@@ -4,7 +4,7 @@ use super::{
     headers::CanonicalUrl,
 };
 use crate::{
-    db::types::BuildStatus,
+    db::{types::BuildStatus, BuildId},
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
@@ -33,7 +33,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Build {
-    id: i32,
+    id: BuildId,
     rustc_version: Option<String>,
     docsrs_version: Option<String>,
     build_status: BuildStatus,
@@ -230,7 +230,7 @@ async fn get_builds(
     Ok(sqlx::query_as!(
         Build,
         r#"SELECT
-            builds.id,
+            builds.id as "id: BuildId",
             builds.rustc_version,
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
@@ -242,7 +242,7 @@ async fn get_builds(
          WHERE
             crates.name = $1 AND
             releases.version = $2
-         ORDER BY id DESC"#,
+         ORDER BY builds.id DESC"#,
         name,
         version.to_string(),
     )

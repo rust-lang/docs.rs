@@ -8,7 +8,9 @@ pub(crate) use self::add_package::{
     initialize_release, update_build_with_error,
 };
 pub use self::{
-    add_package::{update_build_status, update_crate_data_in_database},
+    add_package::{
+        update_build_status, update_crate_data_in_database, BuildId, CrateId, ReleaseId,
+    },
     delete::{delete_crate, delete_version},
     file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,

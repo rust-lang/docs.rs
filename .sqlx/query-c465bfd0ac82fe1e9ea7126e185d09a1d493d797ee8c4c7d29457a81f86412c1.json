@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name FROM crates ORDER BY name",
+  "query": "SELECT id as \"id: CrateId\", name FROM crates ORDER BY name",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id: CrateId",
         "type_info": "Int4"
       },
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "75310f51de2b9064c400dfa4ea16bac989fb9ce51a2efe7661c000aa6ad932d4"
+  "hash": "c465bfd0ac82fe1e9ea7126e185d09a1d493d797ee8c4c7d29457a81f86412c1"
 }

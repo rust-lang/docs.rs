@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context as _, Error, Result};
 use axum::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
-use docs_rs::db::{self, add_path_into_database, Overrides, Pool};
+use docs_rs::db::{self, add_path_into_database, CrateId, Overrides, Pool};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
     get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
@@ -606,9 +606,10 @@ impl DatabaseSubcommand {
                         let mut list_conn = pool.get_async().await?;
                         let mut update_conn = pool.get_async().await?;
 
-                        let mut result_stream =
-                            sqlx::query!("SELECT id, name FROM crates ORDER BY name")
-                                .fetch(&mut *list_conn);
+                        let mut result_stream = sqlx::query!(
+                            r#"SELECT id as "id: CrateId", name FROM crates ORDER BY name"#
+                        )
+                        .fetch(&mut *list_conn);
 
                         while let Some(row) = result_stream.next().await {
                             let row = row?;

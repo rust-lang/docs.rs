@@ -1,6 +1,6 @@
 use super::{error::AxumResult, match_version};
 use crate::{
-    db::Pool,
+    db::{BuildId, Pool},
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
@@ -220,7 +220,7 @@ pub(crate) async fn source_browser_handler(
         .into_version();
 
     let row = sqlx::query!(
-        "SELECT
+        r#"SELECT
             releases.archive_storage,
             (
                 SELECT id
@@ -230,12 +230,12 @@ pub(crate) async fn source_browser_handler(
                     builds.build_status = 'success'
                 ORDER BY build_finished DESC
                 LIMIT 1
-            ) AS latest_build_id
+            ) AS "latest_build_id?: BuildId"
          FROM releases
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
              name = $1 AND
-             version = $2",
+             version = $2"#,
         params.name,
         version.to_string()
     )
@@ -249,7 +249,7 @@ pub(crate) async fn source_browser_handler(
             .fetch_source_file(
                 &params.name,
                 &version.to_string(),
-                row.latest_build_id.unwrap_or(0),
+                row.latest_build_id,
                 &params.path,
                 row.archive_storage,
             )
@@ -501,7 +501,7 @@ mod tests {
                     "UPDATE releases
                      SET files = NULL
                      WHERE id = $1",
-                    release_id,
+                    release_id.0,
                 )
                 .execute(&mut *conn)
                 .await

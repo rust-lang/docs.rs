@@ -2,7 +2,9 @@ use super::TestDatabase;
 
 use crate::db::file::{file_list_to_json, FileEntry};
 use crate::db::types::BuildStatus;
-use crate::db::{initialize_build, initialize_crate, initialize_release, update_build_status};
+use crate::db::{
+    initialize_build, initialize_crate, initialize_release, update_build_status, BuildId, ReleaseId,
+};
 use crate::docbuilder::DocCoverage;
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
@@ -27,7 +29,7 @@ pub(crate) async fn fake_release_that_failed_before_build(
     name: &str,
     version: &str,
     errors: &str,
-) -> Result<(i32, i32)> {
+) -> Result<(ReleaseId, BuildId)> {
     let crate_id = initialize_crate(&mut *conn, name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, version).await?;
     let build_id = initialize_build(&mut *conn, release_id).await?;
@@ -38,7 +40,7 @@ pub(crate) async fn fake_release_that_failed_before_build(
              build_status = 'failure',
              errors = $2
          WHERE id = $1",
-        build_id,
+        build_id.0,
         errors,
     )
     .execute(&mut *conn)
@@ -326,13 +328,13 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn create(self) -> Result<i32> {
+    pub(crate) fn create(self) -> Result<ReleaseId> {
         let runtime = self.runtime.clone();
         runtime.block_on(self.create_async())
     }
 
     /// Returns the release_id
-    pub(crate) async fn create_async(self) -> Result<i32> {
+    pub(crate) async fn create_async(self) -> Result<ReleaseId> {
         use std::fs;
         use std::path::Path;
 
@@ -645,7 +647,7 @@ impl FakeBuild {
         &self,
         conn: &mut sqlx::PgConnection,
         storage: &AsyncStorage,
-        release_id: i32,
+        release_id: ReleaseId,
         default_target: &str,
     ) -> Result<()> {
         let build_id = crate::db::initialize_build(&mut *conn, release_id).await?;
@@ -664,7 +666,7 @@ impl FakeBuild {
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(
                 "UPDATE builds SET output = $2 WHERE id = $1",
-                build_id,
+                build_id.0,
                 db_build_log
             )
             .execute(&mut *conn)

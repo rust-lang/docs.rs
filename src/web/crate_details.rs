@@ -1,8 +1,9 @@
 use super::{match_version, MetaData};
+use crate::db::{BuildId, ReleaseId};
 use crate::registry_api::OwnerKind;
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::{
-    db::types::BuildStatus,
+    db::{types::BuildStatus, CrateId},
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
@@ -42,7 +43,7 @@ pub(crate) struct CrateDetails {
     rustdoc: Option<String>, // this is description_long in database
     release_time: Option<DateTime<Utc>>,
     build_status: BuildStatus,
-    pub latest_build_id: Option<i32>,
+    pub latest_build_id: Option<BuildId>,
     last_successful_build: Option<String>,
     pub rustdoc_status: Option<bool>,
     pub archive_storage: bool,
@@ -62,9 +63,9 @@ pub(crate) struct CrateDetails {
     pub(crate) total_items_needing_examples: Option<i32>,
     pub(crate) items_with_examples: Option<i32>,
     /// Database id for this crate
-    pub(crate) crate_id: i32,
+    pub(crate) crate_id: CrateId,
     /// Database id for this release
-    pub(crate) release_id: i32,
+    pub(crate) release_id: ReleaseId,
     source_size: Option<i64>,
     documentation_size: Option<i64>,
 }
@@ -79,7 +80,7 @@ struct RepositoryMetadata {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct Release {
-    pub id: i32,
+    pub id: ReleaseId,
     pub version: semver::Version,
     /// Aggregated build status of the release.
     /// * no builds -> build In progress
@@ -126,8 +127,8 @@ impl CrateDetails {
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
         let krate = match sqlx::query!(
             r#"SELECT
-                crates.id AS crate_id,
-                releases.id AS release_id,
+                crates.id AS "crate_id: CrateId",
+                releases.id AS "release_id: ReleaseId",
                 crates.name,
                 releases.version,
                 releases.description,
@@ -138,7 +139,7 @@ impl CrateDetails {
                 release_build_status.build_status as "build_status!: BuildStatus",
                 -- this is the latest build ID that generated content
                 -- it's used to invalidate some blob storage related caches.
-                builds.id as "latest_build_id?",
+                builds.id as "latest_build_id?: BuildId",
                 releases.rustdoc_status,
                 releases.archive_storage,
                 releases.repository_url,
@@ -265,7 +266,7 @@ impl CrateDetails {
              FROM owners
              INNER JOIN owner_rels ON owner_rels.oid = owners.id
              WHERE cid = $1"#,
-            krate.crate_id,
+            krate.crate_id.0,
         )
         .fetch(&mut *conn)
         .map_ok(|row| (row.login, row.avatar, row.kind))
@@ -292,7 +293,7 @@ impl CrateDetails {
             .fetch_source_file(
                 &self.name,
                 &self.version.to_string(),
-                self.latest_build_id.unwrap_or(0),
+                self.latest_build_id,
                 "Cargo.toml",
                 self.archive_storage,
             )
@@ -321,7 +322,7 @@ impl CrateDetails {
                 .fetch_source_file(
                     &self.name,
                     &self.version.to_string(),
-                    self.latest_build_id.unwrap_or(0),
+                    self.latest_build_id,
                     path,
                     self.archive_storage,
                 )
@@ -367,11 +368,11 @@ pub(crate) fn latest_release(releases: &[Release]) -> Option<&Release> {
 /// Return all releases for a crate, sorted in descending order by semver
 pub(crate) async fn releases_for_crate(
     conn: &mut sqlx::PgConnection,
-    crate_id: i32,
+    crate_id: CrateId,
 ) -> Result<Vec<Release>, anyhow::Error> {
     let mut releases: Vec<Release> = sqlx::query!(
         r#"SELECT
-             releases.id,
+             releases.id as "id: ReleaseId",
              releases.version,
              release_build_status.build_status as "build_status!: BuildStatus",
              releases.yanked,
@@ -382,7 +383,7 @@ pub(crate) async fn releases_for_crate(
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
          WHERE
              releases.crate_id = $1"#,
-        crate_id,
+        crate_id.0,
     )
     .fetch(&mut *conn)
     .try_filter_map(|row| async move {
@@ -596,7 +597,7 @@ pub(crate) async fn get_all_releases(
             releases.doc_targets
          FROM releases
          WHERE releases.id = $1;",
-        matched_release.id(),
+        matched_release.id().0,
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -721,7 +722,7 @@ pub(crate) async fn get_all_platforms_inner(
             releases.doc_targets
         FROM releases
         WHERE releases.id = $1;",
-        matched_release.id(),
+        matched_release.id().0,
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -867,10 +868,13 @@ mod tests {
         version: &str,
         req_version: Option<ReqVersion>,
     ) -> CrateDetails {
-        let crate_id: i32 = sqlx::query_scalar!("SELECT id FROM crates WHERE name = $1", name)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
+        let crate_id = sqlx::query_scalar!(
+            r#"SELECT id as "id: CrateId" FROM crates WHERE name = $1"#,
+            name
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
 
         let releases = releases_for_crate(&mut *conn, crate_id).await.unwrap();
 
@@ -1688,7 +1692,7 @@ mod tests {
 
             env.runtime().block_on(async {
                 let mut conn = env.async_db().await.async_conn().await;
-                sqlx::query!("UPDATE releases SET features = NULL WHERE id = $1", id)
+                sqlx::query!("UPDATE releases SET features = NULL WHERE id = $1", id.0)
                     .execute(&mut *conn)
                     .await
             })?;

@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE builds\n         SET\n             build_status = $1,\n             errors = $2\n         WHERE id = $3\n         RETURNING rid",
+  "query": "UPDATE builds\n         SET\n             build_status = $1,\n             errors = $2\n         WHERE id = $3\n         RETURNING rid as \"rid: ReleaseId\" ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "rid",
+        "name": "rid: ReleaseId",
         "type_info": "Int4"
       }
     ],
@@ -31,5 +31,5 @@
       false
     ]
   },
-  "hash": "5ffff1acc8acd27b2f6b9ed3f5fb6b6222f7d0d45aa938a1d52791c11629e070"
+  "hash": "d675aff9079a87e41891c589eaffa2497eba27fcee660f3d92241eaeda02ac0f"
 }

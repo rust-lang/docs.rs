@@ -14,8 +14,10 @@ use crate::{
         extractors::{DbConnection, Path},
         file::File,
         match_version,
-        page::templates::{filters, RenderRegular, RenderSolid},
-        page::TemplateData,
+        page::{
+            templates::{filters, RenderRegular, RenderSolid},
+            TemplateData,
+        },
         MetaData, ReqVersion,
     },
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
@@ -180,7 +182,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                     .fetch_rustdoc_file(
                         &crate_name,
                         &krate.version.to_string(),
-                        krate.latest_build_id.unwrap_or(0),
+                        krate.latest_build_id,
                         target,
                         krate.archive_storage,
                     )
@@ -457,7 +459,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .fetch_rustdoc_file(
             &params.name,
             &krate.version.to_string(),
-            krate.latest_build_id.unwrap_or(0),
+            krate.latest_build_id,
             &storage_path,
             krate.archive_storage,
         )
@@ -478,7 +480,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 .rustdoc_file_exists(
                     &params.name,
                     &krate.version.to_string(),
-                    krate.latest_build_id.unwrap_or(0),
+                    krate.latest_build_id,
                     &storage_path,
                     krate.archive_storage,
                 )
@@ -747,7 +749,7 @@ pub(crate) async fn target_redirect_handler(
         .rustdoc_file_exists(
             &name,
             &crate_details.version.to_string(),
-            crate_details.latest_build_id.unwrap_or(0),
+            crate_details.latest_build_id,
             &storage_location_for_path,
             crate_details.archive_storage,
         )
@@ -2051,7 +2053,7 @@ mod test {
                 let mut conn = env.async_db().await.async_conn().await;
                 // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
                 sqlx::query!(
-                    r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#, id)
+                    r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#, id.0)
                     .execute(&mut *conn)
                     .await
             })?;

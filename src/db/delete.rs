@@ -7,7 +7,7 @@ use anyhow::Context as _;
 use fn_error_context::context;
 use sqlx::Connection;
 
-use super::update_latest_version_id;
+use super::{update_latest_version_id, CrateId};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -104,9 +104,13 @@ pub async fn delete_version(
     Ok(())
 }
 
-async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
+async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<CrateId> {
     Ok(sqlx::query_scalar!(
-        "SELECT id FROM crates WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+        r#"
+        SELECT id as "id: CrateId"
+        FROM crates
+        WHERE normalize_crate_name(name) = normalize_crate_name($1)
+        "#,
         name
     )
     .fetch_optional(&mut *conn)
@@ -138,7 +142,7 @@ async fn delete_version_from_database(
     }
     let is_library: bool = sqlx::query_scalar!(
         "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
-        crate_id,
+        crate_id.0,
         version,
     )
     .fetch_one(&mut *transaction)
@@ -169,7 +173,7 @@ async fn delete_version_from_database(
 async fn delete_crate_from_database(
     conn: &mut sqlx::PgConnection,
     name: &str,
-    crate_id: i32,
+    crate_id: CrateId,
 ) -> Result<bool> {
     let mut transaction = conn.begin().await?;
 
@@ -184,7 +188,7 @@ async fn delete_crate_from_database(
             )
             .as_str()).bind(crate_id).execute(&mut *transaction).await?;
     }
-    sqlx::query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id)
+    sqlx::query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id.0)
         .execute(&mut *transaction)
         .await?;
 
@@ -194,16 +198,16 @@ async fn delete_crate_from_database(
         FROM releases
         WHERE releases.crate_id = $1
         ",
-        crate_id
+        crate_id.0
     )
     .fetch_one(&mut *transaction)
     .await?
     .unwrap_or(false);
 
-    sqlx::query!("DELETE FROM releases WHERE crate_id = $1;", crate_id)
+    sqlx::query!("DELETE FROM releases WHERE crate_id = $1;", crate_id.0)
         .execute(&mut *transaction)
         .await?;
-    sqlx::query!("DELETE FROM crates WHERE id = $1;", crate_id)
+    sqlx::query!("DELETE FROM crates WHERE id = $1;", crate_id.0)
         .execute(&mut *transaction)
         .await?;
 
@@ -216,6 +220,7 @@ async fn delete_crate_from_database(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::ReleaseId;
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{async_wrapper, fake_release_that_failed_before_build};
     use test_case::test_case;
@@ -227,8 +232,8 @@ mod tests {
             .is_some())
     }
 
-    async fn release_exists(conn: &mut sqlx::PgConnection, id: i32) -> Result<bool> {
-        Ok(sqlx::query!("SELECT id FROM releases WHERE id = $1;", id)
+    async fn release_exists(conn: &mut sqlx::PgConnection, id: ReleaseId) -> Result<bool> {
+        Ok(sqlx::query!("SELECT id FROM releases WHERE id = $1;", id.0)
             .fetch_optional(conn)
             .await?
             .is_some())
@@ -298,7 +303,7 @@ mod tests {
                         .rustdoc_file_exists(
                             pkg,
                             version,
-                            0,
+                            None,
                             &format!("{pkg}/index.html"),
                             archive_storage
                         )
@@ -327,7 +332,7 @@ mod tests {
                     .rustdoc_file_exists(
                         "package-2",
                         "1.0.0",
-                        0,
+                        None,
                         "package-2/index.html",
                         archive_storage
                     )
@@ -355,7 +360,7 @@ mod tests {
                         .rustdoc_file_exists(
                             "package-1",
                             "1.0.0",
-                            0,
+                            None,
                             "package-1/index.html",
                             archive_storage
                         )
@@ -367,7 +372,7 @@ mod tests {
                         .rustdoc_file_exists(
                             "package-1",
                             "2.0.0",
-                            0,
+                            None,
                             "package-1/index.html",
                             archive_storage
                         )
@@ -383,12 +388,15 @@ mod tests {
     #[test_case(false)]
     fn test_delete_version(archive_storage: bool) {
         async_wrapper(|env| async move {
-            async fn owners(conn: &mut sqlx::PgConnection, crate_id: i32) -> Result<Vec<String>> {
+            async fn owners(
+                conn: &mut sqlx::PgConnection,
+                crate_id: CrateId,
+            ) -> Result<Vec<String>> {
                 Ok(sqlx::query!(
                     "SELECT login FROM owners
                     INNER JOIN owner_rels ON owners.id = owner_rels.oid
                     WHERE owner_rels.cid = $1",
-                    crate_id,
+                    crate_id.0,
                 )
                 .fetch_all(conn)
                 .await?
@@ -415,12 +423,15 @@ mod tests {
             assert!(
                 env.async_storage()
                     .await
-                    .rustdoc_file_exists("a", "1.0.0", 0, "a/index.html", archive_storage)
+                    .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            let crate_id = sqlx::query_scalar!("SELECT crate_id FROM releases WHERE id = $1", v1)
-                .fetch_one(&mut *conn)
-                .await?;
+            let crate_id = sqlx::query_scalar!(
+                r#"SELECT crate_id as "crate_id: CrateId" FROM releases WHERE id = $1"#,
+                v1.0
+            )
+            .fetch_one(&mut *conn)
+            .await?;
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["malicious actor".to_string()]
@@ -443,7 +454,7 @@ mod tests {
             assert!(
                 env.async_storage()
                     .await
-                    .rustdoc_file_exists("a", "2.0.0", 0, "a/index.html", archive_storage)
+                    .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
             assert_eq!(
@@ -478,7 +489,7 @@ mod tests {
                 assert!(
                     !env.async_storage()
                         .await
-                        .rustdoc_file_exists("a", "1.0.0", 0, "a/index.html", archive_storage)
+                        .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                         .await?
                 );
             }
@@ -486,7 +497,7 @@ mod tests {
             assert!(
                 env.async_storage()
                     .await
-                    .rustdoc_file_exists("a", "2.0.0", 0, "a/index.html", archive_storage)
+                    .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
             assert_eq!(

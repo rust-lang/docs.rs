@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM releases WHERE crate_id = $1 and version = $2",
+  "query": "SELECT id as \"id: ReleaseId\" FROM releases WHERE crate_id = $1 and version = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id: ReleaseId",
         "type_info": "Int4"
       }
     ],
@@ -19,5 +19,5 @@
       false
     ]
   },
-  "hash": "f586539bcbb4956768c424065ae7068198f91d2bbd7f176054ac58bcda3fcac6"
+  "hash": "83dc17977f99a0b182f11efa80cf9b9afc273e362160421dda768d45c62f71b7"
 }
