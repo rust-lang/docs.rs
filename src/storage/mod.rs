@@ -1,6 +1,7 @@
 mod archive_index;
 mod compression;
 mod database;
+mod mimes;
 mod s3;
 
 pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
@@ -11,6 +12,7 @@ use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
 use futures_util::stream::BoxStream;
+use mime::Mime;
 use path_slash::PathExt;
 use std::{
     collections::{HashMap, HashSet},
@@ -33,7 +35,7 @@ pub(crate) struct PathNotFoundError;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Blob {
     pub(crate) path: String,
-    pub(crate) mime: String,
+    pub(crate) mime: Mime,
     pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
     pub(crate) compression: Option<CompressionAlgorithm>,
@@ -370,7 +372,7 @@ impl AsyncStorage {
 
         Ok(Blob {
             path: format!("{archive_path}/{path}"),
-            mime: detect_mime(path).into(),
+            mime: detect_mime(path),
             date_updated: blob.date_updated,
             content: blob.content,
             compression: None,
@@ -382,7 +384,7 @@ impl AsyncStorage {
         &self,
         archive_path: &str,
         root_dir: &Path,
-    ) -> Result<(HashMap<PathBuf, String>, CompressionAlgorithm)> {
+    ) -> Result<(HashMap<PathBuf, Mime>, CompressionAlgorithm)> {
         let (zip_content, compressed_index_content, alg, remote_index_path, file_paths) =
             spawn_blocking({
                 let archive_path = archive_path.to_owned();
@@ -418,7 +420,7 @@ impl AsyncStorage {
                             io::copy(&mut file, &mut zip)?;
 
                             let mime = detect_mime(&file_path);
-                            file_paths.insert(file_path, mime.to_string());
+                            file_paths.insert(file_path, mime);
                         }
 
                         zip.finish()?.into_inner()
@@ -453,14 +455,14 @@ impl AsyncStorage {
         self.store_inner(vec![
             Blob {
                 path: archive_path.to_string(),
-                mime: "application/zip".to_owned(),
+                mime: mimes::APPLICATION_ZIP.clone(),
                 content: zip_content,
                 compression: None,
                 date_updated: Utc::now(),
             },
             Blob {
                 path: remote_index_path,
-                mime: "application/octet-stream".to_owned(),
+                mime: mime::APPLICATION_OCTET_STREAM,
                 content: compressed_index_content,
                 compression: Some(alg),
                 date_updated: Utc::now(),
@@ -480,7 +482,7 @@ impl AsyncStorage {
         &self,
         prefix: &Path,
         root_dir: &Path,
-    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>)> {
+    ) -> Result<(HashMap<PathBuf, Mime>, HashSet<CompressionAlgorithm>)> {
         let (blobs, file_paths_and_mimes, algs) = spawn_blocking({
             let prefix = prefix.to_owned();
             let root_dir = root_dir.to_owned();
@@ -503,12 +505,12 @@ impl AsyncStorage {
                         let bucket_path = prefix.join(&file_path).to_slash().unwrap().to_string();
 
                         let mime = detect_mime(&file_path);
-                        file_paths_and_mimes.insert(file_path, mime.to_string());
+                        file_paths_and_mimes.insert(file_path, mime.clone());
                         algs.insert(alg);
 
                         Ok(Blob {
                             path: bucket_path,
-                            mime: mime.to_string(),
+                            mime,
                             content,
                             compression: Some(alg),
                             // this field is ignored by the backend
@@ -735,7 +737,7 @@ impl Storage {
         &self,
         archive_path: &str,
         root_dir: &Path,
-    ) -> Result<(HashMap<PathBuf, String>, CompressionAlgorithm)> {
+    ) -> Result<(HashMap<PathBuf, Mime>, CompressionAlgorithm)> {
         self.runtime
             .block_on(self.inner.store_all_in_archive(archive_path, root_dir))
     }
@@ -744,7 +746,7 @@ impl Storage {
         &self,
         prefix: &Path,
         root_dir: &Path,
-    ) -> Result<(HashMap<PathBuf, String>, HashSet<CompressionAlgorithm>)> {
+    ) -> Result<(HashMap<PathBuf, Mime>, HashSet<CompressionAlgorithm>)> {
         self.runtime
             .block_on(self.inner.store_all(prefix, root_dir))
     }
@@ -801,24 +803,26 @@ impl std::fmt::Debug for Storage {
     }
 }
 
-fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
+fn detect_mime(file_path: impl AsRef<Path>) -> Mime {
     let mime = mime_guess::from_path(file_path.as_ref())
-        .first_raw()
-        .unwrap_or("text/plain");
-    match mime {
+        .first()
+        .unwrap_or(mime::TEXT_PLAIN);
+
+    match mime.as_ref() {
         "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
             match file_path.as_ref().extension().and_then(OsStr::to_str) {
-                Some("md") => "text/markdown",
-                Some("rs") => "text/rust",
-                Some("markdown") => "text/markdown",
-                Some("css") => "text/css",
-                Some("toml") => "text/toml",
-                Some("js") => "text/javascript",
-                Some("json") => "application/json",
+                Some("md") => mimes::TEXT_MARKDOWN.clone(),
+                Some("rs") => mimes::TEXT_RUST.clone(),
+                Some("markdown") => mimes::TEXT_MARKDOWN.clone(),
+                Some("css") => mime::TEXT_CSS,
+                Some("toml") => mimes::TEXT_TOML.clone(),
+                Some("js") => mime::TEXT_JAVASCRIPT,
+                Some("json") => mime::APPLICATION_JSON,
                 _ => mime,
             }
         }
-        "image/svg" => "image/svg+xml",
+        "image/svg" => mime::IMAGE_SVG,
+
         _ => mime,
     }
 }
@@ -883,7 +887,7 @@ mod backend_tests {
         assert!(!storage.exists("path/to/file.txt").unwrap());
         let blob = Blob {
             path: "path/to/file.txt".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: "Hello world!".into(),
             compression: None,
@@ -899,7 +903,7 @@ mod backend_tests {
 
         storage.store_blobs(vec![Blob {
             path: path.into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -926,7 +930,7 @@ mod backend_tests {
         let path: &str = "foo/bar.txt";
         let blob = Blob {
             path: path.into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -961,7 +965,7 @@ mod backend_tests {
     fn test_get_range(storage: &Storage) -> Result<()> {
         let blob = Blob {
             path: "foo/bar.txt".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
@@ -1001,7 +1005,7 @@ mod backend_tests {
                 .iter()
                 .map(|&filename| Blob {
                     path: filename.into(),
-                    mime: "text/plain".into(),
+                    mime: mime::TEXT_PLAIN,
                     date_updated: Utc::now(),
                     compression: None,
                     content: b"test content\n".to_vec(),
@@ -1042,14 +1046,14 @@ mod backend_tests {
 
         let small_blob = Blob {
             path: "small-blob.bin".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: vec![0; MAX_SIZE],
             compression: None,
         };
         let big_blob = Blob {
             path: "big-blob.bin".into(),
-            mime: "text/plain".into(),
+            mime: mime::TEXT_PLAIN,
             date_updated: Utc::now(),
             content: vec![0; MAX_SIZE * 2],
             compression: None,
@@ -1084,7 +1088,7 @@ mod backend_tests {
             .iter()
             .map(|&path| Blob {
                 path: path.into(),
-                mime: "text/plain".into(),
+                mime: mime::TEXT_PLAIN,
                 date_updated: Utc::now(),
                 compression: None,
                 content: b"Hello world!\n".to_vec(),
@@ -1142,12 +1146,12 @@ mod backend_tests {
             assert!(stored_files.contains_key(name));
         }
         assert_eq!(
-            stored_files.get(Path::new("Cargo.toml")).unwrap(),
-            "text/toml"
+            stored_files.get(Path::new("Cargo.toml")).unwrap().as_ref(),
+            mimes::TEXT_TOML.as_ref()
         );
         assert_eq!(
-            stored_files.get(Path::new("src/main.rs")).unwrap(),
-            "text/rust"
+            stored_files.get(Path::new("src/main.rs")).unwrap().as_ref(),
+            mimes::TEXT_RUST.as_ref()
         );
 
         // delete the existing index to test the download of it
@@ -1198,12 +1202,12 @@ mod backend_tests {
             assert!(stored_files.contains_key(name));
         }
         assert_eq!(
-            stored_files.get(Path::new("Cargo.toml")).unwrap(),
-            "text/toml"
+            stored_files.get(Path::new("Cargo.toml")).unwrap().as_ref(),
+            mimes::TEXT_TOML.as_ref()
         );
         assert_eq!(
-            stored_files.get(Path::new("src/main.rs")).unwrap(),
-            "text/rust"
+            stored_files.get(Path::new("src/main.rs")).unwrap().as_ref(),
+            mimes::TEXT_RUST.as_ref()
         );
 
         let file = storage.get("prefix/Cargo.toml", usize::MAX)?;
@@ -1231,7 +1235,7 @@ mod backend_tests {
             .map(|i| {
                 let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
                 Blob {
-                    mime: "text/rust".into(),
+                    mime: mimes::TEXT_RUST.clone(),
                     content,
                     path: format!("{i}.rs"),
                     date_updated: now,
@@ -1296,7 +1300,7 @@ mod backend_tests {
                     path: (*path).to_string(),
                     content: b"foo\n".to_vec(),
                     compression: None,
-                    mime: "text/plain".into(),
+                    mime: mime::TEXT_PLAIN,
                     date_updated: Utc::now(),
                 })
                 .collect(),

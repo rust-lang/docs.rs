@@ -9,6 +9,7 @@
 
 use crate::error::Result;
 use crate::storage::{AsyncStorage, CompressionAlgorithm, CompressionAlgorithms};
+use mime::Mime;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
@@ -53,13 +54,13 @@ pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     ))
 }
 
-fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Value {
+fn file_list_to_json(file_list: Vec<(PathBuf, Mime)>) -> Value {
     Value::Array(
         file_list
             .into_iter()
-            .map(|(path, name)| {
+            .map(|(path, mime)| {
                 Value::Array(vec![
-                    Value::String(name),
+                    Value::String(mime.to_string()),
                     Value::String(path.into_os_string().into_string().unwrap()),
                 ])
             })
