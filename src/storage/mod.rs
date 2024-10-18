@@ -9,7 +9,7 @@ use self::s3::S3Backend;
 use crate::{
     db::{
         file::{detect_mime, FileEntry},
-        mimes, Pool,
+        mimes, BuildId, Pool,
     },
     error::Result,
     utils::spawn_blocking,
@@ -187,7 +187,7 @@ impl AsyncStorage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
@@ -212,7 +212,7 @@ impl AsyncStorage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
@@ -235,7 +235,7 @@ impl AsyncStorage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<bool> {
@@ -253,7 +253,7 @@ impl AsyncStorage {
     pub(crate) async fn exists_in_archive(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
     ) -> Result<bool> {
         match self
@@ -316,14 +316,14 @@ impl AsyncStorage {
     pub(super) async fn download_archive_index(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
     ) -> Result<PathBuf> {
         // remote/folder/and/x.zip.index
         let remote_index_path = format!("{archive_path}.index");
-        let local_index_path = self
-            .config
-            .local_archive_cache_path
-            .join(format!("{archive_path}.{latest_build_id}.index"));
+        let local_index_path = self.config.local_archive_cache_path.join(format!(
+            "{archive_path}.{}.index",
+            latest_build_id.map(|id| id.0).unwrap_or(0)
+        ));
 
         if !local_index_path.exists() {
             let index_content = self.get(&remote_index_path, usize::MAX).await?.content;
@@ -353,7 +353,7 @@ impl AsyncStorage {
     pub(crate) async fn get_from_archive(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         max_size: usize,
     ) -> Result<Blob> {
@@ -640,7 +640,7 @@ impl Storage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
@@ -657,7 +657,7 @@ impl Storage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
@@ -674,7 +674,7 @@ impl Storage {
         &self,
         name: &str,
         version: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         archive_storage: bool,
     ) -> Result<bool> {
@@ -690,7 +690,7 @@ impl Storage {
     pub(crate) fn exists_in_archive(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
     ) -> Result<bool> {
         self.runtime.block_on(
@@ -717,7 +717,7 @@ impl Storage {
     pub(super) fn download_index(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
     ) -> Result<PathBuf> {
         self.runtime.block_on(
             self.inner
@@ -728,7 +728,7 @@ impl Storage {
     pub(crate) fn get_from_archive(
         &self,
         archive_path: &str,
-        latest_build_id: i32,
+        latest_build_id: Option<BuildId>,
         path: &str,
         max_size: usize,
     ) -> Result<Blob> {
@@ -1102,7 +1102,7 @@ mod backend_tests {
     fn test_exists_without_remote_archive(storage: &Storage) -> Result<()> {
         // when remote and local index don't exist, any `exists_in_archive`  should
         // return `false`
-        assert!(!storage.exists_in_archive("some_archive_name", 0, "some_file_name")?);
+        assert!(!storage.exists_in_archive("some_archive_name", None, "some_file_name")?);
         Ok(())
     }
 
@@ -1151,18 +1151,18 @@ mod backend_tests {
 
         // the first exists-query will download and store the index
         assert!(!local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", 0, "Cargo.toml",)?);
+        assert!(storage.exists_in_archive("folder/test.zip", None, "Cargo.toml",)?);
 
         // the second one will use the local index
         assert!(local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", 0, "src/main.rs",)?);
+        assert!(storage.exists_in_archive("folder/test.zip", None, "src/main.rs",)?);
 
-        let file = storage.get_from_archive("folder/test.zip", 0, "Cargo.toml", usize::MAX)?;
+        let file = storage.get_from_archive("folder/test.zip", None, "Cargo.toml", usize::MAX)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
-        let file = storage.get_from_archive("folder/test.zip", 0, "src/main.rs", usize::MAX)?;
+        let file = storage.get_from_archive("folder/test.zip", None, "src/main.rs", usize::MAX)?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");

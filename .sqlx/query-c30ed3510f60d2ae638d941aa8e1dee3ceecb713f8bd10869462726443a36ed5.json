@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                crates.id AS crate_id,\n                releases.id AS release_id,\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                release_build_status.build_status as \"build_status!: BuildStatus\",\n                -- this is the latest build ID that generated content\n                -- it's used to invalidate some blob storage related caches.\n                builds.id as \"latest_build_id?\",\n                releases.rustdoc_status,\n                releases.archive_storage,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                repositories.host as \"repo_host?\",\n                repositories.stars as \"repo_stars?\",\n                repositories.forks as \"repo_forks?\",\n                repositories.issues as \"repo_issues?\",\n                repositories.name as \"repo_name?\",\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                releases.source_size as \"source_size?\",\n                builds.documentation_size as \"documentation_size?\",\n                -- we're using the rustc version here to set the correct CSS file\n                -- in the metadata.\n                -- So we're only interested in successful builds here.\n                builds.rustc_version as \"rustc_version?\",\n                doc_coverage.total_items,\n                doc_coverage.documented_items,\n                doc_coverage.total_items_needing_examples,\n                doc_coverage.items_with_examples\n            FROM releases\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            LEFT JOIN repositories ON releases.repository_id = repositories.id\n            LEFT JOIN LATERAL (\n                 SELECT rustc_version, documentation_size, id\n                 FROM builds\n                 WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = 'success'\n                 ORDER BY builds.build_finished\n                 DESC LIMIT 1\n             ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2;",
+  "query": "SELECT\n                crates.id AS \"crate_id: CrateId\",\n                releases.id AS \"release_id: ReleaseId\",\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                release_build_status.build_status as \"build_status!: BuildStatus\",\n                -- this is the latest build ID that generated content\n                -- it's used to invalidate some blob storage related caches.\n                builds.id as \"latest_build_id?: BuildId\",\n                releases.rustdoc_status,\n                releases.archive_storage,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                repositories.host as \"repo_host?\",\n                repositories.stars as \"repo_stars?\",\n                repositories.forks as \"repo_forks?\",\n                repositories.issues as \"repo_issues?\",\n                repositories.name as \"repo_name?\",\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                releases.source_size as \"source_size?\",\n                builds.documentation_size as \"documentation_size?\",\n                -- we're using the rustc version here to set the correct CSS file\n                -- in the metadata.\n                -- So we're only interested in successful builds here.\n                builds.rustc_version as \"rustc_version?\",\n                doc_coverage.total_items,\n                doc_coverage.documented_items,\n                doc_coverage.total_items_needing_examples,\n                doc_coverage.items_with_examples\n            FROM releases\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            LEFT JOIN repositories ON releases.repository_id = repositories.id\n            LEFT JOIN LATERAL (\n                 SELECT rustc_version, documentation_size, id\n                 FROM builds\n                 WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = 'success'\n                 ORDER BY builds.build_finished\n                 DESC LIMIT 1\n             ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2;",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "crate_id",
+        "name": "crate_id: CrateId",
         "type_info": "Int4"
       },
       {
         "ordinal": 1,
-        "name": "release_id",
+        "name": "release_id: ReleaseId",
         "type_info": "Int4"
       },
       {
@@ -66,7 +66,7 @@
       },
       {
         "ordinal": 10,
-        "name": "latest_build_id?",
+        "name": "latest_build_id?: BuildId",
         "type_info": "Int4"
       },
       {
@@ -240,5 +240,5 @@
       true
     ]
   },
-  "hash": "1f90e235d872d98342e4d0924f162bf1a053cf08270fa5648467453653d11d87"
+  "hash": "c30ed3510f60d2ae638d941aa8e1dee3ceecb713f8bd10869462726443a36ed5"
 }

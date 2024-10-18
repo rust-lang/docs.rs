@@ -4,6 +4,8 @@ pub mod page;
 // mod tmp;
 
 use crate::db::types::BuildStatus;
+use crate::db::CrateId;
+use crate::db::ReleaseId;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use crate::web::page::templates::{filters, RenderSolid};
@@ -215,7 +217,7 @@ impl MatchedRelease {
         &self.release.version
     }
 
-    fn id(&self) -> i32 {
+    fn id(&self) -> ReleaseId {
         self.release.id
     }
 
@@ -275,9 +277,12 @@ async fn match_version(
 ) -> Result<MatchedRelease, AxumNope> {
     let (crate_id, corrected_name) = {
         let row = sqlx::query!(
-            "SELECT id, name
+            r#"
+             SELECT
+                id as "id: CrateId",
+                name
              FROM crates
-             WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+             WHERE normalize_crate_name(name) = normalize_crate_name($1)"#,
             name,
         )
         .fetch_optional(&mut *conn)
@@ -762,12 +767,12 @@ impl_axum_webpage! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{docbuilder::DocCoverage, test::*};
+    use crate::{db::ReleaseId, docbuilder::DocCoverage, test::*};
     use kuchikiki::traits::TendrilSink;
     use serde_json::json;
     use test_case::test_case;
 
-    async fn release(version: &str, env: &TestEnvironment) -> i32 {
+    async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
         env.async_fake_release()
             .await
             .name("foo")
@@ -1057,7 +1062,7 @@ mod test {
 
             sqlx::query!(
                 "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
-                release_id
+                release_id.0
             )
             .execute(&mut *db.async_conn().await)
             .await?;

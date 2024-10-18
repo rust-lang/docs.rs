@@ -2,7 +2,12 @@
 mod macros;
 
 use self::macros::MetricFromOpts;
-use crate::{cdn, db::Pool, target::TargetAtom, AsyncBuildQueue, Config};
+use crate::{
+    cdn,
+    db::{CrateId, Pool, ReleaseId},
+    target::TargetAtom,
+    AsyncBuildQueue, Config,
+};
 use anyhow::Error;
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
@@ -145,9 +150,9 @@ pub(crate) fn duration_to_seconds(d: Duration) -> f64 {
 
 #[derive(Debug, Default)]
 pub(crate) struct RecentlyAccessedReleases {
-    crates: DashMap<i32, Instant>,
-    versions: DashMap<i32, Instant>,
-    platforms: DashMap<(i32, TargetAtom), Instant>,
+    crates: DashMap<CrateId, Instant>,
+    versions: DashMap<ReleaseId, Instant>,
+    platforms: DashMap<(ReleaseId, TargetAtom), Instant>,
 }
 
 impl RecentlyAccessedReleases {
@@ -155,7 +160,7 @@ impl RecentlyAccessedReleases {
         Self::default()
     }
 
-    pub(crate) fn record(&self, krate: i32, version: i32, target: &str) {
+    pub(crate) fn record(&self, krate: CrateId, version: ReleaseId, target: &str) {
         if self.platforms.len() > 100_000 {
             // Avoid filling the maps _too_ much, we should never get anywhere near this limit
             return;

@@ -1,4 +1,4 @@
-use crate::db::{delete_crate, delete_version, update_latest_version_id, Pool};
+use crate::db::{delete_crate, delete_version, update_latest_version_id, CrateId, Pool};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::AsyncStorage;
@@ -368,14 +368,14 @@ impl AsyncBuildQueue {
         let activity = if yanked { "yanked" } else { "unyanked" };
 
         if let Some(crate_id) = sqlx::query_scalar!(
-            "UPDATE releases
+            r#"UPDATE releases
              SET yanked = $3
              FROM crates
              WHERE crates.id = releases.crate_id
                  AND name = $1
                  AND version = $2
-            RETURNING crates.id
-            ",
+            RETURNING crates.id as "id: CrateId"
+            "#,
             name,
             version,
             yanked,

@@ -1,22 +1,22 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM crates WHERE normalize_crate_name(name) = normalize_crate_name($1)",
+  "query": "SELECT id as \"id: CrateId\" FROM crates WHERE name = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id: CrateId",
         "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar"
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "cec7e0053fc9710683bb8b2c7f74d9b1b4acd434f966d1da2db30c509c6089d8"
+  "hash": "db4dacb4c559c87d8d6ed3b3b3e622c402acbe2080f4d0c5079251532b7ceb87"
 }

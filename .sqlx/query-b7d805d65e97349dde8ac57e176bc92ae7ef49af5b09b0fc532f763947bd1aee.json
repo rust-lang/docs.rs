@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n            builds.id,\n            builds.rustc_version,\n            builds.docsrs_version,\n            builds.build_status as \"build_status: BuildStatus\",\n            COALESCE(builds.build_finished, builds.build_started) as build_time,\n            builds.errors\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            crates.name = $1 AND\n            releases.version = $2\n         ORDER BY id DESC",
+  "query": "SELECT\n            builds.id as \"id: BuildId\",\n            builds.rustc_version,\n            builds.docsrs_version,\n            builds.build_status as \"build_status: BuildStatus\",\n            COALESCE(builds.build_finished, builds.build_started) as build_time,\n            builds.errors\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            crates.name = $1 AND\n            releases.version = $2\n         ORDER BY builds.id DESC",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id: BuildId",
         "type_info": "Int4"
       },
       {
@@ -60,5 +60,5 @@
       true
     ]
   },
-  "hash": "20e23c3804282f206fcb8f2466a7d0d34e312cd5caeefcd77f0f1a94bd53fcb3"
+  "hash": "b7d805d65e97349dde8ac57e176bc92ae7ef49af5b09b0fc532f763947bd1aee"
 }
