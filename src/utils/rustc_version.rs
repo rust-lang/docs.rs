@@ -21,7 +21,7 @@ pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
     ))
 }
 
-fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<NaiveDate> {
+pub(crate) fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<NaiveDate> {
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r" (\d+)-(\d+)-(\d+)\)$").unwrap());
 
     let cap = RE
