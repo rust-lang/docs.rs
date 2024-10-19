@@ -6,7 +6,7 @@
           {%- let build_slug2 =  slug::slugify(crate::BUILD_VERSION) -%}
         {%- endif -%}
 
-        <link rel="stylesheet" href="/-/static/{{rustdoc_css_file.as_ref().unwrap()}}?{{build_slug2}}" media="all" />
+        <link rel="stylesheet" href="/-/static/{{rustdoc_css_file.as_ref().expect("rustdoc_css_file missing")}}?{{build_slug2}}" media="all" />
         <link rel="stylesheet" href="/-/static/font-awesome.css?{{build_slug2}}" media="all" />
 
         <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />

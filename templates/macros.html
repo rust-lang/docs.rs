@@ -159,8 +159,8 @@
         {%- for dependency in deps -%}
             {%- if let serde_json::Value::Array(dep) = dependency -%}
                 <li class="pure-menu-item">
-                    {%- set first = dep[0].as_str().unwrap() -%}
-                    {%- set second = dep[1].as_str().unwrap() -%}
+                    {%- set first = dep[0].as_str().expect("dep[0] not a string in dependency") -%}
+                    {%- set second = dep[1].as_str().expect("dep[1] not a string in dependency") -%}
                     <a href="{{ link_prefix|safe }}/{{ first|safe }}/{{ second|safe }}" class="pure-menu-link">
                         {{ first|safe }} {{ second|safe }}
                         {% if let Some(serde_json::Value::String(third)) = dep.get(2) %}
