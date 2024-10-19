@@ -1076,7 +1076,7 @@ mod tests {
     }
 
     #[test]
-    fn search_result_can_retrive_sort_by_from_pagination() {
+    fn search_result_can_retrieve_sort_by_from_pagination() {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
@@ -1848,6 +1848,67 @@ mod tests {
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(queued_items, vec!["bar 0.1.0"]);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_releases_rebuild_queue_empty() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+
+            assert!(empty
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("We continuously rebuild")));
+
+            assert!(empty
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("crates in the rebuild queue")));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_releases_rebuild_queue_with_crates() {
+        wrapper(|env| {
+            let web = env.frontend();
+            let queue = env.build_queue();
+            queue.add_crate("foo", "1.0.0", REBUILD_PRIORITY, None)?;
+            queue.add_crate("bar", "0.1.0", REBUILD_PRIORITY + 1, None)?;
+            queue.add_crate("baz", "0.0.1", REBUILD_PRIORITY - 1, None)?;
+
+            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let items = full
+                .select(".rebuild-queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            // empty because expand_rebuild_queue is not set
+            assert_eq!(items.len(), 0);
+            assert!(full
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el
+                    .text_contents()
+                    .contains("There are currently 2 crates in the rebuild queue")));
+
+            let full =
+                kuchikiki::parse_html().one(web.get("/releases/queue?expand=1").send()?.text()?);
+            let items = full
+                .select(".rebuild-queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            assert_eq!(items.len(), 2);
+            assert!(items.iter().any(|li| li.text_contents().contains("foo")));
+            assert!(items.iter().any(|li| li.text_contents().contains("bar")));
+            assert!(!items.iter().any(|li| li.text_contents().contains("baz")));
 
             Ok(())
         });

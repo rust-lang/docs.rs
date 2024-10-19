@@ -94,7 +94,7 @@
 
             <div class="about">
                 <p>
-                    We continiously rebuild the latest versions for all crates so they can
+                    We continuously rebuild the latest versions for all crates so they can
                     benefit from new features in rustdoc.
                 </p>
                 {%- if !expand_rebuild_queue -%}
@@ -104,7 +104,7 @@
             </div>
 
             {%- if expand_rebuild_queue -%}
-                <ol class="queue-list">
+                <ol class="rebuild-queue-list">
                     {%- if !rebuild_queue.is_empty() -%}
                         {% for crate_item in rebuild_queue -%}
                             <li>
