@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO releases (\n            crate_id, version, release_time,\n            dependencies, target_name, yanked,\n            rustdoc_status, test_status, license, repository_url,\n            homepage_url, description, description_long, readme,\n            keywords, have_examples, downloads, files,\n            doc_targets, is_library,\n            documentation_url, default_target, features,\n            repository_id, archive_storage, source_size\n         )\n         VALUES (\n            $1,  $2,  $3,  $4,  $5,  $6,  $7,  $8,  $9,\n            $10, $11, $12, $13, $14, $15, $16, $17, $18,\n            $19, $20, $21, $22, $23, $24, $25, $26\n         )\n         ON CONFLICT (crate_id, version) DO UPDATE\n            SET release_time = $3,\n                dependencies = $4,\n                target_name = $5,\n                yanked = $6,\n                rustdoc_status = $7,\n                test_status = $8,\n                license = $9,\n                repository_url = $10,\n                homepage_url = $11,\n                description = $12,\n                description_long = $13,\n                readme = $14,\n                keywords = $15,\n                have_examples = $16,\n                downloads = $17,\n                files = $18,\n                doc_targets = $19,\n                is_library = $20,\n                documentation_url = $21,\n                default_target = $22,\n                features = $23,\n                repository_id = $24,\n                archive_storage = $25,\n                source_size = $26\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Timestamptz",
+        "Json",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Json",
+        "Bool",
+        "Int4",
+        "Json",
+        "Json",
+        "Bool",
+        "Varchar",
+        "Varchar",
+        {
+          "Custom": {
+            "name": "feature[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "feature",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "subfeatures",
+                        "TextArray"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Int4",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0431f4fe27d903ad6af26ff36df056a9009e8746f8334ae32f0c900975968532"
+}

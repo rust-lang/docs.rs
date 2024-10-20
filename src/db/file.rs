@@ -8,10 +8,48 @@
 //! However, postgres is still available for testing and backwards compatibility.
 
 use crate::error::Result;
-use crate::storage::{AsyncStorage, CompressionAlgorithm, CompressionAlgorithms};
+use crate::storage::{AsyncStorage, CompressionAlgorithm};
+use mime::Mime;
 use serde_json::Value;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
+
+/// represents a file path from our source or documentation builds.
+/// Used to return metadata about the file.
+#[derive(Debug)]
+pub struct FileEntry {
+    pub(crate) path: PathBuf,
+    pub(crate) size: u64,
+}
+
+impl FileEntry {
+    pub(crate) fn mime(&self) -> Mime {
+        detect_mime(&self.path).parse().unwrap()
+    }
+}
+
+pub(crate) fn detect_mime(file_path: impl AsRef<Path>) -> &'static str {
+    let mime = mime_guess::from_path(file_path.as_ref())
+        .first_raw()
+        .unwrap_or("text/plain");
+    match mime {
+        "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
+            match file_path.as_ref().extension().and_then(OsStr::to_str) {
+                Some("md") => "text/markdown",
+                Some("rs") => "text/rust",
+                Some("markdown") => "text/markdown",
+                Some("css") => "text/css",
+                Some("toml") => "text/toml",
+                Some("js") => "application/javascript",
+                Some("json") => "application/json",
+                _ => mime,
+            }
+        }
+        "image/svg" => "image/svg+xml",
+        _ => mime,
+    }
+}
 
 /// Store all files in a directory and return [[mimetype, filename]] as Json
 ///
@@ -26,12 +64,8 @@ pub async fn add_path_into_database<P: AsRef<Path>>(
     storage: &AsyncStorage,
     prefix: impl AsRef<Path>,
     path: P,
-) -> Result<(Value, CompressionAlgorithms)> {
-    let (file_list, algorithms) = storage.store_all(prefix.as_ref(), path.as_ref()).await?;
-    Ok((
-        file_list_to_json(file_list.into_iter().collect()),
-        algorithms,
-    ))
+) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+    storage.store_all(prefix.as_ref(), path.as_ref()).await
 }
 
 #[instrument(skip(storage))]
@@ -40,27 +74,25 @@ pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     archive_path: &str,
     path: P,
     public_access: bool,
-) -> Result<(Value, CompressionAlgorithm)> {
+) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
     let (file_list, algorithm) = storage
         .store_all_in_archive(archive_path, path.as_ref())
         .await?;
     if public_access {
         storage.set_public_access(archive_path, true).await?;
     }
-    Ok((
-        file_list_to_json(file_list.into_iter().collect()),
-        algorithm,
-    ))
+    Ok((file_list, algorithm))
 }
 
-fn file_list_to_json(file_list: Vec<(PathBuf, String)>) -> Value {
+pub(crate) fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> Value {
     Value::Array(
-        file_list
+        files
             .into_iter()
-            .map(|(path, name)| {
+            .map(|info| {
                 Value::Array(vec![
-                    Value::String(name),
-                    Value::String(path.into_os_string().into_string().unwrap()),
+                    Value::String(info.mime().as_ref().to_string()),
+                    Value::String(info.path.into_os_string().into_string().unwrap()),
+                    Value::Number(info.size.into()),
                 ])
             })
             .collect(),
