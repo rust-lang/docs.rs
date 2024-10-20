@@ -887,6 +887,7 @@ mod tests {
                 "docs.rs 4.0.0",
                 BuildStatus::Success,
                 None,
+                None,
             )
             .await?;
 

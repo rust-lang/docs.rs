@@ -1,4 +1,4 @@
-use crate::db::file::add_path_into_database;
+use crate::db::file::{add_path_into_database, file_list_to_json};
 use crate::db::{
     add_doc_coverage, add_package_into_database, add_path_into_remote_archive, finish_build,
     initialize_build, initialize_crate, initialize_release, types::BuildStatus,
@@ -476,6 +476,7 @@ impl RustwideBuilder {
                     algs.insert(new_alg);
                     files_list
                 };
+                let source_size: u64 = files_list.iter().map(|info| info.size).sum();
                 let metadata = Metadata::from_crate_root(build.host_source_dir())?;
                 let BuildTargets {
                     default_target,
@@ -532,7 +533,7 @@ impl RustwideBuilder {
                 }
 
                 let mut target_build_logs = HashMap::new();
-                if has_docs {
+                let documentation_size = if has_docs {
                     debug!("adding documentation for the default target to the database");
                     self.copy_docs(
                         &build.host_target_dir(),
@@ -557,13 +558,21 @@ impl RustwideBuilder {
                         )?;
                         target_build_logs.insert(target, target_res.build_log);
                     }
-                    let (_, new_alg) = self.runtime.block_on(add_path_into_remote_archive(
-                        &self.async_storage,
-                        &rustdoc_archive_path(name, version),
-                        local_storage.path(),
-                        true,
-                    ))?;
+                    let (file_list, new_alg) =
+                        self.runtime.block_on(add_path_into_remote_archive(
+                            &self.async_storage,
+                            &rustdoc_archive_path(name, version),
+                            local_storage.path(),
+                            true,
+                        ))?;
+                    let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
+                    self.metrics
+                        .documentation_size
+                        .observe(documentation_size as f64 / 1024.0 / 1024.0);
                     algs.insert(new_alg);
+                    Some(documentation_size)
+                } else {
+                    None
                 };
 
                 let has_examples = build.host_source_dir().join("examples").is_dir();
@@ -603,7 +612,7 @@ impl RustwideBuilder {
                     cargo_metadata,
                     &build.host_source_dir(),
                     &res.target,
-                    files_list,
+                    file_list_to_json(files_list),
                     successful_targets,
                     &release_data,
                     has_docs,
@@ -611,6 +620,7 @@ impl RustwideBuilder {
                     algs,
                     repository,
                     true,
+                    source_size,
                 ))?;
 
                 if let Some(doc_coverage) = res.doc_coverage {
@@ -632,6 +642,7 @@ impl RustwideBuilder {
                     &res.result.rustc_version,
                     &res.result.docsrs_version,
                     build_status,
+                    documentation_size,
                     None,
                 ))?;
 
@@ -1093,11 +1104,13 @@ mod tests {
                         r.default_target,
                         r.doc_targets,
                         r.archive_storage,
+                        r.source_size as "source_size!",
                         cov.total_items,
                         b.id as build_id,
                         b.build_status::TEXT as build_status,
                         b.docsrs_version,
-                        b.rustc_version
+                        b.rustc_version,
+                        b.documentation_size
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
@@ -1120,6 +1133,8 @@ mod tests {
             assert!(!row.docsrs_version.unwrap().is_empty());
             assert!(!row.rustc_version.unwrap().is_empty());
             assert_eq!(row.build_status.unwrap(), "success");
+            assert!(row.source_size > 0);
+            assert!(row.documentation_size.unwrap() > 0);
 
             let mut targets: Vec<String> = row
                 .doc_targets
