@@ -72,7 +72,7 @@ pub(crate) async fn build_details_handler(
              builds.rustc_version,
              builds.docsrs_version,
              builds.build_status as "build_status: BuildStatus",
-             builds.build_time,
+             COALESCE(builds.build_finished, builds.build_started) as build_time,
              builds.output,
              builds.errors,
              releases.default_target

@@ -234,7 +234,7 @@ async fn get_builds(
             builds.rustc_version,
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
-            builds.build_time,
+            COALESCE(builds.build_finished, builds.build_started) as build_time,
             builds.errors
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -286,7 +286,8 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
+            // third column contains build-start time, even when the rest is empty
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 2);
 
             Ok(())
         });
