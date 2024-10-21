@@ -685,7 +685,7 @@ impl MetaData {
             LEFT JOIN LATERAL (
                 SELECT * FROM builds
                 WHERE builds.rid = releases.id
-                ORDER BY builds.build_time
+                ORDER BY builds.build_finished
                 DESC LIMIT 1
             ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2"#,

@@ -142,7 +142,7 @@ impl CrateDetails {
                     WHERE
                         builds.rid = releases.id AND
                         builds.build_status = 'success'
-                    ORDER BY build_time DESC
+                    ORDER BY build_finished DESC
                     LIMIT 1
                 ) AS latest_build_id,
                 releases.rustdoc_status,
@@ -172,7 +172,7 @@ impl CrateDetails {
                     WHERE
                         builds.rid = releases.id AND
                         builds.build_status = 'success'
-                    ORDER BY builds.build_time
+                    ORDER BY builds.build_finished
                     DESC LIMIT 1
                 ) as "rustc_version?",
                 doc_coverage.total_items,

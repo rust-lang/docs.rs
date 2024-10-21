@@ -225,7 +225,7 @@ pub(crate) async fn source_browser_handler(
                 WHERE
                     builds.rid = releases.id AND
                     builds.build_status = 'success'
-                ORDER BY build_time DESC
+                ORDER BY build_finished DESC
                 LIMIT 1
             ) AS latest_build_id
          FROM releases

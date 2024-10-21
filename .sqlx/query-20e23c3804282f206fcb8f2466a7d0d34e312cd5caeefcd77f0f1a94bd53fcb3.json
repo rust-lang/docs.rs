@@ -1,20 +1,25 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             builds.rustc_version,\n             builds.docsrs_version,\n             builds.build_status as \"build_status: BuildStatus\",\n             builds.build_time,\n             builds.output,\n             builds.errors,\n             releases.default_target\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+  "query": "SELECT\n            builds.id,\n            builds.rustc_version,\n            builds.docsrs_version,\n            builds.build_status as \"build_status: BuildStatus\",\n            COALESCE(builds.build_finished, builds.build_started) as build_time,\n            builds.errors\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            crates.name = $1 AND\n            releases.version = $2\n         ORDER BY id DESC",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
         "name": "rustc_version",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "docsrs_version",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "build_status: BuildStatus",
         "type_info": {
           "Custom": {
@@ -30,42 +35,30 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "build_time",
         "type_info": "Timestamptz"
-      },
-      {
-        "ordinal": 4,
-        "name": "output",
-        "type_info": "Text"
       },
       {
         "ordinal": 5,
         "name": "errors",
         "type_info": "Text"
-      },
-      {
-        "ordinal": 6,
-        "name": "default_target",
-        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
         "Text",
         "Text"
       ]
     },
     "nullable": [
-      true,
-      true,
       false,
       true,
       true,
-      true,
+      false,
+      null,
       true
     ]
   },
-  "hash": "224f12feb10c65e8345eb4346c123ba324fde11d9f5bd07ae264761dc38e1f2a"
+  "hash": "20e23c3804282f206fcb8f2466a7d0d34e312cd5caeefcd77f0f1a94bd53fcb3"
 }
