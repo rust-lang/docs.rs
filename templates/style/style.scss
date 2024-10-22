@@ -7,19 +7,18 @@
     font-style: normal;
     font-weight: 400;
     src:
-        local('Fira Sans'),
-        url("FiraSans-Regular.woff2") format('woff2'),
-        url("FiraSans-Regular.woff") format('woff');
+      local('Fira Sans'),
+      url("FiraSans-Regular.woff2") format('woff2'),
+      url("FiraSans-Regular.woff") format('woff');
 }
-
 @font-face {
     font-family: 'Fira Sans';
     font-style: normal;
     font-weight: 500;
     src:
-        local('Fira Sans Medium'),
-        url("FiraSans-Medium.woff2") format('woff2'),
-        url("FiraSans-Medium.woff") format('woff');
+      local('Fira Sans Medium'),
+      url("FiraSans-Medium.woff2") format('woff2'),
+      url("FiraSans-Medium.woff") format('woff');
 }
 
 /* See SourceSerif4-LICENSE.md for the Source Serif 4 license. */
@@ -28,29 +27,27 @@
     font-style: normal;
     font-weight: 400;
     src:
-        local('Source Serif 4'),
-        url("SourceSerif4-Regular.ttf.woff2") format('woff2'),
-        url("SourceSerif4-Regular.ttf.woff") format('woff');
+      local('Source Serif 4'),
+      url("SourceSerif4-Regular.ttf.woff2") format('woff2'),
+      url("SourceSerif4-Regular.ttf.woff") format('woff');
 }
-
 @font-face {
     font-family: 'Source Serif';
     font-style: italic;
     font-weight: 400;
     src:
-        local('Source Serif 4'),
-        url("SourceSerif4-It.ttf.woff2") format('woff2'),
-        url("SourceSerif4-It.ttf.woff") format('woff');
+      local('Source Serif 4'),
+      url("SourceSerif4-It.ttf.woff2") format('woff2'),
+      url("SourceSerif4-It.ttf.woff") format('woff');
 }
-
 @font-face {
     font-family: 'Source Serif';
     font-style: normal;
     font-weight: 700;
     src:
-        local('Source Serif 4'),
-        url("SourceSerif4-Bold.ttf.woff2") format('woff2'),
-        url("SourceSerif4-Bold.ttf.woff") format('woff');
+      local('Source Serif 4'),
+      url("SourceSerif4-Bold.ttf.woff2") format('woff2'),
+      url("SourceSerif4-Bold.ttf.woff") format('woff');
 }
 
 /* See SourceCodePro-LICENSE.md for the Source Code Pro license. */
@@ -61,26 +58,24 @@
     /* Avoid using locally installed font because bad versions are in circulation:
      * see https://github.com/rust-lang/rust/issues/24355 */
     src:
-        url("SourceCodePro-Regular.ttf.woff2") format('woff2'),
-        url("SourceCodePro-Regular.ttf.woff") format('woff');
+      url("SourceCodePro-Regular.ttf.woff2") format('woff2'),
+      url("SourceCodePro-Regular.ttf.woff") format('woff');
 }
-
 @font-face {
     font-family: 'Source Code Pro';
     font-style: normal;
     font-weight: 600;
     src:
-        url("SourceCodePro-Semibold.ttf.woff2") format('woff2'),
-        url("SourceCodePro-Semibold.ttf.woff") format('woff');
+      url("SourceCodePro-Semibold.ttf.woff2") format('woff2'),
+      url("SourceCodePro-Semibold.ttf.woff") format('woff');
 }
-
 @font-face {
     font-family: 'Source Code Pro';
     font-style: italic;
     font-weight: 400;
     src:
-        url("SourceCodePro-It.ttf.woff2") format('woff2'),
-        url("SourceCodePro-It.ttf.woff") format('woff');
+      url("SourceCodePro-It.ttf.woff2") format('woff2'),
+      url("SourceCodePro-It.ttf.woff") format('woff');
 }
 
 html,
@@ -107,8 +102,7 @@ body {
     padding: 0;
     margin: 0;
     position: relative;
-    min-height: 100vh;
-    /* Tall enough to stick the footer to the bottom */
+    min-height: 100vh; /* Tall enough to stick the footer to the bottom */
 
     * {
         -webkit-box-sizing: border-box;
@@ -119,55 +113,37 @@ body {
     h1 {
         font-size: 1.5em;
     }
-
     h3 {
         font-size: 1.3em;
     }
-
-    h1,
-    h2,
-    h3,
-    h4 {
-        font-family: "Fira Sans", sans-serif;
+    h1, h2, h3, h4 {
+        font-family: "Fira Sans",sans-serif;
         font-weight: 500;
         margin: 20px 0 15px 0;
         padding-bottom: 6px;
     }
-
-    h2,
-    h3,
-    h4 {
+    h2, h3, h4 {
         border-bottom: 1px solid;
     }
-
     pre {
         background-color: var(--color-background-code);
         padding: 14px;
     }
-
-    code,
-    kbd,
-    pre,
-    samp {
-        font-family: "Source Code Pro", monospace;
+    code, kbd, pre, samp {
+        font-family: "Source Code Pro",monospace;
     }
-
     a {
         text-decoration: none;
         background: transparent;
     }
-
     p {
         margin: 0 0 .6em 0;
     }
-
-    ol,
-    ul {
+    ol, ul {
         padding-left: 25px;
     }
 
-    input,
-    #search {
+    input, #search {
         background-color: var(--color-background-input);
         color: var(--input-color);
         line-height: normal;
@@ -201,7 +177,7 @@ body {
     background-color: var(--color-background);
     color: var(--color-standard);
 
-    >h1 {
+    > h1 {
         color: var(--color-standard);
     }
 
@@ -210,16 +186,15 @@ body {
         fill: var(--color-background);
     }
 
-    text.highcharts-title,
-    g.highcharts-axis-labels>text {
+    text.highcharts-title, g.highcharts-axis-labels > text {
         fill: var(--chart-title-color) !important;
     }
 
-    g.highcharts-legend-item>text {
+    g.highcharts-legend-item > text {
         fill: var(--chart-grid) !important;
     }
 
-    g.highcharts-grid>path {
+    g.highcharts-grid > path {
         stroke: var(--chart-grid) !important;
     }
 }
@@ -287,8 +262,7 @@ div.recent-releases-container {
         padding: 0;
     }
 
-    ol.queue-list li,
-    ol.rebuild-queue-list li {
+    ol.queue-list li, ol.rebuild-queue-list li {
         list-style-type: decimal;
         margin-left: 20px;
 
@@ -296,7 +270,7 @@ div.recent-releases-container {
             color: var(--color-url);
         }
     }
-
+    
     .about p {
         margin-left: 20px;
     }
@@ -310,8 +284,7 @@ div.recent-releases-container {
         background-color: var(--background-color);
     }
 
-    .release,
-    .build-in-progress {
+    .release, .build-in-progress {
         display: block;
         border-bottom: 1px solid var(--color-border);
         padding: 0.4em $search-result-right-left-padding;
@@ -369,7 +342,6 @@ div.recent-releases-container {
         span.fa-check {
             color: var(--color-macro);
         }
-
         span.fa-times {
             color: var(--color-struct);
         }
@@ -416,10 +388,10 @@ div.recent-releases-container {
     }
 
     .yanked {
-        color: var(--color-warn-msg);
-        background-color: var(--color-warn-background);
-        padding: .2em .8em .2em .5em;
-        border-radius: 1em;
+      color: var(--color-warn-msg);
+      background-color: var(--color-warn-background);
+      padding: .2em .8em .2em .5em;
+      border-radius: 1em;
     }
 }
 
@@ -431,7 +403,6 @@ div.package-container {
         margin: 0;
         padding: 20px 0 0 16px;
     }
-
     p {
         margin: 0;
         padding: 0 0 20px 16px;
@@ -502,7 +473,7 @@ div.package-page-container {
             margin: 20px 5px 15px 5px;
         }
 
-        li.pure-menu-item>.documented-info {
+        li.pure-menu-item > .documented-info {
             font-size: 13px;
             display: block;
             width: 100%;
@@ -608,7 +579,7 @@ div.package-page-container {
                 border-bottom: 1px solid var(--color-menu-border);
             }
 
-            tbody>tr:last-child>td {
+            tbody > tr:last-child > td {
                 border-bottom-width: 0;
             }
 
@@ -730,7 +701,7 @@ div.docsrs-package-container {
                     border-radius: 2px;
                 }
 
-                .pure-menu-has-children>.pure-menu-link:after {
+                .pure-menu-has-children > .pure-menu-link:after {
                     font-size: 14px;
                 }
 
@@ -807,12 +778,7 @@ div.search-page-search-form {
         background-color: inherit;
     }
 
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    h6 {
+    h1, h2, h3, h4, h5, h6 {
         border-bottom-color: var(--color-border) !important;
         color: var(--color-standard) !important;
     }
@@ -827,8 +793,8 @@ div.search-page-search-form {
 }
 
 /* Don't put a newline after code fragments in headers */
-h3>code,
-h4>code {
+h3 > code,
+h4 > code {
     display: inline-block;
 }
 
@@ -911,17 +877,13 @@ ul.pure-menu-list {
         max-width: 46px;
 
         ul {
-
-            li:not(.toggle-source),
-            .text {
+            li:not(.toggle-source), .text {
                 display: none;
             }
-
             li.toggle-source {
                 .left {
                     display: none;
                 }
-
                 .right {
                     display: inline-block;
                     margin-left: -4px;
@@ -939,16 +901,13 @@ ul.pure-menu-list {
     display: inline-flex;
     overflow: scroll;
 }
-
 #line-numbers {
     text-align: right;
     letter-spacing: normal;
 }
-
-#line-numbers>code>a {
+#line-numbers > code > a  {
     padding: 0 8px;
 }
-
 // This class is used to the source code and the line number container in the
 // `crate/**/source/*` view
 .source-code {
@@ -966,7 +925,6 @@ ul.pure-menu-list {
         width: calc(100% - 46px);
     }
 }
-
 #source-code {
     overflow: scroll;
     width: 100%;
