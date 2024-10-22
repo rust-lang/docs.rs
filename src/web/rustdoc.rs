@@ -2549,6 +2549,9 @@ mod test {
     #[test]
     fn download_semver() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into()
+            });
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
@@ -2572,6 +2575,9 @@ mod test {
     #[test]
     fn download_specific_version() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into()
+            });
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
@@ -2599,6 +2605,9 @@ mod test {
     #[test]
     fn download_latest_version() {
         wrapper(|env| {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into()
+            });
             env.fake_release()
                 .name("dummy")
                 .version("0.1.0")
