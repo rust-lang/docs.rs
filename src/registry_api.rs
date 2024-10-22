@@ -1,5 +1,5 @@
 use crate::{error::Result, utils::retry_async};
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
 use semver::Version;
@@ -67,6 +67,26 @@ impl fmt::Display for OwnerKind {
             Self::Team => f.write_str("team"),
         }
     }
+}
+
+#[derive(Deserialize, Debug)]
+
+pub(crate) struct SearchCrate {
+    pub(crate) name: String,
+}
+
+#[derive(Deserialize, Debug)]
+
+pub(crate) struct SearchMeta {
+    pub(crate) next_page: Option<String>,
+    pub(crate) prev_page: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+pub(crate) struct Search {
+    pub(crate) crates: Vec<SearchCrate>,
+    pub(crate) meta: SearchMeta,
+    pub(crate) executed_query: Option<String>,
 }
 
 impl RegistryApi {
@@ -226,5 +246,72 @@ impl RegistryApi {
             .collect();
 
         Ok(result)
+    }
+
+    /// Fetch crates from the registry's API
+    pub(crate) async fn get_crates(&self, query: Option<&str>) -> Result<Search> {
+        #[derive(Deserialize, Debug)]
+        struct SearchError {
+            detail: String,
+        }
+
+        #[derive(Deserialize, Debug)]
+        struct SearchResponse {
+            crates: Option<Vec<SearchCrate>>,
+            meta: Option<SearchMeta>,
+            errors: Option<Vec<SearchError>>,
+        }
+
+        let url = {
+            let mut url = self.api_base.clone();
+            url.path_segments_mut()
+                .map_err(|()| anyhow!("Invalid API url"))?
+                .extend(&["api", "v1", "crates"]);
+            url.set_query(query);
+            url
+        };
+
+        // Extract the query from the query args
+        let executed_query = url.query_pairs().find_map(|(key, value)| {
+            if key == "q" {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        });
+
+        let response: SearchResponse = retry_async(
+            || async {
+                Ok(self
+                    .client
+                    .get(url.clone())
+                    .send()
+                    .await?
+                    .error_for_status()?)
+            },
+            self.max_retries,
+        )
+        .await?
+        .json()
+        .await?;
+
+        if let Some(errors) = response.errors {
+            let messages: Vec<_> = errors.into_iter().map(|e| e.detail).collect();
+            bail!("got error from crates.io: {}", messages.join("\n"));
+        }
+
+        let Some(crates) = response.crates else {
+            bail!("missing releases in crates.io response");
+        };
+
+        let Some(meta) = response.meta else {
+            bail!("missing metadata in crates.io response");
+        };
+
+        Ok(Search {
+            crates,
+            meta,
+            executed_query,
+        })
     }
 }
