@@ -1,5 +1,5 @@
 use crate::{
-    db::types::BuildStatus,
+    db::{types::BuildStatus, BuildId},
     impl_axum_webpage,
     web::{
         error::{AxumNope, AxumResult},
@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BuildDetails {
-    id: i32,
+    id: BuildId,
     rustc_version: Option<String>,
     docsrs_version: Option<String>,
     build_status: BuildStatus,
@@ -65,7 +65,11 @@ pub(crate) async fn build_details_handler(
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
-    let id: i32 = params.id.parse().map_err(|_| AxumNope::BuildNotFound)?;
+    let id = params
+        .id
+        .parse()
+        .map(BuildId)
+        .map_err(|_| AxumNope::BuildNotFound)?;
 
     let row = sqlx::query!(
         r#"SELECT
@@ -80,7 +84,7 @@ pub(crate) async fn build_details_handler(
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
-        id,
+        id.0,
         params.name,
         params.version.to_string(),
     )

@@ -1,4 +1,5 @@
 use crate::db::file::add_path_into_database;
+use crate::db::BuildId;
 use crate::db::{
     add_doc_coverage, add_package_into_database, add_path_into_remote_archive, finish_build,
     initialize_build, initialize_crate, initialize_release, types::BuildStatus,
@@ -362,7 +363,7 @@ impl RustwideBuilder {
             let crate_id = initialize_crate(&mut conn, name).await?;
             let release_id = initialize_release(&mut conn, crate_id, version).await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
-            Ok::<i32, Error>(build_id)
+            Ok::<BuildId, Error>(build_id)
         })?;
 
         match self.build_package_inner(name, version, kind, build_id) {
@@ -392,7 +393,7 @@ impl RustwideBuilder {
         name: &str,
         version: &str,
         kind: PackageKind<'_>,
-        build_id: i32,
+        build_id: BuildId,
     ) -> Result<bool> {
         info!("building package {} {}", name, version);
 
@@ -1148,18 +1149,18 @@ mod tests {
             // default target was built and is accessible
             assert!(storage.exists_in_archive(
                 &doc_archive,
-                0,
+                None,
                 &format!("{crate_path}/index.html"),
             )?);
             assert_success(&format!("/{crate_}/{version}/{crate_path}"), web)?;
 
             // source is also packaged
-            assert!(storage.exists_in_archive(&source_archive, 0, "src/lib.rs",)?);
+            assert!(storage.exists_in_archive(&source_archive, None, "src/lib.rs",)?);
             assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs"), web)?;
 
             assert!(!storage.exists_in_archive(
                 &doc_archive,
-                0,
+                None,
                 &format!("{default_target}/{crate_path}/index.html"),
             )?);
 
@@ -1193,7 +1194,7 @@ mod tests {
                     }
                     let target_docs_present = storage.exists_in_archive(
                         &doc_archive,
-                        0,
+                        None,
                         &format!("{target}/{crate_path}/index.html"),
                     )?;
 
@@ -1334,7 +1335,7 @@ mod tests {
             let crate_path = crate_.replace('-', "_");
             let target_docs_present = storage.exists_in_archive(
                 &doc_archive,
-                0,
+                None,
                 &format!("{target}/{crate_path}/index.html"),
             )?;
 
