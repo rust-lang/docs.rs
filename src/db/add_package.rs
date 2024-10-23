@@ -251,6 +251,9 @@ pub(crate) async fn finish_build(
     let rustc_date = match parse_rustc_date(rustc_version) {
         Ok(date) => Some(date),
         Err(err) => {
+            // in the database we see cases where the rustc version is missing
+            // in the builds-table. In this case & if we can't parse the version
+            // we just want to log an error, but still finish the build.
             error!(
                 "Failed to parse date from rustc version \"{}\": {:?}",
                 rustc_version, err
