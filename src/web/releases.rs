@@ -22,6 +22,7 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rinja::Template;
 use serde::{Deserialize, Serialize};
@@ -832,7 +833,7 @@ pub(crate) async fn build_queue_handler(
     .collect();
 
     let mut rebuild_queue = Vec::new();
-    let queue: Vec<QueuedCrate> = build_queue
+    let mut queue = build_queue
         .queued_crates()
         .await?
         .into_iter()
@@ -842,19 +843,20 @@ pub(crate) async fn build_queue_handler(
                 *name == krate.name && *version == krate.version
             })
         })
-        .map(|mut krate| {
-            if krate.priority >= REBUILD_PRIORITY {
-                rebuild_queue.push(krate.clone());
-            } else {
-                // The priority here is inverted: in the database if a crate has a higher priority it
-                // will be built after everything else, which is counter-intuitive for people not
-                // familiar with docs.rs's inner workings.
-                krate.priority = -krate.priority;
-            }
+        .collect_vec();
 
-            krate
-        })
-        .collect();
+    queue.retain_mut(|krate| {
+        if krate.priority >= REBUILD_PRIORITY {
+            rebuild_queue.push(krate.clone());
+            false
+        } else {
+            // The priority here is inverted: in the database if a crate has a higher priority it
+            // will be built after everything else, which is counter-intuitive for people not
+            // familiar with docs.rs's inner workings.
+            krate.priority = -krate.priority;
+            true
+        }
+    });
 
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
@@ -1901,15 +1903,29 @@ mod tests {
 
             let full =
                 kuchikiki::parse_html().one(web.get("/releases/queue?expand=1").send()?.text()?);
-            let items = full
+            let build_queue_list = full
+                .select(".queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+            let rebuild_queue_list = full
                 .select(".rebuild-queue-list > li")
                 .expect("missing list items")
                 .collect::<Vec<_>>();
 
-            assert_eq!(items.len(), 2);
-            assert!(items.iter().any(|li| li.text_contents().contains("foo")));
-            assert!(items.iter().any(|li| li.text_contents().contains("bar")));
-            assert!(!items.iter().any(|li| li.text_contents().contains("baz")));
+            assert_eq!(build_queue_list.len(), 1);
+            assert_eq!(rebuild_queue_list.len(), 2);
+            assert!(rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("foo")));
+            assert!(rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("bar")));
+            assert!(build_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("baz")));
+            assert!(!rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("baz")));
 
             Ok(())
         });
