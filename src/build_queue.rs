@@ -15,6 +15,8 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info};
 
+// Threshold priority to decide whether a crate will in the rebuild-queue-list.
+// If crate is in the rebuild-queue-list it won't in the build-queue-list.
 pub(crate) const REBUILD_PRIORITY: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
