@@ -15,6 +15,10 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, instrument};
 
+/// The static prioriry for background rebuilds.
+/// Used when queueing rebuilds, and when rendering them
+/// collapsed in the UI.
+/// For Normal build priorities we use smaller values.
 pub(crate) const REBUILD_PRIORITY: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
