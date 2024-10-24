@@ -249,7 +249,7 @@ impl RegistryApi {
     }
 
     /// Fetch crates from the registry's API
-    pub(crate) async fn get_crates(&self, query: Option<&str>) -> Result<Search> {
+    pub(crate) async fn search(&self, query_params: &str) -> Result<Search> {
         #[derive(Deserialize, Debug)]
         struct SearchError {
             detail: String,
@@ -267,7 +267,7 @@ impl RegistryApi {
             url.path_segments_mut()
                 .map_err(|()| anyhow!("Invalid API url"))?
                 .extend(&["api", "v1", "crates"]);
-            url.set_query(query);
+            url.set_query(Some(query_params));
             url
         };
 
