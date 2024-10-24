@@ -86,7 +86,6 @@ pub(crate) struct SearchMeta {
 pub(crate) struct Search {
     pub(crate) crates: Vec<SearchCrate>,
     pub(crate) meta: SearchMeta,
-    pub(crate) executed_query: Option<String>,
 }
 
 impl RegistryApi {
@@ -271,15 +270,6 @@ impl RegistryApi {
             url
         };
 
-        // Extract the query from the query args
-        let executed_query = url.query_pairs().find_map(|(key, value)| {
-            if key == "q" {
-                Some(value.to_string())
-            } else {
-                None
-            }
-        });
-
         let response: SearchResponse = retry_async(
             || async {
                 Ok(self
@@ -308,10 +298,6 @@ impl RegistryApi {
             bail!("missing metadata in crates.io response");
         };
 
-        Ok(Search {
-            crates,
-            meta,
-            executed_query,
-        })
+        Ok(Search { crates, meta })
     }
 }
