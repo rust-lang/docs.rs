@@ -424,6 +424,7 @@ async fn apply_middleware(
             .layer(Extension(context.service_metrics()?))
             .layer(Extension(context.instance_metrics()?))
             .layer(Extension(context.config()?))
+            .layer(Extension(context.registry_api()?))
             .layer(Extension(async_storage))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))

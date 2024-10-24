@@ -3,7 +3,7 @@
 use crate::{
     build_queue::QueuedCrate,
     cdn, impl_axum_webpage,
-    utils::{report_error, retry_async},
+    utils::report_error,
     web::{
         axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
@@ -12,9 +12,9 @@ use crate::{
         page::templates::{filters, RenderRegular, RenderSolid},
         ReqVersion,
     },
-    AsyncBuildQueue, Config, InstanceMetrics,
+    AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
 };
-use anyhow::{anyhow, bail, Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 use axum::{
     extract::{Extension, Query},
     response::{IntoResponse, Response as AxumResponse},
@@ -22,14 +22,13 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
-use once_cell::sync::Lazy;
 use rinja::Template;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::warn;
 use url::form_urlencoded;
 
 use super::cache::CachePolicy;
@@ -132,7 +131,6 @@ pub(crate) async fn get_releases(
 
 struct SearchResult {
     pub results: Vec<Release>,
-    pub executed_query: Option<String>,
     pub prev_page: Option<String>,
     pub next_page: Option<String>,
 }
@@ -142,85 +140,10 @@ struct SearchResult {
 /// This delegates to the crates.io search API.
 async fn get_search_results(
     conn: &mut sqlx::PgConnection,
-    config: &Config,
+    registry: &RegistryApi,
     query_params: &str,
 ) -> Result<SearchResult, anyhow::Error> {
-    #[derive(Deserialize)]
-    struct CratesIoError {
-        detail: String,
-    }
-    #[derive(Deserialize)]
-    struct CratesIoSearchResult {
-        crates: Option<Vec<CratesIoCrate>>,
-        meta: Option<CratesIoMeta>,
-        errors: Option<Vec<CratesIoError>>,
-    }
-    #[derive(Deserialize, Debug)]
-    struct CratesIoCrate {
-        name: String,
-    }
-    #[derive(Deserialize, Debug)]
-    struct CratesIoMeta {
-        next_page: Option<String>,
-        prev_page: Option<String>,
-    }
-
-    use crate::utils::APP_USER_AGENT;
-    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
-    use reqwest::Client as HttpClient;
-
-    static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        HttpClient::builder()
-            .default_headers(headers)
-            .build()
-            .unwrap()
-    });
-
-    let url = config
-        .registry_api_host
-        .join(&format!("api/v1/crates{query_params}"))?;
-    debug!("fetching search results from {}", url);
-
-    // extract the query from the query args.
-    // This is easier because the query might have been encoded in the bash64-encoded
-    // paginate parameter.
-    let executed_query = url.query_pairs().find_map(|(key, value)| {
-        if key == "q" {
-            Some(value.to_string())
-        } else {
-            None
-        }
-    });
-
-    let response: CratesIoSearchResult = retry_async(
-        || async {
-            Ok(HTTP_CLIENT
-                .get(url.clone())
-                .send()
-                .await?
-                .error_for_status()?)
-        },
-        config.crates_io_api_call_retries,
-    )
-    .await?
-    .json()
-    .await?;
-
-    if let Some(errors) = response.errors {
-        let messages: Vec<_> = errors.into_iter().map(|e| e.detail).collect();
-        bail!("got error from crates.io: {}", messages.join("\n"));
-    }
-
-    let Some(crates) = response.crates else {
-        bail!("missing releases in crates.io response");
-    };
-
-    let Some(meta) = response.meta else {
-        bail!("missing metadata in crates.io response");
-    };
+    let crate::registry_api::Search { crates, meta } = registry.search(query_params).await?;
 
     let names = Arc::new(
         crates
@@ -291,7 +214,6 @@ async fn get_search_results(
             .filter_map(|name| crates.get(name))
             .cloned()
             .collect(),
-        executed_query,
         prev_page: meta.prev_page,
         next_page: meta.next_page,
     })
@@ -573,10 +495,11 @@ impl_axum_webpage! {
 pub(crate) async fn search_handler(
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
+    Extension(registry): Extension<Arc<RegistryApi>>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Query(mut params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
-    let query = params
+    let mut query = params
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
@@ -638,40 +561,30 @@ pub(crate) async fn search_handler(
 
     let search_result = if let Some(paginate) = params.get("paginate") {
         let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
-            warn!(
-                "error when decoding pagination base64 string \"{}\": {:?}",
-                paginate, e
-            );
+            warn!("error when decoding pagination base64 string \"{paginate}\": {e:?}");
             AxumNope::NoResults
         })?;
         let query_params = String::from_utf8_lossy(&decoded);
-
-        if !query_params.starts_with('?') {
+        let query_params = query_params.strip_prefix('?').ok_or_else(|| {
             // sometimes we see plain bytes being passed to `paginate`.
             // In these cases we just return `NoResults` and don't call
             // the crates.io API.
             // The whole point of the `paginate` design is that we don't
             // know anything about the pagination args and crates.io can
             // change them as they wish, so we cannot do any more checks here.
-            warn!(
-                "didn't get query args in `paginate` arguments for search: \"{}\"",
-                query_params
-            );
-            return Err(AxumNope::NoResults);
+            warn!("didn't get query args in `paginate` arguments for search: \"{query_params}\"");
+            AxumNope::NoResults
+        })?;
+
+        for (k, v) in form_urlencoded::parse(query_params.as_bytes()) {
+            match &*k {
+                "q" => query = v.to_string(),
+                "sort" => sort_by = v.to_string(),
+                _ => {}
+            }
         }
 
-        let mut p = form_urlencoded::parse(query_params.as_bytes());
-        if let Some(v) = p.find_map(|(k, v)| {
-            if &k == "sort" {
-                Some(v.to_string())
-            } else {
-                None
-            }
-        }) {
-            sort_by = v;
-        };
-
-        get_search_results(&mut conn, &config, &query_params).await?
+        get_search_results(&mut conn, &registry, query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -679,23 +592,21 @@ pub(crate) async fn search_handler(
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(&mut conn, &config, &format!("?{}", &query_params)).await?
+        get_search_results(&mut conn, &registry, &query_params).await?
     } else {
         return Err(AxumNope::NoResults);
     };
 
-    let executed_query = search_result.executed_query.unwrap_or_default();
-
     let title = if search_result.results.is_empty() {
-        format!("No results found for '{executed_query}'")
+        format!("No results found for '{query}'")
     } else {
-        format!("Search results for '{executed_query}'")
+        format!("Search results for '{query}'")
     };
 
     Ok(Search {
         title,
         releases: search_result.results,
-        search_query: Some(executed_query),
+        search_query: Some(query),
         search_sort_by: Some(sort_by),
         next_page_link: search_result
             .next_page

@@ -31,12 +31,6 @@ pub(crate) mod sized_buffer;
 
 use std::{future::Future, thread, time::Duration};
 
-pub(crate) const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
-);
-
 pub(crate) fn report_error(err: &anyhow::Error) {
     // Debug-format for anyhow errors includes context & backtrace
     if std::env::var("SENTRY_DSN").is_ok() {
