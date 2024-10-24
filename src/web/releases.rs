@@ -143,13 +143,13 @@ struct SearchResult {
 async fn get_search_results(
     conn: &mut sqlx::PgConnection,
     registry: &RegistryApi,
-    query_params: Option<&str>,
+    query_params: &str,
 ) -> Result<SearchResult, anyhow::Error> {
     let crate::registry_api::Search {
         crates,
         meta,
         executed_query,
-    } = registry.get_crates(query_params).await?;
+    } = registry.search(query_params).await?;
 
     let names = Arc::new(
         crates
@@ -602,7 +602,7 @@ pub(crate) async fn search_handler(
             sort_by = v;
         };
 
-        get_search_results(&mut conn, &registry, Some(query_params)).await?
+        get_search_results(&mut conn, &registry, query_params).await?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -610,7 +610,7 @@ pub(crate) async fn search_handler(
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(&mut conn, &registry, Some(&query_params)).await?
+        get_search_results(&mut conn, &registry, &query_params).await?
     } else {
         return Err(AxumNope::NoResults);
     };
