@@ -98,7 +98,8 @@
                     benefit from new features in rustdoc.
                 </p>
                 {%- if !expand_rebuild_queue -%}
-                    <p>There are currently {{ rebuild_queue.len() }} crate{{ rebuild_queue.len()|pluralize }} in the rebuild queue.</p>
+                    {% let rebuild_queue_len = rebuild_queue.len() %}
+                    <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
                     <p><a href="?expand=1">Show</a></p>
                 {%- endif -%}
             </div>
