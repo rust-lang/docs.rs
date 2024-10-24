@@ -84,9 +84,41 @@
                         </li>
                     {%- endfor %}
                 {%- else %}
-                    <strong>There is nothing in the queue</strong>
+                    <strong>There is nothing in the build queue</strong>
                 {%- endif %}
             </ol>
+
+            <div class="release">
+                <strong>Rebuild Queue</strong>
+            </div>
+
+            <div class="about">
+                <p>
+                    We continuously rebuild the latest versions for all crates so they can
+                    benefit from new features in rustdoc.
+                </p>
+                {%- if !expand_rebuild_queue -%}
+                    {% let rebuild_queue_len = rebuild_queue.len() %}
+                    <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
+                    <p><a href="?expand=1">Show</a></p>
+                {%- endif -%}
+            </div>
+
+            {%- if expand_rebuild_queue -%}
+                <ol class="rebuild-queue-list">
+                    {%- if !rebuild_queue.is_empty() -%}
+                        {% for crate_item in rebuild_queue -%}
+                            <li>
+                                <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                    {{- crate_item.name }} {{ crate_item.version -}}
+                                </a>
+                            </li>
+                        {%- endfor %}
+                    {%- else %}
+                        <strong>There is nothing in the rebuild queue</strong>
+                    {%- endif %}
+                </ol>
+            {%- endif -%}
         </div>
     </div>
 {%- endblock body -%}

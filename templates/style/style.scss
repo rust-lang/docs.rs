@@ -262,13 +262,17 @@ div.recent-releases-container {
         padding: 0;
     }
 
-    ol.queue-list li {
+    ol.queue-list li, ol.rebuild-queue-list li {
         list-style-type: decimal;
         margin-left: 20px;
 
         a {
             color: var(--color-url);
         }
+    }
+    
+    .about p {
+        margin-left: 20px;
     }
 
     strong {

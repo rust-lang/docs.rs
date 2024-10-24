@@ -1,7 +1,7 @@
 //! Releases web handlers
 
 use crate::{
-    build_queue::QueuedCrate,
+    build_queue::{QueuedCrate, REBUILD_PRIORITY},
     cdn, impl_axum_webpage,
     utils::{report_error, retry_async},
     web::{
@@ -22,6 +22,7 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use rinja::Template;
 use serde::{Deserialize, Serialize};
@@ -782,16 +783,24 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
+    rebuild_queue: Vec<QueuedCrate>,
     active_cdn_deployments: Vec<String>,
     in_progress_builds: Vec<(String, String)>,
     csp_nonce: String,
+    expand_rebuild_queue: bool,
 }
 
 impl_axum_webpage! { BuildQueuePage }
 
+#[derive(Deserialize)]
+pub(crate) struct BuildQueueParams {
+    expand: Option<String>,
+}
+
 pub(crate) async fn build_queue_handler(
     Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
+    Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
     let mut active_cdn_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
         .await?
@@ -823,7 +832,8 @@ pub(crate) async fn build_queue_handler(
     .map(|rec| (rec.name, rec.version))
     .collect();
 
-    let queue: Vec<QueuedCrate> = build_queue
+    let mut rebuild_queue = Vec::new();
+    let mut queue = build_queue
         .queued_crates()
         .await?
         .into_iter()
@@ -833,22 +843,29 @@ pub(crate) async fn build_queue_handler(
                 *name == krate.name && *version == krate.version
             })
         })
-        .map(|mut krate| {
+        .collect_vec();
+
+    queue.retain_mut(|krate| {
+        if krate.priority >= REBUILD_PRIORITY {
+            rebuild_queue.push(krate.clone());
+            false
+        } else {
             // The priority here is inverted: in the database if a crate has a higher priority it
             // will be built after everything else, which is counter-intuitive for people not
             // familiar with docs.rs's inner workings.
             krate.priority = -krate.priority;
-
-            krate
-        })
-        .collect();
+            true
+        }
+    });
 
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
         queue,
+        rebuild_queue,
         active_cdn_deployments,
         in_progress_builds,
         csp_nonce: String::new(),
+        expand_rebuild_queue: params.expand.is_some(),
     })
 }
 
@@ -1062,7 +1079,7 @@ mod tests {
     }
 
     #[test]
-    fn search_result_can_retrive_sort_by_from_pagination() {
+    fn search_result_can_retrieve_sort_by_from_pagination() {
         wrapper(|env| {
             let mut crates_io = mockito::Server::new();
             env.override_config(|config| {
@@ -1834,6 +1851,81 @@ mod tests {
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(queued_items, vec!["bar 0.1.0"]);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_releases_rebuild_queue_empty() {
+        wrapper(|env| {
+            let web = env.frontend();
+
+            let empty = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+
+            assert!(empty
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("We continuously rebuild")));
+
+            assert!(empty
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("crates in the rebuild queue")));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_releases_rebuild_queue_with_crates() {
+        wrapper(|env| {
+            let web = env.frontend();
+            let queue = env.build_queue();
+            queue.add_crate("foo", "1.0.0", REBUILD_PRIORITY, None)?;
+            queue.add_crate("bar", "0.1.0", REBUILD_PRIORITY + 1, None)?;
+            queue.add_crate("baz", "0.0.1", REBUILD_PRIORITY - 1, None)?;
+
+            let full = kuchikiki::parse_html().one(web.get("/releases/queue").send()?.text()?);
+            let items = full
+                .select(".rebuild-queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            // empty because expand_rebuild_queue is not set
+            assert_eq!(items.len(), 0);
+            assert!(full
+                .select(".about > p")
+                .expect("missing heading")
+                .any(|el| el
+                    .text_contents()
+                    .contains("There are currently 2 crates in the rebuild queue")));
+
+            let full =
+                kuchikiki::parse_html().one(web.get("/releases/queue?expand=1").send()?.text()?);
+            let build_queue_list = full
+                .select(".queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+            let rebuild_queue_list = full
+                .select(".rebuild-queue-list > li")
+                .expect("missing list items")
+                .collect::<Vec<_>>();
+
+            assert_eq!(build_queue_list.len(), 1);
+            assert_eq!(rebuild_queue_list.len(), 2);
+            assert!(rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("foo")));
+            assert!(rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("bar")));
+            assert!(build_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("baz")));
+            assert!(!rebuild_queue_list
+                .iter()
+                .any(|li| li.text_contents().contains("baz")));
 
             Ok(())
         });
