@@ -132,7 +132,6 @@ pub(crate) async fn get_releases(
 
 struct SearchResult {
     pub results: Vec<Release>,
-    pub executed_query: Option<String>,
     pub prev_page: Option<String>,
     pub next_page: Option<String>,
 }
@@ -145,11 +144,7 @@ async fn get_search_results(
     registry: &RegistryApi,
     query_params: &str,
 ) -> Result<SearchResult, anyhow::Error> {
-    let crate::registry_api::Search {
-        crates,
-        meta,
-        executed_query,
-    } = registry.search(query_params).await?;
+    let crate::registry_api::Search { crates, meta } = registry.search(query_params).await?;
 
     let names = Arc::new(
         crates
@@ -220,7 +215,6 @@ async fn get_search_results(
             .filter_map(|name| crates.get(name))
             .cloned()
             .collect(),
-        executed_query,
         prev_page: meta.prev_page,
         next_page: meta.next_page,
     })
@@ -506,7 +500,7 @@ pub(crate) async fn search_handler(
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Query(mut params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
-    let query = params
+    let mut query = params
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
@@ -568,39 +562,28 @@ pub(crate) async fn search_handler(
 
     let search_result = if let Some(paginate) = params.get("paginate") {
         let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
-            warn!(
-                "error when decoding pagination base64 string \"{}\": {:?}",
-                paginate, e
-            );
+            warn!("error when decoding pagination base64 string \"{paginate}\": {e:?}");
             AxumNope::NoResults
         })?;
         let query_params = String::from_utf8_lossy(&decoded);
-        let query_params = match query_params.strip_prefix('?') {
-            Some(query_params) => query_params,
-            None => {
-                // sometimes we see plain bytes being passed to `paginate`.
-                // In these cases we just return `NoResults` and don't call
-                // the crates.io API.
-                // The whole point of the `paginate` design is that we don't
-                // know anything about the pagination args and crates.io can
-                // change them as they wish, so we cannot do any more checks here.
-                warn!(
-                    "didn't get query args in `paginate` arguments for search: \"{query_params}\""
-                );
-                return Err(AxumNope::NoResults);
-            }
-        };
+        let query_params = query_params.strip_prefix('?').ok_or_else(|| {
+            // sometimes we see plain bytes being passed to `paginate`.
+            // In these cases we just return `NoResults` and don't call
+            // the crates.io API.
+            // The whole point of the `paginate` design is that we don't
+            // know anything about the pagination args and crates.io can
+            // change them as they wish, so we cannot do any more checks here.
+            warn!("didn't get query args in `paginate` arguments for search: \"{query_params}\"");
+            AxumNope::NoResults
+        })?;
 
-        let mut p = form_urlencoded::parse(query_params.as_bytes());
-        if let Some(v) = p.find_map(|(k, v)| {
-            if &k == "sort" {
-                Some(v.to_string())
-            } else {
-                None
+        for (k, v) in form_urlencoded::parse(query_params.as_bytes()) {
+            match &*k {
+                "q" => query = v.to_string(),
+                "sort" => sort_by = v.to_string(),
+                _ => {}
             }
-        }) {
-            sort_by = v;
-        };
+        }
 
         get_search_results(&mut conn, &registry, query_params).await?
     } else if !query.is_empty() {
@@ -615,18 +598,16 @@ pub(crate) async fn search_handler(
         return Err(AxumNope::NoResults);
     };
 
-    let executed_query = search_result.executed_query.unwrap_or_default();
-
     let title = if search_result.results.is_empty() {
-        format!("No results found for '{executed_query}'")
+        format!("No results found for '{query}'")
     } else {
-        format!("Search results for '{executed_query}'")
+        format!("Search results for '{query}'")
     };
 
     Ok(Search {
         title,
         releases: search_result.results,
-        search_query: Some(executed_query),
+        search_query: Some(query),
         search_sort_by: Some(sort_by),
         next_page_link: search_result
             .next_page
