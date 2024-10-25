@@ -12,6 +12,9 @@ pub struct Config {
     pub registry_url: Option<String>,
     pub registry_api_host: Url,
 
+    /// How long to wait between registry checks
+    pub(crate) delay_between_registry_fetches: Duration,
+
     // Database connection params
     pub(crate) database_url: String,
     pub(crate) max_pool_size: u32,
@@ -148,6 +151,10 @@ impl Config {
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
             delay_between_build_attempts: Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
+                60,
+            )?),
+            delay_between_registry_fetches: Duration::from_secs(env::<u64>(
+                "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 60,
             )?),
 
