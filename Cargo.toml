@@ -31,7 +31,7 @@ clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-performance", "parallel"] }
 rayon = "1.6.1"
 num_cpus = "1.15.0"
-crates-index-diff = { version = "25.0.0", features = [ "max-performance" ]}
+crates-index-diff = { version = "26.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.12", features = ["json", "gzip"] }
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"

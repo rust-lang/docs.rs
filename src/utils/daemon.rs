@@ -49,7 +49,7 @@ pub async fn watch_registry(
             .await?;
             last_gc = Instant::now();
         }
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        tokio::time::sleep(config.delay_between_registry_fetches).await;
     }
 }
 
