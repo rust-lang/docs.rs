@@ -676,17 +676,17 @@ pub async fn queue_rebuilds(
     config: &Config,
     build_queue: &AsyncBuildQueue,
 ) -> Result<()> {
-    let already_queued_rebuilds = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!" FROM queue WHERE priority >= $1"#,
-        REBUILD_PRIORITY
-    )
-    .fetch_one(&mut *conn)
-    .await?;
+    let already_queued_rebuilds: usize = build_queue
+        .pending_count_by_priority()
+        .await?
+        .iter()
+        .filter_map(|(priority, count)| (*priority >= REBUILD_PRIORITY).then_some(count))
+        .sum();
 
     let rebuilds_to_queue = config
         .max_queued_rebuilds
         .expect("config.max_queued_rebuilds not set") as i64
-        - already_queued_rebuilds;
+        - already_queued_rebuilds as i64;
 
     if rebuilds_to_queue <= 0 {
         info!("not queueing rebuilds; queue limit reached");
@@ -801,6 +801,47 @@ mod tests {
             assert_eq!(queue[0].name, "foo");
             assert_eq!(queue[0].version, "0.1.0");
             assert_eq!(queue[0].priority, REBUILD_PRIORITY);
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_still_rebuild_when_full_with_failed() {
+        crate::test::async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.max_queued_rebuilds = Some(1);
+                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
+            });
+
+            let build_queue = env.async_build_queue().await;
+            build_queue
+                .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
+                .await?;
+            build_queue
+                .add_crate("foo2", "0.1.0", REBUILD_PRIORITY, None)
+                .await?;
+
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query!("UPDATE queue SET attempt = 99")
+                .execute(&mut *conn)
+                .await?;
+
+            assert_eq!(build_queue.queued_crates().await?.len(), 0);
+
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .create_async()
+                .await?;
+
+            let build_queue = env.async_build_queue().await;
+            queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
+
+            assert_eq!(build_queue.queued_crates().await?.len(), 1);
 
             Ok(())
         })
