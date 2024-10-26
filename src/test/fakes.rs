@@ -321,6 +321,11 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn documentation_url(mut self, documentation_url: Option<String>) -> Self {
+        self.package.documentation = documentation_url;
+        self
+    }
+
     pub(crate) fn create(self) -> Result<i32> {
         let runtime = self.runtime.clone();
         runtime.block_on(self.create_async())

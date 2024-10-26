@@ -219,6 +219,14 @@ impl CrateDetails {
                 .transpose()?,
         };
 
+        // When documentation_url points to docs.rs itself, then we don't need to
+        // show it on the page because user is already on docs.rs website
+        let documentation_url = match krate.documentation_url {
+            Some(url) if url.starts_with("https://docs.rs/") => None,
+            Some(url) => Some(url),
+            None => None,
+        };
+
         let mut crate_details = CrateDetails {
             name: krate.name,
             version: version.clone(),
@@ -241,9 +249,9 @@ impl CrateDetails {
             releases: prefetched_releases,
             repository_metadata,
             metadata,
+            documentation_url,
             is_library: krate.is_library,
             license: krate.license,
-            documentation_url: krate.documentation_url,
             documented_items: krate.documented_items,
             total_items: krate.total_items,
             total_items_needing_examples: krate.total_items_needing_examples,
@@ -890,6 +898,49 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_crate_details_documentation_url_is_none_when_url_is_docs_rs() {
+        async_wrapper(|env| async move {
+            let db = env.async_db().await;
+            let mut conn = db.async_conn().await;
+
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .documentation_url(Some("https://foo.com".into()))
+                .create_async()
+                .await?;
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.2.0")
+                .documentation_url(Some("https://docs.rs/foo/".into()))
+                .create_async()
+                .await?;
+            env.async_fake_release()
+                .await
+                .name("foo")
+                .version("0.3.0")
+                .documentation_url(None)
+                .create_async()
+                .await?;
+
+            let details_0_1 = crate_details(&mut conn, "foo", "0.1.0", None).await;
+            let details_0_2 = crate_details(&mut conn, "foo", "0.2.0", None).await;
+            let details_0_3 = crate_details(&mut conn, "foo", "0.3.0", None).await;
+
+            assert_eq!(
+                details_0_1.documentation_url,
+                Some("https://foo.com".into())
+            );
+            assert_eq!(details_0_2.documentation_url, None);
+            assert_eq!(details_0_3.documentation_url, None);
+
+            Ok(())
+        });
     }
 
     #[test]
