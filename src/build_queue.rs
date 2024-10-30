@@ -698,19 +698,24 @@ pub async fn queue_rebuilds(
              SELECT
                  c.name,
                  r.version,
-                 max(b.rustc_nightly_date) as rustc_nightly_date
-
+                 (
+                    SELECT MAX(b.rustc_nightly_date)
+                    FROM builds AS b
+                    WHERE b.rid = r.id AND b.rustc_nightly_date IS NOT NULL
+                 ) AS rustc_nightly_date,
+                 (
+                    SELECT MAX(COALESCE(b.build_finished, b.build_started))
+                    FROM builds AS b
+                    WHERE b.rid = r.id
+                 ) AS last_build_attempt
              FROM crates AS c
              INNER JOIN releases AS r ON c.latest_version_id = r.id
-             INNER JOIN builds AS b ON r.id = b.rid
 
              WHERE
                  r.rustdoc_status = TRUE
-
-             GROUP BY c.name, r.version
          ) as i
          WHERE i.rustc_nightly_date < $1
-         ORDER BY i.rustc_nightly_date ASC
+         ORDER BY i.last_build_attempt ASC
          LIMIT $2",
         config
             .rebuild_up_to_date
