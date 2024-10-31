@@ -65,6 +65,8 @@ pub(crate) struct CrateDetails {
     pub(crate) crate_id: i32,
     /// Database id for this release
     pub(crate) release_id: i32,
+    source_size: Option<i64>,
+    documentation_size: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -122,6 +124,8 @@ impl CrateDetails {
         req_version: Option<ReqVersion>,
         prefetched_releases: Vec<Release>,
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
+        // FIXME: Since all subqueries from `builds` table have the same conditions, would be
+        // nice to group them in one subquery instead.
         let krate = match sqlx::query!(
             r#"SELECT
                 crates.id AS crate_id,
@@ -163,6 +167,16 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
+                releases.source_size as "source_size?",
+                (
+                    SELECT documentation_size
+                    FROM builds
+                    WHERE
+                        builds.rid = releases.id AND
+                        builds.build_status = 'success'
+                    ORDER BY builds.build_finished
+                    DESC LIMIT 1
+                ) as "documentation_size?",
                 (
                     -- we're using the rustc version here to set the correct CSS file
                     -- in the metadata.
@@ -258,6 +272,8 @@ impl CrateDetails {
             items_with_examples: krate.items_with_examples,
             crate_id: krate.crate_id,
             release_id: krate.release_id,
+            documentation_size: krate.documentation_size,
+            source_size: krate.source_size,
         };
 
         // get owners
@@ -442,6 +458,8 @@ struct CrateDetailsPage {
     last_successful_build: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
     csp_nonce: String,
+    source_size: Option<i64>,
+    documentation_size: Option<i64>,
 }
 
 impl CrateDetailsPage {
@@ -513,6 +531,8 @@ pub(crate) async fn crate_details_handler(
         is_library,
         last_successful_build,
         rustdoc,
+        source_size,
+        documentation_size,
         ..
     } = details;
 
@@ -538,6 +558,8 @@ pub(crate) async fn crate_details_handler(
         last_successful_build,
         rustdoc,
         csp_nonce: String::new(),
+        source_size,
+        documentation_size,
     }
     .into_response();
     res.extensions_mut()

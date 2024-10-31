@@ -37,8 +37,19 @@
                                 {%- endif -%}
                             </li>
                         {%- endif -%}
-                        <li class="pure-menu-heading">Links</li>
+                        {%- if let Some(source_size) = source_size -%}
+                            <li class="pure-menu-heading">Size</li>
+                            <li class="pure-menu-item">
+                                <span class="documented-info">Source code size: {{(*source_size)|filesizeformat}}</span>
+                            </li>
+                            {%- if let Some(doc_size) = documentation_size -%}
+                                <li class="pure-menu-item">
+                                    <span class="documented-info">Documentation size: {{(*doc_size)|filesizeformat}}</span>
+                                </li>
+                            {%- endif -%}
+                        {%- endif -%}
 
+                        <li class="pure-menu-heading">Links</li>
                         {# If the crate has a homepage, show it #}
                         {%- if let Some(homepage_url) = homepage_url -%}
                             <li class="pure-menu-item">
