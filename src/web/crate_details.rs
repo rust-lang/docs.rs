@@ -124,8 +124,6 @@ impl CrateDetails {
         req_version: Option<ReqVersion>,
         prefetched_releases: Vec<Release>,
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
-        // FIXME: Since all subqueries from `builds` table have the same conditions, would be
-        // nice to group them in one subquery instead.
         let krate = match sqlx::query!(
             r#"SELECT
                 crates.id AS crate_id,
@@ -138,17 +136,9 @@ impl CrateDetails {
                 releases.description_long,
                 releases.release_time,
                 release_build_status.build_status as "build_status!: BuildStatus",
-                (
-                    -- this is the latest build ID that generated content
-                    -- it's used to invalidate some blob storage related caches.
-                    SELECT id
-                    FROM builds
-                    WHERE
-                        builds.rid = releases.id AND
-                        builds.build_status = 'success'
-                    ORDER BY build_finished DESC
-                    LIMIT 1
-                ) AS latest_build_id,
+                -- this is the latest build ID that generated content
+                -- it's used to invalidate some blob storage related caches.
+                builds.id as "latest_build_id?",
                 releases.rustdoc_status,
                 releases.archive_storage,
                 releases.repository_url,
@@ -168,27 +158,11 @@ impl CrateDetails {
                 releases.documentation_url,
                 releases.default_target,
                 releases.source_size as "source_size?",
-                (
-                    SELECT documentation_size
-                    FROM builds
-                    WHERE
-                        builds.rid = releases.id AND
-                        builds.build_status = 'success'
-                    ORDER BY builds.build_finished
-                    DESC LIMIT 1
-                ) as "documentation_size?",
-                (
-                    -- we're using the rustc version here to set the correct CSS file
-                    -- in the metadata.
-                    -- So we're only interested in successful builds here.
-                    SELECT rustc_version
-                    FROM builds
-                    WHERE
-                        builds.rid = releases.id AND
-                        builds.build_status = 'success'
-                    ORDER BY builds.build_finished
-                    DESC LIMIT 1
-                ) as "rustc_version?",
+                builds.documentation_size as "documentation_size?",
+                -- we're using the rustc version here to set the correct CSS file
+                -- in the metadata.
+                -- So we're only interested in successful builds here.
+                builds.rustc_version as "rustc_version?",
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
@@ -198,6 +172,15 @@ impl CrateDetails {
             INNER JOIN crates ON releases.crate_id = crates.id
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
+            LEFT JOIN LATERAL (
+                 SELECT rustc_version, documentation_size, id
+                 FROM builds
+                 WHERE
+                    builds.rid = releases.id AND
+                    builds.build_status = 'success'
+                 ORDER BY builds.build_finished
+                 DESC LIMIT 1
+             ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2;"#,
             name,
             version.to_string(),
