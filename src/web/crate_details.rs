@@ -2165,4 +2165,35 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    fn test_sizes_display() {
+        wrapper(|env| {
+            env.fake_release()
+                .name("dummy")
+                .version("0.4.0")
+                .rustdoc_file("dummy/index.html")
+                .create()?;
+
+            let response = env.frontend().get("/crate/dummy/0.4.0").send()?;
+            assert!(response.status().is_success());
+
+            let mut has_source_code_size = false;
+            let mut has_doc_size = false;
+            for span in kuchikiki::parse_html()
+                .one(response.text()?)
+                .select(r#".pure-menu-item span.documented-info"#)
+                .expect("invalid selector")
+            {
+                if span.text_contents().starts_with("Source code size:") {
+                    has_source_code_size = true;
+                } else if span.text_contents().starts_with("Documentation size:") {
+                    has_doc_size = true;
+                }
+            }
+            assert!(has_source_code_size);
+            assert!(has_doc_size);
+            Ok(())
+        });
+    }
 }
