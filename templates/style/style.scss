@@ -479,6 +479,20 @@ div.package-page-container {
             width: 100%;
         }
 
+        .documented-info .size .info {
+            display: none;
+            position: absolute;
+            top: 90%;
+            background: var(--color-background-code);
+            z-index: 1;
+            border: 1px solid var(--color-menu-border);
+        }
+
+        .documented-info .size:hover .info,
+        .documented-info .size:focus .info {
+            display: block;
+        }
+
         li.pure-menu-heading:first-child {
             margin-top: 0;
         }
