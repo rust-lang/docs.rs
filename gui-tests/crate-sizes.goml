@@ -1,0 +1,37 @@
+// Checks that the size popup work as expected.
+go-to: |DOC_PATH| + "/crate/sysinfo/latest"
+// By default, they're hidden.
+assert-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "none"},
+)
+// When we hover the parent element, it should make them appear.
+move-cursor-to: "div.package-page-container div.package-menu .documented-info .size"
+wait-for-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "block"},
+)
+// And when we move the mouse cursor away, it's hidden again.
+move-cursor-to: "#clipboard"
+assert-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "none"},
+)
+
+// When clicked, the popup should remain visible.
+click: "div.package-page-container div.package-menu .documented-info .size"
+wait-for-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "block"},
+)
+move-cursor-to: "#clipboard"
+assert-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "block"},
+)
+// Clicking somewhere else will change focus, making the popup disappear.
+click: "#main"
+wait-for-css: (
+    "div.package-page-container div.package-menu .documented-info .size .info",
+    {"display": "none"},
+)
