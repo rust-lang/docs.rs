@@ -41,7 +41,6 @@ pub struct CdnInvalidation {
     pub(crate) completed: bool,
 }
 
-#[derive(Debug)]
 pub enum CdnBackend {
     Dummy {
         invalidation_requests: Arc<Mutex<Vec<CdnInvalidation>>>,
@@ -81,7 +80,7 @@ impl CdnBackend {
     ///
     /// Returns the caller reference that can be used to query the status of this
     /// invalidation request.
-    #[instrument]
+    #[instrument(skip(self))]
     async fn create_invalidation(
         &self,
         distribution_id: &str,
@@ -299,9 +298,8 @@ impl CdnBackend {
 }
 
 /// fully invalidate the CDN distribution, also emptying the queue.
-#[instrument(skip(conn))]
+#[instrument(skip_all, fields(distribution_id))]
 pub(crate) async fn full_invalidation(
-    config: &Config,
     cdn: &CdnBackend,
     metrics: &InstanceMetrics,
     conn: &mut sqlx::PgConnection,
@@ -356,7 +354,7 @@ pub(crate) async fn full_invalidation(
     Ok(())
 }
 
-#[instrument(skip(conn))]
+#[instrument(skip_all, fields(distribution_id))]
 pub(crate) async fn handle_queued_invalidation_requests(
     config: &Config,
     cdn: &CdnBackend,
@@ -457,7 +455,7 @@ pub(crate) async fn handle_queued_invalidation_requests(
     .await?
     {
         if (now - min_queued).to_std().unwrap_or_default() >= config.cdn_max_queued_age {
-            full_invalidation(config, cdn, metrics, conn, distribution_id).await?;
+            full_invalidation(cdn, metrics, conn, distribution_id).await?;
             return Ok(());
         }
     }
