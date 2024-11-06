@@ -1,0 +1,1 @@
+DROP INDEX releases_rustdoc_status_idx;
