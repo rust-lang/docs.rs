@@ -81,29 +81,40 @@ pub(crate) fn build_static_router() -> AxumRouter {
 mod tests {
     use super::{STYLE_CSS, VENDORED_CSS};
     use crate::{
-        test::{assert_cache_control, wrapper},
+        test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt},
         web::cache::CachePolicy,
     };
+    use axum::response::Response as AxumResponse;
     use reqwest::StatusCode;
     use std::fs;
     use test_case::test_case;
 
     const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
+    fn content_length(resp: &AxumResponse) -> u64 {
+        resp.headers()
+            .get("Content-Length")
+            .expect("content-length header")
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+
     #[test]
     fn style_css() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
-            let resp = web.get("/-/static/style.css").send()?;
+            let resp = web.get("/-/static/style.css").await?;
             assert!(resp.status().is_success());
-            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
             );
-            assert_eq!(resp.content_length().unwrap(), STYLE_CSS.len() as u64);
-            assert_eq!(resp.bytes()?, STYLE_CSS.as_bytes());
+            assert_eq!(content_length(&resp), STYLE_CSS.len() as u64);
+            assert_eq!(resp.bytes().await?, STYLE_CSS.as_bytes());
 
             Ok(())
         });
@@ -111,18 +122,18 @@ mod tests {
 
     #[test]
     fn vendored_css() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
-            let resp = web.get("/-/static/vendored.css").send()?;
+            let resp = web.get("/-/static/vendored.css").await?;
             assert!(resp.status().is_success());
-            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
             );
-            assert_eq!(resp.content_length().unwrap(), VENDORED_CSS.len() as u64);
-            assert_eq!(resp.text()?, VENDORED_CSS);
+            assert_eq!(content_length(&resp), VENDORED_CSS.len() as u64);
+            assert_eq!(resp.text().await?, VENDORED_CSS);
 
             Ok(())
         });
@@ -130,16 +141,16 @@ mod tests {
 
     #[test]
     fn io_error_not_a_directory_leads_to_404() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             // just to be sure that `index.js` exists
-            assert!(web.get("/-/static/index.js").send()?.status().is_success());
+            assert!(web.get("/-/static/index.js").await?.status().is_success());
 
             // `index.js` exists, but is not a directory,
             // so trying to fetch it via `ServeDir` will lead
             // to an IO-error.
-            let resp = web.get("/-/static/index.js/something").send()?;
+            let resp = web.get("/-/static/index.js/something").await?;
             assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
 
             Ok(())
@@ -151,18 +162,18 @@ mod tests {
     #[test_case("/-/static/keyboard.js", "handleKey")]
     #[test_case("/-/static/source.js", "toggleSource")]
     fn js_content(path: &str, expected_content: &str) {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
-            let resp = web.get(path).send()?;
+            let resp = web.get(path).await?;
             assert!(resp.status().is_success());
-            assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/javascript".parse().unwrap()),
             );
-            assert!(resp.content_length().unwrap() > 10);
-            assert!(resp.text()?.contains(expected_content));
+            assert!(content_length(&resp) > 10);
+            assert!(resp.text().await?.contains(expected_content));
 
             Ok(())
         });
@@ -170,8 +181,8 @@ mod tests {
 
     #[test]
     fn static_files() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             for root in STATIC_SEARCH_PATHS {
                 for entry in walkdir::WalkDir::new(root) {
@@ -183,12 +194,12 @@ mod tests {
                     let path = entry.path();
 
                     let url = format!("/-/static/{}", file.to_str().unwrap());
-                    let resp = web.get(&url).send()?;
+                    let resp = web.get(&url).await?;
 
                     assert!(resp.status().is_success(), "failed to fetch {url:?}");
-                    assert_cache_control(&resp, CachePolicy::ForeverInCdnAndBrowser, &env.config());
+                    resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
                     assert_eq!(
-                        resp.bytes()?,
+                        resp.bytes().await?,
                         fs::read(path).unwrap(),
                         "failed to fetch {url:?}",
                     );
@@ -201,9 +212,9 @@ mod tests {
 
     #[test]
     fn static_file_that_doesnt_exist() {
-        wrapper(|env| {
-            let response = env.frontend().get("/-/static/whoop-de-do.png").send()?;
-            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+        async_wrapper(|env| async move {
+            let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
+            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
             Ok(())
@@ -212,14 +223,14 @@ mod tests {
 
     #[test]
     fn static_mime_types() {
-        wrapper(|env| {
-            let web = env.frontend();
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
 
             let files = &[("vendored.css", "text/css")];
 
             for (file, mime) in files {
                 let url = format!("/-/static/{file}");
-                let resp = web.get(&url).send()?;
+                let resp = web.get(&url).await?;
 
                 assert_eq!(
                     resp.headers().get("Content-Type"),

@@ -368,26 +368,26 @@ async fn fallback() -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::*;
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
     use crate::web::cache::CachePolicy;
     use reqwest::StatusCode;
 
     #[test]
     fn test_root_redirects() {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
             // These are "well-known" resources that will be requested from the root, but support
             // redirection
-            assert_redirect("/favicon.ico", "/-/static/favicon.ico", env.frontend())?;
-            assert_redirect("/robots.txt", "/-/static/robots.txt", env.frontend())?;
+            web.assert_redirect("/favicon.ico", "/-/static/favicon.ico")
+                .await?;
+            web.assert_redirect("/robots.txt", "/-/static/robots.txt")
+                .await?;
 
             // This has previously been served with a url pointing to the root, it may be
             // plausible to remove the redirects in the future, but for now we need to keep serving
             // it.
-            assert_redirect(
-                "/opensearch.xml",
-                "/-/static/opensearch.xml",
-                env.frontend(),
-            )?;
+            web.assert_redirect("/opensearch.xml", "/-/static/opensearch.xml")
+                .await?;
 
             Ok(())
         });
@@ -395,35 +395,38 @@ mod tests {
 
     #[test]
     fn serve_rustdoc_content_not_found() {
-        wrapper(|env| {
-            let response = env.frontend().get("/-/rustdoc.static/style.css").send()?;
+        async_wrapper(|env| async move {
+            let response = env
+                .web_app()
+                .await
+                .get("/-/rustdoc.static/style.css")
+                .await?;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
-            assert_cache_control(&response, CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
             Ok(())
         })
     }
 
     #[test]
     fn serve_rustdoc_content() {
-        wrapper(|env| {
-            let web = env.frontend();
-            env.storage()
-                .store_one("/rustdoc-static/style.css", "content".as_bytes())?;
-            env.storage()
-                .store_one("/will_not/be_found.css", "something".as_bytes())?;
+        async_wrapper(|env| async move {
+            let web = env.web_app().await;
+            let storage = env.async_storage().await;
+            storage
+                .store_one("/rustdoc-static/style.css", "content".as_bytes())
+                .await?;
+            storage
+                .store_one("/will_not/be_found.css", "something".as_bytes())
+                .await?;
 
-            let response = web.get("/-/rustdoc.static/style.css").send()?;
+            let response = web.get("/-/rustdoc.static/style.css").await?;
             assert!(response.status().is_success());
-            assert_cache_control(
-                &response,
-                CachePolicy::ForeverInCdnAndBrowser,
-                &env.config(),
-            );
-            assert_eq!(response.text()?, "content");
+            response.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            assert_eq!(response.text().await?, "content");
 
             assert_eq!(
                 web.get("/-/rustdoc.static/will_not/be_found.css")
-                    .send()?
+                    .await?
                     .status(),
                 StatusCode::NOT_FOUND
             );

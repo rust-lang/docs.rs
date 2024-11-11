@@ -110,14 +110,13 @@ pub(crate) async fn request_recorder(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::wrapper;
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
     use crate::Context;
     use std::collections::HashMap;
 
     #[test]
     fn test_response_times_count_being_collected() {
         const ROUTES: &[(&str, &str)] = &[
-            ("", "/"),
             ("/", "/"),
             ("/crate/hexponent/0.2.0", "/crate/:name/:version"),
             ("/crate/rcc/0.0.0", "/crate/:name/:version"),
@@ -152,28 +151,34 @@ mod tests {
             ("/rustdoc/gcc/0.0.0/gcc/index.html", "rustdoc page"),
         ];
 
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("rcc")
                 .version("0.0.0")
                 .repo("https://github.com/jyn514/rcc")
-                .create()?;
-            env.fake_release()
+                .create_async()
+                .await?;
+            env.async_fake_release()
+                .await
                 .name("rcc")
                 .version("1.0.0")
                 .build_result_failed()
-                .create()?;
-            env.fake_release()
+                .create_async()
+                .await?;
+            env.async_fake_release()
+                .await
                 .name("hexponent")
                 .version("0.2.0")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let frontend = env.frontend();
+            let frontend = env.web_app().await;
             let metrics = env.instance_metrics();
 
             for (route, _) in ROUTES.iter() {
-                frontend.get(route).send()?;
-                frontend.get(route).send()?;
+                frontend.get(route).await?;
+                frontend.get(route).await?;
             }
 
             let mut expected = HashMap::new();
@@ -183,7 +188,7 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.pool()?)?;
+            let metrics_serialized = metrics.gather(&env.async_pool().await?)?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.get_name() == "docsrs_routes_visited")
@@ -223,11 +228,11 @@ mod tests {
 
     #[test]
     fn test_metrics_page_success() {
-        wrapper(|env| {
-            let response = env.frontend().get("/about/metrics").send()?;
+        async_wrapper(|env| async move {
+            let response = env.web_app().await.get("/about/metrics").await?;
             assert!(response.status().is_success());
 
-            let body = response.text()?;
+            let body = response.text().await?;
             assert!(body.contains("docsrs_failed_builds"), "{}", body);
             assert!(body.contains("queued_crates_count"), "{}", body);
             Ok(())
@@ -236,11 +241,11 @@ mod tests {
 
     #[test]
     fn test_service_metrics_page_success() {
-        wrapper(|env| {
-            let response = env.frontend().get("/about/metrics/service").send()?;
+        async_wrapper(|env| async move {
+            let response = env.web_app().await.get("/about/metrics/service").await?;
             assert!(response.status().is_success());
 
-            let body = response.text()?;
+            let body = response.text().await?;
             assert!(!body.contains("docsrs_failed_builds"), "{}", body);
             assert!(body.contains("queued_crates_count"), "{}", body);
             Ok(())
@@ -249,11 +254,11 @@ mod tests {
 
     #[test]
     fn test_instance_metrics_page_success() {
-        wrapper(|env| {
-            let response = env.frontend().get("/about/metrics/instance").send()?;
+        async_wrapper(|env| async move {
+            let response = env.web_app().await.get("/about/metrics/instance").await?;
             assert!(response.status().is_success());
 
-            let body = response.text()?;
+            let body = response.text().await?;
             assert!(body.contains("docsrs_failed_builds"), "{}", body);
             assert!(!body.contains("queued_crates_count"), "{}", body);
             Ok(())

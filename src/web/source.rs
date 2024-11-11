@@ -345,8 +345,10 @@ pub(crate) async fn source_browser_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::*;
-    use crate::web::cache::CachePolicy;
+    use crate::{
+        test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt},
+        web::{cache::CachePolicy, encode_url_path},
+    };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use test_case::test_case;
@@ -366,26 +368,31 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn fetch_source_file_utf8_path(archive_storage: bool) {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             let filename = "序.pdf";
 
-            env.fake_release()
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file(filename, b"some_random_content")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
+            let web = env.web_app().await;
             let response = web
-                .get(&format!("/crate/fake/0.1.0/source/{filename}"))
-                .send()?;
+                .get(&format!(
+                    "/crate/fake/0.1.0/source/{}",
+                    encode_url_path(filename)
+                ))
+                .await?;
             assert!(response.status().is_success());
             assert_eq!(
                 response.headers().get("link").unwrap(),
                 "<https://docs.rs/crate/fake/latest/source/%E5%BA%8F.pdf>; rel=\"canonical\"",
             );
-            assert!(response.text()?.contains("some_random_content"));
+            assert!(response.text().await?.contains("some_random_content"));
             Ok(())
         });
     }
@@ -393,34 +400,31 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn fetch_source_file_content(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file("some_filename.rs", b"some_random_content")
-                .create()?;
-            let web = env.frontend();
-            assert_success_cached(
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success_cached(
                 "/crate/fake/0.1.0/source/",
-                web,
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
                 &env.config(),
-            )?;
-            let response = web
-                .get("/crate/fake/0.1.0/source/some_filename.rs")
-                .send()?;
+            )
+            .await?;
+            let response = web.get("/crate/fake/0.1.0/source/some_filename.rs").await?;
             assert!(response.status().is_success());
             assert_eq!(
                 response.headers().get("link").unwrap(),
                 "<https://docs.rs/crate/fake/latest/source/some_filename.rs>; rel=\"canonical\""
             );
-            assert_cache_control(
-                &response,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
-            );
-            assert!(response.text()?.contains("some_random_content"));
+            response
+                .assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
+            assert!(response.text().await?.contains("some_random_content"));
             Ok(())
         });
     }
@@ -428,15 +432,17 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn fetch_binary(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file("some_file.pdf", b"some_random_content")
-                .create()?;
-            let web = env.frontend();
-            let response = web.get("/crate/fake/0.1.0/source/some_file.pdf").send()?;
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            let response = web.get("/crate/fake/0.1.0/source/some_file.pdf").await?;
             assert!(response.status().is_success());
             assert_eq!(
                 response.headers().get("link").unwrap(),
@@ -452,12 +458,9 @@ mod tests {
                 "application/pdf"
             );
 
-            assert_cache_control(
-                &response,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
-            );
-            assert!(response.text()?.contains("some_random_content"));
+            response
+                .assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
+            assert!(response.text().await?.contains("some_random_content"));
             Ok(())
         });
     }
@@ -465,16 +468,18 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn cargo_ok_not_skipped(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file(".cargo-ok", b"ok")
                 .source_file("README.md", b"hello")
-                .create()?;
-            let web = env.frontend();
-            assert_success("/crate/fake/0.1.0/source/", web)?;
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success("/crate/fake/0.1.0/source/").await?;
             Ok(())
         });
     }
@@ -482,32 +487,32 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn empty_file_list_dont_break_the_view(archive_storage: bool) {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             let release_id = env
-                .fake_release()
+                .async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("fake")
                 .version("0.1.0")
                 .source_file("README.md", b"hello")
-                .create()?;
+                .create_async()
+                .await?;
 
             let path = "/crate/fake/0.1.0/source/README.md";
-            let web = env.frontend();
-            assert_success(path, web)?;
+            let web = env.web_app().await;
+            web.assert_success(path).await?;
 
-            env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
-                sqlx::query!(
-                    "UPDATE releases
+            let mut conn = env.async_db().await.async_conn().await;
+            sqlx::query!(
+                "UPDATE releases
                      SET files = NULL
                      WHERE id = $1",
-                    release_id.0,
-                )
-                .execute(&mut *conn)
-                .await
-            })?;
+                release_id.0,
+            )
+            .execute(&mut *conn)
+            .await?;
 
-            assert!(web.get(path).send()?.status().is_success());
+            assert!(web.get(path).await?.status().is_success());
 
             Ok(())
         });
@@ -515,18 +520,23 @@ mod tests {
 
     #[test]
     fn latest_contains_links_to_latest() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(true)
                 .name("fake")
                 .version("0.1.0")
                 .source_file(".cargo-ok", b"ok")
                 .source_file("README.md", b"hello")
-                .create()?;
-            let resp = env.frontend().get("/crate/fake/latest/source/").send()?;
-            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
-            assert!(resp.url().as_str().ends_with("/crate/fake/latest/source/"));
-            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+                .create_async()
+                .await?;
+            let resp = env
+                .web_app()
+                .await
+                .get("/crate/fake/latest/source/")
+                .await?;
+            resp.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
+            let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/fake/latest/builds\""));
             assert!(body.contains("<a href=\"/crate/fake/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/fake/latest\""));
@@ -539,14 +549,17 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn directory_not_found(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("mbedtls")
                 .version("0.2.0")
-                .create()?;
-            let web = env.frontend();
-            assert_success("/crate/mbedtls/0.2.0/source/test/", web)?;
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success("/crate/mbedtls/0.2.0/source/test/")
+                .await?;
             Ok(())
         })
     }
@@ -554,22 +567,24 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn semver_handled_latest(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("mbedtls")
                 .version("0.2.0")
                 .source_file("README.md", b"hello")
-                .create()?;
-            let web = env.frontend();
-            assert_success("/crate/mbedtls/0.2.0/source/", web)?;
-            assert_redirect_cached(
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success("/crate/mbedtls/0.2.0/source/").await?;
+            web.assert_redirect_cached(
                 "/crate/mbedtls/*/source/",
                 "/crate/mbedtls/latest/source/",
                 CachePolicy::ForeverInCdn,
-                web,
                 &env.config(),
-            )?;
+            )
+            .await?;
             Ok(())
         })
     }
@@ -577,22 +592,24 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn semver_handled(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("mbedtls")
                 .version("0.2.0")
                 .source_file("README.md", b"hello")
-                .create()?;
-            let web = env.frontend();
-            assert_success("/crate/mbedtls/0.2.0/source/", web)?;
-            assert_redirect_cached(
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success("/crate/mbedtls/0.2.0/source/").await?;
+            web.assert_redirect_cached(
                 "/crate/mbedtls/~0.2.0/source/",
                 "/crate/mbedtls/0.2.0/source/",
                 CachePolicy::ForeverInCdn,
-                web,
                 &env.config(),
-            )?;
+            )
+            .await?;
             Ok(())
         })
     }
@@ -600,47 +617,53 @@ mod tests {
     #[test_case(true)]
     #[test_case(false)]
     fn literal_krate_description(archive_storage: bool) {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .archive_storage(archive_storage)
                 .name("rustc-ap-syntax")
                 .version("178.0.0")
                 .description("some stuff with krate")
                 .source_file("fold.rs", b"fn foo() {}")
-                .create()?;
-            let web = env.frontend();
-            assert_success_cached(
+                .create_async()
+                .await?;
+            let web = env.web_app().await;
+            web.assert_success_cached(
                 "/crate/rustc-ap-syntax/178.0.0/source/fold.rs",
-                web,
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
                 &env.config(),
-            )?;
+            )
+            .await?;
             Ok(())
         })
     }
 
     #[test]
     fn cargo_special_filetypes_are_highlighted() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file("Cargo.toml.orig", b"[package]")
                 .source_file("Cargo.lock", b"[dependencies]")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
+            let web = env.web_app().await;
 
             let response = web
                 .get("/crate/fake/0.1.0/source/Cargo.toml.orig")
-                .send()?
-                .text()?;
+                .await?
+                .text()
+                .await?;
             assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
 
             let response = web
                 .get("/crate/fake/0.1.0/source/Cargo.lock")
-                .send()?
-                .text()?;
+                .await?
+                .text()
+                .await?;
             assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
 
             Ok(())
@@ -649,19 +672,22 @@ mod tests {
 
     #[test]
     fn dotfiles_with_extension_are_highlighted() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file(".rustfmt.toml", b"[rustfmt]")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
+            let web = env.web_app().await;
 
             let response = web
                 .get("/crate/fake/0.1.0/source/.rustfmt.toml")
-                .send()?
-                .text()?;
+                .await?
+                .text()
+                .await?;
             assert!(response.contains(r#"<span class="syntax-source syntax-toml">"#));
 
             Ok(())
@@ -670,17 +696,19 @@ mod tests {
 
     #[test]
     fn json_is_served_as_rendered_html() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file("Cargo.toml", b"")
                 .source_file("config.json", b"{}")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
+            let web = env.web_app().await;
 
-            let response = web.get("/crate/fake/0.1.0/source/config.json").send()?;
+            let response = web.get("/crate/fake/0.1.0/source/config.json").await?;
             assert!(response
                 .headers()
                 .get("content-type")
@@ -689,7 +717,7 @@ mod tests {
                 .unwrap()
                 .starts_with("text/html"));
 
-            let text = response.text()?;
+            let text = response.text().await?;
             assert!(text.starts_with(r#"<!DOCTYPE html>"#));
 
             // file list doesn't show "../"
@@ -704,27 +732,26 @@ mod tests {
 
     #[test]
     fn root_file_list() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file("Cargo.toml", b"some_random_content")
                 .source_file("folder1/some_filename.rs", b"some_random_content")
                 .source_file("folder2/another_filename.rs", b"some_random_content")
                 .source_file("root_filename.rs", b"some_random_content")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
-            let response = web.get("/crate/fake/0.1.0/source/").send()?;
+            let web = env.web_app().await;
+            let response = web.get("/crate/fake/0.1.0/source/").await?;
             assert!(response.status().is_success());
-            assert_cache_control(
-                &response,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
-            );
+            response
+                .assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
 
             assert_eq!(
-                get_file_list_links(&response.text()?),
+                get_file_list_links(&response.text().await?),
                 vec![
                     "./folder1/",
                     "./folder2/",
@@ -738,29 +765,28 @@ mod tests {
 
     #[test]
     fn child_file_list() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file("folder1/some_filename.rs", b"some_random_content")
                 .source_file("folder1/more_filenames.rs", b"some_random_content")
                 .source_file("folder2/another_filename.rs", b"some_random_content")
                 .source_file("root_filename.rs", b"some_random_content")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
+            let web = env.web_app().await;
             let response = web
                 .get("/crate/fake/0.1.0/source/folder1/some_filename.rs")
-                .send()?;
+                .await?;
             assert!(response.status().is_success());
-            assert_cache_control(
-                &response,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
-            );
+            response
+                .assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
 
             assert_eq!(
-                get_file_list_links(&response.text()?),
+                get_file_list_links(&response.text().await?),
                 vec!["../", "./more_filenames.rs", "./some_filename.rs"],
             );
             Ok(())
@@ -769,22 +795,25 @@ mod tests {
 
     #[test]
     fn large_file_test() {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.max_file_size = 1;
                 config.max_file_size_html = 1;
             });
-            env.fake_release()
+            env.async_fake_release()
+                .await
                 .name("fake")
                 .version("0.1.0")
                 .source_file("large_file.rs", b"some_random_content")
-                .create()?;
+                .create_async()
+                .await?;
 
-            let web = env.frontend();
-            let response = web.get("/crate/fake/0.1.0/source/large_file.rs").send()?;
+            let web = env.web_app().await;
+            let response = web.get("/crate/fake/0.1.0/source/large_file.rs").await?;
             assert_eq!(response.status(), StatusCode::OK);
             assert!(response
-                .text()?
+                .text()
+                .await?
                 .contains("This file is too large to display"));
             Ok(())
         });

@@ -12,24 +12,18 @@ use crate::{
     ServiceMetrics,
 };
 use anyhow::Context as _;
+use axum::body::Bytes;
 use axum::{async_trait, body::Body, http::Request, response::Response as AxumResponse, Router};
 use fn_error_context::context;
 use futures_util::{stream::TryStreamExt, FutureExt};
 use http_body_util::BodyExt; // for `collect`
 use once_cell::sync::OnceCell;
-use reqwest::{
-    blocking::{Client, ClientBuilder, RequestBuilder, Response},
-    Method,
-};
+use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
-use std::thread::{self, JoinHandle};
-use std::{
-    fs, future::Future, net::SocketAddr, panic, rc::Rc, str::FromStr, sync::Arc, time::Duration,
-};
+use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
 use tokio::runtime::{Builder, Runtime};
-use tokio::sync::oneshot::Sender;
 use tower::ServiceExt;
-use tracing::{debug, error, instrument, trace};
+use tracing::error;
 
 #[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -88,216 +82,184 @@ where
     }
 }
 
-/// check a request if the cache control header matches NoCache
-pub(crate) fn assert_no_cache(res: &Response) {
-    assert_eq!(
-        res.headers()
-            .get("Cache-Control")
-            .expect("missing cache-control header")
-            .to_str()
-            .unwrap(),
-        cache::NO_CACHING.to_str().unwrap(),
-    );
-}
-
-/// check a request if the cache control header matches the given cache config.
-pub(crate) fn assert_cache_control(
-    res: &Response,
-    cache_policy: cache::CachePolicy,
-    config: &Config,
-) {
-    assert!(config.cache_control_stale_while_revalidate.is_some());
-    let cache_control = res.headers().get("Cache-Control");
-
-    if let Some(expected_directives) = cache_policy.render(config) {
-        assert_eq!(
-            cache_control
-                .expect("missing cache-control header")
-                .to_str()
-                .unwrap(),
-            expected_directives.to_str().unwrap(),
-        );
-    } else {
-        assert!(cache_control.is_none());
-    }
-}
-
-/// Make sure that a URL returns a status code between 200-299
-pub(crate) fn assert_success(path: &str, web: &TestFrontend) -> Result<()> {
-    let status = web.get(path).send()?.status();
-    assert!(status.is_success(), "failed to GET {path}: {status}");
-    Ok(())
-}
-/// Make sure that a URL returns a status code between 200-299,
-/// also check the cache-control headers.
-pub(crate) fn assert_success_cached(
-    path: &str,
-    web: &TestFrontend,
-    cache_policy: cache::CachePolicy,
-    config: &Config,
-) -> Result<()> {
-    let response = web.get(path).send()?;
-    let status = response.status();
-    assert!(status.is_success(), "failed to GET {path}: {status}");
-    assert_cache_control(&response, cache_policy, config);
-    Ok(())
-}
-
-/// Make sure that a URL returns a 404
-pub(crate) fn assert_not_found(path: &str, web: &TestFrontend) -> Result<()> {
-    let response = web.get(path).send()?;
-
-    // for now, 404s should always have `no-cache`
-    assert_no_cache(&response);
-
-    assert_eq!(response.status(), 404, "GET {path} should have been a 404");
-    Ok(())
-}
-
-fn assert_redirect_common(
-    path: &str,
-    expected_target: &str,
-    web: &TestFrontend,
-) -> Result<Response> {
-    let response = web.get_no_redirect(path).send()?;
-    let status = response.status();
-    if !status.is_redirection() {
-        anyhow::bail!("non-redirect from GET {path}: {status}");
-    }
-
-    let mut redirect_target = response
-        .headers()
-        .get("Location")
-        .context("missing 'Location' header")?
-        .to_str()
-        .context("non-ASCII redirect")?;
-
-    if !expected_target.starts_with("http") {
-        // TODO: Should be able to use Url::make_relative,
-        // but https://github.com/servo/rust-url/issues/766
-        let base = format!("http://{}", web.server_addr());
-        redirect_target = redirect_target
-            .strip_prefix(&base)
-            .unwrap_or(redirect_target);
-    }
-
-    if redirect_target != expected_target {
-        anyhow::bail!("got redirect to {redirect_target}");
-    }
-
-    Ok(response)
-}
-
-/// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
-///
-/// Returns the redirect response
-#[context("expected redirect from {path} to {expected_target}")]
-pub(crate) fn assert_redirect_unchecked(
-    path: &str,
-    expected_target: &str,
-    web: &TestFrontend,
-) -> Result<Response> {
-    assert_redirect_common(path, expected_target, web)
-}
-
-/// Makes sure that a URL redirects to a specific page, but doesn't check that the target exists
-///
-/// Returns the redirect response
-#[context("expected redirect from {path} to {expected_target}")]
-pub(crate) fn assert_redirect_cached_unchecked(
-    path: &str,
-    expected_target: &str,
-    cache_policy: cache::CachePolicy,
-    web: &TestFrontend,
-    config: &Config,
-) -> Result<Response> {
-    let redirect_response = assert_redirect_common(path, expected_target, web)?;
-    assert_cache_control(&redirect_response, cache_policy, config);
-    Ok(redirect_response)
-}
-
-/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect
-///
-/// Returns the redirect response
-#[context("expected redirect from {path} to {expected_target}")]
-pub(crate) fn assert_redirect(
-    path: &str,
-    expected_target: &str,
-    web: &TestFrontend,
-) -> Result<Response> {
-    let redirect_response = assert_redirect_common(path, expected_target, web)?;
-
-    let response = web.get_no_redirect(expected_target).send()?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("failed to GET {expected_target}: {status}");
-    }
-
-    Ok(redirect_response)
-}
-
-/// Make sure that a URL redirects to a specific page, and that the target exists and is not another redirect.
-/// Also verifies that the redirect's cache-control header matches the provided cache policy.
-///
-/// Returns the redirect response
-#[context("expected redirect from {path} to {expected_target}")]
-pub(crate) fn assert_redirect_cached(
-    path: &str,
-    expected_target: &str,
-    cache_policy: cache::CachePolicy,
-    web: &TestFrontend,
-    config: &Config,
-) -> Result<Response> {
-    let redirect_response = assert_redirect_common(path, expected_target, web)?;
-    assert_cache_control(&redirect_response, cache_policy, config);
-
-    let response = web.get_no_redirect(expected_target).send()?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("failed to GET {expected_target}: {status}");
-    }
-
-    Ok(redirect_response)
-}
-
 pub(crate) trait AxumResponseTestExt {
-    async fn text(self) -> String;
+    async fn text(self) -> Result<String>;
+    async fn bytes(self) -> Result<Bytes>;
+    async fn json<T: DeserializeOwned>(self) -> Result<T>;
+    fn redirect_target(&self) -> Option<&str>;
+    fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config);
+    fn error_for_status(self) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 impl AxumResponseTestExt for axum::response::Response {
-    async fn text(self) -> String {
-        String::from_utf8_lossy(&self.into_body().collect().await.unwrap().to_bytes()).to_string()
+    async fn text(self) -> Result<String> {
+        Ok(String::from_utf8_lossy(&(self.bytes().await?)).to_string())
+    }
+    async fn bytes(self) -> Result<Bytes> {
+        Ok(self.into_body().collect().await?.to_bytes())
+    }
+    async fn json<T: DeserializeOwned>(self) -> Result<T> {
+        let body = self.text().await?;
+        Ok(serde_json::from_str(&body)?)
+    }
+    fn redirect_target(&self) -> Option<&str> {
+        self.headers().get("Location")?.to_str().ok()
+    }
+    fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config) {
+        assert!(config.cache_control_stale_while_revalidate.is_some());
+        let cache_control = self.headers().get("Cache-Control");
+
+        if let Some(expected_directives) = cache_policy.render(config) {
+            assert_eq!(
+                cache_control
+                    .expect("missing cache-control header")
+                    .to_str()
+                    .unwrap(),
+                expected_directives.to_str().unwrap(),
+            );
+        } else {
+            assert!(cache_control.is_none());
+        }
+    }
+
+    fn error_for_status(self) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            anyhow::bail!("got status code {}", status);
+        } else {
+            Ok(self)
+        }
     }
 }
 
 pub(crate) trait AxumRouterTestExt {
-    async fn assert_success(&self, path: &str) -> Result<()>;
+    async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_cached_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse>;
+    async fn assert_not_found(&self, path: &str) -> Result<()>;
+    async fn assert_success_cached(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<()>;
+    async fn assert_success(&self, path: &str) -> Result<AxumResponse>;
     async fn get(&self, path: &str) -> Result<AxumResponse>;
+    async fn post(&self, path: &str) -> Result<AxumResponse>;
     async fn assert_redirect_common(
         &self,
         path: &str,
         expected_target: &str,
     ) -> Result<AxumResponse>;
     async fn assert_redirect(&self, path: &str, expected_target: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse>;
+    async fn assert_redirect_cached(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse>;
 }
 
 impl AxumRouterTestExt for axum::Router {
     /// Make sure that a URL returns a status code between 200-299
-    async fn assert_success(&self, path: &str) -> Result<()> {
-        let response = self
-            .clone()
-            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
-            .await?;
+    async fn assert_success(&self, path: &str) -> Result<AxumResponse> {
+        let response = self.get(path).await?;
 
         let status = response.status();
+        if status.is_redirection() {
+            panic!(
+                "expected success response from {path}, got redirect ({status}) to {:?}",
+                response.redirect_target()
+            );
+        }
         assert!(status.is_success(), "failed to GET {path}: {status}");
+        Ok(response)
+    }
+
+    async fn assert_not_found(&self, path: &str) -> Result<()> {
+        let response = self.get(path).await?;
+
+        // for now, 404s should always have `no-cache`
+        // assert_no_cache(&response);
+        assert_eq!(
+            response
+                .headers()
+                .get("Cache-Control")
+                .expect("missing cache-control header")
+                .to_str()
+                .unwrap(),
+            cache::NO_CACHING.to_str().unwrap(),
+        );
+
+        assert_eq!(response.status(), 404, "GET {path} should have been a 404");
         Ok(())
     }
-    /// simple `get` method
+
+    async fn assert_success_cached(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<()> {
+        let response = self.get(path).await?;
+        let status = response.status();
+        assert!(
+            status.is_success(),
+            "failed to GET {path}: {status} (redirect: {})",
+            response.redirect_target().unwrap_or_default()
+        );
+        response.assert_cache_control(cache_policy, config);
+        Ok(())
+    }
+
     async fn get(&self, path: &str) -> Result<AxumResponse> {
         Ok(self
             .clone()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse> {
+        let mut path = path.to_owned();
+        for _ in 0..=10 {
+            let response = self.get(&path).await?;
+            if response.status().is_redirection() {
+                if let Some(target) = response.redirect_target() {
+                    path = target.to_owned();
+                    continue;
+                }
+            }
+            return Ok(response);
+        }
+        panic!("redirect loop");
+    }
+
+    async fn post(&self, path: &str) -> Result<AxumResponse> {
+        Ok(self
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await?)
     }
 
@@ -313,11 +275,8 @@ impl AxumRouterTestExt for axum::Router {
         }
 
         let redirect_target = response
-            .headers()
-            .get("Location")
-            .context("missing 'Location' header")?
-            .to_str()
-            .context("non-ASCII redirect")?;
+            .redirect_target()
+            .context("missing 'Location' header")?;
 
         // FIXME: not sure we need this
         // if !expected_target.starts_with("http") {
@@ -348,6 +307,45 @@ impl AxumRouterTestExt for axum::Router {
 
         Ok(redirect_response)
     }
+
+    async fn assert_redirect_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse> {
+        self.assert_redirect_common(path, expected_target).await
+    }
+
+    async fn assert_redirect_cached(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+        redirect_response.assert_cache_control(cache_policy, config);
+
+        let response = self.get(expected_target).await?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to GET {expected_target}: {status}");
+        }
+
+        Ok(redirect_response)
+    }
+
+    async fn assert_redirect_cached_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+        redirect_response.assert_cache_control(cache_policy, config);
+        Ok(redirect_response)
+    }
 }
 
 pub(crate) struct TestEnvironment {
@@ -363,7 +361,6 @@ pub(crate) struct TestEnvironment {
     runtime: OnceCell<Arc<Runtime>>,
     instance_metrics: OnceCell<Arc<InstanceMetrics>>,
     service_metrics: OnceCell<Arc<ServiceMetrics>>,
-    frontend: OnceCell<TestFrontend>,
     repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
 }
 
@@ -398,16 +395,12 @@ impl TestEnvironment {
             registry_api: OnceCell::new(),
             instance_metrics: OnceCell::new(),
             service_metrics: OnceCell::new(),
-            frontend: OnceCell::new(),
             runtime: OnceCell::new(),
             repository_stats_updater: OnceCell::new(),
         }
     }
 
     fn cleanup(self) {
-        if let Some(frontend) = self.frontend.into_inner() {
-            frontend.shutdown();
-        }
         if let Some(storage) = self.storage.get() {
             storage
                 .cleanup_after_test()
@@ -428,7 +421,7 @@ impl TestEnvironment {
         fs::create_dir_all(config.registry_index_path.clone()).unwrap();
 
         // Use less connections for each test compared to production.
-        config.max_pool_size = 4;
+        config.max_pool_size = 8;
         config.min_pool_idle = 0;
 
         // Use the database for storage, as it's faster than S3.
@@ -608,19 +601,6 @@ impl TestEnvironment {
             .await
     }
 
-    pub(crate) fn override_frontend(&self, init: impl FnOnce(&mut TestFrontend)) -> &TestFrontend {
-        let mut frontend = TestFrontend::new(self);
-        init(&mut frontend);
-        if self.frontend.set(frontend).is_err() {
-            panic!("cannot call override_frontend after frontend is initialized");
-        }
-        self.frontend.get().unwrap()
-    }
-
-    pub(crate) fn frontend(&self) -> &TestFrontend {
-        self.frontend.get_or_init(|| TestFrontend::new(self))
-    }
-
     pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
         self.runtime().block_on(self.async_fake_release())
     }
@@ -794,115 +774,5 @@ impl Drop for TestDatabase {
 
             migration_result.expect("downgrading database works");
         });
-    }
-}
-
-pub(crate) struct TestFrontend {
-    axum_server_thread: JoinHandle<()>,
-    axum_server_shutdown_signal: Sender<()>,
-    axum_server_address: SocketAddr,
-    pub(crate) client: Client,
-    pub(crate) client_no_redirect: Client,
-}
-
-impl TestFrontend {
-    #[instrument(skip_all)]
-    fn new(context: &dyn Context) -> Self {
-        fn build(f: impl FnOnce(ClientBuilder) -> ClientBuilder) -> Client {
-            let base = Client::builder()
-                .connect_timeout(Duration::from_millis(2000))
-                .timeout(Duration::from_millis(2000))
-                // The test server only supports a single connection, so having two clients with
-                // idle connections deadlocks the tests
-                .pool_max_idle_per_host(0);
-            f(base).build().unwrap()
-        }
-
-        debug!("loading template data");
-        let template_data = Arc::new(TemplateData::new(1).unwrap());
-
-        let runtime = context.runtime().unwrap();
-
-        debug!("binding local TCP port for axum");
-        let axum_listener = runtime
-            .block_on(tokio::net::TcpListener::bind(
-                "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
-            ))
-            .unwrap();
-
-        let axum_addr = axum_listener.local_addr().unwrap();
-        debug!("bound to local address: {}", axum_addr);
-
-        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-
-        debug!("building axum app");
-        let runtime = context.runtime().unwrap();
-        let axum_app = runtime
-            .block_on(build_axum_app(context, template_data))
-            .expect("could not build axum app");
-
-        let handle = thread::spawn({
-            move || {
-                runtime.block_on(async {
-                    axum::serve(axum_listener, axum_app.into_make_service())
-                        .with_graceful_shutdown(async {
-                            rx.await.ok();
-                        })
-                        .await
-                        .expect("error from axum server")
-                })
-            }
-        });
-
-        Self {
-            axum_server_address: axum_addr,
-            axum_server_thread: handle,
-            axum_server_shutdown_signal: tx,
-            client: build(|b| b),
-            client_no_redirect: build(|b| b.redirect(reqwest::redirect::Policy::none())),
-        }
-    }
-
-    #[instrument(skip_all)]
-    fn shutdown(self) {
-        trace!("sending axum shutdown signal");
-        self.axum_server_shutdown_signal
-            .send(())
-            .expect("could not send shutdown signal");
-
-        trace!("joining axum server thread");
-        self.axum_server_thread
-            .join()
-            .expect("could not join axum background thread");
-    }
-
-    fn build_url(&self, url: &str) -> String {
-        if url.is_empty() || url.starts_with('/') {
-            format!("http://{}{}", self.axum_server_address, url)
-        } else {
-            url.to_owned()
-        }
-    }
-
-    pub(crate) fn server_addr(&self) -> SocketAddr {
-        self.axum_server_address
-    }
-
-    pub(crate) fn get(&self, url: &str) -> RequestBuilder {
-        let url = self.build_url(url);
-        debug!("getting {url}");
-        self.client.request(Method::GET, url)
-    }
-
-    pub(crate) fn post(&self, url: &str) -> RequestBuilder {
-        let url = self.build_url(url);
-        debug!("posting {url}");
-        self.client.request(Method::POST, url)
-    }
-
-    pub(crate) fn get_no_redirect(&self, url: &str) -> RequestBuilder {
-        let url = self.build_url(url);
-        debug!("getting {url} (no redirects)");
-        self.client_no_redirect.request(Method::GET, url)
     }
 }

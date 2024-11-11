@@ -1019,10 +1019,8 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        db::types::Feature,
-        test::{assert_redirect, assert_success, wrapper, TestEnvironment},
-    };
+    use crate::db::types::Feature;
+    use crate::test::{wrapper, AxumRouterTestExt, TestEnvironment};
 
     fn get_features(
         env: &TestEnvironment,
@@ -1149,7 +1147,8 @@ mod tests {
                 .collect();
             targets.sort();
 
-            let web = env.frontend();
+            let runtime = env.runtime();
+            let web = runtime.block_on(env.web_app());
 
             // old rustdoc & source files are gone
             assert!(!storage.exists(&old_rustdoc_file)?);
@@ -1169,12 +1168,13 @@ mod tests {
                 None,
                 &format!("{crate_path}/index.html"),
             )?);
-            assert_success(&format!("/{crate_}/{version}/{crate_path}"), web)?;
+            runtime.block_on(web.assert_success(&format!("/{crate_}/{version}/{crate_path}/")))?;
 
             // source is also packaged
             assert!(storage.exists_in_archive(&source_archive, None, "src/lib.rs",)?);
-            assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs"), web)?;
-
+            runtime.block_on(
+                web.assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs")),
+            )?;
             assert!(!storage.exists_in_archive(
                 &doc_archive,
                 None,
@@ -1183,11 +1183,10 @@ mod tests {
 
             let default_target_url =
                 format!("/{crate_}/{version}/{default_target}/{crate_path}/index.html");
-            assert_redirect(
+            runtime.block_on(web.assert_redirect(
                 &default_target_url,
                 &format!("/{crate_}/{version}/{crate_path}/index.html"),
-                web,
-            )?;
+            ))?;
 
             // Non-dist toolchains only have a single target, and of course
             // if include_default_targets is false we won't have this full list
@@ -1219,7 +1218,7 @@ mod tests {
                         format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
 
                     assert!(target_docs_present);
-                    assert_success(&target_url, web)?;
+                    runtime.block_on(web.assert_success(&target_url))?;
 
                     assert!(storage
                         .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
@@ -1355,12 +1354,14 @@ mod tests {
                 None,
                 &format!("{target}/{crate_path}/index.html"),
             )?;
-
-            let web = env.frontend();
-            let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
-
             assert!(target_docs_present);
-            assert_success(&target_url, web)?;
+
+            env.runtime().block_on(async {
+                let web = env.web_app().await;
+                let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
+
+                web.assert_success(&target_url).await
+            })?;
 
             Ok(())
         });

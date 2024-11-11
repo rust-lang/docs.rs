@@ -210,7 +210,8 @@ mod tests {
     fn sitemap_index() {
         async_wrapper(|env| async move {
             let app = env.web_app().await;
-            app.assert_success("/sitemap.xml").await
+            app.assert_success("/sitemap.xml").await?;
+            Ok(())
         })
     }
 
@@ -260,7 +261,7 @@ mod tests {
             let response = web.get("/-/sitemap/s/sitemap.xml").await?;
             assert!(response.status().is_success());
 
-            let content = response.text().await;
+            let content = response.text().await?;
             assert!(content.contains("some_random_crate"));
             assert!(!(content.contains("some_random_crate_that_failed")));
 
@@ -269,7 +270,7 @@ mod tests {
                 let response = web.get(&format!("/-/sitemap/{letter}/sitemap.xml")).await?;
 
                 assert!(response.status().is_success());
-                assert!(!(response.text().await.contains("some_random_crate")));
+                assert!(!(response.text().await?.contains("some_random_crate")));
             }
 
             Ok(())
@@ -292,7 +293,7 @@ mod tests {
             let response = web.get("/-/sitemap/s/sitemap.xml").await?;
             assert!(response.status().is_success());
 
-            let content = response.text().await;
+            let content = response.text().await?;
             assert!(content.contains("2022-08-28T00:00:00+00:00"));
             Ok(())
         })
@@ -315,7 +316,8 @@ mod tests {
                 let path = format!("/about/{filename}");
                 web.assert_success(&path).await?;
             }
-            web.assert_success("/about").await
+            web.assert_success("/about").await?;
+            Ok(())
         })
     }
 
