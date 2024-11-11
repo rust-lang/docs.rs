@@ -107,12 +107,12 @@ pub(crate) fn rewrite_lol(
 
 #[cfg(test)]
 mod test {
-    use crate::test::wrapper;
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
 
     #[test]
     fn rewriting_only_injects_css_once() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release().await
                 .name("testing")
                 .version("0.1.0")
                 // A somewhat representative rustdoc html file from 2016
@@ -139,12 +139,13 @@ mod test {
                         </head>
                     </html>
                 "#)
-                .create()?;
+                .create_async().await?;
 
-            let output = env.frontend().get("/testing/0.1.0/2016/").send()?.text()?;
+            let web = env.web_app().await;
+            let output = web.get("/testing/0.1.0/2016/").await?.text().await?;
             assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
 
-            let output = env.frontend().get("/testing/0.1.0/2022/").send()?.text()?;
+            let output = web.get("/testing/0.1.0/2022/").await?.text().await?;
             assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
 
             Ok(())

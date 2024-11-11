@@ -472,11 +472,6 @@ impl BuildQueue {
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
         self.runtime.block_on(self.inner.queued_crates())
     }
-    #[cfg(test)]
-    pub(crate) fn has_build_queued(&self, name: &str, version: &str) -> Result<bool> {
-        self.runtime
-            .block_on(self.inner.has_build_queued(name, version))
-    }
 }
 
 impl BuildQueue {

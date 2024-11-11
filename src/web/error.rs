@@ -217,7 +217,8 @@ pub(crate) type JsonAxumResult<T> = Result<T, JsonAxumNope>;
 #[cfg(test)]
 mod tests {
     use super::{AxumNope, IntoResponse};
-    use crate::{test::wrapper, web::cache::CachePolicy};
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::web::cache::CachePolicy;
     use kuchikiki::traits::TendrilSink;
 
     #[test]
@@ -232,12 +233,14 @@ mod tests {
 
     #[test]
     fn check_404_page_content_crate() {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             let page = kuchikiki::parse_html().one(
-                env.frontend()
+                env.web_app()
+                    .await
                     .get("/crate-which-doesnt-exist")
-                    .send()?
-                    .text()?,
+                    .await?
+                    .text()
+                    .await?,
             );
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
@@ -255,12 +258,14 @@ mod tests {
 
     #[test]
     fn check_404_page_content_resource() {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             let page = kuchikiki::parse_html().one(
-                env.frontend()
+                env.web_app()
+                    .await
                     .get("/resource-which-doesnt-exist.js")
-                    .send()?
-                    .text()?,
+                    .await?
+                    .text()
+                    .await?,
             );
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
@@ -278,13 +283,17 @@ mod tests {
 
     #[test]
     fn check_400_page_content_not_semver_version() {
-        wrapper(|env| {
-            env.fake_release().name("dummy").create()?;
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .create_async()
+                .await?;
 
-            let response = env.frontend().get("/dummy/not-semver").send()?;
+            let response = env.web_app().await.get("/dummy/not-semver").await?;
             assert_eq!(response.status(), 400);
 
-            let page = kuchikiki::parse_html().one(response.text()?);
+            let page = kuchikiki::parse_html().one(response.text().await?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")
@@ -301,10 +310,15 @@ mod tests {
 
     #[test]
     fn check_404_page_content_nonexistent_version() {
-        wrapper(|env| {
-            env.fake_release().name("dummy").version("1.0.0").create()?;
-            let page =
-                kuchikiki::parse_html().one(env.frontend().get("/dummy/2.0").send()?.text()?);
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
+                .name("dummy")
+                .version("1.0.0")
+                .create_async()
+                .await?;
+            let page = kuchikiki::parse_html()
+                .one(env.web_app().await.get("/dummy/2.0").await?.text().await?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")
@@ -321,13 +335,16 @@ mod tests {
 
     #[test]
     fn check_404_page_content_any_version_all_yanked() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("dummy")
                 .version("1.0.0")
                 .yanked(true)
-                .create()?;
-            let page = kuchikiki::parse_html().one(env.frontend().get("/dummy/*").send()?.text()?);
+                .create_async()
+                .await?;
+            let page = kuchikiki::parse_html()
+                .one(env.web_app().await.get("/dummy/*").await?.text().await?);
             assert_eq!(page.select("#crate-title").unwrap().count(), 1);
             assert_eq!(
                 page.select("#crate-title")

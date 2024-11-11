@@ -232,7 +232,7 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{assert_cache_control, assert_redirect_cached, wrapper};
+    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
     use reqwest::StatusCode;
 
     #[test]
@@ -357,64 +357,70 @@ mod tests {
 
     #[test]
     fn semver_redirect() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.2.1")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            assert_redirect_cached(
+            let web = env.web_app().await;
+            web.assert_redirect_cached(
                 "/crate/foo/~0.2/features",
                 "/crate/foo/0.2.1/features",
                 CachePolicy::ForeverInCdn,
-                env.frontend(),
                 &env.config(),
-            )?;
+            )
+            .await?;
             Ok(())
         });
     }
 
     #[test]
     fn specific_version_correctly_cached() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.2.0")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            let resp = env.frontend().get("/crate/foo/0.2.0/features").send()?;
+            let web = env.web_app().await;
+            let resp = web.get("/crate/foo/0.2.0/features").await?;
             assert!(resp.status().is_success());
-            assert_cache_control(
-                &resp,
-                CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
-            );
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
             Ok(())
         });
     }
 
     #[test]
     fn latest_200() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.1.0")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            env.fake_release()
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.2.0")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            let resp = env.frontend().get("/crate/foo/latest/features").send()?;
+            let web = env.web_app().await;
+            let resp = web.get("/crate/foo/latest/features").await?;
             assert!(resp.status().is_success());
-            assert_cache_control(&resp, CachePolicy::ForeverInCdn, &env.config());
-            assert!(resp.url().as_str().ends_with("/crate/foo/latest/features"));
-            let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+            resp.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
+            let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
             assert!(body.contains("<a href=\"/crate/foo/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/foo/latest\""));
@@ -424,16 +430,17 @@ mod tests {
 
     #[test]
     fn crate_version_not_found() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.1.0")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            let resp = env.frontend().get("/crate/foo/0.2.0/features").send()?;
-            dbg!(resp.url().as_str());
-            assert!(resp.url().as_str().ends_with("/crate/foo/0.2.0/features"));
+            let web = env.web_app().await;
+            let resp = web.get("/crate/foo/0.2.0/features").await?;
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
@@ -441,16 +448,17 @@ mod tests {
 
     #[test]
     fn invalid_semver() {
-        wrapper(|env| {
-            env.fake_release()
+        async_wrapper(|env| async move {
+            env.async_fake_release()
+                .await
                 .name("foo")
                 .version("0.1.0")
                 .features(HashMap::new())
-                .create()?;
+                .create_async()
+                .await?;
 
-            let resp = env.frontend().get("/crate/foo/0,1,0/features").send()?;
-            dbg!(resp.url().as_str());
-            assert!(resp.url().as_str().ends_with("/crate/foo/0,1,0/features"));
+            let web = env.web_app().await;
+            let resp = web.get("/crate/foo/0,1,0/features").await?;
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
