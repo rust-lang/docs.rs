@@ -521,8 +521,12 @@ impl<'a> FakeRelease<'a> {
         // non-linux platforms.
         let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
         let mut async_conn = db.async_conn().await;
-        let release_id = crate::db::add_package_into_database(
+        let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
+        let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
+        crate::db::finish_release(
             &mut async_conn,
+            crate_id,
+            release_id,
             &package,
             crate_dir,
             default_target,

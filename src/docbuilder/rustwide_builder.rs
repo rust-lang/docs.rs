@@ -1,12 +1,13 @@
 use crate::db::{
-    add_doc_coverage, add_package_into_database, add_path_into_remote_archive, finish_build,
-    initialize_build, initialize_crate, initialize_release, types::BuildStatus,
-    update_build_with_error, update_crate_data_in_database, Pool,
+    add_doc_coverage, add_path_into_remote_archive, finish_build, finish_release, initialize_build,
+    initialize_crate, initialize_release, types::BuildStatus, update_build_with_error,
+    update_crate_data_in_database, Pool,
 };
 use crate::db::{
     file::{add_path_into_database, file_list_to_json},
     BuildId,
 };
+use crate::db::{CrateId, ReleaseId};
 use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
@@ -360,15 +361,15 @@ impl RustwideBuilder {
         version: &str,
         kind: PackageKind<'_>,
     ) -> Result<BuildPackageSummary> {
-        let build_id = self.runtime.block_on(async {
+        let (crate_id, release_id, build_id) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
             let crate_id = initialize_crate(&mut conn, name).await?;
             let release_id = initialize_release(&mut conn, crate_id, version).await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
-            Ok::<BuildId, Error>(build_id)
+            Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(name, version, kind, build_id) {
+        match self.build_package_inner(name, version, kind, crate_id, release_id, build_id) {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -395,6 +396,8 @@ impl RustwideBuilder {
         name: &str,
         version: &str,
         kind: PackageKind<'_>,
+        crate_id: CrateId,
+        release_id: ReleaseId,
         build_id: BuildId,
     ) -> Result<bool> {
         info!("building package {} {}", name, version);
@@ -610,8 +613,10 @@ impl RustwideBuilder {
 
                 let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
-                let release_id = self.runtime.block_on(add_package_into_database(
+                self.runtime.block_on(finish_release(
                     &mut async_conn,
+                    crate_id,
+                    release_id,
                     cargo_metadata,
                     &build.host_source_dir(),
                     &res.target,
