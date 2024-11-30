@@ -290,7 +290,7 @@ pub(crate) enum ReleaseType {
     Search,
 }
 
-impl<'a> PartialEq<&'a str> for ReleaseType {
+impl PartialEq<&str> for ReleaseType {
     fn eq(&self, other: &&str) -> bool {
         self.as_str() == *other
     }

@@ -32,7 +32,7 @@ impl BuildStatus {
     }
 }
 
-impl<'a> PartialEq<&'a str> for BuildStatus {
+impl PartialEq<&str> for BuildStatus {
     fn eq(&self, other: &&str) -> bool {
         match self {
             Self::Success => *other == "success",
