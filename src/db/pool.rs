@@ -117,7 +117,7 @@ impl Pool {
 }
 
 /// This impl allows us to use our own pool as an executor for SQLx queries.
-impl<'p> sqlx::Executor<'p> for &'_ Pool
+impl sqlx::Executor<'_> for &'_ Pool
 where
     for<'c> &'c mut <sqlx::Postgres as sqlx::Database>::Connection:
         sqlx::Executor<'c, Database = sqlx::Postgres>,
