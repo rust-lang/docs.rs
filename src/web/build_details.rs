@@ -93,37 +93,53 @@ pub(crate) async fn build_details_handler(
     .ok_or(AxumNope::BuildNotFound)?;
 
     let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
+        // legacy case, for old builds the build log was stored in the database.
         (output, Vec::new(), None)
     } else {
+        // for newer builds we have the build logs stored in S3.
+        // For a long time only for one target, then we started storing the logs for other targets
+        // toFor a long time only for one target, then we started storing the logs for other
+        // targets. In any case, all the logfiles are put into a folder we can just query.
         let prefix = format!("build-logs/{}/", id);
+        let all_log_filenames: Vec<_> = storage
+            .list_prefix(&prefix) // the result from S3 is ordered by key
+            .await
+            .map_ok(|path| {
+                path.strip_prefix(&prefix)
+                    .expect("since we query for the prefix, it has to be always there")
+                    .to_owned()
+            })
+            .try_collect()
+            .await?;
 
-        if let Some(current_filename) = params
-            .filename
-            .or(row.default_target.map(|target| format!("{}.txt", target)))
-        {
-            let path = format!("{prefix}{current_filename}");
-            let file = File::from_path(&storage, &path, &config).await?;
-            (
-                String::from_utf8(file.0.content).context("non utf8")?,
-                storage
-                    .list_prefix(&prefix) // the result from S3 is ordered by key
-                    .await
-                    .map_ok(|path| {
-                        path.strip_prefix(&prefix)
-                            .expect("since we query for the prefix, it has to be always there")
-                            .to_owned()
-                    })
-                    .try_collect()
-                    .await?,
-                Some(current_filename),
-            )
+        let current_filename = if let Some(filename) = params.filename {
+            // if we have a given filename in the URL, we use that one.
+            Some(filename)
+        } else if let Some(default_target) = row.default_target {
+            // without a filename in the URL, we try to show the build log
+            // for the default target, if we have one.
+            let wanted_filename = format!("{default_target}.txt");
+            if all_log_filenames.contains(&wanted_filename) {
+                Some(wanted_filename)
+            } else {
+                None
+            }
         } else {
             // this can only happen when `releases.default_target` is NULL,
             // which is the case for in-progress builds or builds which errored
             // before we could determine the target.
             // For the "error" case we show `row.errors`, which should contain what we need to see.
-            ("".into(), Vec::new(), None)
-        }
+            None
+        };
+
+        let file_content = if let Some(ref filename) = current_filename {
+            let file = File::from_path(&storage, &format!("{prefix}{filename}"), &config).await?;
+            String::from_utf8(file.0.content).context("non utf8")?
+        } else {
+            "".to_string()
+        };
+
+        (file_content, all_log_filenames, current_filename)
     };
 
     Ok(BuildDetailsPage {
@@ -176,6 +192,44 @@ mod tests {
                 "0.1.0",
                 "some random error",
             )
+            .await?;
+
+            let page = kuchikiki::parse_html().one(
+                env.web_app()
+                    .await
+                    .get(&format!("/crate/foo/0.1.0/builds/{build_id}"))
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?,
+            );
+
+            let info_text = page.select("pre").unwrap().next().unwrap().text_contents();
+
+            assert!(info_text.contains("# pre-build errors"), "{}", info_text);
+            assert!(info_text.contains("some random error"), "{}", info_text);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_partial_build_result_plus_default_target_from_previous_build() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let (release_id, build_id) = fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                "some random error",
+            )
+            .await?;
+
+            sqlx::query!(
+                "UPDATE releases SET default_target = 'x86_64-unknown-linux-gnu' WHERE id = $1",
+                release_id.0
+            )
+            .execute(&mut *conn)
             .await?;
 
             let page = kuchikiki::parse_html().one(
