@@ -17,11 +17,11 @@ exclude = [
 ]
 
 [dependencies]
-sentry = "0.34.0"
-sentry-panic = "0.34.0"
-sentry-tracing = "0.34.0"
-sentry-tower = { version = "0.34.0", features = ["http"] }
-sentry-anyhow = { version = "0.34.0", features = ["backtrace"] }
+sentry = "0.35.0"
+sentry-panic = "0.35.0"
+sentry-tracing = "0.35.0"
+sentry-tower = { version = "0.35.0", features = ["http"] }
+sentry-anyhow = { version = "0.35.0", features = ["backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
@@ -41,7 +41,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.29.0", default-features = false }
+comrak = { version = "0.31.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -58,7 +58,7 @@ font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "6.0.0"
 string_cache = "0.8.0"
 zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
-bzip2 = "0.4.4"
+bzip2 = "0.5.0"
 getrandom = "0.2.1"
 itertools = { version = "0.13.0" }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
@@ -131,7 +131,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.67.0", default-features = false }
+gix = { version = "0.68.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
