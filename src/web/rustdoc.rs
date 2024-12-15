@@ -472,30 +472,38 @@ pub(crate) async fn rustdoc_html_server_handler(
             {
                 debug!("got error serving {}: {}", storage_path, err);
             }
-            // If it fails, we try again with /index.html at the end
-            storage_path.push_str("/index.html");
-            req_path.push("index.html");
 
-            return if storage
-                .rustdoc_file_exists(
-                    &params.name,
-                    &krate.version.to_string(),
-                    krate.latest_build_id,
-                    &storage_path,
-                    krate.archive_storage,
-                )
-                .await?
             {
-                redirect(
-                    &params.name,
-                    &krate.version,
-                    &req_path,
-                    CachePolicy::ForeverInCdn,
-                )
-            } else if req_path.first().map_or(false, |p| p.contains('-')) {
+                // If it fails, we try again with /index.html at the end
+                let mut storage_path = storage_path.clone();
+                storage_path.push_str("/index.html");
+
+                let mut req_path = req_path.clone();
+                req_path.push("index.html");
+
+                if storage
+                    .rustdoc_file_exists(
+                        &params.name,
+                        &krate.version.to_string(),
+                        krate.latest_build_id,
+                        &storage_path,
+                        krate.archive_storage,
+                    )
+                    .await?
+                {
+                    return redirect(
+                        &params.name,
+                        &krate.version,
+                        &req_path,
+                        CachePolicy::ForeverInCdn,
+                    );
+                }
+            }
+
+            if req_path.first().map_or(false, |p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
-                Ok(axum_cached_redirect(
+                return Ok(axum_cached_redirect(
                     encode_url_path(&format!(
                         "/crate/{}/{}/target-redirect/{}",
                         params.name,
@@ -504,21 +512,28 @@ pub(crate) async fn rustdoc_html_server_handler(
                     )),
                     CachePolicy::ForeverInCdn,
                 )?
-                .into_response())
-            } else {
-                if storage_path == format!("{}/index.html", krate.target_name.expect("we check rustdoc_status = true above, and with docs we have target_name")) {
-                    error!(
-                        krate = params.name,
-                        version = krate.version.to_string(),
-                        original_path = original_path.as_ref(),
-                        storage_path,
-                        "Couldn't find crate documentation root on storage.
-                        Something is wrong with the build."
-                    )
-                }
+                .into_response());
+            }
 
-                Err(AxumNope::ResourceNotFound)
-            };
+            if storage_path
+                == format!(
+                    "{}/index.html",
+                    krate.target_name.expect(
+                        "we check rustdoc_status = true above, and with docs we have target_name"
+                    )
+                )
+            {
+                error!(
+                    krate = params.name,
+                    version = krate.version.to_string(),
+                    original_path = original_path.as_ref(),
+                    storage_path,
+                    "Couldn't find crate documentation root on storage.
+                        Something is wrong with the build."
+                )
+            }
+
+            return Err(AxumNope::ResourceNotFound);
         }
     };
 
@@ -2899,7 +2914,7 @@ mod test {
 
             web.assert_redirect_cached_unchecked(
                 "/clap/2.24.0/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20%5B%60Display%60%5D",
-                "/crate/clap/2.24.0/target-redirect/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20[%60Display%60]/index.html",
+                "/crate/clap/2.24.0/target-redirect/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20[%60Display%60]",
                 CachePolicy::ForeverInCdn,
                 &env.config(),
             ).await?;
