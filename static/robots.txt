@@ -1,1 +1,6 @@
 Sitemap: https://docs.rs/sitemap.xml
+# Semver-based URL are always redirects, and sometimes
+# confuse Google's duplicate detection, so we block crawling them.
+# https://docs.rs/about/redirections
+Disallow: */^
+Disallow: */~
