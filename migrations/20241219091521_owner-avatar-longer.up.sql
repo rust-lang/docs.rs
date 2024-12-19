@@ -1,0 +1,1 @@
+ALTER TABLE owners ALTER COLUMN avatar TYPE TEXT;

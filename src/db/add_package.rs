@@ -958,6 +958,46 @@ mod test {
     }
 
     #[test]
+    fn new_owner_long_avatar() {
+        async_wrapper(|env| async move {
+            let mut conn = env.async_db().await.async_conn().await;
+            let crate_id = initialize_crate(&mut conn, "krate").await?;
+
+            let owner1 = CrateOwner {
+                avatar: "avatar".repeat(100),
+                login: "login".into(),
+                kind: OwnerKind::User,
+            };
+
+            update_owners_in_database(&mut conn, &[owner1.clone()], crate_id).await?;
+
+            let owner_def = sqlx::query!(
+                r#"SELECT login, avatar, kind as "kind: OwnerKind"
+                FROM owners"#
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+            assert_eq!(owner_def.login, owner1.login);
+            assert_eq!(owner_def.avatar, owner1.avatar);
+            assert_eq!(owner_def.kind, owner1.kind);
+
+            let owner_rel = sqlx::query!(
+                "SELECT o.login
+                FROM owners o, owner_rels r
+                WHERE
+                    o.id = r.oid AND
+                    r.cid = $1",
+                crate_id.0
+            )
+            .fetch_one(&mut *conn)
+            .await?;
+            assert_eq!(owner_rel.login, owner1.login);
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn new_owners() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().await.async_conn().await;
