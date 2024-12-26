@@ -80,9 +80,7 @@ serde_with = "3.4.0"
 # axum dependencies
 axum = { version = "0.7.3", features = ["macros"] }
 axum-extra = { version = "0.9.1", features = ["typed-header"] }
-hyper = { version = "1.1.0", default-features = false }
 tower = "0.5.1"
-tower-service = "0.3.2"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
 percent-encoding = "2.2.0"
