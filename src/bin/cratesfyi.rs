@@ -23,7 +23,10 @@ use docs_rs::{
 use futures_util::StreamExt;
 use humantime::Duration;
 use once_cell::sync::OnceCell;
-use sentry::TransactionContext;
+use sentry::{
+    integrations::panic as sentry_panic, integrations::tracing as sentry_tracing,
+    TransactionContext,
+};
 use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
 use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};

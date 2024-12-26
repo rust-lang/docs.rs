@@ -51,6 +51,7 @@ use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use semver::{Version, VersionReq};
+use sentry::integrations::tower as sentry_tower;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     borrow::{Borrow, Cow},
