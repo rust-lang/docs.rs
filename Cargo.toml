@@ -17,11 +17,7 @@ exclude = [
 ]
 
 [dependencies]
-sentry = "0.35.0"
-sentry-panic = "0.35.0"
-sentry-tracing = "0.35.0"
-sentry-tower = { version = "0.35.0", features = ["http"] }
-sentry-anyhow = { version = "0.35.0", features = ["backtrace"] }
+sentry = { version = "0.35.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
