@@ -19,7 +19,7 @@ use strum::EnumString;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-/// maximum amout of parallel in-progress wildcard invalidations
+/// maximum amount of parallel in-progress wildcard invalidations
 /// The actual limit is 15, but we want to keep some room for manually
 /// triggered invalidations
 const MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS: i32 = 13;

@@ -22,7 +22,7 @@ use tracing::{error, warn};
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
 const PUBLIC_ACCESS_VALUE: &str = "allow";
 
-// error codes to check for when trying to determaine if an error is
+// error codes to check for when trying to determine if an error is
 // a "NOT FOUND" error.
 // Definition taken from the S3 rust SDK,
 // and validated by manually testing with actual S3.

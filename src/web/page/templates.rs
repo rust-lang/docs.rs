@@ -77,7 +77,7 @@ impl TemplateData {
                 // dropped and we don't need to bother rendering the template
                 if !send.is_closed() {
                     // `.send` only fails when the receiver is dropped while we were rendering,
-                    // at which point we don't need the result any more.
+                    // at which point we don't need the result anymore.
                     let _ = send.send(render_fn());
                 }
             }

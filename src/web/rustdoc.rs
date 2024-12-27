@@ -2407,7 +2407,7 @@ mod test {
                 ]
             );
 
-            // test if target-redirect inludes path
+            // test if target-redirect includes path
             let releases_response = env
                 .web_app()
                 .await
@@ -2590,7 +2590,7 @@ mod test {
             );
             assert!(dom
                 .select(r#"a[href="/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#)
-                .expect("shoud have optional dependency")
+                .expect("should have optional dependency")
                 .any(|el| { el.text_contents().contains("optional") }));
             let dom = kuchikiki::parse_html().one(
                 env.web_app()
@@ -2604,7 +2604,7 @@ mod test {
                 .select(
                     r#"a[href="/crate/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#
                 )
-                .expect("shoud have optional dependency")
+                .expect("should have optional dependency")
                 .any(|el| { el.text_contents().contains("optional") }));
             Ok(())
         })
@@ -2845,7 +2845,7 @@ mod test {
     }
 
     #[test_case("something.js")]
-    #[test_case("someting.css")]
+    #[test_case("something.css")]
     fn serve_release_specific_static_assets(name: &str) {
         async_wrapper(|env| async move {
             env.async_fake_release()

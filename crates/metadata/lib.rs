@@ -267,7 +267,7 @@ impl Metadata {
             cargo_args.push("--no-default-features".into());
         }
 
-        // Unconditionnaly set `--cfg docsrs` as it has become a de-facto way to
+        // Unconditionally set `--cfg docsrs` as it has become a de-facto way to
         // distinguish docs.rs.
         //
         // See https://github.com/rust-lang/docs.rs/issues/2389.
