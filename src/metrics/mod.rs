@@ -329,7 +329,7 @@ impl ServiceMetrics {
         // When a priority is used at least once, it would be kept in the metric and the last
         // value would be remembered. `pending_count_by_priority` returns only the priorities
         // that are currently in the queue, which means when the tasks for a priority are
-        // finished, we wouldn't update the metric any more, which means a wrong value is
+        // finished, we wouldn't update the metric anymore, which means a wrong value is
         // in the metric.
         //
         // The solution is to reset the metric, and then set all priorities again.

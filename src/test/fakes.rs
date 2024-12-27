@@ -23,7 +23,7 @@ use tracing::debug;
 
 /// Create a fake release in the database that failed before the build.
 /// This is a temporary small factory function only until we refactored the
-/// `FakeRelelease` and `FakeBuild` factories to be more flexible.
+/// `FakeRelease` and `FakeBuild` factories to be more flexible.
 pub(crate) async fn fake_release_that_failed_before_build(
     conn: &mut sqlx::PgConnection,
     name: &str,

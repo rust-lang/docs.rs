@@ -170,7 +170,7 @@ impl MatchedRelease {
         }
     }
 
-    /// Canonicalize the the version from the request
+    /// Canonicalize the version from the request
     ///
     /// Mainly:
     /// * "newest"/"*" or empty -> "latest" in the URL
@@ -255,7 +255,7 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
         // semver `*` does not match pre-releases.
         // So when we only have pre-releases, `VersionReq::STAR` would lead to an
         // empty result.
-        // In this case we just return the latest latest prerelase instead of nothing.
+        // In this case we just return the latest prerelease instead of nothing.
         return releases.iter().find(|release| filter(release));
     } else {
         None

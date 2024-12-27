@@ -41,7 +41,7 @@ pub struct Config {
     pub(crate) github_accesstoken: Option<String>,
     pub(crate) github_updater_min_rate_limit: u32,
 
-    // Gitlab authentication
+    // GitLab authentication
     pub(crate) gitlab_accesstoken: Option<String>,
 
     // Access token for APIs for crates.io (careful: use
@@ -132,7 +132,7 @@ impl Config {
             ("CRATESFYI_RUSTWIDE_WORKSPACE", "DOCSRS_RUSTWIDE_WORKSPACE"),
             ("DOCS_RS_DOCKER", "DOCSRS_DOCKER"),
             ("DOCS_RS_LOCAL_DOCKER_IMAGE", "DOCSRS_DOCKER_IMAGE"),
-            ("DOCS_RS_BULID_CPU_LIMIT", "DOCSRS_BULID_CPU_LIMIT"),
+            ("DOCS_RS_BUILD_CPU_LIMIT", "DOCSRS_BUILD_CPU_LIMIT"),
         ];
         for (old_var, new_var) in old_vars {
             if std::env::var(old_var).is_ok() {

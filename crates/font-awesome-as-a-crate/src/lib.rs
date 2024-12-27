@@ -123,6 +123,6 @@ mod tests {
     fn it_works() {
         assert!(crate::svg(crate::Type::Solid, "gear").is_ok());
         assert!(crate::svg(crate::Type::Solid, "download").is_ok());
-        assert!(crate::svg(crate::Type::Solid, "giberich").is_err());
+        assert!(crate::svg(crate::Type::Solid, "gibberish").is_err());
     }
 }

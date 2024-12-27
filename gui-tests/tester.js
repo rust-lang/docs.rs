@@ -31,7 +31,7 @@ function parseOptions(args) {
         "no_headless": false,
         "jobs": -1,
     };
-    const correspondances = {
+    const correspondences = {
         "--debug": "debug",
         "--show-text": "show_text",
         "--no-headless": "no_headless",
@@ -53,15 +53,15 @@ function parseOptions(args) {
                 }
                 opts["jobs"] = parseInt(args[i]);
             } else if (args[i - 1] !== "--file") {
-                opts[correspondances[args[i - 1]]] = args[i];
+                opts[correspondences[args[i - 1]]] = args[i];
             } else {
                 opts["files"].push(args[i]);
             }
         } else if (args[i] === "--help") {
             showHelp();
             process.exit(0);
-        } else if (correspondances[args[i]]) {
-            opts[correspondances[args[i]]] = true;
+        } else if (correspondences[args[i]]) {
+            opts[correspondences[args[i]]] = true;
         } else {
             console.log("Unknown option `" + args[i] + "`.");
             console.log("Use `--help` to see the list of options");

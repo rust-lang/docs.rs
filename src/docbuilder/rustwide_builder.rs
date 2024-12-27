@@ -1461,7 +1461,7 @@ mod tests {
                     .successful
             );
 
-            // source archice exists
+            // source archive exists
             let source_archive = source_archive_path(crate_, version);
             assert!(
                 env.storage().exists(&source_archive)?,

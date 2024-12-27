@@ -113,7 +113,7 @@ To run GUI tests:
 ```
 
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
-can take a look at its documentation [here](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
+can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
 
 ### Pure docker-compose
 

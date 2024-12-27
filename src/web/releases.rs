@@ -1027,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn search_result_can_retrive_sort_by_from_pagination() {
+    fn search_result_can_retrieve_sort_by_from_pagination() {
         async_wrapper(|env| async move {
             let mut crates_io = mockito::Server::new_async().await;
             env.override_config(|config| {

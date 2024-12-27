@@ -80,7 +80,7 @@
                                 </li>
                             {%- endif -%}
 
-                            {# If a the crate has a repo url, show it #}
+                            {# If the crate has a repo url, show it #}
                             {%- if let Some(repository_url) = krate.repository_url -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ repository_url }}" class="pure-menu-link">

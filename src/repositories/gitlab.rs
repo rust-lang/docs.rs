@@ -98,7 +98,7 @@ impl RepositoryForge for GitLab {
 
     async fn fetch_repository(&self, name: &RepositoryName) -> Result<Option<Repository>> {
         let project_path = format!("{}/{}", name.owner, name.repo);
-        // Fetch the latest information from the Gitlab API.
+        // Fetch the latest information from the GitLab API.
         let response: (GraphResponse<GraphProjectNode>, Option<usize>) = self
             .graphql(
                 GRAPHQL_SINGLE,
