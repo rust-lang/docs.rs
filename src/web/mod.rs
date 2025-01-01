@@ -413,7 +413,9 @@ async fn apply_middleware<C: Context>(
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
-            .layer(sentry_tower::NewSentryLayer::new_from_top())
+            // FIXME: send / sync error?
+            // .layer(sentry_tower::NewSentryLayer::new_from_top())
+            // .layer(sentry_tower::SentryLayer::new_from_top())
             .layer(sentry_tower::SentryHttpLayer::with_transaction())
             .layer(middleware::from_fn(
                 set_sentry_transaction_name_from_axum_route,

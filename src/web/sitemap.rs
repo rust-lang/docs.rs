@@ -154,6 +154,7 @@ about_page!(AboutPageMetadata, "core/about/metadata.html");
 about_page!(AboutPageRedirection, "core/about/redirections.html");
 about_page!(AboutPageDownload, "core/about/download.html");
 
+#[axum::debug_handler]
 pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<impl IntoResponse> {
     let subpage = match subpage {
         Some(subpage) => subpage.0,
