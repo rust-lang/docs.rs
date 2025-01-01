@@ -108,13 +108,13 @@ pub(super) fn build_axum_routes() -> AxumRouter {
     // have to use the same name:
     //
     // These routes work together:
-    // - `/:name/:version/settings.html`
-    // - `/:name/:version/:target`
+    // - `/{name}/{version}/settings.html`
+    // - `/{name}/{version}/{target}`
     // and axum can prioritize the more specific route.
     //
     // This panics because of conflicting routes:
-    // - `/:name/:version/settings.html`
-    // - `/:crate/:version/:target`
+    // - `/{name}/{version}/settings.html`
+    // - `/{crate}/{version}/{target}`
     //
     AxumRouter::new()
         // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
@@ -129,7 +129,9 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/favicon.ico",
             get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
         )
-        .nest("/-/static/", build_static_router())
+        // `.nest` with fallbacks is currently broken, `.nest_service works
+        // https://github.com/tokio-rs/axum/issues/3138
+        .nest_service("/-/static", build_static_router())
         .route(
             "/opensearch.xml",
             get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
@@ -139,7 +141,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::sitemap::sitemapindex_handler),
         )
         .route_with_tsr(
-            "/-/sitemap/:letter/sitemap.xml",
+            "/-/sitemap/{letter}/sitemap.xml",
             get_internal(super::sitemap::sitemap_handler),
         )
         .route_with_tsr(
@@ -149,7 +151,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         .merge(build_metric_routes())
         .route_with_tsr("/about", get_internal(super::sitemap::about_handler))
         .route_with_tsr(
-            "/about/:subpage",
+            "/about/{subpage}",
             get_internal(super::sitemap::about_handler),
         )
         .route("/", get_internal(super::releases::home_page))
@@ -158,7 +160,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::recent_releases_handler),
         )
         .route_with_tsr(
-            "/releases/recent/:page",
+            "/releases/recent/{page}",
             get_internal(super::releases::recent_releases_handler),
         )
         .route_with_tsr(
@@ -166,7 +168,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::releases_by_stars_handler),
         )
         .route_with_tsr(
-            "/releases/stars/:page",
+            "/releases/stars/{page}",
             get_internal(super::releases::releases_by_stars_handler),
         )
         .route_with_tsr(
@@ -174,7 +176,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::releases_recent_failures_handler),
         )
         .route_with_tsr(
-            "/releases/recent-failures/:page",
+            "/releases/recent-failures/{page}",
             get_internal(super::releases::releases_recent_failures_handler),
         )
         .route_with_tsr(
@@ -182,15 +184,15 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
         .route_with_tsr(
-            "/releases/failures/:page",
+            "/releases/failures/{page}",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
         .route_with_tsr(
-            "/crate/:name",
+            "/crate/{name}",
             get_internal(super::crate_details::crate_details_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version",
+            "/crate/{name}/{version}",
             get_internal(super::crate_details::crate_details_handler),
         )
         .route_with_tsr(
@@ -198,11 +200,11 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::releases_feed_handler),
         )
         .route_with_tsr(
-            "/releases/:owner",
+            "/releases/{owner}",
             get_internal(super::releases::owner_handler),
         )
         .route_with_tsr(
-            "/releases/:owner/:page",
+            "/releases/{owner}/{page}",
             get_internal(super::releases::owner_handler),
         )
         .route_with_tsr(
@@ -218,71 +220,71 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::releases::build_queue_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version/builds",
+            "/crate/{name}/{version}/builds",
             get_internal(super::builds::build_list_handler),
         )
         .route(
-            "/crate/:name/:version/builds.json",
+            "/crate/{name}/{version}/builds.json",
             get_internal(super::builds::build_list_json_handler),
         )
         .route(
-            "/crate/:name/:version/rebuild",
+            "/crate/{name}/{version}/rebuild",
             post_internal(super::builds::build_trigger_rebuild_handler),
         )
         .route(
-            "/crate/:name/:version/status.json",
+            "/crate/{name}/{version}/status.json",
             get_internal(super::status::status_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version/builds/:id",
+            "/crate/{name}/{version}/builds/{id}",
             get_internal(super::build_details::build_details_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version/builds/:id/:filename",
+            "/crate/{name}/{version}/builds/{id}/{filename}",
             get_internal(super::build_details::build_details_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version/features",
+            "/crate/{name}/{version}/features",
             get_internal(super::features::build_features_handler),
         )
         .route_with_tsr(
-            "/crate/:name/:version/source/",
+            "/crate/{name}/{version}/source/",
             get_internal(super::source::source_browser_handler),
         )
         .route(
-            "/crate/:name/:version/source/*path",
+            "/crate/{name}/{version}/source/{*path}",
             get_internal(super::source::source_browser_handler),
         )
         .route(
-            "/crate/:name/:version/menus/platforms/:target",
+            "/crate/{name}/{version}/menus/platforms/{target}",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/crate/:name/:version/menus/platforms/:target/*path",
+            "/crate/{name}/{version}/menus/platforms/{target}/{*path}",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/crate/:name/:version/menus/platforms",
+            "/crate/{name}/{version}/menus/platforms",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/crate/:name/:version/menus/releases/:target",
+            "/crate/{name}/{version}/menus/releases/{target}",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
-            "/crate/:name/:version/menus/releases/:target/*path",
+            "/crate/{name}/{version}/menus/releases/{target}/{*path}",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
-            "/crate/:name/:version/menus/releases",
+            "/crate/{name}/{version}/menus/releases",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
-            "/crate/:name/:version/menus/releases/:target/",
+            "/crate/{name}/{version}/menus/releases/{target}/",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(
-            "/-/rustdoc.static/*path",
+            "/-/rustdoc.static/{*path}",
             get_internal(super::rustdoc::static_asset_handler),
         )
         .route(
@@ -304,59 +306,59 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             }),
         )
         .route_with_tsr(
-            "/crate/:name/:version/download",
+            "/crate/{name}/{version}/download",
             get_internal(super::rustdoc::download_handler),
         )
         .route(
-            "/crate/:name/:version/target-redirect/*path",
+            "/crate/{name}/{version}/target-redirect/{*path}",
             get_internal(super::rustdoc::target_redirect_handler),
         )
         .route(
-            "/:name/badge.svg",
+            "/{name}/badge.svg",
             get_internal(super::rustdoc::badge_handler),
         )
         .route(
-            "/:name",
+            "/{name}",
             get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
         )
         .route(
-            "/:name/",
+            "/{name}/",
             get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
         )
         .route(
-            "/:name/:version",
+            "/{name}/{version}",
             get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
         )
         .route(
-            "/:name/:version/",
+            "/{name}/{version}/",
             get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
         )
         .route(
-            "/:name/:version/all.html",
+            "/{name}/{version}/all.html",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
-            "/:name/:version/help.html",
+            "/{name}/{version}/help.html",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
-            "/:name/:version/settings.html",
+            "/{name}/{version}/settings.html",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
-            "/:name/:version/scrape-examples-help.html",
+            "/{name}/{version}/scrape-examples-help.html",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
-            "/:name/:version/:target",
+            "/{name}/{version}/{target}",
             get_rustdoc(super::rustdoc::rustdoc_redirector_handler),
         )
         .route(
-            "/:name/:version/:target/",
+            "/{name}/{version}/{target}/",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .route(
-            "/:name/:version/:target/*path",
+            "/{name}/{version}/{target}/{*path}",
             get_rustdoc(super::rustdoc::rustdoc_html_server_handler),
         )
         .fallback(fallback)

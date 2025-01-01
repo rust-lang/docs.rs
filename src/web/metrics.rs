@@ -118,15 +118,15 @@ mod tests {
     fn test_response_times_count_being_collected() {
         const ROUTES: &[(&str, &str)] = &[
             ("/", "/"),
-            ("/crate/hexponent/0.2.0", "/crate/:name/:version"),
-            ("/crate/rcc/0.0.0", "/crate/:name/:version"),
+            ("/crate/hexponent/0.2.0", "/crate/{name}/{version}"),
+            ("/crate/rcc/0.0.0", "/crate/{name}/{version}"),
             (
                 "/crate/rcc/0.0.0/builds.json",
-                "/crate/:name/:version/builds.json",
+                "/crate/{name}/{version}/builds.json",
             ),
             (
                 "/crate/rcc/0.0.0/status.json",
-                "/crate/:name/:version/status.json",
+                "/crate/{name}/{version}/status.json",
             ),
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
@@ -139,12 +139,15 @@ mod tests {
             ("/releases/recent-failures", "/releases/recent-failures"),
             (
                 "/releases/recent-failures/1",
-                "/releases/recent-failures/:page",
+                "/releases/recent-failures/{page}",
             ),
-            ("/releases/recent/1", "/releases/recent/:page"),
+            ("/releases/recent/1", "/releases/recent/{page}"),
             ("/-/static/robots.txt", "static resource"),
             ("/sitemap.xml", "/sitemap.xml"),
-            ("/-/sitemap/a/sitemap.xml", "/-/sitemap/:letter/sitemap.xml"),
+            (
+                "/-/sitemap/a/sitemap.xml",
+                "/-/sitemap/{letter}/sitemap.xml",
+            ),
             ("/-/static/style.css", "static resource"),
             ("/-/static/vendored.css", "static resource"),
             ("/rustdoc/rcc/0.0.0/rcc/index.html", "rustdoc page"),
