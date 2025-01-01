@@ -37,11 +37,11 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.31.0", default-features = false }
+comrak = { version = "0.32.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
-rustwide = { version = "0.18.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { version = "0.19.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
 hostname = "0.4.0"
@@ -56,7 +56,7 @@ string_cache = "0.8.0"
 zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.5.0"
 getrandom = "0.2.1"
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 hex = "0.4.3"
 derive_more = { version = "1.0.0", features = ["display"] }
@@ -125,7 +125,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.68.0", default-features = false }
+gix = { version = "0.69.1", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
