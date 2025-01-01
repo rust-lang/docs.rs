@@ -129,7 +129,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/favicon.ico",
             get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
         )
-        .nest("/-/static/", build_static_router())
+        .nest("/-/static", build_static_router())
         .route(
             "/opensearch.xml",
             get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),

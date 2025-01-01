@@ -67,8 +67,7 @@ pub(crate) fn build_static_router() -> AxumRouter {
             "/rustdoc-2021-12-05.css",
             get_static(|| async { build_static_css_response(RUSTDOC_2021_12_05_CSS) }),
         )
-        .nest_service(
-            "/",
+        .fallback_service(
             get_service(ServeDir::new("static").fallback(ServeDir::new("vendor")))
                 .layer(middleware::from_fn(set_needed_static_headers))
                 .layer(middleware::from_fn(|request, next| async {
@@ -166,7 +165,12 @@ mod tests {
             let web = env.web_app().await;
 
             let resp = web.get(path).await?;
-            assert!(resp.status().is_success());
+            if !resp.status().is_success() {
+                let status = resp.status();
+                dbg!(&resp.text().await);
+                assert!(status.is_success(), "{}", status);
+                panic!("as");
+            }
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
