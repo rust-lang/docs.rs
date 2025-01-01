@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::repositories::{GitHub, GitLab, RateLimitReached};
 use crate::utils::MetadataPackage;
 use crate::{db::Pool, Config};
-use axum::async_trait;
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use once_cell::sync::Lazy;

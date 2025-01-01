@@ -1,8 +1,7 @@
 use crate::db::{AsyncPoolClient, Pool};
 use anyhow::Context as _;
 use axum::{
-    async_trait,
-    extract::{Extension, FromRequestParts},
+    extract::{Extension, FromRequestParts, OptionalFromRequestParts},
     http::request::Parts,
     RequestPartsExt,
 };
@@ -20,7 +19,6 @@ use super::error::AxumNope;
 #[derive(Debug)]
 pub(crate) struct DbConnection(AsyncPoolClient);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for DbConnection
 where
     S: Send + Sync,
@@ -55,11 +53,32 @@ impl DerefMut for DbConnection {
 /// as error response instead of a plain text "bad request"
 #[allow(clippy::disallowed_types)]
 mod path_impl {
+    use serde::de::DeserializeOwned;
+
     use super::*;
 
     #[derive(FromRequestParts)]
     #[from_request(via(axum::extract::Path), rejection(AxumNope))]
     pub(crate) struct Path<T>(pub T);
+
+    impl<T, S> OptionalFromRequestParts<S> for Path<T>
+    where
+        T: DeserializeOwned + Send + 'static,
+        S: Send + Sync,
+    {
+        type Rejection = AxumNope;
+
+        async fn from_request_parts(
+            parts: &mut Parts,
+            _state: &S,
+        ) -> Result<Option<Self>, Self::Rejection> {
+            parts
+                .extract::<Option<axum::extract::Path<T>>>()
+                .await
+                .map(|path| path.map(|obj| Path(obj.0)))
+                .map_err(|err| AxumNope::BadRequest(err.into()))
+        }
+    }
 }
 
 pub(crate) use path_impl::Path;

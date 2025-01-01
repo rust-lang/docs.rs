@@ -17,7 +17,7 @@ exclude = [
 ]
 
 [dependencies]
-sentry = { version = "0.35.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+sentry = { version = "0.36.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
@@ -78,8 +78,9 @@ serde_json = "1.0"
 serde_with = "3.4.0"
 
 # axum dependencies
-axum = { version = "0.7.3", features = ["macros"] }
-axum-extra = { version = "0.9.1", features = ["typed-header"] }
+async-trait = "0.1.83"
+axum = { version = "0.8.1", features = ["macros"] }
+axum-extra = { version = "0.10.0", features = ["typed-header"] }
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
