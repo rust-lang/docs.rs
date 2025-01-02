@@ -53,7 +53,7 @@ pub async fn watch_registry(
     }
 }
 
-fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
+fn start_registry_watcher<C: Context>(context: &C) -> Result<(), Error> {
     let build_queue = context.runtime()?.block_on(context.async_build_queue())?;
     let config = context.config()?;
     let index = context.index()?;
@@ -69,7 +69,7 @@ fn start_registry_watcher(context: &dyn Context) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn start_background_repository_stats_updater(context: &dyn Context) -> Result<(), Error> {
+pub fn start_background_repository_stats_updater<C: Context>(context: &C) -> Result<(), Error> {
     // This call will still skip github repositories updates and continue if no token is provided
     // (gitlab doesn't require to have a token). The only time this can return an error is when
     // creating a pool or if config fails, which shouldn't happen here because this is run right at
@@ -91,7 +91,7 @@ pub fn start_background_repository_stats_updater(context: &dyn Context) -> Resul
     Ok(())
 }
 
-pub fn start_background_queue_rebuild(context: &dyn Context) -> Result<(), Error> {
+pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Error> {
     let runtime = context.runtime()?;
     let pool = context.pool()?;
     let config = context.config()?;
@@ -120,7 +120,7 @@ pub fn start_background_queue_rebuild(context: &dyn Context) -> Result<(), Error
     Ok(())
 }
 
-pub fn start_background_cdn_invalidator(context: &dyn Context) -> Result<(), Error> {
+pub fn start_background_cdn_invalidator<C: Context>(context: &C) -> Result<(), Error> {
     let metrics = context.instance_metrics()?;
     let config = context.config()?;
     let pool = context.pool()?;

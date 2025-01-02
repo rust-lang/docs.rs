@@ -24,7 +24,7 @@ const BUILD_PRIORITY: i32 = 15;
 ///
 /// Even when activities fail, the command can just be re-run. While the diff calculation will
 /// be repeated, we won't re-execute fixing activities.
-pub fn run_check(ctx: &dyn Context, dry_run: bool) -> Result<()> {
+pub fn run_check<C: Context>(ctx: &C, dry_run: bool) -> Result<()> {
     let index = ctx.index()?;
 
     info!("Loading data from database...");
@@ -79,9 +79,10 @@ struct HandleResult {
     yanks_corrected: u32,
 }
 
-fn handle_diff<'a, I>(ctx: &dyn Context, iter: I, dry_run: bool) -> Result<HandleResult>
+fn handle_diff<'a, I, C>(ctx: &C, iter: I, dry_run: bool) -> Result<HandleResult>
 where
     I: Iterator<Item = &'a diff::Difference>,
+    C: Context,
 {
     let mut result = HandleResult::default();
 

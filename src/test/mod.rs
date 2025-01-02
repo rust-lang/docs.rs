@@ -13,7 +13,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use axum::body::Bytes;
-use axum::{async_trait, body::Body, http::Request, response::Response as AxumResponse, Router};
+use axum::{body::Body, http::Request, response::Response as AxumResponse, Router};
 use fn_error_context::context;
 use futures_util::{stream::TryStreamExt, FutureExt};
 use http_body_util::BodyExt; // for `collect`
@@ -621,7 +621,6 @@ impl TestEnvironment {
     }
 }
 
-#[async_trait]
 impl Context for TestEnvironment {
     fn config(&self) -> Result<Arc<Config>> {
         Ok(TestEnvironment::config(self))

@@ -6,7 +6,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context as _, Error, Result};
-use axum::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
 use docs_rs::db::{self, add_path_into_database, CrateId, Overrides, Pool};
@@ -877,7 +876,6 @@ macro_rules! lazy {
     }
 }
 
-#[async_trait]
 impl Context for BinContext {
     lazy! {
         fn build_queue(self) -> BuildQueue = {
