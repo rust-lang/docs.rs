@@ -114,7 +114,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
     //
     // This panics because of conflicting routes:
     // - `/{name}/{version}/settings.html`
-    // - `/:crate/{version}/{target}`
+    // - `/{crate}/{version}/{target}`
     //
     AxumRouter::new()
         // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
@@ -129,7 +129,9 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/favicon.ico",
             get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
         )
-        .nest("/-/static", build_static_router())
+        // `.nest` with fallbacks is currently broken, `.nest_service works
+        // https://github.com/tokio-rs/axum/issues/3138
+        .nest_service("/-/static", build_static_router())
         .route(
             "/opensearch.xml",
             get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
