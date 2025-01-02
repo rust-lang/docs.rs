@@ -55,7 +55,7 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-fn build_workspace(context: &dyn Context) -> Result<Workspace> {
+fn build_workspace<C: Context>(context: &C) -> Result<Workspace> {
     let config = context.config()?;
 
     let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
@@ -99,7 +99,7 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init(context: &dyn Context) -> Result<Self> {
+    pub fn init<C: Context>(context: &C) -> Result<Self> {
         let config = context.config()?;
         let pool = context.pool()?;
         let runtime = context.runtime()?;
@@ -123,9 +123,9 @@ impl RustwideBuilder {
         })
     }
 
-    pub fn reinitialize_workspace_if_interval_passed(
+    pub fn reinitialize_workspace_if_interval_passed<C: Context>(
         &mut self,
-        context: &dyn Context,
+        context: &C,
     ) -> Result<()> {
         let interval = context.config()?.build_workspace_reinitialization_interval;
         if self.workspace_initialize_time.elapsed() >= interval {

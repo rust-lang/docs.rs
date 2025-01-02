@@ -6,20 +6,18 @@ use crate::{
     AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
 };
-use axum::async_trait;
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 use tokio::runtime::Runtime;
 
-#[async_trait]
 pub trait Context {
     fn config(&self) -> Result<Arc<Config>>;
-    async fn async_build_queue(&self) -> Result<Arc<AsyncBuildQueue>>;
+    fn async_build_queue(&self) -> impl Future<Output = Result<Arc<AsyncBuildQueue>>> + Send;
     fn build_queue(&self) -> Result<Arc<BuildQueue>>;
     fn storage(&self) -> Result<Arc<Storage>>;
-    async fn async_storage(&self) -> Result<Arc<AsyncStorage>>;
-    async fn cdn(&self) -> Result<Arc<CdnBackend>>;
+    fn async_storage(&self) -> impl Future<Output = Result<Arc<AsyncStorage>>> + Send;
+    fn cdn(&self) -> impl Future<Output = Result<Arc<CdnBackend>>> + Send;
     fn pool(&self) -> Result<Pool>;
-    async fn async_pool(&self) -> Result<Pool>;
+    fn async_pool(&self) -> impl Future<Output = Result<Pool>> + Send;
     fn service_metrics(&self) -> Result<Arc<ServiceMetrics>>;
     fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>>;
     fn index(&self) -> Result<Arc<Index>>;

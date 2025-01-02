@@ -399,9 +399,9 @@ async fn set_sentry_transaction_name_from_axum_route(
     next.run(request).await
 }
 
-async fn apply_middleware(
+async fn apply_middleware<C: Context>(
     router: AxumRouter,
-    context: &dyn Context,
+    context: &C,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let config = context.config()?;
@@ -441,20 +441,20 @@ async fn apply_middleware(
     ))
 }
 
-pub(crate) async fn build_axum_app(
-    context: &dyn Context,
+pub(crate) async fn build_axum_app<C: Context>(
+    context: &C,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
     apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
 }
 
-pub(crate) async fn build_metrics_axum_app(context: &dyn Context) -> Result<AxumRouter, Error> {
+pub(crate) async fn build_metrics_axum_app<C: Context>(context: &C) -> Result<AxumRouter, Error> {
     apply_middleware(routes::build_metric_routes(), context, None).await
 }
 
-pub fn start_background_metrics_webserver(
+pub fn start_background_metrics_webserver<C: Context>(
     addr: Option<SocketAddr>,
-    context: &dyn Context,
+    context: &C,
 ) -> Result<(), Error> {
     let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND);
 
@@ -492,7 +492,7 @@ pub fn start_background_metrics_webserver(
 }
 
 #[instrument(skip_all)]
-pub fn start_web_server(addr: Option<SocketAddr>, context: &dyn Context) -> Result<(), Error> {
+pub fn start_web_server<C: Context>(addr: Option<SocketAddr>, context: &C) -> Result<(), Error> {
     let template_data = Arc::new(TemplateData::new(context.config()?.render_threads)?);
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
