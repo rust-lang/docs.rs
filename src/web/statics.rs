@@ -165,12 +165,7 @@ mod tests {
             let web = env.web_app().await;
 
             let resp = web.get(path).await?;
-            if !resp.status().is_success() {
-                let status = resp.status();
-                dbg!(&resp.text().await);
-                assert!(status.is_success(), "{}", status);
-                panic!("as");
-            }
+            assert!(resp.status().is_success());
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
