@@ -12,7 +12,6 @@ use crate::{
     ServiceMetrics,
 };
 use anyhow::Context as _;
-use async_trait::async_trait;
 use axum::body::Bytes;
 use axum::{body::Body, http::Request, response::Response as AxumResponse, Router};
 use fn_error_context::context;
