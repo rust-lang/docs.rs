@@ -5910,6 +5910,7 @@ version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcdaf9b1939589476bd57751d12a9653bbfe356610fc476d03d7683189183ab7"
 dependencies = [
+ "axum",
  "http 1.2.0",
  "pin-project",
  "sentry-core",
