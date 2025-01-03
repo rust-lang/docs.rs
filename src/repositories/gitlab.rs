@@ -1,5 +1,5 @@
 use crate::error::Result;
-use axum::async_trait;
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
