@@ -130,8 +130,15 @@ pub(crate) async fn get_releases(
         .await?)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ReleaseStatus {
+    Available(Release),
+    /// Only contains the crate name.
+    NotAvailable(String),
+}
+
 struct SearchResult {
-    pub results: Vec<Release>,
+    pub results: Vec<ReleaseStatus>,
     pub prev_page: Option<String>,
     pub next_page: Option<String>,
 }
@@ -160,7 +167,7 @@ async fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let crates: HashMap<String, Release> = sqlx::query!(
+    let mut crates: HashMap<String, Release> = sqlx::query!(
         r#"SELECT
                crates.name,
                releases.version,
@@ -206,14 +213,21 @@ async fn get_search_results(
     .try_collect()
     .await?;
 
+    let names: Vec<String> =
+        Arc::into_inner(names).expect("Arc still borrowed in `get_search_results`");
     Ok(SearchResult {
         // start with the original names from crates.io to keep the original ranking,
         // extend with the release/build information from docs.rs
         // Crates that are not on docs.rs yet will not be returned.
         results: names
-            .iter()
-            .filter_map(|name| crates.get(name))
-            .cloned()
+            .into_iter()
+            .map(|name| {
+                if let Some(release) = crates.remove(&name) {
+                    ReleaseStatus::Available(release)
+                } else {
+                    ReleaseStatus::NotAvailable(name)
+                }
+            })
             .collect(),
         prev_page: meta.prev_page,
         next_page: meta.next_page,
@@ -269,7 +283,7 @@ pub(crate) async fn releases_feed_handler(mut conn: DbConnection) -> AxumResult<
 #[template(path = "releases/releases.html")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ViewReleases {
-    releases: Vec<Release>,
+    releases: Vec<ReleaseStatus>,
     description: String,
     release_type: ReleaseType,
     show_next_page: bool,
@@ -355,7 +369,10 @@ pub(crate) async fn releases_handler(
     );
 
     Ok(ViewReleases {
-        releases,
+        releases: releases
+            .into_iter()
+            .map(ReleaseStatus::Available)
+            .collect::<Vec<_>>(),
         description: description.into(),
         release_type,
         show_next_page,
@@ -407,7 +424,7 @@ pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Search {
     pub(super) title: String,
-    pub(super) releases: Vec<Release>,
+    pub(super) releases: Vec<ReleaseStatus>,
     pub(super) search_query: Option<String>,
     pub(super) search_sort_by: Option<String>,
     pub(super) previous_page_link: Option<String>,
