@@ -4,4 +4,7 @@ Sitemap: https://docs.rs/sitemap.xml
 # https://docs.rs/about/redirections
 User-Agent: *
 Disallow: */^
+# %5E is '^', URL-encoded. Based on the Search Console, Google
+# may be encoding '^' before checking against robots.txt.
+Disallow: */%5E
 Disallow: */~
