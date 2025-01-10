@@ -688,7 +688,8 @@ impl DatabaseSubcommand {
             Self::Limits { command } => command.handle_args(ctx)?,
 
             Self::Synchronize { dry_run } => {
-                docs_rs::utils::consistency::run_check(&ctx, dry_run)?;
+                ctx.runtime()?
+                    .block_on(docs_rs::utils::consistency::run_check(&ctx, dry_run))?;
             }
         }
         Ok(())
