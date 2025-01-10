@@ -69,27 +69,28 @@ fn render_with_highlighter(
     text: &str,
     highlighter: impl Fn(Option<&str>, &str) -> String + Send + Sync,
 ) -> String {
-    let mut extension = ExtensionOptions::default();
-    extension.superscript = true;
-    extension.table = true;
-    extension.autolink = true;
-    extension.tasklist = true;
-    extension.strikethrough = true;
-
-    let options = Options {
-        extension,
-        ..Default::default()
-    };
-
     let code_adapter = CodeAdapter(highlighter);
 
-    let mut render = RenderPlugins::default();
-    render.codefence_syntax_highlighter = Some(&code_adapter);
-
-    let mut plugins = Plugins::default();
-    plugins.render = render;
-
-    comrak::markdown_to_html_with_plugins(text, &options, &plugins)
+    comrak::markdown_to_html_with_plugins(
+        text,
+        &Options {
+            extension: ExtensionOptions {
+                superscript: true,
+                table: true,
+                autolink: true,
+                tasklist: true,
+                strikethrough: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        &Plugins {
+            render: RenderPlugins {
+                codefence_syntax_highlighter: Some(&code_adapter),
+                ..Default::default()
+            },
+        },
+    )
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
