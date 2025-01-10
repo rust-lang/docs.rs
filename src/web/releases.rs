@@ -2100,4 +2100,59 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn crates_not_on_docsrs() {
+        async_wrapper(|env| async move {
+            let mut crates_io = mockito::Server::new_async().await;
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url().parse().unwrap();
+            });
+
+            let web = env.web_app().await;
+            env.async_fake_release()
+                .await
+                .name("some_random_crate")
+                .create_async()
+                .await?;
+
+            let _m = crates_io
+                .mock("GET", "/api/v1/crates")
+                .match_query(Matcher::AllOf(vec![
+                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                    Matcher::UrlEncoded("per_page".into(), "30".into()),
+                ]))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    json!({
+                        "crates": [
+                            { "name": "some_random_crate" },
+                            { "name": "some_random_crate2" },
+                            { "name": "some_random_crate3" },
+                        ],
+                        "meta": {
+                            "next_page": "null",
+                            "prev_page": "null",
+                        }
+                    })
+                    .to_string(),
+                )
+                .create_async()
+                .await;
+
+            let response = web.get("/releases/search?query=some_random_crate").await?;
+            assert!(response.status().is_success());
+
+            let page = kuchikiki::parse_html().one(response.text().await?);
+
+            assert_eq!(page.select("div.name.not-available").unwrap().count(), 2);
+            assert_eq!(
+                page.select("div.name:not(.not-available)").unwrap().count(),
+                1
+            );
+
+            Ok(())
+        })
+    }
 }
