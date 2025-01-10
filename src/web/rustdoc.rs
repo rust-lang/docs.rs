@@ -500,7 +500,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 }
             }
 
-            if req_path.first().map_or(false, |p| p.contains('-')) {
+            if req_path.first().is_some_and(|p| p.contains('-')) {
                 // This is a target, not a module; it may not have been built.
                 // Redirect to the default target and show a search page instead of a hard 404.
                 return Ok(axum_cached_redirect(
