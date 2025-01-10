@@ -90,8 +90,12 @@ impl Package {
     }
 
     pub(crate) fn package_name(&self) -> String {
-        self.library_name()
-            .unwrap_or_else(|| self.normalize_package_name(&self.targets[0].name))
+        self.library_name().unwrap_or_else(|| {
+            self.targets
+                .first()
+                .map(|t| self.normalize_package_name(&t.name))
+                .unwrap_or_default()
+        })
     }
 
     pub(crate) fn library_name(&self) -> Option<String> {

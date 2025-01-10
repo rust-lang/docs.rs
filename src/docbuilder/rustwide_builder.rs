@@ -581,7 +581,32 @@ impl RustwideBuilder {
                     None
                 };
 
-                let has_examples = build.host_source_dir().join("examples").is_dir();
+                let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+
+                self.runtime.block_on(finish_build(
+                    &mut async_conn,
+                    build_id,
+                    &res.result.rustc_version,
+                    &res.result.docsrs_version,
+                    if res.result.successful {
+                        BuildStatus::Success
+                    } else {
+                        BuildStatus::Failure
+                    },
+                    documentation_size,
+                    None,
+                ))?;
+
+                {
+                    let _span = info_span!("store_build_logs").entered();
+                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                    self.storage.store_one(build_log_path, res.build_log)?;
+                    for (target, log) in target_build_logs {
+                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
+                        self.storage.store_one(build_log_path, log)?;
+                    }
+                }
+
                 if res.result.successful {
                     self.metrics.successful_builds.inc();
                 } else if res.cargo_metadata.root().is_library() {
@@ -611,8 +636,26 @@ impl RustwideBuilder {
                 let cargo_metadata = res.cargo_metadata.root();
                 let repository = self.get_repo(cargo_metadata)?;
 
-                let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+                // when we have an unsuccessful build, but the release was already successfullly
+                // built in the past, don't touch the release record so the docs stay intact.
+                // This mainly happens with manually triggered or automated rebuilds.
+                // The `release_build_status` table is already updated with the information from
+                // the current build via `finish_build`.
+                let current_release_build_status = self.runtime.block_on(sqlx::query_scalar!(
+                    r#"
+                    SELECT build_status AS "build_status: BuildStatus"
+                    FROM release_build_status
+                    WHERE rid = $1
+                    "#,
+                    release_id.0,
+                ).fetch_optional(&mut *async_conn))?;
 
+                if !res.result.successful && current_release_build_status == Some(BuildStatus::Success) {
+                    info!("build was unsuccessful, but the release was already successfully built in the past. Skipping release record update.");
+                    return Ok(false);
+                }
+
+                let has_examples = build.host_source_dir().join("examples").is_dir();
                 self.runtime.block_on(finish_release(
                     &mut async_conn,
                     crate_id,
@@ -637,31 +680,6 @@ impl RustwideBuilder {
                         release_id,
                         doc_coverage,
                     ))?;
-                }
-
-                let build_status = if res.result.successful {
-                    BuildStatus::Success
-                } else {
-                    BuildStatus::Failure
-                };
-                self.runtime.block_on(finish_build(
-                    &mut async_conn,
-                    build_id,
-                    &res.result.rustc_version,
-                    &res.result.docsrs_version,
-                    build_status,
-                    documentation_size,
-                    None,
-                ))?;
-
-                {
-                    let _span = info_span!("store_build_logs").entered();
-                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
-                    self.storage.store_one(build_log_path, res.build_log)?;
-                    for (target, log) in target_build_logs {
-                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
-                        self.storage.store_one(build_log_path, log)?;
-                    }
                 }
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
@@ -1023,8 +1041,12 @@ impl Default for BuildPackageSummary {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use super::*;
     use crate::db::types::Feature;
+    use crate::registry_api::ReleaseData;
+    use crate::storage::CompressionAlgorithm;
     use crate::test::{wrapper, AxumRouterTestExt, TestEnvironment};
 
     fn get_features(
@@ -1295,6 +1317,91 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    #[ignore]
+    fn test_failed_build_with_existing_successful_release() {
+        wrapper(|env| {
+            // rand 0.8.5 fails to build with recent nightly versions
+            // https://github.com/rust-lang/docs.rs/issues/26750
+            let crate_ = "rand";
+            let version = "0.8.5";
+
+            // create a successful release & build in the database
+            let release_id = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                let crate_id = initialize_crate(&mut conn, crate_).await?;
+                let release_id = initialize_release(&mut conn, crate_id, version).await?;
+                let build_id = initialize_build(&mut conn, release_id).await?;
+                finish_build(
+                    &mut conn,
+                    build_id,
+                    "some-version",
+                    "other-version",
+                    BuildStatus::Success,
+                    None,
+                    None,
+                )
+                .await?;
+                finish_release(
+                    &mut conn,
+                    crate_id,
+                    release_id,
+                    &MetadataPackage::default(),
+                    Path::new("/unknown/"),
+                    "x86_64-unknown-linux-gnu",
+                    serde_json::Value::Array(vec![]),
+                    vec![
+                        "i686-pc-windows-msvc".into(),
+                        "i686-unknown-linux-gnu".into(),
+                        "x86_64-apple-darwin".into(),
+                        "x86_64-pc-windows-msvc".into(),
+                        "x86_64-unknown-linux-gnu".into(),
+                    ],
+                    &ReleaseData::default(),
+                    true,
+                    false,
+                    iter::once(CompressionAlgorithm::Bzip2),
+                    None,
+                    true,
+                    42,
+                )
+                .await?;
+
+                Ok::<_, anyhow::Error>(release_id)
+            })?;
+
+            fn check_rustdoc_status(env: &TestEnvironment, rid: ReleaseId) -> Result<()> {
+                assert_eq!(
+                    env.runtime().block_on(async {
+                        let mut conn = env.async_db().await.async_conn().await;
+                        sqlx::query_scalar!(
+                            "SELECT rustdoc_status FROM releases WHERE id = $1",
+                            rid.0
+                        )
+                        .fetch_one(&mut *conn)
+                        .await
+                    })?,
+                    Some(true)
+                );
+                Ok(())
+            }
+
+            check_rustdoc_status(env, release_id)?;
+
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
+            assert!(
+                // not successful build
+                !builder
+                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .successful
+            );
+
+            check_rustdoc_status(env, release_id)?;
+            Ok(())
+        });
     }
 
     #[test]
