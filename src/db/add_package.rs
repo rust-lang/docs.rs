@@ -447,7 +447,7 @@ fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>
 }
 
 fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    if let Some(src_path) = &pkg.targets.first().and_then(|t| t.src_path.clone()) {
+    if let Some(src_path) = &pkg.targets.first().and_then(|t| t.src_path.as_ref()) {
         let src_path = Path::new(src_path);
         if src_path.is_absolute() {
             read_rust_doc(src_path)
