@@ -112,7 +112,7 @@ mod test {
     #[test]
     fn rewriting_only_injects_css_once() {
         async_wrapper(|env| async move {
-            env.async_fake_release().await
+            env.fake_release().await
                 .name("testing")
                 .version("0.1.0")
                 // A somewhat representative rustdoc html file from 2016
@@ -139,7 +139,7 @@ mod test {
                         </head>
                     </html>
                 "#)
-                .create_async().await?;
+                .create().await?;
 
             let web = env.web_app().await;
             let output = web.get("/testing/0.1.0/2016/").await?.text().await?;

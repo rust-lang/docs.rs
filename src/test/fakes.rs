@@ -18,7 +18,6 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::iter;
 use std::sync::Arc;
-use tokio::runtime::Runtime;
 use tracing::debug;
 
 /// Create a fake release in the database that failed before the build.
@@ -55,7 +54,6 @@ pub(crate) async fn fake_release_that_failed_before_build(
 pub(crate) struct FakeRelease<'a> {
     db: &'a TestDatabase,
     storage: Arc<AsyncStorage>,
-    runtime: Arc<Runtime>,
     package: MetadataPackage,
     builds: Option<Vec<FakeBuild>>,
     /// name, content
@@ -89,15 +87,10 @@ const DEFAULT_CONTENT: &[u8] =
     b"<html><head></head><body>default content for test/fakes</body></html>";
 
 impl<'a> FakeRelease<'a> {
-    pub(super) fn new(
-        db: &'a TestDatabase,
-        storage: Arc<AsyncStorage>,
-        runtime: Arc<Runtime>,
-    ) -> Self {
+    pub(super) fn new(db: &'a TestDatabase, storage: Arc<AsyncStorage>) -> Self {
         FakeRelease {
             db,
             storage,
-            runtime,
             package: MetadataPackage {
                 id: "fake-package-id".into(),
                 name: "fake-package".into(),
@@ -328,13 +321,8 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn create(self) -> Result<ReleaseId> {
-        let runtime = self.runtime.clone();
-        runtime.block_on(self.create_async())
-    }
-
     /// Returns the release_id
-    pub(crate) async fn create_async(self) -> Result<ReleaseId> {
+    pub(crate) async fn create(self) -> Result<ReleaseId> {
         use std::fs;
         use std::path::Path;
 

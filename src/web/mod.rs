@@ -778,11 +778,11 @@ mod test {
     use test_case::test_case;
 
     async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
-        env.async_fake_release()
+        env.fake_release()
             .await
             .name("foo")
             .version(version)
-            .create_async()
+            .create()
             .await
             .unwrap()
     }
@@ -830,7 +830,7 @@ mod test {
     #[test]
     fn test_doc_coverage_for_crate_pages() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.0.1")
@@ -841,7 +841,7 @@ mod test {
                     total_items_needing_examples: 2,
                     items_with_examples: 1,
                 })
-                .create_async()
+                .create()
                 .await?;
             let web = env.web_app().await;
 
@@ -870,12 +870,12 @@ mod test {
     #[test]
     fn test_show_clipboard_for_crate_pages() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("fake_crate")
                 .version("0.0.1")
                 .source_file("test.rs", &[])
-                .create_async()
+                .create()
                 .await?;
             let web = env.web_app().await;
             assert!(clipboard_is_present_for_path("/crate/fake_crate/0.0.1", &web).await);
@@ -888,11 +888,11 @@ mod test {
     #[test]
     fn test_hide_clipboard_for_non_crate_pages() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("fake_crate")
                 .version("0.0.1")
-                .create_async()
+                .create()
                 .await?;
             let web = env.web_app().await;
             assert!(!clipboard_is_present_for_path("/about", &web).await);
@@ -963,11 +963,11 @@ mod test {
     #[test]
     fn double_slash_does_redirect_to_latest_version() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("bat")
                 .version("0.2.0")
-                .create_async()
+                .create()
                 .await?;
             let web = env.web_app().await;
             web.assert_redirect("/bat//", "/bat/latest/bat/").await?;
@@ -978,12 +978,12 @@ mod test {
     #[test]
     fn binary_docs_redirect_to_crate() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("bat")
                 .version("0.2.0")
                 .binary(true)
-                .create_async()
+                .create()
                 .await?;
             let web = env.web_app().await;
             web.assert_redirect("/bat/0.2.0", "/crate/bat/0.2.0")
@@ -1001,12 +1001,12 @@ mod test {
     #[test]
     fn can_view_source() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("regex")
                 .version("0.3.0")
                 .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -1062,12 +1062,12 @@ mod test {
             assert_eq!(platform, 0);
 
             // sanity check the test is doing something
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.2.0")
                 .add_platform("x86_64-unknown-linux-musl")
-                .create_async()
+                .create()
                 .await?;
             let text = web.assert_success("/foo/0.2.0/foo/").await?.text().await?;
             let platform = kuchikiki::parse_html()
@@ -1115,14 +1115,14 @@ mod test {
             release("1.0.0", &env).await;
 
             // in progress release
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("1.1.0")
                 .builds(vec![
                     FakeBuild::default().build_status(BuildStatus::InProgress)
                 ])
-                .create_async()
+                .create()
                 .await?;
 
             // STAR gives me the prod release

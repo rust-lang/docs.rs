@@ -601,10 +601,6 @@ impl TestEnvironment {
             .await
     }
 
-    pub(crate) fn fake_release(&self) -> fakes::FakeRelease {
-        self.runtime().block_on(self.async_fake_release())
-    }
-
     pub(crate) async fn web_app(&self) -> Router {
         let template_data = Arc::new(TemplateData::new(1).unwrap());
         build_axum_app(self, template_data)
@@ -612,12 +608,8 @@ impl TestEnvironment {
             .expect("could not build axum app")
     }
 
-    pub(crate) async fn async_fake_release(&self) -> fakes::FakeRelease {
-        fakes::FakeRelease::new(
-            self.async_db().await,
-            self.async_storage().await,
-            self.runtime(),
-        )
+    pub(crate) async fn fake_release(&self) -> fakes::FakeRelease {
+        fakes::FakeRelease::new(self.async_db().await, self.async_storage().await)
     }
 }
 

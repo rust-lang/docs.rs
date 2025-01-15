@@ -825,12 +825,12 @@ mod test {
             let mut conn = env.async_db().await.async_conn().await;
 
             let release_id = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("dummy")
                 .version("0.13.0")
                 .keywords(vec!["kw 1".into(), "kw 2".into()])
-                .create_async()
+                .create()
                 .await?;
 
             let kw_r = sqlx::query!(
@@ -867,19 +867,23 @@ mod test {
 
     #[test]
     fn keyword_conflict_when_rebuilding_release() {
-        wrapper(|env| {
+        async_wrapper(|env| async move {
             env.fake_release()
+                .await
                 .name("dummy")
                 .version("0.13.0")
                 .keywords(vec!["kw 3".into(), "kw 4".into()])
-                .create()?;
+                .create()
+                .await?;
 
             // same version so we have the same release
             env.fake_release()
+                .await
                 .name("dummy")
                 .version("0.13.0")
                 .keywords(vec!["kw 3".into(), "kw 4".into()])
-                .create()?;
+                .create()
+                .await?;
 
             Ok(())
         })
@@ -888,21 +892,21 @@ mod test {
     #[test]
     fn updated_keywords() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.13.0")
                 .keywords(vec!["kw 3".into(), "kw 4".into()])
-                .create_async()
+                .create()
                 .await?;
 
             let release_id = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("dummy")
                 .version("0.13.0")
                 .keywords(vec!["kw 1".into(), "kw 2".into()])
-                .create_async()
+                .create()
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;

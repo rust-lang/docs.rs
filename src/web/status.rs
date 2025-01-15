@@ -57,11 +57,11 @@ mod tests {
     #[test_case("=0.1.0"; "exact_version")]
     fn status(version: &str) {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             let response = env
@@ -89,11 +89,11 @@ mod tests {
     #[test]
     fn redirect_latest() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -111,11 +111,11 @@ mod tests {
     #[test_case("~0.1"; "semver")]
     fn redirect(version: &str) {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -138,12 +138,12 @@ mod tests {
     #[test_case("=0.1.0"; "exact_version")]
     fn failure(version: &str) {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .build_result_failed()
-                .create_async()
+                .create()
                 .await?;
 
             let response = env
@@ -181,11 +181,11 @@ mod tests {
     #[test_case("foo", "0,1,0")]
     fn not_found(krate: &str, version: &str) {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.1")
-                .create_async()
+                .create()
                 .await?;
 
             let response = env

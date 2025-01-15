@@ -185,12 +185,12 @@ mod tests {
     #[test]
     fn test_delete_crate() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.1.1")
                 .version("0.1.2")
-                .create_async()
+                .create()
                 .await?;
 
             let diff = [Difference::CrateNotInIndex("krate".into())];
@@ -218,17 +218,17 @@ mod tests {
     #[test]
     fn test_delete_release() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.1.1")
-                .create_async()
+                .create()
                 .await?;
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.1.2")
-                .create_async()
+                .create()
                 .await?;
 
             let diff = [Difference::ReleaseNotInIndex(
@@ -256,12 +256,12 @@ mod tests {
     #[test]
     fn test_wrong_yank() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.1.1")
                 .yanked(true)
-                .create_async()
+                .create()
                 .await?;
 
             let diff = [Difference::ReleaseYank(
