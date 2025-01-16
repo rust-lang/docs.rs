@@ -71,18 +71,18 @@ mod tests {
                 .await
                 .add_crate("queued", "0.0.1", 0, None)
                 .await?;
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.0.2")
-                .create_async()
+                .create()
                 .await?;
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("krate")
                 .version("0.0.3")
                 .yanked(true)
-                .create_async()
+                .create()
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;

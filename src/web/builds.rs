@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn build_list() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
@@ -319,7 +319,7 @@ mod tests {
                         .rustc_version("rustc (blabla 2022-01-01)")
                         .docsrs_version("docs.rs 4.0.0"),
                 ])
-                .create_async()
+                .create()
                 .await?;
 
             let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn build_list_json() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
@@ -366,7 +366,7 @@ mod tests {
                         .rustc_version("rustc (blabla 2022-01-01)")
                         .docsrs_version("docs.rs 4.0.0"),
                 ])
-                .create_async()
+                .create()
                 .await?;
 
             let response = env
@@ -441,11 +441,11 @@ mod tests {
     fn build_trigger_rebuild_missing_config() {
         async_wrapper(|env| async move {
             env.override_config(|config| config.cratesio_token = None);
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             {
@@ -485,11 +485,11 @@ mod tests {
             let correct_token = "foo137";
             env.override_config(|config| config.cratesio_token = Some(correct_token.into()));
 
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             {
@@ -590,12 +590,12 @@ mod tests {
     #[test]
     fn build_empty_list() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .no_builds()
-                .create_async()
+                .create()
                 .await?;
 
             let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
@@ -627,11 +627,11 @@ mod tests {
     #[test]
     fn limits() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;
@@ -675,24 +675,24 @@ mod tests {
     #[test]
     fn latest_200() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("aquarelle")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
-                .create_async()
+                .create()
                 .await?;
 
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("aquarelle")
                 .version("0.2.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
-                .create_async()
+                .create()
                 .await?;
 
             let resp = env
@@ -718,14 +718,14 @@ mod tests {
     #[test]
     fn crate_version_not_found() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
-                .create_async()
+                .create()
                 .await?;
 
             let resp = env.web_app().await.get("/crate/foo/0.2.0/builds").await?;
@@ -737,14 +737,14 @@ mod tests {
     #[test]
     fn invalid_semver() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .rustc_version("rustc (blabla 2019-01-01)")
                     .docsrs_version("docs.rs 1.0.0")])
-                .create_async()
+                .create()
                 .await?;
 
             let resp = env.web_app().await.get("/crate/foo/0,1,0/builds").await?;

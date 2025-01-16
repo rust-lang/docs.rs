@@ -254,14 +254,14 @@ mod tests {
     #[test]
     fn db_build_logs() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .no_s3_build_log()
                     .db_build_log("A build log")])
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -294,12 +294,12 @@ mod tests {
     #[test]
     fn s3_build_logs() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default().s3_build_log("A build log")])
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn s3_build_logs_multiple_targets() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
@@ -356,7 +356,7 @@ mod tests {
                         "other_target",
                         "other target build log",
                     )])
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -413,14 +413,14 @@ mod tests {
     #[test]
     fn both_build_logs() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![FakeBuild::default()
                     .s3_build_log("A build log")
                     .db_build_log("Another build log")])
-                .create_async()
+                .create()
                 .await?;
 
             let web = env.web_app().await;
@@ -449,11 +449,11 @@ mod tests {
     #[test_case("nan")]
     fn non_existing_build(build_id: &str) {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .create_async()
+                .create()
                 .await?;
 
             let res = env

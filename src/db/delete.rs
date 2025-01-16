@@ -242,11 +242,11 @@ mod tests {
     #[test]
     fn test_get_id_uses_normalization() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("Some_Package")
                 .version("1.0.0")
-                .create_async()
+                .create()
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;
@@ -264,27 +264,27 @@ mod tests {
 
             // Create fake packages in the database
             let pkg1_v1_id = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("package-1")
                 .version("1.0.0")
                 .archive_storage(archive_storage)
-                .create_async()
+                .create()
                 .await?;
             let pkg1_v2_id = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("package-1")
                 .version("2.0.0")
                 .archive_storage(archive_storage)
-                .create_async()
+                .create()
                 .await?;
             let pkg2_id = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("package-2")
                 .archive_storage(archive_storage)
-                .create_async()
+                .create()
                 .await?;
 
             assert!(crate_exists(&mut conn, "package-1").await?);
@@ -407,7 +407,7 @@ mod tests {
 
             let mut conn = env.async_db().await.async_conn().await;
             let v1 = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("a")
                 .version("1.0.0")
@@ -417,7 +417,7 @@ mod tests {
                     avatar: "https://example.org/malicious".into(),
                     kind: OwnerKind::User,
                 })
-                .create_async()
+                .create()
                 .await?;
             assert!(release_exists(&mut conn, v1).await?);
             assert!(
@@ -438,7 +438,7 @@ mod tests {
             );
 
             let v2 = env
-                .async_fake_release()
+                .fake_release()
                 .await
                 .name("a")
                 .version("2.0.0")
@@ -448,7 +448,7 @@ mod tests {
                     avatar: "https://example.org/peter".into(),
                     kind: OwnerKind::User,
                 })
-                .create_async()
+                .create()
                 .await?;
             assert!(release_exists(&mut conn, v2).await?);
             assert!(

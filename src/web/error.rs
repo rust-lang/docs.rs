@@ -284,11 +284,7 @@ mod tests {
     #[test]
     fn check_400_page_content_not_semver_version() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
-                .await
-                .name("dummy")
-                .create_async()
-                .await?;
+            env.fake_release().await.name("dummy").create().await?;
 
             let response = env.web_app().await.get("/dummy/not-semver").await?;
             assert_eq!(response.status(), 400);
@@ -311,11 +307,11 @@ mod tests {
     #[test]
     fn check_404_page_content_nonexistent_version() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("dummy")
                 .version("1.0.0")
-                .create_async()
+                .create()
                 .await?;
             let page = kuchikiki::parse_html()
                 .one(env.web_app().await.get("/dummy/2.0").await?.text().await?);
@@ -336,12 +332,12 @@ mod tests {
     #[test]
     fn check_404_page_content_any_version_all_yanked() {
         async_wrapper(|env| async move {
-            env.async_fake_release()
+            env.fake_release()
                 .await
                 .name("dummy")
                 .version("1.0.0")
                 .yanked(true)
-                .create_async()
+                .create()
                 .await?;
             let page = kuchikiki::parse_html()
                 .one(env.web_app().await.get("/dummy/*").await?.text().await?);
