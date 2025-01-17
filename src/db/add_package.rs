@@ -469,7 +469,10 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
         let line = line?;
         if line.starts_with("//!") {
             // some lines may or may not have a space between the `//!` and the start of the text
-            let line = line.trim_start_matches("//!").trim_start();
+            let mut line = line.trim_start_matches("//!");
+            if line.starts_with(' ') {
+                line = &line[1..];
+            }
             if !line.is_empty() {
                 rustdoc.push_str(line);
             }
