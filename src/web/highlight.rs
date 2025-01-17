@@ -51,6 +51,9 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
 
 fn select_syntax(name: Option<&str>, code: &str) -> &'static SyntaxReference {
     name.and_then(|name| {
+        if name.is_empty() {
+            return SYNTAXES.find_syntax_by_token("rust");
+        }
         SYNTAXES.find_syntax_by_token(name).or_else(|| {
             name.rsplit_once('.')
                 .and_then(|(_, ext)| SYNTAXES.find_syntax_by_token(ext))
