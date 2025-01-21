@@ -49,10 +49,16 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
     Ok(html_generator.finalize())
 }
 
-fn select_syntax(name: Option<&str>, code: &str) -> &'static SyntaxReference {
+fn select_syntax(
+    name: Option<&str>,
+    code: &str,
+    default: Option<&str>,
+) -> &'static SyntaxReference {
     name.and_then(|name| {
         if name.is_empty() {
-            return SYNTAXES.find_syntax_by_token("rust");
+            if let Some(default) = default {
+                return SYNTAXES.find_syntax_by_token(default);
+            }
         }
         SYNTAXES.find_syntax_by_token(name).or_else(|| {
             name.rsplit_once('.')
@@ -63,12 +69,12 @@ fn select_syntax(name: Option<&str>, code: &str) -> &'static SyntaxReference {
     .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text())
 }
 
-pub fn try_with_lang(lang: Option<&str>, code: &str) -> Result<String> {
-    try_with_syntax(select_syntax(lang, code), code)
+pub fn try_with_lang(lang: Option<&str>, code: &str, default: Option<&str>) -> Result<String> {
+    try_with_syntax(select_syntax(lang, code, default), code)
 }
 
-pub fn with_lang(lang: Option<&str>, code: &str) -> String {
-    match try_with_lang(lang, code) {
+pub fn with_lang(lang: Option<&str>, code: &str, default: Option<&str>) -> String {
+    match try_with_lang(lang, code, default) {
         Ok(highlighted) => highlighted,
         Err(err) => {
             if err.is::<LimitsExceeded>() {
@@ -92,23 +98,29 @@ mod tests {
 
     #[test]
     fn custom_filetypes() {
-        let toml = select_syntax(Some("toml"), "");
+        let toml = select_syntax(Some("toml"), "", None);
 
-        assert_eq!(select_syntax(Some("Cargo.toml.orig"), "").name, toml.name);
-        assert_eq!(select_syntax(Some("Cargo.lock"), "").name, toml.name);
+        assert_eq!(
+            select_syntax(Some("Cargo.toml.orig"), "", None).name,
+            toml.name
+        );
+        assert_eq!(select_syntax(Some("Cargo.lock"), "", None).name, toml.name);
     }
 
     #[test]
     fn dotfile_with_extension() {
-        let toml = select_syntax(Some("toml"), "");
+        let toml = select_syntax(Some("toml"), "", None);
 
-        assert_eq!(select_syntax(Some(".rustfmt.toml"), "").name, toml.name);
+        assert_eq!(
+            select_syntax(Some(".rustfmt.toml"), "", None).name,
+            toml.name
+        );
     }
 
     #[test]
     fn limits() {
         let is_limited = |s: String| {
-            try_with_lang(Some("toml"), &s)
+            try_with_lang(Some("toml"), &s, None)
                 .unwrap_err()
                 .is::<LimitsExceeded>()
         };
@@ -119,7 +131,7 @@ mod tests {
     #[test]
     fn limited_escaped() {
         let text = "<p>\n".to_string() + "aa".repeat(PER_LINE_BYTE_LENGTH_LIMIT).as_str();
-        let highlighted = with_lang(Some("toml"), &text);
+        let highlighted = with_lang(Some("toml"), &text, None);
         assert!(highlighted.starts_with("&lt;p&gt;\n"));
     }
 }

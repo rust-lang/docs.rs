@@ -5,9 +5,9 @@ use comrak::{
 use std::collections::HashMap;
 
 #[derive(Debug)]
-struct CodeAdapter<F>(F);
+struct CodeAdapter<F>(F, Option<&'static str>);
 
-impl<F: Fn(Option<&str>, &str) -> String + Send + Sync> SyntaxHighlighterAdapter
+impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHighlighterAdapter
     for CodeAdapter<F>
 {
     fn write_highlighted(
@@ -19,7 +19,7 @@ impl<F: Fn(Option<&str>, &str) -> String + Send + Sync> SyntaxHighlighterAdapter
         // comrak does not treat `,` as an info-string delimiter, so we do that here
         // TODO: https://github.com/kivikakk/comrak/issues/246
         let lang = lang.and_then(|lang| lang.split(',').next());
-        write!(output, "{}", (self.0)(lang, code))
+        write!(output, "{}", (self.0)(lang, code, self.1))
     }
 
     fn write_pre_tag(
@@ -67,9 +67,10 @@ fn write_opening_tag(
 
 fn render_with_highlighter(
     text: &str,
-    highlighter: impl Fn(Option<&str>, &str) -> String + Send + Sync,
+    default_syntax: Option<&'static str>,
+    highlighter: impl Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync,
 ) -> String {
-    let code_adapter = CodeAdapter(highlighter);
+    let code_adapter = CodeAdapter(highlighter, default_syntax);
 
     comrak::markdown_to_html_with_plugins(
         text,
@@ -95,7 +96,11 @@ fn render_with_highlighter(
 
 /// Wrapper around the Markdown parser and renderer to render markdown
 pub fn render(text: &str) -> String {
-    render_with_highlighter(text, highlight::with_lang)
+    render_with_highlighter(text, None, highlight::with_lang)
+}
+
+pub fn render_with_default(text: &str, default: &'static str) -> String {
+    render_with_highlighter(text, Some(default), highlight::with_lang)
 }
 
 #[cfg(test)]
@@ -118,7 +123,8 @@ mod test {
                 ignore::spaces();
                 ```
             "},
-            |lang, code| {
+            None,
+            |lang, code, _| {
                 let mut highlighted = highlighted.lock().unwrap();
                 highlighted.push((lang.map(str::to_owned), code.to_owned()));
                 code.to_owned()

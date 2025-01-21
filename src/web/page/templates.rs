@@ -201,7 +201,8 @@ pub mod filters {
     }
 
     pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
-        let highlighted_code = crate::web::highlight::with_lang(Some(lang), &code.to_string());
+        let highlighted_code =
+            crate::web::highlight::with_lang(Some(lang), &code.to_string(), None);
         Ok(Safe(format!(
             "<pre><code>{}</code></pre>",
             highlighted_code
