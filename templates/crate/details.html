@@ -198,7 +198,7 @@
 
                 {# If there's not a readme then attempt to display the long description #}
                 {%- elif let Some(rustdoc) = rustdoc -%}
-                    {{ crate::web::markdown::render(rustdoc)|safe }}
+                    {{ crate::web::markdown::render_with_default(rustdoc, "rust")|safe }}
                 {%- endif -%}
             </div>
         </div>
