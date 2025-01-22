@@ -37,7 +37,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.33.0", default-features = false }
+comrak = { version = "0.34.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -80,7 +80,7 @@ serde_with = "3.4.0"
 # axum dependencies
 async-trait = "0.1.83"
 axum = { version = "0.8.1", features = ["macros"] }
-axum-extra = { version = "0.10.0", features = ["typed-header"] }
+axum-extra = { version = "0.11.0", features = ["typed-header"] }
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
@@ -126,7 +126,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.69.1", default-features = false }
+gix = { version = "0.70.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
