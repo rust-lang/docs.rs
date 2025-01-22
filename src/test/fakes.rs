@@ -231,6 +231,13 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
+    pub(crate) fn target_source(mut self, path: &'a str) -> Self {
+        if let Some(target) = self.package.targets.first_mut() {
+            target.src_path = Some(path.into());
+        }
+        self
+    }
+
     pub(crate) fn no_cargo_toml(mut self) -> Self {
         self.no_cargo_toml = true;
         self
@@ -503,6 +510,7 @@ impl<'a> FakeRelease<'a> {
         if let Some(markdown) = self.readme {
             fs::write(crate_dir.join("README.md"), markdown)?;
         }
+        store_files_into(&self.source_files, crate_dir)?;
 
         // Many tests rely on the default-target being linux, so it should not
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
