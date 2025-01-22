@@ -2188,6 +2188,61 @@ mod tests {
     }
 
     #[test]
+    fn no_readme() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0")
+                .source_file(
+                    "Cargo.toml",
+                    br#"[package]
+name = "dummy"
+version = "0.2.0"
+
+[lib]
+name = "dummy"
+path = "src/lib.rs"
+"#,
+                )
+                .source_file(
+                    "src/lib.rs",
+                    b"//! # Crate-level docs
+//!
+//! ```
+//! let x = 21;
+//! ```
+",
+                )
+                .target_source("src/lib.rs")
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            let response = web.get("/crate/dummy/0.2.0").await?;
+            assert!(response.status().is_success());
+
+            let dom = kuchikiki::parse_html().one(response.text().await?);
+            dom.select_first("#main").expect("not main crate docs");
+            // First we check that the crate-level docs have been rendered as expected.
+            assert_eq!(
+                dom.select_first("#main h1")
+                    .expect("no h1 found")
+                    .text_contents(),
+                "Crate-level docs"
+            );
+            // Then we check that by default, the language used for highlighting is rust.
+            assert_eq!(
+                dom.select_first("#main pre .syntax-source.syntax-rust")
+                    .expect("no rust code block found")
+                    .text_contents(),
+                "let x = 21;\n"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
     fn test_crate_name_with_other_uri_chars() {
         async_wrapper(|env| async move {
             env.fake_release()
