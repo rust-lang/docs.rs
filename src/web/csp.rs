@@ -21,7 +21,7 @@ impl Csp {
         // Nonces need to be different for each single request in order to maintain security, so we
         // generate a new one with a cryptographically-secure generator for each request.
         let mut random = [0u8; 36];
-        getrandom::getrandom(&mut random).expect("failed to generate a nonce");
+        getrandom::fill(&mut random).expect("failed to generate a nonce");
 
         Self {
             nonce: b64.encode(random),

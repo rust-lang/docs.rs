@@ -37,7 +37,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.34.0", default-features = false }
+comrak = { version = "0.35.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
 prometheus = { version = "0.13.0", default-features = false }
@@ -55,7 +55,7 @@ dashmap = "6.0.0"
 string_cache = "0.8.0"
 zip = {version = "2.2.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.5.0"
-getrandom = "0.2.1"
+getrandom = "0.3.1"
 itertools = { version = "0.14.0" }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 hex = "0.4.3"
@@ -110,7 +110,7 @@ criterion = "0.5.1"
 kuchikiki = "0.8"
 http02 = { version = "0.2.11", package = "http"}
 http-body-util = "0.1.0"
-rand = "0.8"
+rand = "0.9"
 mockito = "1.0.2"
 test-case = "3.0.0"
 tower = { version = "0.5.1", features = ["util"] }
