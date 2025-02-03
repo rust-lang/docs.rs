@@ -319,6 +319,9 @@ div.recent-releases-container {
 
         &:hover {
             background-color: transparent;
+            overflow: visible;
+            white-space: normal;
+            word-break: break-word;
         }
 
         &::before {
@@ -333,11 +336,6 @@ div.recent-releases-container {
 
     .name.not-available {
         color: var(--color-standard);
-    }
-
-    .name:hover {
-        overflow: visible;
-        white-space: normal;
     }
 
     .build {
