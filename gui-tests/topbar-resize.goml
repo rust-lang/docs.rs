@@ -4,7 +4,7 @@ store-value: (window_height, 1000)
 
 define-function: (
     "check-topbar",
-    (width, text_display, search_display, search_max_width),
+    [width, text_display, search_display, search_max_width],
     block {
         set-window-size: (|width|, |window_height|)
         wait-for-css: (".nav-container > .container a > .title", {"display": |text_display|})
@@ -24,7 +24,7 @@ define-function: (
 
 define-function: (
     "check-topbar-sizes",
-    (),
+    [],
     block {
         set-window-size: (1100, |window_height|)
         store-size: ("body > .nav-container", {"height": top_navbar_height})
@@ -92,7 +92,7 @@ define-function: (
 )
 
 go-to: |DOC_PATH| + "/sysinfo"
-call-function: ("check-topbar-sizes", ())
+call-function: ("check-topbar-sizes", {})
 
 go-to: |DOC_PATH| + "/releases/search?query=sysinfo"
-call-function: ("check-topbar-sizes", ())
+call-function: ("check-topbar-sizes", {})
