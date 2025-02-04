@@ -122,9 +122,7 @@ async function main(argv) {
     const options = new Options();
     try {
         // This is more convenient that setting fields one by one.
-        const args = [
-            "--no-sandbox",
-        ];
+        const args = [];
         if (typeof process.env.SERVER_URL !== "undefined") {
             args.push("--variable", "DOC_PATH", process.env.SERVER_URL);
         } else {
