@@ -1,0 +1,16 @@
+// Checks that the crate name in release list doesn't overflow when hovered.
+
+go-to: |DOC_PATH|
+// We reduce the width to 800px because the text will be on 3 different lines. Meaning
+// that if it overflows, the height will be smaller than expected since it will only take
+// 2 lines.
+set-window-size: (1200, 600)
+set-text: ("ul a.release .name", "blabla_under_something_longname_right-0.7.0")
+move-cursor-to: "ul a.release .name"
+assert-css: ("ul a.release .name:hover", { "line-height": "22.4px" })
+// 45 / 2 = 22.5, so it's on 2 lines
+assert-size: ("ul a.release .name:hover", { "height": 45 })
+// We reduce the width to it should now take 3 lines.
+set-window-size: (800, 600)
+// 67 / 2 = 33.5, so it's more than 2 lines
+assert-size: ("ul a.release .name:hover", { "height": 67 })
