@@ -65,7 +65,7 @@ div.nav-container {
         }
     }
 
-    .pure-menu-link {
+    .pure-menu-link,.pure-menu-text {
         font-size: 12.8px;
         font-weight: 400;
         color: var(--color-navbar-standard);
@@ -73,6 +73,11 @@ div.nav-container {
         &.description {
             font-size: 14.4px;
         }
+    }
+    a.pure-menu-sublink {
+        color: var(--color-navbar-standard);
+    }
+    .pure-menu-link,.pure-menu-sublink, a.pure-menu-sublink {
 
         // Improves menu link readability when inverting the colors on focus.
         // Vendor do background-color #eee, looks weird on different theme.
@@ -135,7 +140,7 @@ div.nav-container {
             outline: unset;
         }
 
-       .docsrs-logo, .pure-menu-item a {
+       .docsrs-logo, .pure-menu-item a.pure-menu-link, .pure-menu-item .pure-menu-text {
             padding: 6.4px 16px 6.4px 16px;
        }
 
@@ -316,7 +321,7 @@ div.nav-container {
             border-right: 1px solid var(--color-border);
         }
 
-        a.pure-menu-link {
+        a.pure-menu-link,.pure-menu-item {
             word-wrap: normal;
             white-space: normal;
         }

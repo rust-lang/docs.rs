@@ -51,9 +51,21 @@
                     </li>
 
                     <li class="pure-menu-item">
-                        <a href="{{ crate_url|safe }}" class="pure-menu-link">
-                            {{ crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }} {{ krate.license.as_deref().unwrap_or_default() }}
-                        </a>
+                        <span class="pure-menu-text description">
+                        {{ crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
+                        {%- if let Some(parsed_licenses) = krate.parsed_license -%}
+                            {%- for item in parsed_licenses -%}
+                                {%- match item -%}
+                                    {%- when crate::web::licenses::LicenseSegment::Spdx with (license) -%}
+                                        <a href="https://spdx.org/licenses/{{ license|safe }}" class="pure-menu-sublink">{{ license }}</a>
+                                    {%- when crate::web::licenses::LicenseSegment::UnknownLicense with (license) -%}
+                                        {{ license }}
+                                    {%- when crate::web::licenses::LicenseSegment::GlueTokens with (tokens) -%}
+                                        {{ tokens }}
+                                {%- endmatch -%}
+                            {%- endfor -%}
+                        {%- endif -%}
+                        </span>
                     </li>
                 </ul>
 

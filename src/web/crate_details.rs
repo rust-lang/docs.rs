@@ -57,6 +57,7 @@ pub(crate) struct CrateDetails {
     pub(crate) metadata: MetaData,
     is_library: Option<bool>,
     pub(crate) license: Option<String>,
+    pub(crate) parsed_license: Option<Vec<super::licenses::LicenseSegment>>,
     pub(crate) documentation_url: Option<String>,
     pub(crate) total_items: Option<i32>,
     pub(crate) documented_items: Option<i32>,
@@ -225,6 +226,8 @@ impl CrateDetails {
             None => None,
         };
 
+        let parsed_license = krate.license.as_deref().map(super::licenses::parse_license);
+
         let mut crate_details = CrateDetails {
             name: krate.name,
             version: version.clone(),
@@ -250,6 +253,7 @@ impl CrateDetails {
             documentation_url,
             is_library: krate.is_library,
             license: krate.license,
+            parsed_license,
             documented_items: krate.documented_items,
             total_items: krate.total_items,
             total_items_needing_examples: krate.total_items_needing_examples,
