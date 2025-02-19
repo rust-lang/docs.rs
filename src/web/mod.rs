@@ -26,6 +26,7 @@ mod features;
 mod file;
 mod headers;
 mod highlight;
+mod licenses;
 mod markdown;
 pub(crate) mod metrics;
 mod releases;
