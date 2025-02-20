@@ -140,9 +140,13 @@ div.nav-container {
             outline: unset;
         }
 
-       .docsrs-logo, .pure-menu-item a.pure-menu-link, .pure-menu-item .pure-menu-text {
+        .docsrs-logo, .pure-menu-item a.pure-menu-link, .pure-menu-item .pure-menu-text {
             padding: 6.4px 16px 6.4px 16px;
-       }
+        }
+
+        .pure-menu-link, .pure-menu-text {
+            display: block;
+        }
 
        .docsrs-logo, .pure-menu-item, .pure-menu-item a {
             height: 100%;

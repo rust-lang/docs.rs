@@ -50,23 +50,23 @@
                         </a>
                     </li>
 
-                    <li class="pure-menu-item">
-                        <span class="pure-menu-text description">
-                        {{ crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
-                        {%- if let Some(parsed_licenses) = krate.parsed_license -%}
-                            {%- for item in parsed_licenses -%}
+                    {%- if let Some(parsed_licenses) = krate.parsed_license -%}
+                        <li class="pure-menu-item">
+                            <span class="pure-menu-link description">
+                            {{- crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
+                            {%+ for item in parsed_licenses -%}
                                 {%- match item -%}
-                                    {%- when crate::web::licenses::LicenseSegment::Spdx with (license) -%}
+                                    {%- when crate::web::licenses::LicenseSegment::Spdx(license) -%}
                                         <a href="https://spdx.org/licenses/{{ license|safe }}" class="pure-menu-sublink">{{ license }}</a>
-                                    {%- when crate::web::licenses::LicenseSegment::UnknownLicense with (license) -%}
+                                    {%- when crate::web::licenses::LicenseSegment::UnknownLicense(license) -%}
                                         {{ license }}
-                                    {%- when crate::web::licenses::LicenseSegment::GlueTokens with (tokens) -%}
+                                    {%- when crate::web::licenses::LicenseSegment::GlueTokens(tokens) -%}
                                         {{ tokens }}
                                 {%- endmatch -%}
                             {%- endfor -%}
-                        {%- endif -%}
-                        </span>
-                    </li>
+                            </span>
+                        </li>
+                    {%- endif -%}
                 </ul>
 
                 <div class="pure-g menu-item-divided">
