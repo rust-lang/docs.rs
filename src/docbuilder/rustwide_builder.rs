@@ -990,7 +990,6 @@ impl RustwideBuilder {
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats_updater.load_repository(metadata))
-            .map_err(Into::into)
     }
 }
 
