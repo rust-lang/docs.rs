@@ -17,6 +17,9 @@ ignore = [
     # We have plenty of places where user input ends up in sql, for example the inner doc path for doc pages, crate names etc.
     # But in all these places, the user content is part of the path of the URL.
     # Since URL length is limited by cloudfront, and also by nginx, to something much smaller than 4 GiB, I don't think this issue affects us.
+
+    "RUSTSEC-2025-0007", # `ring` is unmaintained. Not much we can do about it.
+    # https://github.com/rust-lang/docs.rs/issues/2741
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
