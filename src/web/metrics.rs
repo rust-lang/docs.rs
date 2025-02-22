@@ -1,15 +1,15 @@
 use crate::{
-    db::Pool, metrics::duration_to_seconds, web::error::AxumResult, AsyncBuildQueue, Config,
-    InstanceMetrics, ServiceMetrics,
+    AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics, db::Pool,
+    metrics::duration_to_seconds, web::error::AxumResult,
 };
 use anyhow::{Context as _, Result};
 use axum::{
     extract::{Extension, MatchedPath, Request as AxumRequest},
-    http::{header::CONTENT_TYPE, StatusCode},
+    http::{StatusCode, header::CONTENT_TYPE},
     middleware::Next,
     response::IntoResponse,
 };
-use prometheus::{proto::MetricFamily, Encoder, TextEncoder};
+use prometheus::{Encoder, TextEncoder, proto::MetricFamily};
 use std::{borrow::Cow, future::Future, sync::Arc, time::Instant};
 
 async fn fetch_and_render_metrics<Fut>(fetch_metrics: Fut) -> AxumResult<impl IntoResponse>
@@ -110,8 +110,8 @@ pub(crate) async fn request_recorder(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
     use crate::Context;
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use std::collections::HashMap;
 
     #[test]

@@ -3,12 +3,11 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    cdn, queue_rebuilds,
+    AsyncBuildQueue, Config, Context, Index, RustwideBuilder, cdn, queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
 };
-use anyhow::{anyhow, Context as _, Error};
+use anyhow::{Context as _, Error, anyhow};
 use std::future::Future;
 use std::sync::Arc;
 use std::thread;

@@ -1,12 +1,12 @@
 use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
 use axum::{
+    Router as AxumRouter,
     extract::{Extension, Request},
     http::header::CONTENT_TYPE,
     middleware,
     middleware::Next,
     response::{IntoResponse, Response},
     routing::get_service,
-    Router as AxumRouter,
 };
 use axum_extra::headers::HeaderValue;
 use tower_http::services::ServeDir;
@@ -80,7 +80,7 @@ pub(crate) fn build_static_router() -> AxumRouter {
 mod tests {
     use super::{STYLE_CSS, VENDORED_CSS};
     use crate::{
-        test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt},
+        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
         web::cache::CachePolicy,
     };
     use axum::response::Response as AxumResponse;

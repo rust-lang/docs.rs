@@ -1,6 +1,6 @@
 use crate::error::Result;
-use crate::storage::{compression::CompressionAlgorithm, FileRange};
-use anyhow::{bail, Context as _};
+use crate::storage::{FileRange, compression::CompressionAlgorithm};
+use anyhow::{Context as _, bail};
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::{fs, io, path::Path};
 use tracing::instrument;
@@ -150,9 +150,11 @@ mod tests {
         assert_eq!(fi.range, FileRange::new(39, 459));
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
 
-        assert!(find_in_file(&tempfile, "some_other_file",)
-            .unwrap()
-            .is_none());
+        assert!(
+            find_in_file(&tempfile, "some_other_file",)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

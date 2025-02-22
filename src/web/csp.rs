@@ -2,12 +2,12 @@ use crate::config::Config;
 use axum::{
     extract::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
-use base64::{engine::general_purpose::STANDARD as b64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use std::{
     fmt::Write,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 

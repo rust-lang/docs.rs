@@ -1,21 +1,21 @@
 use super::{error::AxumResult, match_version};
 use crate::{
+    AsyncStorage,
     db::{BuildId, Pool},
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
+        MetaData, ReqVersion,
         cache::CachePolicy,
         error::AxumNope,
         extractors::Path,
         file::File as DbFile,
         headers::CanonicalUrl,
-        page::templates::{filters, RenderBrands, RenderRegular, RenderSolid},
-        MetaData, ReqVersion,
+        page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
-    AsyncStorage,
 };
 use anyhow::{Context as _, Result};
-use axum::{response::IntoResponse, Extension};
+use axum::{Extension, response::IntoResponse};
 use axum_extra::headers::HeaderMapExt;
 use mime::Mime;
 use rinja::Template;
@@ -346,7 +346,7 @@ pub(crate) async fn source_browser_handler(
 #[cfg(test)]
 mod tests {
     use crate::{
-        test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt},
+        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
         web::{cache::CachePolicy, encode_url_path},
     };
     use kuchikiki::traits::TendrilSink;
@@ -709,13 +709,15 @@ mod tests {
             let web = env.web_app().await;
 
             let response = web.get("/crate/fake/0.1.0/source/config.json").await?;
-            assert!(response
-                .headers()
-                .get("content-type")
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("text/html"));
+            assert!(
+                response
+                    .headers()
+                    .get("content-type")
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .starts_with("text/html")
+            );
 
             let text = response.text().await?;
             assert!(text.starts_with(r#"<!DOCTYPE html>"#));
@@ -811,10 +813,12 @@ mod tests {
             let web = env.web_app().await;
             let response = web.get("/crate/fake/0.1.0/source/large_file.rs").await?;
             assert_eq!(response.status(), StatusCode::OK);
-            assert!(response
-                .text()
-                .await?
-                .contains("This file is too large to display"));
+            assert!(
+                response
+                    .text()
+                    .await?
+                    .contains("This file is too large to display")
+            );
             Ok(())
         });
     }

@@ -107,7 +107,7 @@ pub(crate) fn rewrite_lol(
 
 #[cfg(test)]
 mod test {
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
 
     #[test]
     fn rewriting_only_injects_css_once() {

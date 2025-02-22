@@ -1,9 +1,9 @@
 use crate::db::{AsyncPoolClient, Pool};
 use anyhow::Context as _;
 use axum::{
+    RequestPartsExt,
     extract::{Extension, FromRequestParts, OptionalFromRequestParts},
     http::request::Parts,
-    RequestPartsExt,
 };
 use std::ops::{Deref, DerefMut};
 

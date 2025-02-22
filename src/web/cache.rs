@@ -2,7 +2,7 @@ use crate::config::Config;
 use axum::{
     extract::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
 };
-use http::{header::CACHE_CONTROL, HeaderValue};
+use http::{HeaderValue, header::CACHE_CONTROL};
 use std::sync::Arc;
 
 pub static NO_CACHING: HeaderValue = HeaderValue::from_static("max-age=0");
@@ -140,9 +140,11 @@ mod tests {
         wrapper(|env| {
             env.override_config(|config| config.cache_control_stale_while_revalidate = None);
 
-            assert!(CachePolicy::ForeverInCdnAndStaleInBrowser
-                .render(&env.config())
-                .is_none());
+            assert!(
+                CachePolicy::ForeverInCdnAndStaleInBrowser
+                    .render(&env.config())
+                    .is_none()
+            );
             Ok(())
         });
     }

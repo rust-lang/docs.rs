@@ -1,23 +1,23 @@
-use super::{match_version, MetaData};
+use super::{MetaData, match_version};
 use crate::db::{BuildId, ReleaseId};
 use crate::registry_api::OwnerKind;
 use crate::utils::{get_correct_docsrs_style_file, report_error};
 use crate::{
-    db::{types::BuildStatus, CrateId},
+    AsyncStorage,
+    db::{CrateId, types::BuildStatus},
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
+        MatchedRelease, ReqVersion,
         cache::CachePolicy,
         encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        page::templates::{filters, RenderRegular, RenderSolid},
+        page::templates::{RenderRegular, RenderSolid, filters},
         rustdoc::RustdocHtmlParams,
-        MatchedRelease, ReqVersion,
     },
-    AsyncStorage,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use axum::{
     extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
@@ -827,8 +827,8 @@ pub(crate) async fn get_all_platforms(
 mod tests {
     use super::*;
     use crate::test::{
-        async_wrapper, fake_release_that_failed_before_build, AxumResponseTestExt,
-        AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
+        async_wrapper, fake_release_that_failed_before_build,
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
@@ -894,7 +894,9 @@ mod tests {
         .unwrap()
     }
 
-    #[fn_error_context::context("assert_last_successful_build_equals({package}, {version}, {expected_last_successful_build:?})")]
+    #[fn_error_context::context(
+        "assert_last_successful_build_equals({package}, {version}, {expected_last_successful_build:?})"
+    )]
     async fn assert_last_successful_build_equals(
         db: &TestDatabase,
         package: &str,
@@ -1243,10 +1245,12 @@ mod tests {
             response
                 .assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, &env.config());
 
-            assert!(response
-                .text()
-                .await?
-                .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest"));
+            assert!(
+                response
+                    .text()
+                    .await?
+                    .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest")
+            );
 
             Ok(())
         })
@@ -1420,7 +1424,7 @@ mod tests {
                 .name("foo")
                 .version("0.0.2")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
                 ])
                 .create()
                 .await?;
@@ -1484,7 +1488,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
                 ])
                 .create()
                 .await?;
@@ -2351,7 +2355,7 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
                 ])
                 .create()
                 .await?;

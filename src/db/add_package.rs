@@ -4,10 +4,10 @@ use crate::{
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::{rustc_version::parse_rustc_date, MetadataPackage},
+    utils::{MetadataPackage, rustc_version::parse_rustc_date},
     web::crate_details::{latest_release, releases_for_crate},
 };
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use derive_more::Display;
 use futures_util::stream::TryStreamExt;
 use serde::Serialize;

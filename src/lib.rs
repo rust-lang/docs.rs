@@ -2,7 +2,7 @@
 //! documentation of crates for the Rust Programming Language.
 #![allow(clippy::cognitive_complexity)]
 
-pub use self::build_queue::{queue_rebuilds, AsyncBuildQueue, BuildQueue};
+pub use self::build_queue::{AsyncBuildQueue, BuildQueue, queue_rebuilds};
 pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::PackageKind;

@@ -2,16 +2,16 @@
 
 use super::cache::CachePolicy;
 use crate::{
+    Config,
     error::Result,
     storage::{AsyncStorage, Blob},
-    Config,
 };
 
 use axum::{
     extract::Extension,
     http::{
-        header::{CONTENT_TYPE, LAST_MODIFIED},
         StatusCode,
+        header::{CONTENT_TYPE, LAST_MODIFIED},
     },
     response::{IntoResponse, Response as AxumResponse},
 };

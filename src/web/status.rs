@@ -1,11 +1,12 @@
 use super::{cache::CachePolicy, error::AxumNope};
 use crate::web::{
+    ReqVersion,
     error::AxumResult,
     extractors::{DbConnection, Path},
-    match_version, ReqVersion,
+    match_version,
 };
 use axum::{
-    extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
+    Json, extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse,
 };
 
 pub(crate) async fn status_handler(
@@ -46,7 +47,7 @@ pub(crate) async fn status_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use crate::web::cache::CachePolicy;
     use reqwest::StatusCode;
     use test_case::test_case;

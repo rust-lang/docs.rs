@@ -23,10 +23,10 @@ mod queue;
 pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;
 use anyhow::Result;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::panic;
-use tracing::{error, warn, Span};
+use tracing::{Span, error, warn};
 pub(crate) mod sized_buffer;
 
 use std::{future::Future, thread, time::Duration};
@@ -196,9 +196,11 @@ mod tests {
                 .execute(&mut *conn)
                 .await?;
 
-            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)
-                .await?
-                .is_none());
+            assert!(
+                get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                    .await?
+                    .is_none()
+            );
             Ok(())
         });
     }
@@ -211,9 +213,11 @@ mod tests {
                 .execute(&mut *conn)
                 .await?;
 
-            assert!(get_config::<String>(&mut conn, ConfigName::RustcVersion)
-                .await?
-                .is_none());
+            assert!(
+                get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                    .await?
+                    .is_none()
+            );
 
             set_config(
                 &mut conn,

@@ -92,8 +92,8 @@ pub fn with_lang(lang: Option<&str>, code: &str, default: Option<&str>) -> Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        select_syntax, try_with_lang, with_lang, LimitsExceeded, PER_LINE_BYTE_LENGTH_LIMIT,
-        TOTAL_CODE_BYTE_LENGTH_LIMIT,
+        LimitsExceeded, PER_LINE_BYTE_LENGTH_LIMIT, TOTAL_CODE_BYTE_LENGTH_LIMIT, select_syntax,
+        try_with_lang, with_lang,
     };
 
     #[test]

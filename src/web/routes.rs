@@ -2,12 +2,12 @@ use super::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
 use axum::{
+    Router as AxumRouter,
     extract::Request as AxumHttpRequest,
     handler::Handler as AxumHandler,
     middleware::{self, Next},
     response::{IntoResponse, Redirect},
-    routing::{get, post, MethodRouter},
-    Router as AxumRouter,
+    routing::{MethodRouter, get, post},
 };
 use axum_extra::routing::RouterExt;
 use rinja::Template;
@@ -370,7 +370,7 @@ async fn fallback() -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use crate::web::cache::CachePolicy;
     use reqwest::StatusCode;
 

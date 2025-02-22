@@ -1,5 +1,5 @@
 use crate::{cdn::CdnKind, storage::StorageKind};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::NaiveDate;
 use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
 use tracing::trace;

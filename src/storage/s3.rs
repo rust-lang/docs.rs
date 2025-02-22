@@ -4,10 +4,10 @@ use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
-    config::{retry::RetryConfig, Region},
+    Client,
+    config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
     types::{Delete, ObjectIdentifier, Tag, Tagging},
-    Client,
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;

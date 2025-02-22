@@ -1,7 +1,7 @@
 use crate::Context;
-use crate::{docbuilder::RustwideBuilder, utils::report_error, BuildQueue, Config};
+use crate::{BuildQueue, Config, docbuilder::RustwideBuilder, utils::report_error};
 use anyhow::{Context as _, Error};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, io, path::Path, thread};

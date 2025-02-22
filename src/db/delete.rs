@@ -1,13 +1,13 @@
 use crate::{
-    error::Result,
-    storage::{rustdoc_archive_path, source_archive_path, AsyncStorage},
     Config,
+    error::Result,
+    storage::{AsyncStorage, rustdoc_archive_path, source_archive_path},
 };
 use anyhow::Context as _;
 use fn_error_context::context;
 use sqlx::Connection;
 
-use super::{update_latest_version_id, CrateId};
+use super::{CrateId, update_latest_version_id};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -480,11 +480,12 @@ mod tests {
                 // local and remote index are gone too
                 let archive_index = format!("{rustdoc_archive}.index");
                 assert!(!env.async_storage().await.exists(&archive_index).await?);
-                assert!(!env
-                    .config()
-                    .local_archive_cache_path
-                    .join(&archive_index)
-                    .exists());
+                assert!(
+                    !env.config()
+                        .local_archive_cache_path
+                        .join(&archive_index)
+                        .exists()
+                );
             } else {
                 assert!(
                     !env.async_storage()

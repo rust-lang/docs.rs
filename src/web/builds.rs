@@ -4,25 +4,25 @@ use super::{
     headers::CanonicalUrl,
 };
 use crate::{
-    db::{types::BuildStatus, BuildId},
+    AsyncBuildQueue, Config,
+    db::{BuildId, types::BuildStatus},
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
+        MetaData, ReqVersion,
         error::AxumResult,
         extractors::{DbConnection, Path},
         filters, match_version,
         page::templates::{RenderRegular, RenderSolid},
-        MetaData, ReqVersion,
     },
-    AsyncBuildQueue, Config,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use axum::{
-    extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse, Json,
+    Json, extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse,
 };
 use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
     TypedHeader,
+    headers::{Authorization, authorization::Bearer},
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
@@ -256,8 +256,8 @@ mod tests {
     use crate::{
         db::Overrides,
         test::{
-            async_wrapper, fake_release_that_failed_before_build, AxumResponseTestExt,
-            AxumRouterTestExt, FakeBuild,
+            AxumResponseTestExt, AxumRouterTestExt, FakeBuild, async_wrapper,
+            fake_release_that_failed_before_build,
         },
         web::cache::CachePolicy,
     };
@@ -389,10 +389,12 @@ mod tests {
                 Some(&"rustc (blabla 2021-01-01)".into())
             );
             assert!(value.pointer("/0/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/0/build_time").unwrap().clone()
-            )
-            .is_ok());
+            assert!(
+                serde_json::from_value::<DateTime<Utc>>(
+                    value.pointer("/0/build_time").unwrap().clone()
+                )
+                .is_ok()
+            );
 
             assert_eq!(value.pointer("/1/build_status"), Some(&false.into()));
             assert_eq!(
@@ -404,10 +406,12 @@ mod tests {
                 Some(&"rustc (blabla 2020-01-01)".into())
             );
             assert!(value.pointer("/1/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/1/build_time").unwrap().clone()
-            )
-            .is_ok());
+            assert!(
+                serde_json::from_value::<DateTime<Utc>>(
+                    value.pointer("/1/build_time").unwrap().clone()
+                )
+                .is_ok()
+            );
 
             assert_eq!(value.pointer("/2/build_status"), Some(&true.into()));
             assert_eq!(
@@ -419,10 +423,12 @@ mod tests {
                 Some(&"rustc (blabla 2019-01-01)".into())
             );
             assert!(value.pointer("/2/id").unwrap().is_i64());
-            assert!(serde_json::from_value::<DateTime<Utc>>(
-                value.pointer("/2/build_time").unwrap().clone()
-            )
-            .is_ok());
+            assert!(
+                serde_json::from_value::<DateTime<Utc>>(
+                    value.pointer("/2/build_time").unwrap().clone()
+                )
+                .is_ok()
+            );
 
             assert!(
                 value.pointer("/1/build_time").unwrap().as_str().unwrap()
@@ -679,9 +685,11 @@ mod tests {
                 .await
                 .name("aquarelle")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc (blabla 2019-01-01)")
-                    .docsrs_version("docs.rs 1.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -689,9 +697,11 @@ mod tests {
                 .await
                 .name("aquarelle")
                 .version("0.2.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc (blabla 2019-01-01)")
-                    .docsrs_version("docs.rs 1.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -722,9 +732,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc (blabla 2019-01-01)")
-                    .docsrs_version("docs.rs 1.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -741,9 +753,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc (blabla 2019-01-01)")
-                    .docsrs_version("docs.rs 1.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0"),
+                ])
                 .create()
                 .await?;
 

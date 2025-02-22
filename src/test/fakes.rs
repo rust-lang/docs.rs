@@ -1,19 +1,19 @@
 use super::TestDatabase;
 
-use crate::db::file::{file_list_to_json, FileEntry};
+use crate::db::file::{FileEntry, file_list_to_json};
 use crate::db::types::BuildStatus;
 use crate::db::{
-    initialize_build, initialize_crate, initialize_release, update_build_status, BuildId, ReleaseId,
+    BuildId, ReleaseId, initialize_build, initialize_crate, initialize_release, update_build_status,
 };
 use crate::docbuilder::DocCoverage;
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{
-    rustdoc_archive_path, source_archive_path, AsyncStorage, CompressionAlgorithm,
+    AsyncStorage, CompressionAlgorithm, rustdoc_archive_path, source_archive_path,
 };
 use crate::utils::{Dependency, MetadataPackage, Target};
-use anyhow::{bail, Context};
-use base64::{engine::general_purpose::STANDARD as b64, Engine};
+use anyhow::{Context, bail};
+use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::iter;

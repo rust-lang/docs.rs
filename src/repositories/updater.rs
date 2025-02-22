@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::repositories::{GitHub, GitLab, RateLimitReached};
 use crate::utils::MetadataPackage;
-use crate::{db::Pool, Config};
+use crate::{Config, db::Pool};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
@@ -258,8 +258,7 @@ impl RepositoryStatsUpdater {
     ) -> Result<i32> {
         trace!(
             "storing {} repository stats for {}",
-            host,
-            repo.name_with_owner,
+            host, repo.name_with_owner,
         );
         Ok(sqlx::query_scalar!(
             "INSERT INTO repositories (
@@ -296,8 +295,7 @@ impl RepositoryStatsUpdater {
     ) -> Result<()> {
         trace!(
             "removing repository stats for host ID `{}` and host `{}`",
-            host_id,
-            host
+            host_id, host
         );
         sqlx::query!(
             "DELETE FROM repositories WHERE host_id = $1 AND host = $2;",
