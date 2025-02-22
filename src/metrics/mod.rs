@@ -3,10 +3,9 @@ mod macros;
 
 use self::macros::MetricFromOpts;
 use crate::{
-    cdn,
+    AsyncBuildQueue, Config, cdn,
     db::{CrateId, Pool, ReleaseId},
     target::TargetAtom,
-    AsyncBuildQueue, Config,
 };
 use anyhow::Error;
 use dashmap::DashMap;

@@ -40,7 +40,9 @@ impl Overrides {
 
     pub async fn save(conn: &mut sqlx::PgConnection, krate: &str, overrides: Self) -> Result<()> {
         if overrides.timeout.is_some() && overrides.targets.is_none() {
-            tracing::warn!("setting `Overrides::timeout` implies a default `Overrides::targets = 1`, prefer setting this explicitly");
+            tracing::warn!(
+                "setting `Overrides::timeout` implies a default `Overrides::targets = 1`, prefer setting this explicitly"
+            );
         }
 
         if sqlx::query_scalar!("SELECT id FROM crates WHERE crates.name = $1", krate)

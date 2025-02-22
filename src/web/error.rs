@@ -5,9 +5,9 @@ use crate::{
 };
 use anyhow::anyhow;
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
-    Json,
 };
 use std::borrow::Cow;
 use tracing::error;
@@ -217,7 +217,7 @@ pub(crate) type JsonAxumResult<T> = Result<T, JsonAxumNope>;
 #[cfg(test)]
 mod tests {
     use super::{AxumNope, IntoResponse};
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use crate::web::cache::CachePolicy;
     use kuchikiki::traits::TendrilSink;
 

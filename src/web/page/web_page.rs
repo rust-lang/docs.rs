@@ -1,4 +1,4 @@
-use crate::web::{csp::Csp, error::AxumNope, TemplateData};
+use crate::web::{TemplateData, csp::Csp, error::AxumNope};
 use axum::{
     body::Body,
     extract::Request as AxumRequest,

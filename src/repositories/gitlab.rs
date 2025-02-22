@@ -2,8 +2,8 @@ use crate::error::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT},
     Client as HttpClient,
+    header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -11,8 +11,8 @@ use std::str::FromStr;
 use tracing::warn;
 
 use crate::repositories::{
-    FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,
-    APP_USER_AGENT,
+    APP_USER_AGENT, FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge,
+    RepositoryName,
 };
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
@@ -265,8 +265,8 @@ struct GraphProject {
 #[cfg(test)]
 mod tests {
     use super::GitLab;
-    use crate::repositories::updater::{repository_name, RepositoryForge};
     use crate::repositories::RateLimitReached;
+    use crate::repositories::updater::{RepositoryForge, repository_name};
 
     async fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
         let server = mockito::Server::new_async().await;

@@ -1,7 +1,7 @@
-use crate::metrics::InstanceMetrics;
 use crate::Config;
+use crate::metrics::InstanceMetrics;
 use futures_util::{future::BoxFuture, stream::BoxStream};
-use sqlx::{postgres::PgPoolOptions, Executor};
+use sqlx::{Executor, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,

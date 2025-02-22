@@ -3,17 +3,18 @@ mod compression;
 mod database;
 mod s3;
 
-pub use self::compression::{compress, decompress, CompressionAlgorithm, CompressionAlgorithms};
+pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
 use crate::{
+    Config, InstanceMetrics,
     db::{
-        file::{detect_mime, FileEntry},
-        mimes, BuildId, Pool,
+        BuildId, Pool,
+        file::{FileEntry, detect_mime},
+        mimes,
     },
     error::Result,
     utils::spawn_blocking,
-    Config, InstanceMetrics,
 };
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -907,11 +908,13 @@ mod backend_tests {
         assert!(!storage.get_public_access(path)?);
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
-            assert!(storage
-                .set_public_access(path, true)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
+            assert!(
+                storage
+                    .set_public_access(path, true)
+                    .unwrap_err()
+                    .downcast_ref::<PathNotFoundError>()
+                    .is_some()
+            );
         }
 
         Ok(())
@@ -937,17 +940,21 @@ mod backend_tests {
         assert!(!storage.get_public_access(path)?);
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
-            assert!(storage
-                .get(path, usize::MAX)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
+            assert!(
+                storage
+                    .get(path, usize::MAX)
+                    .unwrap_err()
+                    .downcast_ref::<PathNotFoundError>()
+                    .is_some()
+            );
 
-            assert!(storage
-                .get_public_access(path)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
+            assert!(
+                storage
+                    .get_public_access(path)
+                    .unwrap_err()
+                    .downcast_ref::<PathNotFoundError>()
+                    .is_some()
+            );
         }
 
         Ok(())
@@ -978,11 +985,13 @@ mod backend_tests {
         );
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
-            assert!(storage
-                .get_range(path, usize::MAX, 0..=4, None)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
+            assert!(
+                storage
+                    .get_range(path, usize::MAX, 0..=4, None)
+                    .unwrap_err()
+                    .downcast_ref::<PathNotFoundError>()
+                    .is_some()
+            );
         }
 
         Ok(())
@@ -1024,10 +1033,12 @@ mod backend_tests {
         // When testing, minio just gave me `XMinioInvalidObjectName`, so I'll check that too.
         let long_filename = "ATCG".repeat(512);
 
-        assert!(storage
-            .get(&long_filename, 42)
-            .unwrap_err()
-            .is::<PathNotFoundError>());
+        assert!(
+            storage
+                .get(&long_filename, 42)
+                .unwrap_err()
+                .is::<PathNotFoundError>()
+        );
 
         Ok(())
     }
@@ -1055,13 +1066,15 @@ mod backend_tests {
         let blob = storage.get("small-blob.bin", MAX_SIZE)?;
         assert_eq!(blob.content.len(), small_blob.content.len());
 
-        assert!(storage
-            .get("big-blob.bin", MAX_SIZE)
-            .unwrap_err()
-            .downcast_ref::<std::io::Error>()
-            .and_then(|io| io.get_ref())
-            .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
-            .is_some());
+        assert!(
+            storage
+                .get("big-blob.bin", MAX_SIZE)
+                .unwrap_err()
+                .downcast_ref::<std::io::Error>()
+                .and_then(|io| io.get_ref())
+                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                .is_some()
+        );
 
         Ok(())
     }
@@ -1299,11 +1312,13 @@ mod backend_tests {
             assert!(storage.get(existing, usize::MAX).is_ok());
         }
         for missing in missing {
-            assert!(storage
-                .get(missing, usize::MAX)
-                .unwrap_err()
-                .downcast_ref::<PathNotFoundError>()
-                .is_some());
+            assert!(
+                storage
+                    .get(missing, usize::MAX)
+                    .unwrap_err()
+                    .downcast_ref::<PathNotFoundError>()
+                    .is_some()
+            );
         }
 
         Ok(())

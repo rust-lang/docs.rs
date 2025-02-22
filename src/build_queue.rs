@@ -1,14 +1,14 @@
-use crate::db::{delete_crate, delete_version, update_latest_version_id, CrateId, Pool};
+use crate::Context;
+use crate::db::{CrateId, Pool, delete_crate, delete_version, update_latest_version_id};
 use crate::docbuilder::PackageKind;
 use crate::error::Result;
 use crate::storage::AsyncStorage;
-use crate::utils::{get_config, get_crate_priority, report_error, retry, set_config, ConfigName};
-use crate::Context;
-use crate::{cdn, BuildPackageSummary};
+use crate::utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config};
+use crate::{BuildPackageSummary, cdn};
 use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
 use anyhow::Context as _;
 use fn_error_context::context;
-use futures_util::{stream::TryStreamExt, StreamExt};
+use futures_util::{StreamExt, stream::TryStreamExt};
 use sqlx::Connection as _;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -125,7 +125,7 @@ impl AsyncBuildQueue {
             .pending_count_by_priority()
             .await?
             .iter()
-            .filter(|(&priority, _)| priority <= 0)
+            .filter(|&(&priority, _)| priority <= 0)
             .map(|(_, count)| count)
             .sum::<usize>())
     }
@@ -756,8 +756,10 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                ])
                 .create()
                 .await?;
 
@@ -785,8 +787,10 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                ])
                 .create()
                 .await?;
 
@@ -833,8 +837,10 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                ])
                 .create()
                 .await?;
 
@@ -867,8 +873,10 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                ])
                 .create()
                 .await?;
 
@@ -1090,15 +1098,16 @@ mod tests {
             assert_eq!(metrics.build_time.get_sample_count(), 9);
 
             // no invalidations were run since we don't have a distribution id configured
-            assert!(env
-                .runtime()
-                .block_on(async {
-                    cdn::queued_or_active_crate_invalidations(
-                        &mut *env.async_db().await.async_conn().await,
-                    )
-                    .await
-                })?
-                .is_empty());
+            assert!(
+                env.runtime()
+                    .block_on(async {
+                        cdn::queued_or_active_crate_invalidations(
+                            &mut *env.async_db().await.async_conn().await,
+                        )
+                        .await
+                    })?
+                    .is_empty()
+            );
 
             Ok(())
         })
@@ -1135,9 +1144,11 @@ mod tests {
 
             let queued_invalidations = fetch_invalidations();
             assert_eq!(queued_invalidations.len(), 3);
-            assert!(queued_invalidations
-                .iter()
-                .all(|i| i.krate == "will_succeed"));
+            assert!(
+                queued_invalidations
+                    .iter()
+                    .all(|i| i.krate == "will_succeed")
+            );
 
             queue.process_next_crate(|krate| {
                 assert_eq!("will_fail", krate.name);
@@ -1146,10 +1157,12 @@ mod tests {
 
             let queued_invalidations = fetch_invalidations();
             assert_eq!(queued_invalidations.len(), 6);
-            assert!(queued_invalidations
-                .iter()
-                .skip(3)
-                .all(|i| i.krate == "will_fail"));
+            assert!(
+                queued_invalidations
+                    .iter()
+                    .skip(3)
+                    .all(|i| i.krate == "will_fail")
+            );
 
             Ok(())
         })

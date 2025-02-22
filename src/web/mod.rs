@@ -3,13 +3,13 @@
 pub mod page;
 // mod tmp;
 
-use crate::db::types::BuildStatus;
 use crate::db::CrateId;
 use crate::db::ReleaseId;
+use crate::db::types::BuildStatus;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
-use crate::web::page::templates::{filters, RenderSolid};
-use anyhow::{anyhow, bail, Context as _, Result};
+use crate::web::page::templates::{RenderSolid, filters};
+use anyhow::{Context as _, Result, anyhow, bail};
 use axum_extra::middleware::option_layer;
 use rinja::Template;
 use serde_json::Value;
@@ -37,20 +37,20 @@ mod source;
 mod statics;
 mod status;
 
-use crate::{impl_axum_webpage, Context};
+use crate::{Context, impl_axum_webpage};
 use anyhow::Error;
 use axum::{
+    Router as AxumRouter,
     extract::{Extension, MatchedPath, Request as AxumRequest},
     http::StatusCode,
     middleware,
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
-    Router as AxumRouter,
 };
 use chrono::{DateTime, Utc};
 use error::AxumNope;
 use page::TemplateData;
-use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use semver::{Version, VersionReq};
 use sentry::integrations::tower as sentry_tower;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -770,8 +770,8 @@ impl_axum_webpage! {
 mod test {
     use super::*;
     use crate::test::{
-        async_wrapper, AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase,
-        TestEnvironment,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
+        async_wrapper,
     };
     use crate::{db::ReleaseId, docbuilder::DocCoverage};
     use kuchikiki::traits::TendrilSink;
@@ -859,10 +859,12 @@ mod test {
 
             let foo_doc = kuchikiki::parse_html()
                 .one(web.assert_success("/foo/0.0.1/foo/").await?.text().await?);
-            assert!(foo_doc
-                .select(".pure-menu-link b")
-                .unwrap()
-                .any(|e| e.text_contents().contains("60%")));
+            assert!(
+                foo_doc
+                    .select(".pure-menu-link b")
+                    .unwrap()
+                    .any(|e| e.text_contents().contains("60%"))
+            );
 
             Ok(())
         });
@@ -1121,7 +1123,7 @@ mod test {
                 .name("foo")
                 .version("1.1.0")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress)
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
                 ])
                 .create()
                 .await?;
@@ -1312,10 +1314,12 @@ mod test {
             response.headers().get(http::header::LOCATION).unwrap(),
             "/something"
         );
-        assert!(response
-            .headers()
-            .get(http::header::CACHE_CONTROL)
-            .is_none());
+        assert!(
+            response
+                .headers()
+                .get(http::header::CACHE_CONTROL)
+                .is_none()
+        );
         assert!(response.extensions().get::<cache::CachePolicy>().is_none());
     }
 

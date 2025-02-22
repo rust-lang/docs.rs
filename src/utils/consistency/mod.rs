@@ -1,4 +1,4 @@
-use crate::{db::delete, utils::spawn_blocking, Context};
+use crate::{Context, db::delete, utils::spawn_blocking};
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
 use tracing::{info, warn};
@@ -159,7 +159,7 @@ where
 mod tests {
     use super::diff::Difference;
     use super::*;
-    use crate::test::{async_wrapper, TestEnvironment};
+    use crate::test::{TestEnvironment, async_wrapper};
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {

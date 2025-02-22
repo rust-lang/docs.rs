@@ -1,15 +1,15 @@
 use crate::{
-    db::{types::BuildStatus, BuildId},
+    AsyncStorage, Config,
+    db::{BuildId, types::BuildStatus},
     impl_axum_webpage,
     web::{
+        MetaData,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         file::File,
         filters,
         page::templates::{RenderRegular, RenderSolid},
-        MetaData,
     },
-    AsyncStorage, Config,
 };
 use anyhow::Context as _;
 use axum::{extract::Extension, response::IntoResponse};
@@ -163,8 +163,8 @@ pub(crate) async fn build_details_handler(
 #[cfg(test)]
 mod tests {
     use crate::test::{
-        async_wrapper, fake_release_that_failed_before_build, AxumResponseTestExt,
-        AxumRouterTestExt, FakeBuild,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, async_wrapper,
+        fake_release_that_failed_before_build,
     };
     use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
@@ -258,9 +258,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .no_s3_build_log()
-                    .db_build_log("A build log")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .no_s3_build_log()
+                        .db_build_log("A build log"),
+                ])
                 .create()
                 .await?;
 
@@ -350,12 +352,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .s3_build_log("A build log")
-                    .build_log_for_other_target(
-                        "other_target",
-                        "other target build log",
-                    )])
+                .builds(vec![
+                    FakeBuild::default()
+                        .s3_build_log("A build log")
+                        .build_log_for_other_target("other_target", "other target build log"),
+                ])
                 .create()
                 .await?;
 
@@ -417,9 +418,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .s3_build_log("A build log")
-                    .db_build_log("Another build log")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .s3_build_log("A build log")
+                        .db_build_log("Another build log"),
+                ])
                 .create()
                 .await?;
 

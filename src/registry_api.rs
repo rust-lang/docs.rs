@@ -1,7 +1,7 @@
 use crate::{error::Result, utils::retry_async};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, Utc};
-use reqwest::header::{HeaderValue, ACCEPT, USER_AGENT};
+use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::fmt;

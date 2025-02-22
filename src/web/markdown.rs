@@ -1,6 +1,6 @@
 use crate::web::highlight;
 use comrak::{
-    adapters::SyntaxHighlighterAdapter, ExtensionOptions, Options, Plugins, RenderPlugins,
+    ExtensionOptions, Options, Plugins, RenderPlugins, adapters::SyntaxHighlighterAdapter,
 };
 use std::collections::HashMap;
 

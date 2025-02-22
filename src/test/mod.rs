@@ -1,6 +1,6 @@
 mod fakes;
 
-pub(crate) use self::fakes::{fake_release_that_failed_before_build, FakeBuild};
+pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::cdn::CdnBackend;
 use crate::db::{self, AsyncPoolClient, Pool};
 use crate::error::Result;
@@ -13,9 +13,9 @@ use crate::{
 };
 use anyhow::Context as _;
 use axum::body::Bytes;
-use axum::{body::Body, http::Request, response::Response as AxumResponse, Router};
+use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use fn_error_context::context;
-use futures_util::{stream::TryStreamExt, FutureExt};
+use futures_util::{FutureExt, stream::TryStreamExt};
 use http_body_util::BodyExt; // for `collect`
 use once_cell::sync::OnceCell;
 use serde::de::DeserializeOwned;
@@ -365,7 +365,7 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) fn init_logger() {
-    use tracing_subscriber::{filter::Directive, EnvFilter};
+    use tracing_subscriber::{EnvFilter, filter::Directive};
 
     rustwide::logging::init_with(tracing_log::LogTracer::new());
     let subscriber = tracing_subscriber::FmtSubscriber::builder()

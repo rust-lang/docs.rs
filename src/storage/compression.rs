@@ -1,6 +1,6 @@
 use anyhow::Error;
-use bzip2::read::{BzDecoder, BzEncoder};
 use bzip2::Compression;
+use bzip2::read::{BzDecoder, BzEncoder};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -125,11 +125,12 @@ mod tests {
 
             // Ensure decompressing a file over the limit returns a SizeLimitReached error.
             let err = decompress(compressed_big.as_slice(), alg, MAX_SIZE).unwrap_err();
-            assert!(err
-                .downcast_ref::<std::io::Error>()
-                .and_then(|io| io.get_ref())
-                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
-                .is_some());
+            assert!(
+                err.downcast_ref::<std::io::Error>()
+                    .and_then(|io| io.get_ref())
+                    .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                    .is_some()
+            );
         }
     }
 

@@ -2,6 +2,7 @@ use crate::{
     db::types::Feature as DbFeature,
     impl_axum_webpage,
     web::{
+        MetaData, ReqVersion,
         cache::CachePolicy,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
@@ -9,7 +10,6 @@ use crate::{
         headers::CanonicalUrl,
         match_version,
         page::templates::{RenderRegular, RenderSolid},
-        MetaData, ReqVersion,
     },
 };
 use anyhow::anyhow;
@@ -232,7 +232,7 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use reqwest::StatusCode;
 
     #[test]

@@ -1,5 +1,5 @@
 use super::{Blob, FileRange};
-use crate::{db::Pool, error::Result, InstanceMetrics};
+use crate::{InstanceMetrics, db::Pool, error::Result};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;

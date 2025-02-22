@@ -1,25 +1,24 @@
 //! Releases web handlers
 
 use crate::{
+    AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
     build_queue::{QueuedCrate, REBUILD_PRIORITY},
     cdn, impl_axum_webpage,
     utils::report_error,
     web::{
-        axum_parse_uri_with_params, axum_redirect, encode_url_path,
+        ReqVersion, axum_parse_uri_with_params, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         match_version,
-        page::templates::{filters, RenderRegular, RenderSolid},
-        ReqVersion,
+        page::templates::{RenderRegular, RenderSolid, filters},
     },
-    AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
 };
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use axum::{
     extract::{Extension, Query},
     response::{IntoResponse, Response as AxumResponse},
 };
-use base64::{engine::general_purpose::STANDARD as b64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
@@ -331,7 +330,7 @@ pub(crate) async fn releases_handler(
     conn: &mut sqlx::PgConnection,
     page: Option<i64>,
     release_type: ReleaseType,
-) -> AxumResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse + use<>> {
     let page_number = page.unwrap_or(1);
 
     let (description, release_order, latest_only) = match release_type {
@@ -455,7 +454,7 @@ async fn redirect_to_random_crate(
     config: Arc<Config>,
     metrics: Arc<InstanceMetrics>,
     conn: &mut sqlx::PgConnection,
-) -> AxumResult<impl IntoResponse> {
+) -> AxumResult<impl IntoResponse + use<>> {
     // We try to find a random crate and redirect to it.
     //
     // The query is efficient, but relies on a static factor which depends
@@ -804,8 +803,8 @@ mod tests {
     use crate::db::{finish_build, initialize_build, initialize_crate, initialize_release};
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
-        async_wrapper, fake_release_that_failed_before_build, AxumResponseTestExt,
-        AxumRouterTestExt, FakeBuild,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, async_wrapper,
+        fake_release_that_failed_before_build,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -889,10 +888,12 @@ mod tests {
                 .await
                 .name("in_progress")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .build_status(BuildStatus::InProgress)
-                    .rustc_version("rustc (blabla 2022-01-01)")
-                    .docsrs_version("docs.rs 4.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .build_status(BuildStatus::InProgress)
+                        .rustc_version("rustc (blabla 2022-01-01)")
+                        .docsrs_version("docs.rs 4.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -1230,10 +1231,12 @@ mod tests {
                 .await?;
             assert_eq!(response.status(), 500);
 
-            assert!(response
-                .text()
-                .await?
-                .contains("error name 1\nerror name 2"));
+            assert!(
+                response
+                    .text()
+                    .await?
+                    .contains("error name 1\nerror name 2")
+            );
             Ok(())
         })
     }
@@ -1419,10 +1422,12 @@ mod tests {
                 .await
                 .name("in_progress")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default()
-                    .build_status(BuildStatus::InProgress)
-                    .rustc_version("rustc (blabla 2022-01-01)")
-                    .docsrs_version("docs.rs 4.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .build_status(BuildStatus::InProgress)
+                        .rustc_version("rustc (blabla 2022-01-01)")
+                        .docsrs_version("docs.rs 4.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -1791,10 +1796,12 @@ mod tests {
 
             let content =
                 kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
-            assert!(content
-                .select(".release > div > strong")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("active CDN deployments")));
+            assert!(
+                content
+                    .select(".release > div > strong")
+                    .expect("missing heading")
+                    .any(|el| el.text_contents().contains("active CDN deployments"))
+            );
 
             let items = content
                 .select(".queue-list > li")
@@ -1817,15 +1824,19 @@ mod tests {
 
             let empty =
                 kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
-            assert!(empty
-                .select(".queue-list > strong")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("nothing")));
+            assert!(
+                empty
+                    .select(".queue-list > strong")
+                    .expect("missing heading")
+                    .any(|el| el.text_contents().contains("nothing"))
+            );
 
-            assert!(!empty
-                .select(".release > strong")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("active CDN deployments")));
+            assert!(
+                !empty
+                    .select(".release > strong")
+                    .expect("missing heading")
+                    .any(|el| el.text_contents().contains("active CDN deployments"))
+            );
 
             let queue = env.async_build_queue().await;
             queue.add_crate("foo", "1.0.0", 0, None).await?;
@@ -1850,9 +1861,10 @@ mod tests {
                 assert!(a.text_contents().contains(expected.1));
 
                 if let Some(priority) = expected.2 {
-                    assert!(li
-                        .text_contents()
-                        .contains(&format!("priority: {priority}")));
+                    assert!(
+                        li.text_contents()
+                            .contains(&format!("priority: {priority}"))
+                    );
                 }
             }
 
@@ -1874,10 +1886,12 @@ mod tests {
                 .await
                 .name("foo")
                 .version("1.0.0")
-                .builds(vec![FakeBuild::default()
-                    .build_status(BuildStatus::InProgress)
-                    .rustc_version("rustc (blabla 2022-01-01)")
-                    .docsrs_version("docs.rs 4.0.0")])
+                .builds(vec![
+                    FakeBuild::default()
+                        .build_status(BuildStatus::InProgress)
+                        .rustc_version("rustc (blabla 2022-01-01)")
+                        .docsrs_version("docs.rs 4.0.0"),
+                ])
                 .create()
                 .await?;
 
@@ -1917,15 +1931,19 @@ mod tests {
             let empty =
                 kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
 
-            assert!(empty
-                .select(".about > p")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("We continuously rebuild")));
+            assert!(
+                empty
+                    .select(".about > p")
+                    .expect("missing heading")
+                    .any(|el| el.text_contents().contains("We continuously rebuild"))
+            );
 
-            assert!(empty
-                .select(".about > p")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("crates in the rebuild queue")));
+            assert!(
+                empty
+                    .select(".about > p")
+                    .expect("missing heading")
+                    .any(|el| el.text_contents().contains("crates in the rebuild queue"))
+            );
 
             Ok(())
         });
@@ -1954,12 +1972,13 @@ mod tests {
 
             // empty because expand_rebuild_queue is not set
             assert_eq!(items.len(), 0);
-            assert!(full
-                .select(".about > p")
-                .expect("missing heading")
-                .any(|el| el
-                    .text_contents()
-                    .contains("There are currently 2 crates in the rebuild queue")));
+            assert!(
+                full.select(".about > p")
+                    .expect("missing heading")
+                    .any(|el| el
+                        .text_contents()
+                        .contains("There are currently 2 crates in the rebuild queue"))
+            );
 
             let full = kuchikiki::parse_html()
                 .one(web.get("/releases/queue?expand=1").await?.text().await?);
@@ -1974,18 +1993,26 @@ mod tests {
 
             assert_eq!(build_queue_list.len(), 1);
             assert_eq!(rebuild_queue_list.len(), 2);
-            assert!(rebuild_queue_list
-                .iter()
-                .any(|li| li.text_contents().contains("foo")));
-            assert!(rebuild_queue_list
-                .iter()
-                .any(|li| li.text_contents().contains("bar")));
-            assert!(build_queue_list
-                .iter()
-                .any(|li| li.text_contents().contains("baz")));
-            assert!(!rebuild_queue_list
-                .iter()
-                .any(|li| li.text_contents().contains("baz")));
+            assert!(
+                rebuild_queue_list
+                    .iter()
+                    .any(|li| li.text_contents().contains("foo"))
+            );
+            assert!(
+                rebuild_queue_list
+                    .iter()
+                    .any(|li| li.text_contents().contains("bar"))
+            );
+            assert!(
+                build_queue_list
+                    .iter()
+                    .any(|li| li.text_contents().contains("baz"))
+            );
+            assert!(
+                !rebuild_queue_list
+                    .iter()
+                    .any(|li| li.text_contents().contains("baz"))
+            );
 
             Ok(())
         });

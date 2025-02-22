@@ -1,26 +1,26 @@
+use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
 use crate::db::{
-    add_doc_coverage, add_path_into_remote_archive, finish_build, finish_release, initialize_build,
-    initialize_crate, initialize_release, types::BuildStatus, update_build_with_error,
-    update_crate_data_in_database, Pool,
-};
-use crate::db::{
-    file::{add_path_into_database, file_list_to_json},
     BuildId,
+    file::{add_path_into_database, file_list_to_json},
 };
 use crate::db::{CrateId, ReleaseId};
+use crate::db::{
+    Pool, add_doc_coverage, add_path_into_remote_archive, finish_build, finish_release,
+    initialize_build, initialize_crate, initialize_release, types::BuildStatus,
+    update_build_with_error, update_crate_data_in_database,
+};
 use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{rustdoc_archive_path, source_archive_path};
 use crate::utils::{
-    copy_dir_all, get_config, parse_rustc_version, report_error, set_config, CargoMetadata,
-    ConfigName,
+    CargoMetadata, ConfigName, copy_dir_all, get_config, parse_rustc_version, report_error,
+    set_config,
 };
-use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
-use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage};
-use anyhow::{anyhow, bail, Context as _, Error};
-use docsrs_metadata::{BuildTargets, Metadata, DEFAULT_TARGETS, HOST_TARGET};
+use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
+use anyhow::{Context as _, Error, anyhow, bail};
+use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
@@ -422,8 +422,12 @@ impl RustwideBuilder {
                 .mem_available
                 .expect("kernel version too old for determining memory limit");
             if limits.memory() as u64 > available {
-                bail!("not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
-                    name, version, limits.memory() / 1024 / 1024, available / 1024 / 1024
+                bail!(
+                    "not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
+                    name,
+                    version,
+                    limits.memory() / 1024 / 1024,
+                    available / 1024 / 1024
                 );
             } else {
                 debug!(
@@ -821,12 +825,14 @@ impl RustwideBuilder {
             &build.host_source_dir(),
         )?;
 
-        let mut rustdoc_flags = vec![if create_essential_files {
-            "--emit=unversioned-shared-resources,toolchain-shared-resources"
-        } else {
-            "--emit=invocation-specific"
-        }
-        .to_string()];
+        let mut rustdoc_flags = vec![
+            if create_essential_files {
+                "--emit=unversioned-shared-resources,toolchain-shared-resources"
+            } else {
+                "--emit=invocation-specific"
+            }
+            .to_string(),
+        ];
         rustdoc_flags.extend(vec![
             "--resource-suffix".to_string(),
             format!("-{}", parse_rustc_version(self.rustc_version()?)?),
@@ -990,7 +996,6 @@ impl RustwideBuilder {
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats_updater.load_repository(metadata))
-            .map_err(Into::into)
     }
 }
 
@@ -1047,7 +1052,7 @@ mod tests {
     use crate::db::types::Feature;
     use crate::registry_api::ReleaseData;
     use crate::storage::CompressionAlgorithm;
-    use crate::test::{wrapper, AxumRouterTestExt, TestEnvironment};
+    use crate::test::{AxumRouterTestExt, TestEnvironment, wrapper};
 
     fn get_features(
         env: &TestEnvironment,
@@ -1247,9 +1252,11 @@ mod tests {
                     assert!(target_docs_present);
                     runtime.block_on(web.assert_success(&target_url))?;
 
-                    assert!(storage
-                        .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
-                        .unwrap());
+                    assert!(
+                        storage
+                            .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
+                            .unwrap()
+                    );
                 }
             }
 
@@ -1645,10 +1652,12 @@ mod tests {
                     .successful
             );
 
-            assert!(get_features(env, crate_, version)?
-                .unwrap()
-                .iter()
-                .any(|f| f.name == "serde_derive"));
+            assert!(
+                get_features(env, crate_, version)?
+                    .unwrap()
+                    .iter()
+                    .any(|f| f.name == "serde_derive")
+            );
 
             Ok(())
         });
@@ -1668,10 +1677,12 @@ mod tests {
                     .successful
             );
 
-            assert!(!get_features(env, crate_, version)?
-                .unwrap()
-                .iter()
-                .any(|f| f.name == "with_builtin_macros"));
+            assert!(
+                !get_features(env, crate_, version)?
+                    .unwrap()
+                    .iter()
+                    .any(|f| f.name == "with_builtin_macros")
+            );
 
             Ok(())
         });

@@ -1,14 +1,14 @@
 use crate::{
+    Config,
     docbuilder::Limits,
     impl_axum_webpage,
-    utils::{get_config, ConfigName},
+    utils::{ConfigName, get_config},
     web::{
+        AxumErrorPage,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
-        page::templates::{filters, RenderBrands, RenderSolid},
-        AxumErrorPage,
+        page::templates::{RenderBrands, RenderSolid, filters},
     },
-    Config,
 };
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use chrono::{TimeZone, Utc};
@@ -203,7 +203,7 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{async_wrapper, AxumResponseTestExt, AxumRouterTestExt};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use axum::http::StatusCode;
 
     #[test]

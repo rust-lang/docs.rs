@@ -5,30 +5,30 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context as _, Error, Result};
+use anyhow::{Context as _, Error, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::cdn::CdnBackend;
-use docs_rs::db::{self, add_path_into_database, CrateId, Overrides, Pool};
+use docs_rs::db::{self, CrateId, Overrides, Pool, add_path_into_database};
 use docs_rs::repositories::RepositoryStatsUpdater;
 use docs_rs::utils::{
-    get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-    remove_crate_priority, set_config, set_crate_priority, ConfigName,
+    ConfigName, get_config, get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
+    remove_crate_priority, set_config, set_crate_priority,
 };
 use docs_rs::{
-    start_background_metrics_webserver, start_web_server, AsyncBuildQueue, AsyncStorage,
-    BuildQueue, Config, Context, Index, InstanceMetrics, PackageKind, RegistryApi, RustwideBuilder,
-    ServiceMetrics, Storage,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Context, Index, InstanceMetrics,
+    PackageKind, RegistryApi, RustwideBuilder, ServiceMetrics, Storage,
+    start_background_metrics_webserver, start_web_server,
 };
 use futures_util::StreamExt;
 use humantime::Duration;
 use once_cell::sync::OnceCell;
 use sentry::{
-    integrations::panic as sentry_panic, integrations::tracing as sentry_tracing,
-    TransactionContext,
+    TransactionContext, integrations::panic as sentry_panic,
+    integrations::tracing as sentry_tracing,
 };
 use tokio::runtime::{Builder, Runtime};
 use tracing_log::LogTracer;
-use tracing_subscriber::{filter::Directive, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, filter::Directive, prelude::*};
 
 fn main() {
     // set the global log::logger for backwards compatibility

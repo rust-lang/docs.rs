@@ -1,4 +1,4 @@
-use crate::{db::Overrides, error::Result, Config};
+use crate::{Config, db::Overrides, error::Result};
 use serde::Serialize;
 use std::time::Duration;
 

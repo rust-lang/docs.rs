@@ -57,10 +57,12 @@ mod tests {
 
         // Ensure adding a third chunk fails
         let error = buffer.write(&[0; 500]).unwrap_err();
-        assert!(error
-            .get_ref()
-            .unwrap()
-            .is::<crate::error::SizeLimitReached>());
+        assert!(
+            error
+                .get_ref()
+                .unwrap()
+                .is::<crate::error::SizeLimitReached>()
+        );
 
         // Ensure all the third chunk was discarded
         assert_eq!(1000, buffer.inner.len());

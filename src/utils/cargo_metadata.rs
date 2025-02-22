@@ -1,6 +1,6 @@
 use crate::error::Result;
-use anyhow::{bail, Context};
-use rustwide::{cmd::Command, Toolchain, Workspace};
+use anyhow::{Context, bail};
+use rustwide::{Toolchain, Workspace, cmd::Command};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

@@ -1,11 +1,11 @@
-use crate::{metrics::duration_to_seconds, utils::report_error, Config, InstanceMetrics};
-use anyhow::{anyhow, bail, Context, Error, Result};
+use crate::{Config, InstanceMetrics, metrics::duration_to_seconds, utils::report_error};
+use anyhow::{Context, Error, Result, anyhow, bail};
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
-    config::{retry::RetryConfig, Region},
+    Client,
+    config::{Region, retry::RetryConfig},
     error::SdkError,
     types::{InvalidationBatch, Paths},
-    Client,
 };
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
@@ -133,7 +133,7 @@ impl CdnBackend {
         path_patterns: &[&str],
     ) {
         let CdnBackend::Dummy {
-            ref invalidation_requests,
+            invalidation_requests,
             ..
         } = self
         else {
@@ -646,13 +646,13 @@ mod tests {
     use super::*;
     use crate::test::async_wrapper;
 
-    use aws_sdk_cloudfront::{config::Credentials, Config};
+    use aws_sdk_cloudfront::{Config, config::Credentials};
     use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
     use aws_smithy_types::body::SdkBody;
 
     fn active_invalidations(cdn: &CdnBackend, distribution_id: &str) -> Vec<CdnInvalidation> {
         let CdnBackend::Dummy {
-            ref invalidation_requests,
+            invalidation_requests,
             ..
         } = cdn
         else {
@@ -734,9 +734,11 @@ mod tests {
 
             let config = env.config();
             let mut conn = env.async_db().await.async_conn().await;
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             let counts =
                 queued_or_active_crate_invalidation_count_by_distribution(&mut conn, &config)
@@ -760,9 +762,11 @@ mod tests {
             let cdn = env.cdn().await;
             let config = env.config();
             let mut conn = env.async_db().await.async_conn().await;
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             queue_crate_invalidation(&mut conn, &env.config(), "krate").await?;
 
@@ -844,10 +848,12 @@ mod tests {
             }
 
             // the queued entries got a CDN reference attached
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .iter()
-                .all(|i| i.cdn_reference.is_some() && i.created_in_cdn.is_some()));
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .iter()
+                    .all(|i| i.cdn_reference.is_some() && i.created_in_cdn.is_some())
+            );
 
             Ok(())
         });
@@ -864,9 +870,11 @@ mod tests {
             let cdn = env.cdn().await;
             let config = env.config();
             let mut conn = env.async_db().await.async_conn().await;
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             queue_crate_invalidation(&mut conn, &env.config(), "krate").await?;
 
@@ -948,10 +956,12 @@ mod tests {
             }
 
             // the queued entries got a CDN reference attached
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .iter()
-                .all(|i| i.cdn_reference.is_some() && i.created_in_cdn.is_some()));
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .iter()
+                    .all(|i| i.cdn_reference.is_some() && i.created_in_cdn.is_some())
+            );
 
             // clear the active invalidations in the CDN to _fake_ them
             // being completed on the CDN side.
@@ -976,9 +986,11 @@ mod tests {
             .await?;
 
             // which removes them from the queue table
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             Ok(())
         });
@@ -1004,9 +1016,11 @@ mod tests {
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             // insert some completed invalidations into the queue & the CDN, these will be ignored
             for i in 0..10 {
@@ -1082,9 +1096,11 @@ mod tests {
                 .await?;
 
             let mut conn = env.async_db().await.async_conn().await;
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
             insert_running_invalidation(
                 &mut conn,
                 "distribution_id_web",
@@ -1106,14 +1122,16 @@ mod tests {
             .await?;
 
             // nothing was added to the CDN
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .iter()
-                .filter(|i| !matches!(
-                    &i.cdn_reference,
-                    Some(val) if val == &already_running_invalidation.invalidation_id
-                ))
-                .all(|i| i.cdn_reference.is_none()));
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .iter()
+                    .filter(|i| !matches!(
+                        &i.cdn_reference,
+                        Some(val) if val == &already_running_invalidation.invalidation_id
+                    ))
+                    .all(|i| i.cdn_reference.is_none())
+            );
 
             // old invalidations are still active
             let ir_web = active_invalidations(&cdn, "distribution_id_web");
@@ -1135,10 +1153,12 @@ mod tests {
             .await?;
 
             // which adds the CDN reference
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .iter()
-                .all(|i| i.cdn_reference.is_some()));
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .iter()
+                    .all(|i| i.cdn_reference.is_some())
+            );
 
             // and creates them in the CDN too
             let ir_web = active_invalidations(&cdn, "distribution_id_web");
@@ -1160,9 +1180,11 @@ mod tests {
 
             let mut conn = env.async_db().await.async_conn().await;
             // no invalidation is queued
-            assert!(queued_or_active_crate_invalidations(&mut conn)
-                .await?
-                .is_empty());
+            assert!(
+                queued_or_active_crate_invalidations(&mut conn)
+                    .await?
+                    .is_empty()
+            );
 
             // run the handler
             handle_queued_invalidation_requests(
@@ -1265,14 +1287,16 @@ mod tests {
         )]);
         let client = Client::from_conf(get_mock_config(conn.clone()).await);
 
-        assert!(CdnBackend::get_cloudfront_invalidation_status(
-            &client,
-            "some_distribution",
-            "some_reference",
-        )
-        .await
-        .expect("error getting invalidation")
-        .is_none());
+        assert!(
+            CdnBackend::get_cloudfront_invalidation_status(
+                &client,
+                "some_distribution",
+                "some_reference",
+            )
+            .await
+            .expect("error getting invalidation")
+            .is_none()
+        );
     }
 
     #[tokio::test]

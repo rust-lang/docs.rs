@@ -1,11 +1,12 @@
 //! rustdoc handler
 
 use crate::{
+    AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
     db::Pool,
     storage::rustdoc_archive_path,
     utils,
     web::{
-        axum_cached_redirect, axum_parse_uri_with_params,
+        MetaData, ReqVersion, axum_cached_redirect, axum_parse_uri_with_params,
         cache::CachePolicy,
         crate_details::CrateDetails,
         csp::Csp,
@@ -15,14 +16,12 @@ use crate::{
         file::File,
         match_version,
         page::{
-            templates::{filters, RenderRegular, RenderSolid},
             TemplateData,
+            templates::{RenderRegular, RenderSolid, filters},
         },
-        MetaData, ReqVersion,
     },
-    AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
 };
-use anyhow::{anyhow, Context as _};
+use anyhow::{Context as _, anyhow};
 use axum::{
     extract::{Extension, Query},
     http::{StatusCode, Uri},
@@ -37,7 +36,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
-use tracing::{debug, error, info_span, instrument, trace, Instrument};
+use tracing::{Instrument, debug, error, info_span, instrument, trace};
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -296,12 +295,11 @@ impl RustdocPage {
             Err(RewritingError::MemoryLimitExceeded(..)) => {
                 metrics.html_rewrite_ooms.inc();
 
-                return Err(AxumNope::InternalError(
-                    anyhow!(
-                        "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
-                        file_path, config.max_parse_memory,
-                    )
-                ));
+                return Err(AxumNope::InternalError(anyhow!(
+                    "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
+                    file_path,
+                    config.max_parse_memory,
+                )));
             }
             result => result.context("error rewriting HTML")?,
         };
@@ -871,11 +869,11 @@ pub(crate) async fn static_asset_handler(
 #[cfg(test)]
 mod test {
     use crate::{
+        Config,
         registry_api::{CrateOwner, OwnerKind},
         test::*,
         utils::Dependency,
         web::{cache::CachePolicy, encode_url_path},
-        Config,
     };
     use anyhow::Context;
     use kuchikiki::traits::TendrilSink;
@@ -893,7 +891,10 @@ mod test {
         let response = web.get(path).await?;
         response.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, config);
         let data = response.text().await?;
-        info!("fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>", path, data);
+        info!(
+            "fetched path {} and got content {}\nhelp: if this is missing the header, remember to add <html><head></head><body></body></html>",
+            path, data
+        );
         let dom = kuchikiki::parse_html().one(data);
 
         if let Some(elem) = dom
@@ -1221,7 +1222,10 @@ mod test {
                 &env.config(),
             )
             .await?;
-            assert_eq!(redirect, "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html");
+            assert_eq!(
+                redirect,
+                "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/struct.will-be-deleted.html"
+            );
 
             Ok(())
         })
@@ -2317,7 +2321,8 @@ mod test {
                     "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
                     &env.web_app().await,
                     &env.config()
-                ).await?,
+                )
+                .await?,
                 "/crate/tungstenite/latest/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
             );
             Ok(())
@@ -2588,10 +2593,11 @@ mod test {
                     .text()
                     .await?,
             );
-            assert!(dom
-                .select(r#"a[href="/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#)
-                .expect("should have optional dependency")
-                .any(|el| { el.text_contents().contains("optional") }));
+            assert!(
+                dom.select(r#"a[href="/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#)
+                    .expect("should have optional dependency")
+                    .any(|el| { el.text_contents().contains("optional") })
+            );
             let dom = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
@@ -2600,12 +2606,13 @@ mod test {
                     .text()
                     .await?,
             );
-            assert!(dom
-                .select(
+            assert!(
+                dom.select(
                     r#"a[href="/crate/optional-dep/1.2.3"] > i[class="dependencies normal"] + i"#
                 )
                 .expect("should have optional dependency")
-                .any(|el| { el.text_contents().contains("optional") }));
+                .any(|el| { el.text_contents().contains("optional") })
+            );
             Ok(())
         })
     }
@@ -2684,22 +2691,24 @@ mod test {
 
             let web = env.web_app().await;
 
-            assert!(web
-                .get("/dummy/0.1.0/dummy/")
-                .await?
-                .headers()
-                .get("x-robots-tag")
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .contains("noindex"));
+            assert!(
+                web.get("/dummy/0.1.0/dummy/")
+                    .await?
+                    .headers()
+                    .get("x-robots-tag")
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .contains("noindex")
+            );
 
-            assert!(web
-                .get("/dummy/latest/dummy/")
-                .await?
-                .headers()
-                .get("x-robots-tag")
-                .is_none());
+            assert!(
+                web.get("/dummy/latest/dummy/")
+                    .await?
+                    .headers()
+                    .get("x-robots-tag")
+                    .is_none()
+            );
             Ok(())
         })
     }
