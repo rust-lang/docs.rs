@@ -18,6 +18,9 @@ ignore = [
     # But in all these places, the user content is part of the path of the URL.
     # Since URL length is limited by cloudfront, and also by nginx, to something much smaller than 4 GiB, I don't think this issue affects us.
 
+    "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
+    # https://github.com/rust-lang/docs.rs/issues/2595
+
     "RUSTSEC-2025-0007", # `ring` is unmaintained. Not much we can do about it.
     # https://github.com/rust-lang/docs.rs/issues/2741
 ]
