@@ -694,11 +694,6 @@ pub async fn queue_rebuilds(
                  c.name,
                  r.version,
                  (
-                    SELECT MAX(b.rustc_nightly_date)
-                    FROM builds AS b
-                    WHERE b.rid = r.id AND b.rustc_nightly_date IS NOT NULL
-                 ) AS rustc_nightly_date,
-                 (
                     SELECT MAX(COALESCE(b.build_finished, b.build_started))
                     FROM builds AS b
                     WHERE b.rid = r.id
@@ -709,12 +704,8 @@ pub async fn queue_rebuilds(
              WHERE
                  r.rustdoc_status = TRUE
          ) as i
-         WHERE i.rustc_nightly_date < $1
          ORDER BY i.last_build_attempt ASC
-         LIMIT $2",
-        config
-            .rebuild_up_to_date
-            .expect("config.rebuild_up_to_date not set"),
+         LIMIT $1",
         rebuilds_to_queue,
     )
     .fetch(&mut *conn);
@@ -741,46 +732,14 @@ mod tests {
     use crate::test::FakeBuild;
 
     use super::*;
-    use chrono::{NaiveDate, Utc};
+    use chrono::Utc;
     use std::time::Duration;
-
-    #[test]
-    fn test_dont_rebuild_when_new() {
-        crate::test::async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.max_queued_rebuilds = Some(100);
-                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
-            });
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.1.0")
-                .builds(vec![
-                    FakeBuild::default()
-                        .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
-                ])
-                .create()
-                .await?;
-
-            let build_queue = env.async_build_queue().await;
-            assert!(build_queue.queued_crates().await?.is_empty());
-
-            let mut conn = env.async_db().await.async_conn().await;
-            queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
-
-            assert!(build_queue.queued_crates().await?.is_empty());
-
-            Ok(())
-        })
-    }
 
     #[test]
     fn test_rebuild_when_old() {
         crate::test::async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.max_queued_rebuilds = Some(100);
-                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
             });
 
             env.fake_release()
@@ -815,7 +774,6 @@ mod tests {
         crate::test::async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.max_queued_rebuilds = Some(1);
-                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
             });
 
             let build_queue = env.async_build_queue().await;
@@ -858,7 +816,6 @@ mod tests {
         crate::test::async_wrapper(|env| async move {
             env.override_config(|config| {
                 config.max_queued_rebuilds = Some(1);
-                config.rebuild_up_to_date = Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
             });
 
             let build_queue = env.async_build_queue().await;

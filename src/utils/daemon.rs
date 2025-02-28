@@ -96,7 +96,7 @@ pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Err
     let config = context.config()?;
     let build_queue = runtime.block_on(context.async_build_queue())?;
 
-    if config.max_queued_rebuilds.is_none() || config.rebuild_up_to_date.is_none() {
+    if config.max_queued_rebuilds.is_none() {
         info!("rebuild config incomplete, skipping rebuild queueing");
         return Ok(());
     }
