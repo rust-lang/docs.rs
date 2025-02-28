@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.* FROM (\n             SELECT\n                 c.name,\n                 r.version,\n                 (\n                    SELECT MAX(COALESCE(b.build_finished, b.build_started))\n                    FROM builds AS b\n                    WHERE b.rid = r.id\n                 ) AS last_build_attempt\n             FROM crates AS c\n             INNER JOIN releases AS r ON c.latest_version_id = r.id\n\n             WHERE\n                 r.rustdoc_status = TRUE\n         ) as i\n         ORDER BY i.last_build_attempt ASC\n         LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_build_attempt",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "aee84ef8b568045ef4928498578911074a74b38084b93dbe62c23d9348b8e609"
+}
