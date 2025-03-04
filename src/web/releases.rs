@@ -319,7 +319,7 @@ impl ReleaseType {
         match self {
             Self::Recent => "recent",
             Self::Stars => "stars",
-            Self::RecentFailures => "recent_failures",
+            Self::RecentFailures => "recent-failures",
             Self::Failures => "failures",
             Self::Search => "search",
         }
