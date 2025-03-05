@@ -2182,4 +2182,69 @@ mod tests {
             Ok(())
         })
     }
+
+    #[test]
+    fn recent_failures_correct_pagination_links() {
+        async_wrapper(|env| async move {
+            for i in 0..RELEASES_IN_RELEASES + 1 {
+                env.fake_release()
+                    .await
+                    .name("failed")
+                    .version(&format!("0.0.{}", i))
+                    .build_result_failed()
+                    .create()
+                    .await?;
+            }
+
+            let web = env.web_app().await;
+
+            let response = web.get("/releases/recent-failures").await?;
+            assert!(response.status().is_success());
+
+            let page = kuchikiki::parse_html().one(response.text().await?);
+            assert_eq!(
+                page.select("div.description")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "Recent crates failed to build"
+            );
+
+            let next_page_link = page.select("div.pagination > a").unwrap().next().unwrap();
+            assert_eq!(next_page_link.text_contents().trim(), "Next Page");
+
+            let next_page_url = next_page_link
+                .attributes
+                .borrow()
+                .get("href")
+                .unwrap()
+                .to_owned();
+            assert_eq!(next_page_url, "/releases/recent-failures/2");
+
+            let response = web.get(&next_page_url).await?;
+            assert!(response.status().is_success());
+
+            let page = kuchikiki::parse_html().one(response.text().await?);
+            assert_eq!(
+                page.select("div.description")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents(),
+                "Recent crates failed to build"
+            );
+            assert_eq!(
+                page.select(".recent-releases-container > ul > li .name")
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .text_contents()
+                    .trim(),
+                "failed-0.0.0"
+            );
+
+            Ok(())
+        });
+    }
 }
