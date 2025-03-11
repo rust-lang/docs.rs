@@ -28,7 +28,6 @@ use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str;
 use std::sync::Arc;
-use tracing::warn;
 use url::form_urlencoded;
 
 use super::cache::CachePolicy;
@@ -534,6 +533,7 @@ pub(crate) async fn search_handler(
                 .into_response());
         }
 
+        // Capture query results into a BTreeMap data structure
         let mut queries = BTreeMap::new();
 
         let krate = match query.split_once("::") {
@@ -577,10 +577,9 @@ pub(crate) async fn search_handler(
     }
 
     let search_result = if let Some(paginate) = params.get("paginate") {
-        let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
-            warn!("error when decoding pagination base64 string \"{paginate}\": {e:?}");
-            AxumNope::NoResults
-        })?;
+        let decoded = b64
+            .decode(paginate.as_bytes())
+            .map_err(|_| AxumNope::NoResults)?;
         let query_params = String::from_utf8_lossy(&decoded);
         let query_params = query_params.strip_prefix('?').ok_or_else(|| {
             // sometimes we see plain bytes being passed to `paginate`.
@@ -589,7 +588,6 @@ pub(crate) async fn search_handler(
             // The whole point of the `paginate` design is that we don't
             // know anything about the pagination args and crates.io can
             // change them as they wish, so we cannot do any more checks here.
-            warn!("didn't get query args in `paginate` arguments for search: \"{query_params}\"");
             AxumNope::NoResults
         })?;
 
@@ -601,7 +599,9 @@ pub(crate) async fn search_handler(
             }
         }
 
-        get_search_results(&mut conn, &registry, query_params).await?
+        get_search_results(&mut conn, &registry, query_params)
+            .await
+            .map_err(|_| AxumNope::NoResults)?
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -609,7 +609,9 @@ pub(crate) async fn search_handler(
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(&mut conn, &registry, &query_params).await?
+        get_search_results(&mut conn, &registry, &query_params)
+            .await
+            .map_err(|_| AxumNope::NoResults)?
     } else {
         return Err(AxumNope::NoResults);
     };
