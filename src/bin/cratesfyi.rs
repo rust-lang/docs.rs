@@ -20,7 +20,6 @@ use docs_rs::{
     start_background_metrics_webserver, start_web_server,
 };
 use futures_util::StreamExt;
-use humantime::Duration;
 use once_cell::sync::OnceCell;
 use sentry::{
     TransactionContext, integrations::panic as sentry_panic,
@@ -712,7 +711,7 @@ enum LimitsSubcommand {
         #[arg(long)]
         targets: Option<usize>,
         #[arg(long)]
-        timeout: Option<Duration>,
+        timeout: Option<usize>,
     },
 
     /// Remove sandbox limits overrides for a crate
@@ -748,7 +747,8 @@ impl LimitsSubcommand {
                     let overrides = Overrides {
                         memory,
                         targets,
-                        timeout: timeout.map(Into::into),
+                        timeout: timeout
+                            .map(|timeout| std::time::Duration::from_secs(timeout as _)),
                     };
                     Overrides::save(&mut conn, &crate_name, overrides).await?;
                     let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
