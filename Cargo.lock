@@ -934,16 +934,6 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
-dependencies = [
- "bzip2-sys",
- "libc",
-]
-
-[[package]]
-name = "bzip2"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b89e7c29231c673a61a46e722602bcd138298f6b9e81e71119693534585f5c"
@@ -1678,7 +1668,7 @@ dependencies = [
  "axum-extra",
  "backtrace",
  "base64 0.22.1",
- "bzip2 0.5.1",
+ "bzip2",
  "chrono",
  "clap",
  "comrak",
@@ -8288,12 +8278,12 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "2.2.2"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae9c1ea7b3a5e1f4b922ff856a129881167511563dc219869afe3787fc0c1a45"
+checksum = "84e9a772a54b54236b9b744aaaf8d7be01b4d6e99725523cb82cb32d1c81b1d7"
 dependencies = [
  "arbitrary",
- "bzip2 0.4.4",
+ "bzip2",
  "crc32fast",
  "crossbeam-utils",
  "displaydoc",
