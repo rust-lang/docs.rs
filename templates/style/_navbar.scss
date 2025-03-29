@@ -99,13 +99,12 @@ div.nav-container {
     }
 
     form.landing-search-form-nav {
-        max-width: 1200px;
+        width: 100%;
         height: 100%;
         display: flex;
         flex-direction: row;
 
         #search-input-nav {
-            max-width: 150px;
             display: none;
             border-left: 1px solid var(--color-border);
             height: 100%;
@@ -127,12 +126,11 @@ div.nav-container {
 
             input, select {
                 border: none;
-                margin: 0 1em 0 0;
+                margin: 0;
                 font-size: 12.8px;
                 box-shadow: none;
                 background-color: var(--color-background);
                 height: 100%;
-                width: 50%;
             }
         }
 
@@ -268,13 +266,6 @@ div.nav-container {
 
         &.not-latest.yanked {
             $medium-width: 1191px;
-
-            // Because this message is very long, steal some additional space from the search input
-            #search-input-nav {
-                @media screen and (min-width: #{$medium-width}) {
-                    max-width: 150px;
-                }
-            }
 
             @include navbar-menu-labels($medium-width, $full-width, $show-full: false);
         }
