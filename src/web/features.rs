@@ -13,8 +13,8 @@ use crate::{
     },
 };
 use anyhow::anyhow;
+use askama::Template;
 use axum::response::IntoResponse;
-use rinja::Template;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 

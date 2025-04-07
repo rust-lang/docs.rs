@@ -18,6 +18,7 @@ use crate::{
     },
 };
 use anyhow::{Context, Result, anyhow};
+use askama::Template;
 use axum::{
     extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
@@ -25,7 +26,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use log::warn;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use serde_json::Value;

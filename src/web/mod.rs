@@ -10,8 +10,8 @@ use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use crate::web::page::templates::{RenderSolid, filters};
 use anyhow::{Context as _, Result, anyhow, bail};
+use askama::Template;
 use axum_extra::middleware::option_layer;
-use rinja::Template;
 use serde_json::Value;
 use tracing::{info, instrument};
 

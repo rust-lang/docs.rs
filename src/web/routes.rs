@@ -1,6 +1,7 @@
 use super::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
+use askama::Template;
 use axum::{
     Router as AxumRouter,
     extract::Request as AxumHttpRequest,
@@ -10,7 +11,6 @@ use axum::{
     routing::{MethodRouter, get, post},
 };
 use axum_extra::routing::RouterExt;
-use rinja::Template;
 use std::convert::Infallible;
 use tracing::{debug, instrument};
 

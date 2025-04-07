@@ -22,6 +22,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, anyhow};
+use askama::Template;
 use axum::{
     extract::{Extension, Query},
     http::{StatusCode, Uri},
@@ -29,7 +30,6 @@ use axum::{
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use std::{

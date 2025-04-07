@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Result, anyhow};
+use askama::Template;
 use axum::{
     extract::{Extension, Query},
     response::{IntoResponse, Response as AxumResponse},
@@ -22,7 +23,6 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
-use rinja::Template;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};

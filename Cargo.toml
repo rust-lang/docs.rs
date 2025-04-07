@@ -90,7 +90,7 @@ tempfile = "3.1.0"
 fn-error-context = "0.2.0"
 
 # Templating
-rinja = "0.3.4"
+askama = "0.13"
 walkdir = "2"
 
 # Date and Time utilities
