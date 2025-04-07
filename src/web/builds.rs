@@ -670,7 +670,7 @@ mod tests {
             dbg!(&values);
             assert!(values.contains(&"6.44 GB"));
             assert!(values.contains(&"2 hours"));
-            assert!(values.contains(&"102.40 kB"));
+            assert!(values.contains(&"102.4 kB"));
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
 
