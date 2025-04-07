@@ -15,10 +15,10 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Result};
+use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::headers::HeaderMapExt;
 use mime::Mime;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use std::{cmp::Ordering, sync::Arc};

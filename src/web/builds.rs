@@ -17,6 +17,7 @@ use crate::{
     },
 };
 use anyhow::{Result, anyhow};
+use askama::Template;
 use axum::{
     Json, extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse,
 };
@@ -27,7 +28,6 @@ use axum_extra::{
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
 use http::StatusCode;
-use rinja::Template;
 use semver::Version;
 use std::sync::Arc;
 

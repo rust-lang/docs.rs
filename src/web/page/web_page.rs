@@ -10,7 +10,7 @@ use http::header::CONTENT_LENGTH;
 use std::sync::Arc;
 
 pub(crate) trait AddCspNonce: IntoResponse {
-    fn render_with_csp_nonce(&mut self, csp_nonce: String) -> rinja::Result<String>;
+    fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String>;
 }
 
 #[macro_export]
@@ -25,7 +25,7 @@ macro_rules! impl_axum_webpage {
         $(,)?
     ) => {
         impl $crate::web::page::web_page::AddCspNonce for $page {
-            fn render_with_csp_nonce(&mut self, csp_nonce: String) -> rinja::Result<String> {
+            fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
                 self.csp_nonce = csp_nonce;
                 self.render()
             }

@@ -12,10 +12,10 @@ use crate::{
     },
 };
 use anyhow::Context as _;
+use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use std::sync::Arc;

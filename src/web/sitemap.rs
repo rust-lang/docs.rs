@@ -10,10 +10,10 @@ use crate::{
         page::templates::{RenderBrands, RenderSolid, filters},
     },
 };
+use askama::Template;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use chrono::{TimeZone, Utc};
 use futures_util::stream::TryStreamExt;
-use rinja::Template;
 use std::sync::Arc;
 
 /// sitemap index
