@@ -820,6 +820,10 @@ ul.pure-menu-list {
         border: 1px solid var(--color-border);
         display: none;
 
+        &:hover {
+            border-color: var(--color-standard);
+        }
+
         button {
             cursor: pointer;
         }
