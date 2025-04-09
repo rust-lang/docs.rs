@@ -758,7 +758,6 @@ pub(crate) struct AxumErrorPage {
     /// The error message, displayed as a description
     pub message: Cow<'static, str>,
     pub status: StatusCode,
-    pub csp_nonce: String,
 }
 
 impl_axum_webpage! {

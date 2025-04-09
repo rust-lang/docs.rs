@@ -89,7 +89,6 @@ struct FeaturesPage {
     default_features: HashSet<String>,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
-    csp_nonce: String,
 }
 
 impl FeaturesPage {
@@ -167,7 +166,6 @@ pub(crate) async fn build_features_handler(
         default_features,
         is_latest_url: req_version.is_latest(),
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
-        csp_nonce: String::new(),
     }
     .into_response())
 }

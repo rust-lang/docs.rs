@@ -293,16 +293,12 @@ pub(super) fn build_axum_routes() -> AxumRouter {
                 #[derive(Template)]
                 #[template(path = "storage-change-detection.html")]
                 #[derive(Debug, Clone)]
-                struct StorageChangeDetection {
-                    csp_nonce: String,
-                }
+                struct StorageChangeDetection;
                 crate::impl_axum_webpage!(
                     StorageChangeDetection,
                     cache_policy = |_| CachePolicy::ForeverInCdnAndBrowser,
                 );
-                StorageChangeDetection {
-                    csp_nonce: String::new(),
-                }
+                StorageChangeDetection
             }),
         )
         .route_with_tsr(

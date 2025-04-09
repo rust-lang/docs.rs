@@ -8,7 +8,7 @@
             ../templates/theme.js when rustdoc in the current window changes the
             theme
         -->
-        <script nonce="{{ csp_nonce }}" type="text/javascript">
+        <script nonce="{{ askama::get_value::<String>("csp_nonce").unwrap() }}" type="text/javascript">
             onstorage = function(ev) {
                 parent.postMessage({
                     storage: {
