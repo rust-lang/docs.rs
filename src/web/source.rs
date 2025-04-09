@@ -163,7 +163,6 @@ struct SourcePage {
     canonical_url: CanonicalUrl,
     is_file_too_large: bool,
     is_latest_url: bool,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -338,7 +337,6 @@ pub(crate) async fn source_browser_handler(
         canonical_url,
         is_file_too_large,
         is_latest_url: params.version.is_latest(),
-        csp_nonce: String::new(),
     }
     .into_response())
 }

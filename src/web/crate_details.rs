@@ -445,7 +445,6 @@ struct CrateDetailsPage {
     is_library: Option<bool>,
     last_successful_build: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
-    csp_nonce: String,
     source_size: Option<i64>,
     documentation_size: Option<i64>,
 }
@@ -545,7 +544,6 @@ pub(crate) async fn crate_details_handler(
         is_library,
         last_successful_build,
         rustdoc,
-        csp_nonce: String::new(),
         source_size,
         documentation_size,
     }
@@ -567,7 +565,6 @@ struct ReleaseList {
     crate_name: String,
     inner_path: String,
     target: String,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -649,7 +646,6 @@ pub(crate) async fn get_all_releases(
         target,
         inner_path,
         crate_name: params.name,
-        csp_nonce: String::new(),
     };
     Ok(res.into_response())
 }
@@ -677,7 +673,6 @@ struct PlatformList {
     inner_path: String,
     use_direct_platform_links: bool,
     current_target: String,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -748,7 +743,6 @@ pub(crate) async fn get_all_platforms_inner(
             inner_path: "".into(),
             use_direct_platform_links: is_crate_root,
             current_target: "".into(),
-            csp_nonce: String::new(),
         }
         .into_response());
     }
@@ -803,7 +797,6 @@ pub(crate) async fn get_all_platforms_inner(
         inner_path,
         use_direct_platform_links: is_crate_root,
         current_target,
-        csp_nonce: String::new(),
     }
     .into_response())
 }

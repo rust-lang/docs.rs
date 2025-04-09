@@ -148,7 +148,6 @@ impl IntoResponse for AxumNope {
                     title,
                     message,
                     status,
-                    csp_nonce: String::new(),
                 }
                 .into_response()
             }

@@ -49,7 +49,6 @@ struct BuildsPage {
     builds: Vec<Build>,
     limits: Limits,
     canonical_url: CanonicalUrl,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! { BuildsPage }
@@ -81,7 +80,6 @@ pub(crate) async fn build_list_handler(
         builds: get_builds(&mut conn, &name, &version).await?,
         limits: Limits::for_crate(&config, &mut conn, &name).await?,
         canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
-        csp_nonce: String::new(),
     }
     .into_response())
 }

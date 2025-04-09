@@ -22,7 +22,6 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapIndexXml {
     sitemaps: Vec<char>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -33,10 +32,7 @@ impl_axum_webpage! {
 pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     let sitemaps: Vec<char> = ('a'..='z').collect();
 
-    SitemapIndexXml {
-        sitemaps,
-        csp_nonce: String::new(),
-    }
+    SitemapIndexXml { sitemaps }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +48,6 @@ struct SitemapRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapXml {
     releases: Vec<SitemapRow>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -102,10 +97,7 @@ pub(crate) async fn sitemap_handler(
     .try_collect()
     .await?;
 
-    Ok(SitemapXml {
-        releases,
-        csp_nonce: String::new(),
-    })
+    Ok(SitemapXml { releases })
 }
 
 #[derive(Template)]
@@ -118,7 +110,6 @@ struct AboutBuilds {
     limits: Limits,
     /// Just for the template, since this isn't shared with AboutPage
     active_tab: &'static str,
-    csp_nonce: String,
 }
 
 impl_axum_webpage!(AboutBuilds);
@@ -131,7 +122,6 @@ pub(crate) async fn about_builds_handler(
         rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
         limits: Limits::new(&config),
         active_tab: "builds",
-        csp_nonce: String::new(),
     })
 }
 
@@ -141,7 +131,6 @@ macro_rules! about_page {
         #[template(path = $template)]
         struct $ty {
             active_tab: &'static str,
-            csp_nonce: String,
         }
 
         impl_axum_webpage! { $ty }
@@ -163,27 +152,22 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
     let response = match &subpage[..] {
         "about" | "index" => AboutPage {
             active_tab: "index",
-            csp_nonce: String::new(),
         }
         .into_response(),
         "badges" => AboutPageBadges {
             active_tab: "badges",
-            csp_nonce: String::new(),
         }
         .into_response(),
         "metadata" => AboutPageMetadata {
             active_tab: "metadata",
-            csp_nonce: String::new(),
         }
         .into_response(),
         "redirections" => AboutPageRedirection {
             active_tab: "redirections",
-            csp_nonce: String::new(),
         }
         .into_response(),
         "download" => AboutPageDownload {
             active_tab: "download",
-            csp_nonce: String::new(),
         }
         .into_response(),
         _ => {
@@ -193,7 +177,6 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
                 title: "The requested page does not exist",
                 message: msg.into(),
                 status: StatusCode::NOT_FOUND,
-                csp_nonce: String::new(),
             };
             page.into_response()
         }
