@@ -914,7 +914,6 @@ ul.pure-menu-list {
 
 #source-code-container {
     display: inline-flex;
-    overflow: scroll;
 }
 #line-numbers {
     text-align: right;
@@ -941,6 +940,5 @@ ul.pure-menu-list {
     }
 }
 #source-code {
-    overflow: scroll;
     width: 100%;
 }
