@@ -7,7 +7,7 @@ use crate::{
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
-        error::AxumNope,
+        error::{AxumNope, EscapedURI},
         extractors::Path,
         file::File as DbFile,
         headers::CanonicalUrl,
@@ -203,16 +203,22 @@ pub(crate) async fn source_browser_handler(
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
-                format!(
-                    "/crate/{corrected_name}/{req_version}/source/{}",
-                    params.path
+                EscapedURI::new(
+                    &format!(
+                        "/crate/{corrected_name}/{req_version}/source/{}",
+                        params.path
+                    ),
+                    None,
                 ),
                 CachePolicy::NoCaching,
             )
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{}/{version}/source/{}", params.name, params.path),
+                EscapedURI::new(
+                    &format!("/crate/{}/{version}/source/{}", params.name, params.path),
+                    None,
+                ),
                 CachePolicy::ForeverInCdn,
             )
         })?

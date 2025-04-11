@@ -1,7 +1,7 @@
 use super::{cache::CachePolicy, error::AxumNope};
 use crate::web::{
     ReqVersion,
-    error::AxumResult,
+    error::{AxumResult, EscapedURI},
     extractors::{DbConnection, Path},
     match_version,
 };
@@ -28,7 +28,7 @@ pub(crate) async fn status_handler(
             let version = matched_release
                 .into_canonical_req_version_or_else(|version| {
                     AxumNope::Redirect(
-                        format!("/crate/{name}/{version}/status.json"),
+                        EscapedURI::new(&format!("/crate/{name}/{version}/status.json"), None),
                         CachePolicy::NoCaching,
                     )
                 })?
