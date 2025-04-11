@@ -116,6 +116,13 @@ impl FeaturesPage {
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         true
     }
+
+    pub(crate) fn nb_enabled_default_features(&self) -> usize {
+        self.default_features
+            .iter()
+            .filter(|f| !f.starts_with("dep:") && *f != "default" && !f.contains('/'))
+            .count()
+    }
 }
 
 pub(crate) async fn build_features_handler(
@@ -231,6 +238,7 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 mod tests {
     use super::*;
     use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
 
     #[test]
@@ -458,6 +466,48 @@ mod tests {
             let web = env.web_app().await;
             let resp = web.get("/crate/foo/0,1,0/features").await?;
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        });
+    }
+
+    // This test ensures that the count of feature flags is correct, in particular the count of
+    // features enabled by default.
+    #[test]
+    fn test_features_count() {
+        async_wrapper(|env| async move {
+            let features = vec![
+                (
+                    "default".to_owned(),
+                    vec![
+                        "bla".to_owned(),
+                        "dep:what".to_owned(),
+                        "whatever/wut".to_owned(),
+                    ],
+                ),
+                ("bla".to_owned(), vec![]),
+                ("blob".to_owned(), vec![]),
+            ];
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .features(features.into_iter().collect::<HashMap<_, _>>())
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+
+            let page = kuchikiki::parse_html()
+                .one(web.get("/crate/foo/0.1.0/features").await?.text().await?);
+            let text = page.select_first("#main > p").unwrap().text_contents();
+            // It should only contain one feature enabled by default since the others are either
+            // enabling a dependency (`dep:what`) or enabling a feature from a dependency
+            // (`whatever/wut`).
+            assert_eq!(
+                text,
+                "This version has 3 feature flags, 1 of them enabled by default."
+            );
+
             Ok(())
         });
     }
