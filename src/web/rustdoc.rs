@@ -366,7 +366,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         // We cannot extract the fragment (`#`) with current `Uri` API so forced to do ugly
         // things like that...
         uri.path_and_query()
-            .and_then(|path_and_query| path_and_query.as_str().splitn(2, '?').nth(1))
+            .and_then(|path_and_query| path_and_query.as_str().split_once('?').map(|s| s.1))
     }
 
     // Convenience function to allow for easy redirection
@@ -379,7 +379,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         uri: &Uri,
     ) -> AxumResult<AxumResponse> {
         trace!("redirect");
-        let query = get_query_and_fragment(&uri);
+        let query = get_query_and_fragment(uri);
         Ok(axum_cached_redirect(
             EscapedURI::new(&format!("/{}/{}/{}", name, vers, path.join("/")), query).as_str(),
             cache_policy,
