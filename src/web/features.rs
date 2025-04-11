@@ -123,6 +123,17 @@ impl FeaturesPage {
             .filter(|f| !f.starts_with("dep:") && *f != "default" && !f.contains('/'))
             .count()
     }
+
+    pub(crate) fn nb_features(&self) -> usize {
+        let Some(features) = &self.sorted_features else {
+            return 0;
+        };
+        if features.iter().any(|f| f.name == "default") {
+            features.len() - 1
+        } else {
+            features.len()
+        }
+    }
 }
 
 pub(crate) async fn build_features_handler(
@@ -505,7 +516,7 @@ mod tests {
             // (`whatever/wut`).
             assert_eq!(
                 text,
-                "This version has 3 feature flags, 1 of them enabled by default."
+                "This version has 2 feature flags, 1 of them enabled by default."
             );
 
             Ok(())
