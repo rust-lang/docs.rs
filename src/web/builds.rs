@@ -10,7 +10,7 @@ use crate::{
     impl_axum_webpage,
     web::{
         MetaData, ReqVersion,
-        error::AxumResult,
+        error::{AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         filters, match_version,
         page::templates::{RenderRegular, RenderSolid},
@@ -69,7 +69,7 @@ pub(crate) async fn build_list_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{name}/{version}/builds"),
+                EscapedURI::new(&format!("/crate/{name}/{version}/builds"), None),
                 CachePolicy::ForeverInCdn,
             )
         })?
@@ -93,7 +93,7 @@ pub(crate) async fn build_list_json_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{name}/{version}/builds.json"),
+                EscapedURI::new(&format!("/crate/{name}/{version}/builds.json"), None),
                 CachePolicy::ForeverInCdn,
             )
         })?
