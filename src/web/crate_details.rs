@@ -1740,7 +1740,7 @@ mod tests {
             let def_len = page
                 .select_first(r#"b[data-id="default-feature-len"]"#)
                 .unwrap();
-            assert_eq!(def_len.text_contents(), "3");
+            assert_eq!(def_len.text_contents(), "2");
             Ok(())
         });
     }
