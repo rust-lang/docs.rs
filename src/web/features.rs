@@ -117,14 +117,14 @@ impl FeaturesPage {
         true
     }
 
-    pub(crate) fn nb_enabled_default_features(&self) -> usize {
+    pub(crate) fn enabled_default_features_count(&self) -> usize {
         self.default_features
             .iter()
             .filter(|f| !f.starts_with("dep:") && *f != "default" && !f.contains('/'))
             .count()
     }
 
-    pub(crate) fn nb_features(&self) -> usize {
+    pub(crate) fn features_count(&self) -> usize {
         let Some(features) = &self.sorted_features else {
             return 0;
         };
