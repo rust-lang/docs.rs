@@ -65,7 +65,7 @@
                     {%- if features.is_empty() -%}
                         <p data-id="empty-features">This release does not have any feature flags.</p>
                     {%- else -%}
-                        <p>This version has <b>{{ nb_features() }}</b> feature flags, <b data-id="default-feature-len">{{ nb_enabled_default_features() }}</b> of them enabled by <b>default</b>.</p>
+                        <p>This version has <b>{{ features_count() }}</b> feature flags, <b data-id="default-feature-len">{{ enabled_default_features_count() }}</b> of them enabled by <b>default</b>.</p>
                         {%- for feature in features -%}
                             {%- let is_default = feature.name != "default" && is_default_feature(feature.name) -%}
                             <h3 id="{{ feature.name }}">{{ feature.name }}{%- if is_default  %} (default){%- endif -%}</h3>
