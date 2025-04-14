@@ -253,7 +253,11 @@ pub(crate) async fn rustdoc_redirector_handler(
         .into_response())
     } else {
         Ok(axum_cached_redirect(
-            format!("/crate/{crate_name}/{}", matched_release.req_version),
+            EscapedURI::new(
+                &format!("/crate/{crate_name}/{}", matched_release.req_version),
+                uri.query(),
+            )
+            .as_str(),
             CachePolicy::ForeverInCdn,
         )?
         .into_response())
@@ -2982,5 +2986,27 @@ mod test {
 
             Ok(())
         })
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_redirect_with_query_args(archive_storage: bool) {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("fake")
+                .version("0.0.1")
+                .archive_storage(archive_storage)
+                .rustdoc_file("fake/index.html")
+                .binary(true) // binary => rustdoc_status = false
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            web.assert_redirect("/fake?a=b", "/crate/fake/latest?a=b")
+                .await?;
+
+            Ok(())
+        });
     }
 }
