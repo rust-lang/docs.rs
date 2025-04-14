@@ -253,7 +253,11 @@ pub(crate) async fn rustdoc_redirector_handler(
         .into_response())
     } else {
         Ok(axum_cached_redirect(
-            format!("/crate/{crate_name}/{}", matched_release.req_version),
+            EscapedURI::new(
+                &format!("/crate/{crate_name}/{}", matched_release.req_version),
+                uri.query(),
+            )
+            .as_str(),
             CachePolicy::ForeverInCdn,
         )?
         .into_response())
