@@ -26,7 +26,7 @@ macro_rules! impl_axum_webpage {
     ) => {
         impl $crate::web::page::web_page::AddCspNonce for $page {
             fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
-                let values: [(&str, &dyn std::any::Any); 1] = [("csp_nonce", &csp_nonce)];
+                let values: (&str, &dyn std::any::Any) = ("csp_nonce", &csp_nonce);
                 self.render_with_values(&values)
             }
         }
