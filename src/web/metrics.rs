@@ -194,7 +194,7 @@ mod tests {
             let metrics_serialized = metrics.gather(&env.async_pool().await?)?;
             let all_routes_visited = metrics_serialized
                 .iter()
-                .find(|x| x.get_name() == "docsrs_routes_visited")
+                .find(|x| x.name() == "docsrs_routes_visited")
                 .unwrap();
             let routes_visited_pretty: Vec<_> = all_routes_visited
                 .get_metric()
@@ -202,7 +202,7 @@ mod tests {
                 .map(|metric| {
                     let labels = metric.get_label();
                     assert_eq!(labels.len(), 1); // not sure when this would be false
-                    let route = labels[0].get_value();
+                    let route = labels[0].value();
                     let count = metric.get_counter().get_value();
                     format!("{route}: {count}")
                 })

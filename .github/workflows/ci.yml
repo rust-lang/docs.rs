@@ -27,6 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: update rust toolchain
+        run: |
+          rustup override set stable
+          rustup update stable
+
       - name: install `just`
         run: sudo snap install --edge --classic just
 
@@ -71,6 +76,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: update rust toolchain
+        run: |
+          rustup override set stable
+          rustup update stable
+
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -107,6 +117,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: update rust toolchain
+        run: |
+          rustup override set stable
+          rustup update stable
+
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -134,8 +149,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - id: install
-        run: rustup component add rustfmt
+      - name: update rust toolchain
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add rustfmt
 
       - run: cargo fmt -- --check
 
@@ -145,8 +163,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - id: install
-        run: rustup component add clippy
+
+      - name: update rust toolchain
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add clippy
 
       - name: install `just`
         run: sudo snap install --edge --classic just
