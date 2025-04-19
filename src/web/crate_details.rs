@@ -83,6 +83,7 @@ struct RepositoryMetadata {
 pub(crate) struct Release {
     pub id: ReleaseId,
     pub version: semver::Version,
+    #[allow(clippy::doc_overindented_list_items)]
     /// Aggregated build status of the release.
     /// * no builds -> build In progress
     /// * any build is successful -> Success
