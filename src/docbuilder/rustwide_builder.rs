@@ -1548,7 +1548,7 @@ mod tests {
     fn test_rustflags_are_passed_to_build_script() {
         wrapper(|env| {
             let crate_ = "proc-macro2";
-            let version = "1.0.33";
+            let version = "1.0.95";
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(
