@@ -17,7 +17,7 @@ exclude = [
 ]
 
 [dependencies]
-sentry = { version = "0.36.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+sentry = { version = "0.37.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
@@ -37,10 +37,10 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.36.0", default-features = false }
+comrak = { version = "0.38.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.8.0"
-prometheus = { version = "0.13.0", default-features = false }
+prometheus = { version = "0.14.0", default-features = false }
 rustwide = { version = "0.19.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
