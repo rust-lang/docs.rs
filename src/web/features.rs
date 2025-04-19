@@ -4,7 +4,7 @@ use crate::{
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
-        error::{AxumNope, AxumResult},
+        error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         filters,
         headers::CanonicalUrl,
@@ -145,7 +145,7 @@ pub(crate) async fn build_features_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{}/{}/features", &name, version),
+                EscapedURI::new(&format!("/crate/{}/{}/features", &name, version), None),
                 CachePolicy::ForeverInCdn,
             )
         })?

@@ -10,8 +10,7 @@ use crate::{
     web::{
         MatchedRelease, ReqVersion,
         cache::CachePolicy,
-        encode_url_path,
-        error::{AxumNope, AxumResult},
+        error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         page::templates::{RenderRegular, RenderSolid, filters},
         rustdoc::RustdocHtmlParams,
@@ -475,7 +474,10 @@ pub(crate) async fn crate_details_handler(
 ) -> AxumResult<AxumResponse> {
     let req_version = params.version.ok_or_else(|| {
         AxumNope::Redirect(
-            format!("/crate/{}/{}", &params.name, ReqVersion::Latest),
+            EscapedURI::new(
+                &format!("/crate/{}/{}", &params.name, ReqVersion::Latest),
+                None,
+            ),
             CachePolicy::ForeverInCdn,
         )
     })?;
@@ -485,7 +487,7 @@ pub(crate) async fn crate_details_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{}/{}", &params.name, version),
+                EscapedURI::new(&format!("/crate/{}/{}", &params.name, version), None),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -694,23 +696,29 @@ pub(crate) async fn get_all_platforms_inner(
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/platforms/{}/{}/{}",
-                    corrected_name,
-                    req_version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!(
+                        "/platforms/{}/{}/{}",
+                        corrected_name,
+                        req_version,
+                        req_path.join("/")
+                    ),
+                    None,
+                ),
                 CachePolicy::NoCaching,
             )
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/platforms/{}/{}/{}",
-                    &params.name,
-                    version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!(
+                        "/platforms/{}/{}/{}",
+                        &params.name,
+                        version,
+                        req_path.join("/")
+                    ),
+                    None,
+                ),
                 CachePolicy::ForeverInCdn,
             )
         })?;
