@@ -19,9 +19,11 @@ services:
             - "/var/run/docker.sock:/var/run/docker.sock"
             - ".rustwide-docker:/opt/docsrs/rustwide"
             - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+            - "./ignored/cratesfyi-prefix/metrics:/opt/docsrs/prefix/metrics"
             - "./static:/opt/docsrs/static:ro"
         environment:
             DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+            DOCSRS_COMPILER_METRICS_PATH: /opt/docsrs/prefix/metrics
             DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
             DOCSRS_STORAGE_BACKEND: s3
             S3_ENDPOINT: http://s3:9000

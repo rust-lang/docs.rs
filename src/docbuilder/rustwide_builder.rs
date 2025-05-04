@@ -862,6 +862,18 @@ impl RustwideBuilder {
             })
         };
 
+        if let Some(compiler_metric_target_dir) = &self.config.compiler_metrics_collection_path {
+            let metric_output = build.host_target_dir().join("metrics/");
+            info!(
+                "found {} files in metric dir, copy over to {} (exists: {})",
+                fs::read_dir(&metric_output)?.count(),
+                &compiler_metric_target_dir.to_string_lossy(),
+                &compiler_metric_target_dir.exists(),
+            );
+            copy_dir_all(&metric_output, compiler_metric_target_dir)?;
+            fs::remove_dir_all(&metric_output)?;
+        }
+
         // For proc-macros, cargo will put the output in `target/doc`.
         // Move it to the target-specific directory for consistency with other builds.
         // NOTE: don't rename this if the build failed, because `target/doc` won't exist.
@@ -945,7 +957,7 @@ impl RustwideBuilder {
         ];
 
         rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
-        let cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
+        let mut cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
 
         // If the explicit target is not a tier one target, we need to install it.
         let has_build_std = cargo_args.windows(2).any(|args| {
@@ -964,6 +976,21 @@ impl RustwideBuilder {
 
         for (key, val) in metadata.environment_variables() {
             command = command.env(key, val);
+        }
+
+        if self.config.compiler_metrics_collection_path.is_some() {
+            // set the `./target/metrics/` directory inside the build container
+            // as a target directory for the metric files.
+            let flag = "-Zmetrics-dir=/opt/rustwide/target/metrics";
+
+            // this is how we can reach it from outside the container.
+            fs::create_dir_all(build.host_target_dir().join("metrics/"))?;
+
+            let rustflags = toml::Value::try_from(vec![flag])
+                .expect("serializing a string should never fail")
+                .to_string();
+            cargo_args.push("--config".into());
+            cargo_args.push(format!("build.rustflags={rustflags}"));
         }
 
         Ok(command.args(&cargo_args))
