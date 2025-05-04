@@ -29,6 +29,7 @@ pub(crate) struct QueuedCrate {
     pub(crate) version: String,
     pub(crate) priority: i32,
     pub(crate) registry: Option<String>,
+    pub(crate) attempt: i32,
 }
 
 #[derive(Debug)]
@@ -165,7 +166,7 @@ impl AsyncBuildQueue {
 
         Ok(sqlx::query_as!(
             QueuedCrate,
-            "SELECT id, name, version, priority, registry
+            "SELECT id, name, version, priority, registry, attempt
                  FROM queue
                  WHERE attempt < $1
                  ORDER BY priority ASC, attempt ASC, id ASC",
@@ -495,7 +496,7 @@ impl BuildQueue {
         let to_process = match self.runtime.block_on(
             sqlx::query_as!(
                 QueuedCrate,
-                "SELECT id, name, version, priority, registry
+                "SELECT id, name, version, priority, registry, attempt
                  FROM queue
                  WHERE
                     attempt < $1 AND
@@ -646,7 +647,7 @@ impl BuildQueue {
                 return Err(err);
             }
 
-            builder.build_package(&krate.name, &krate.version, kind)
+            builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
         })?;
 
         Ok(processed)
