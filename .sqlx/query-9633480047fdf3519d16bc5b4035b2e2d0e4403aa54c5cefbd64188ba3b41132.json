@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, version, priority, registry\n                 FROM queue\n                 WHERE attempt < $1\n                 ORDER BY priority ASC, attempt ASC, id ASC",
+  "query": "SELECT id, name, version, priority, registry, attempt\n                 FROM queue\n                 WHERE attempt < $1\n                 ORDER BY priority ASC, attempt ASC, id ASC",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "registry",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "attempt",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -39,8 +44,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "ebb47544b1090567139f3bdf2c22993c3a3aaef41c6520095a2c3bfaf6035da6"
+  "hash": "9633480047fdf3519d16bc5b4035b2e2d0e4403aa54c5cefbd64188ba3b41132"
 }

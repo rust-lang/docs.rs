@@ -469,6 +469,7 @@ impl BuildSubcommand {
                                 .as_ref()
                                 .map(|s| PackageKind::Registry(s.as_str()))
                                 .unwrap_or(PackageKind::CratesIo),
+                            true,
                         )
                         .context("Building documentation failed")?;
                 }
