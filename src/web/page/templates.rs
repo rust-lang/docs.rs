@@ -88,12 +88,13 @@ impl TemplateData {
 }
 
 pub mod filters {
+    use askama::Values;
     use askama::filters::Safe;
     use chrono::{DateTime, Utc};
     use std::borrow::Cow;
 
     // Copied from `tera`.
-    pub fn escape_html(input: &str) -> askama::Result<Cow<'_, str>> {
+    pub fn escape_html<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -115,7 +116,7 @@ pub mod filters {
     }
 
     // Copied from `tera`.
-    pub fn escape_xml(input: &str) -> askama::Result<Cow<'_, str>> {
+    pub fn escape_xml<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
         if !input.chars().any(|c| "&<>\"'".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -135,11 +136,11 @@ pub mod filters {
 
     /// Prettily format a timestamp
     // TODO: This can be replaced by chrono
-    pub fn timeformat(value: &DateTime<Utc>) -> askama::Result<String> {
+    pub fn timeformat(value: &DateTime<Utc>, _: &dyn Values) -> askama::Result<String> {
         Ok(crate::web::duration_to_str(*value))
     }
 
-    pub fn format_secs(mut value: f32) -> askama::Result<String> {
+    pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
         const TIMES: &[&str] = &["seconds", "minutes", "hours"];
 
         let mut chosen_time = &TIMES[0];
@@ -166,6 +167,7 @@ pub mod filters {
     #[allow(clippy::unnecessary_wraps)]
     pub fn dedent<T: std::fmt::Display, I: Into<Option<i32>>>(
         value: T,
+        _: &dyn Values,
         levels: I,
     ) -> askama::Result<String> {
         let string = value.to_string();
@@ -200,7 +202,11 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn highlight(code: impl std::fmt::Display, lang: &str) -> askama::Result<Safe<String>> {
+    pub fn highlight(
+        code: impl std::fmt::Display,
+        _: &dyn Values,
+        lang: &str,
+    ) -> askama::Result<Safe<String>> {
         let highlighted_code =
             crate::web::highlight::with_lang(Some(lang), &code.to_string(), None);
         Ok(Safe(format!(
@@ -209,7 +215,7 @@ pub mod filters {
         )))
     }
 
-    pub fn round(value: &f32, precision: u32) -> askama::Result<String> {
+    pub fn round(value: &f32, _: &dyn Values, precision: u32) -> askama::Result<String> {
         let multiplier = if precision == 0 {
             1.0
         } else {
@@ -218,11 +224,18 @@ pub mod filters {
         Ok(((multiplier * *value).round() / multiplier).to_string())
     }
 
-    pub fn split_first<'a>(value: &'a str, pat: &str) -> askama::Result<Option<&'a str>> {
+    pub fn split_first<'a>(
+        value: &'a str,
+        _: &dyn Values,
+        pat: &str,
+    ) -> askama::Result<Option<&'a str>> {
         Ok(value.split(pat).next())
     }
 
-    pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> askama::Result<Safe<String>> {
+    pub fn json_encode<T: ?Sized + serde::Serialize>(
+        value: &T,
+        _: &dyn Values,
+    ) -> askama::Result<Safe<String>> {
         Ok(Safe(
             serde_json::to_string(value).expect("`encode_json` failed"),
         ))
