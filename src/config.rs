@@ -78,6 +78,10 @@ pub struct Config {
     // for the remote archives?
     pub(crate) local_archive_cache_path: PathBuf,
 
+    // Where to collect metrics for the metrics initiative.
+    // When empty, we won't collect metrics.
+    pub(crate) compiler_metrics_collection_path: Option<PathBuf>,
+
     // Content Security Policy
     pub(crate) csp_report_only: bool,
 
@@ -225,6 +229,8 @@ impl Config {
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
             )?,
+
+            compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
 
             temp_dir,
 
