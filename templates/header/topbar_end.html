@@ -6,9 +6,9 @@
 
                 <ul class="pure-menu-list">
                     {#
-                    The Rust dropdown menu
+                    The docs.rs dropdown menu
                     #}<li class="pure-menu-item pure-menu-has-children">
-                        <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
+                        <a href="#" class="pure-menu-link" aria-label="docs.rs">docs.rs</a>
                         <ul class="pure-menu-children">
                             {% call macros::menu_link(
                                 href="/about",
@@ -20,6 +20,14 @@
                                 text="Privacy policy",
                                 target="_blank"
                             ) %}
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="pure-menu-list">{#
+                    The Rust dropdown menu
+                    #}<li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
+                        <ul class="pure-menu-children">
                             {% call macros::menu_link(
                                 href="https://www.rust-lang.org/",
                                 text="Rust website",
