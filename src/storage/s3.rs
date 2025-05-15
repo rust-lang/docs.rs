@@ -52,7 +52,7 @@ where
             Ok(result) => Ok(result),
             Err(err) => {
                 if let Some(err_code) = err.code() {
-                    if NOT_FOUND_ERROR_CODES.iter().any(|&code| err_code == code) {
+                    if NOT_FOUND_ERROR_CODES.contains(&err_code) {
                         return Err(super::PathNotFoundError.into());
                     }
                 }

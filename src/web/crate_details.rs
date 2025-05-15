@@ -1993,8 +1993,7 @@ mod tests {
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();
-                    let url = attributes.get("href").expect("href").to_string();
-                    url
+                    attributes.get("href").expect("href").to_string()
                 })
                 .collect();
 
