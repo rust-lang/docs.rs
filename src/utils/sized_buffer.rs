@@ -1,4 +1,4 @@
-use std::io::{Error as IoError, ErrorKind, Write};
+use std::io::{Error as IoError, Write};
 
 pub(crate) struct SizedBuffer {
     inner: Vec<u8>,
@@ -29,10 +29,7 @@ impl SizedBuffer {
 impl Write for SizedBuffer {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         if self.inner.len() + buf.len() > self.limit {
-            Err(IoError::new(
-                ErrorKind::Other,
-                crate::error::SizeLimitReached,
-            ))
+            Err(IoError::other(crate::error::SizeLimitReached))
         } else {
             self.inner.write(buf)
         }
