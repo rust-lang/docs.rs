@@ -38,4 +38,5 @@ SERVER_PID=$!
 # status="docker run . -v `pwd`:/build/out:ro gui_tests"
 docker compose run gui_tests
 status=$?
+kill $SERVER_PID
 exit $status
