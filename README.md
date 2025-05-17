@@ -115,6 +115,18 @@ To run GUI tests:
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
 can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
 
+Alternatively, you can start the web server and run the test manually:
+
+```
+node gui-tests/tester.js
+```
+
+For this to work, you need to install the `browser-ui-test` package:
+
+```
+npm install browser-ui-test
+```
+
 ### Pure docker-compose
 
 If you have trouble with the above commands, consider using `docker-compose up --build`,
