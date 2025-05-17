@@ -134,7 +134,13 @@ This will not cache dependencies - in particular, you'll have to rebuild all 400
 but makes sure that you're in a known environment so you should have fewer problems getting started.
 
 You'll need to `touch .docker.env` first, this file can have any environment
-variable overrides you want to use in docker containers.
+variable overrides you want to use in docker containers. Then run the migrations
+before launching the main services:
+
+```sh
+docker compose run --build --rm cli database migrate
+docker compose up --build -d
+```
 
 You can also use the `builder-a` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
 
@@ -154,14 +160,24 @@ docker compose run --rm cli database migrate
 docker compose run --rm cli queue add regex 1.3.1
 ```
 
-If the command needs the crates.io-index clone then it must be run from within
-a `registry-watcher` container:
+If you want to run the registry watcher, you'll need to first set the "last seen
+reference" from the registry index, e.g. to set it to the current head so only
+newly published crates are built:
 
 ```sh
-docker compose run --rm registry-watcher queue set-last-seen-reference --head
+docker compose run --rm cli queue set-last-seen-reference --head
+```
+
+Then enable the docker-compose profile that includes the watcher:
+
+```sh
+docker compose --profile watch up --build -d
 ```
 
 Note that running tests is not supported when using pure docker-compose.
+
+Some of the above commands are included in the `Justfile` for ease of use,
+check the `[compose]` group in `just --list`.
 
 Please file bugs for any trouble you have running docs.rs!
 
