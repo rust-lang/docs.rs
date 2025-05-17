@@ -14,5 +14,5 @@ sqlx-check:
 lint: 
   cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
 
-lint-js:
-  deno run -A npm:eslint@9 static templates gui-tests eslint.config.js
+lint-js *args:
+  deno run -A npm:eslint@9 static templates gui-tests eslint.config.js {{ args }}
