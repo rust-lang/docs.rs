@@ -11,7 +11,7 @@ use super::{CrateId, update_latest_version_id};
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
-static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
+static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "rustdoc-json", "sources"];
 static OTHER_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
 
 #[derive(Debug, thiserror::Error)]
@@ -222,6 +222,7 @@ mod tests {
     use super::*;
     use crate::db::ReleaseId;
     use crate::registry_api::{CrateOwner, OwnerKind};
+    use crate::storage::rustdoc_json_path;
     use crate::test::{async_wrapper, fake_release_that_failed_before_build};
     use test_case::test_case;
 
@@ -405,6 +406,17 @@ mod tests {
                 .collect())
             }
 
+            async fn json_exists(storage: &AsyncStorage, version: &str) -> Result<bool> {
+                storage
+                    .exists(&rustdoc_json_path(
+                        "a",
+                        version,
+                        "x86_64-unknown-linux-gnu",
+                        crate::storage::RustdocJsonFormatVersion::Latest,
+                    ))
+                    .await
+            }
+
             let mut conn = env.async_db().await.async_conn().await;
             let v1 = env
                 .fake_release()
@@ -426,6 +438,7 @@ mod tests {
                     .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
+            assert!(json_exists(&*env.async_storage().await, "1.0.0").await?);
             let crate_id = sqlx::query_scalar!(
                 r#"SELECT crate_id as "crate_id: CrateId" FROM releases WHERE id = $1"#,
                 v1.0
@@ -457,6 +470,7 @@ mod tests {
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
+            assert!(json_exists(&*env.async_storage().await, "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]
@@ -494,6 +508,8 @@ mod tests {
                         .await?
                 );
             }
+            assert!(!json_exists(&*env.async_storage().await, "1.0.0").await?);
+
             assert!(release_exists(&mut conn, v2).await?);
             assert!(
                 env.async_storage()
@@ -501,6 +517,7 @@ mod tests {
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
+            assert!(json_exists(&*env.async_storage().await, "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]

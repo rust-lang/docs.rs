@@ -12,7 +12,10 @@ use crate::db::{
 use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
-use crate::storage::{rustdoc_archive_path, source_archive_path};
+use crate::storage::{
+    CompressionAlgorithm, RustdocJsonFormatVersion, compress, rustdoc_archive_path,
+    rustdoc_json_path, source_archive_path,
+};
 use crate::utils::{
     CargoMetadata, ConfigName, copy_dir_all, get_config, parse_rustc_version, report_error,
     set_config,
@@ -26,18 +29,38 @@ use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
 use rustwide::toolchain::ToolchainError;
 use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::fs::{self, File};
+use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::runtime::Runtime;
-use tracing::{debug, info, info_span, instrument, warn};
+use tracing::{debug, error, info, info_span, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
+
+/// read the format version from a rustdoc JSON file.
+fn read_format_version_from_rustdoc_json(
+    reader: impl std::io::Read,
+) -> Result<RustdocJsonFormatVersion> {
+    let reader = BufReader::new(reader);
+
+    #[derive(Deserialize)]
+    struct RustdocJson {
+        format_version: u16,
+    }
+
+    let rustdoc_json: RustdocJson = serde_json::from_reader(reader)?;
+
+    Ok(RustdocJsonFormatVersion::Version(
+        rustdoc_json.format_version,
+    ))
+}
 
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
     let name: String = get_config(conn, ConfigName::Toolchain)
@@ -303,8 +326,18 @@ impl RustwideBuilder {
             .run(|build| {
                 let metadata = Metadata::from_crate_root(build.host_source_dir())?;
 
-                let res =
-                    self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true, false)?;
+                let res = self.execute_build(
+                    BuildId(0),
+                    DUMMY_CRATE_NAME,
+                    DUMMY_CRATE_VERSION,
+                    HOST_TARGET,
+                    true,
+                    build,
+                    &limits,
+                    &metadata,
+                    true,
+                    false,
+                )?;
                 if !res.result.successful {
                     bail!("failed to build dummy crate for {}", rustc_version);
                 }
@@ -518,12 +551,13 @@ impl RustwideBuilder {
                     build.fetch_build_std_dependencies(&targets)?;
                 }
 
+
                 let mut has_docs = false;
                 let mut successful_targets = Vec::new();
 
                 // Perform an initial build
                 let mut res =
-                    self.execute_build(default_target, true, build, &limits, &metadata, false, collect_metrics)?;
+                    self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
 
                 // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                 let cargo_lock = build.host_source_dir().join("Cargo.lock");
@@ -545,7 +579,7 @@ impl RustwideBuilder {
                             .run_capture()?;
                     }
                     res =
-                        self.execute_build(default_target, true, build, &limits, &metadata, false, collect_metrics)?;
+                        self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
                 if res.result.successful {
@@ -576,6 +610,9 @@ impl RustwideBuilder {
                     for target in other_targets.into_iter().take(limits.targets()) {
                         debug!("building package {} {} for {}", name, version, target);
                         let target_res = self.build_target(
+                            build_id,
+                            name,
+                            version,
                             target,
                             build,
                             &limits,
@@ -751,6 +788,9 @@ impl RustwideBuilder {
     #[allow(clippy::too_many_arguments)]
     fn build_target(
         &self,
+        build_id: BuildId,
+        name: &str,
+        version: &str,
         target: &str,
         build: &Build,
         limits: &Limits,
@@ -760,6 +800,9 @@ impl RustwideBuilder {
         collect_metrics: bool,
     ) -> Result<FullBuildResult> {
         let target_res = self.execute_build(
+            build_id,
+            name,
+            version,
             target,
             false,
             build,
@@ -779,6 +822,102 @@ impl RustwideBuilder {
             }
         }
         Ok(target_res)
+    }
+
+    /// Run the build with rustdoc JSON output for a specific target and directly upload the
+    /// build log & the JSON files.
+    ///
+    /// The method only returns an `Err` for internal errors that should be retryable.
+    /// For all build errors we would just upload the log file and still return `Ok(())`.
+    #[instrument(skip(self, build))]
+    #[allow(clippy::too_many_arguments)]
+    fn execute_json_build(
+        &self,
+        build_id: BuildId,
+        name: &str,
+        version: &str,
+        target: &str,
+        is_default_target: bool,
+        build: &Build,
+        metadata: &Metadata,
+        limits: &Limits,
+    ) -> Result<()> {
+        let rustdoc_flags = vec!["--output-format".to_string(), "json".to_string()];
+
+        let mut storage = LogStorage::new(log::LevelFilter::Info);
+        storage.set_max_size(limits.max_log_size());
+
+        let successful = logging::capture(&storage, || {
+            let _span = info_span!("cargo_build_json", target = %target).entered();
+            self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)
+                .and_then(|command| command.run().map_err(Error::from))
+                .is_ok()
+        });
+
+        {
+            let _span = info_span!("store_json_build_logs").entered();
+            let build_log_path = format!("build-logs/{build_id}/{target}_json.txt");
+            self.storage
+                .store_one(build_log_path, storage.to_string())
+                .context("storing build log on S3")?;
+        }
+
+        if !successful {
+            // this is a normal build error and will be visible in the uploaded build logs.
+            // We don't need the Err variant here.
+            return Ok(());
+        }
+
+        let json_dir = if metadata.proc_macro {
+            assert!(
+                is_default_target && target == HOST_TARGET,
+                "can't handle cross-compiling macros"
+            );
+            build.host_target_dir().join("doc")
+        } else {
+            build.host_target_dir().join(target).join("doc")
+        };
+
+        let json_filename = fs::read_dir(&json_dir)?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_file() && path.extension()? == "json" {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .next()
+            .ok_or_else(|| {
+                anyhow!("no JSON file found in target/doc after successful rustdoc json build")
+            })?;
+
+        let format_version = {
+            let _span = info_span!("read_format_version").entered();
+            read_format_version_from_rustdoc_json(&File::open(&json_filename)?)
+                .context("couldn't parse rustdoc json to find format version")?
+        };
+
+        let compressed_json: Vec<u8> = {
+            let _span =
+                info_span!("compress_json", file_size = json_filename.metadata()?.len()).entered();
+
+            compress(
+                BufReader::new(File::open(&json_filename)?),
+                CompressionAlgorithm::Zstd,
+            )?
+        };
+
+        for format_version in [format_version, RustdocJsonFormatVersion::Latest] {
+            let _span = info_span!("store_json", %format_version).entered();
+            self.storage.store_one(
+                rustdoc_json_path(name, version, target, format_version),
+                compressed_json.clone(),
+            )?;
+        }
+
+        Ok(())
     }
 
     #[instrument(skip(self, build))]
@@ -841,6 +980,9 @@ impl RustwideBuilder {
     #[allow(clippy::too_many_arguments)]
     fn execute_build(
         &self,
+        build_id: BuildId,
+        name: &str,
+        version: &str,
         target: &str,
         is_default_target: bool,
         build: &Build,
@@ -882,6 +1024,26 @@ impl RustwideBuilder {
                 None
             }
         };
+
+        if let Err(err) = self.execute_json_build(
+            build_id,
+            name,
+            version,
+            target,
+            is_default_target,
+            build,
+            metadata,
+            limits,
+        ) {
+            // FIXME: this is temporary. Theoretically all `Err` things coming out
+            // of the method should be retryable, so we could juse use `?` here.
+            // But since this is new, I want to be carful and first see what kind of
+            // errors we are seeing here.
+            error!(
+                ?err,
+                "internal error when trying to generate rustdoc JSON output"
+            );
+        }
 
         let successful = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
@@ -1114,13 +1276,12 @@ impl Default for BuildPackageSummary {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
-
     use super::*;
     use crate::db::types::Feature;
     use crate::registry_api::ReleaseData;
     use crate::storage::CompressionAlgorithm;
     use crate::test::{AxumRouterTestExt, TestEnvironment, wrapper};
+    use std::{io, iter};
 
     fn get_features(
         env: &TestEnvironment,
@@ -1305,6 +1466,31 @@ mod tests {
 
                 // other targets too
                 for target in DEFAULT_TARGETS {
+                    // check if rustdoc json files exist for all targets
+                    assert!(storage.exists(&rustdoc_json_path(
+                        crate_,
+                        version,
+                        target,
+                        RustdocJsonFormatVersion::Latest
+                    ))?);
+
+                    let json_prefix = format!("rustdoc-json/{crate_}/{version}/{target}/");
+                    let mut json_files: Vec<_> = storage
+                        .list_prefix(&json_prefix)
+                        .filter_map(|res| res.ok())
+                        .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
+                        .collect();
+                    json_files.sort();
+                    dbg!(&json_prefix);
+                    dbg!(&json_files);
+                    assert_eq!(
+                        json_files,
+                        vec![
+                            format!("empty-library_1.0.0_{target}_45.json.zst"),
+                            format!("empty-library_1.0.0_{target}_latest.json.zst"),
+                        ]
+                    );
+
                     if target == &default_target {
                         continue;
                     }
@@ -1875,5 +2061,20 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn test_read_format_version_from_rustdoc_json() -> Result<()> {
+        let buf = serde_json::to_vec(&serde_json::json!({
+            "something": "else",
+            "format_version": 42
+        }))?;
+
+        assert_eq!(
+            read_format_version_from_rustdoc_json(&mut io::Cursor::new(buf))?,
+            RustdocJsonFormatVersion::Version(42)
+        );
+
+        Ok(())
     }
 }
