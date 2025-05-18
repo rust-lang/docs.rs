@@ -9,7 +9,8 @@ use crate::docbuilder::DocCoverage;
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{
-    AsyncStorage, CompressionAlgorithm, rustdoc_archive_path, source_archive_path,
+    AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, rustdoc_archive_path,
+    rustdoc_json_path, source_archive_path,
 };
 use crate::utils::{Dependency, MetadataPackage, Target};
 use anyhow::{Context, bail};
@@ -512,10 +513,38 @@ impl<'a> FakeRelease<'a> {
         }
         store_files_into(&self.source_files, crate_dir)?;
 
+        let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
+
+        {
+            let mut targets = self.doc_targets.clone();
+            if !targets.contains(&default_target.to_owned()) {
+                targets.push(default_target.to_owned());
+            }
+            for target in &targets {
+                for format_version in [
+                    RustdocJsonFormatVersion::Version(42),
+                    RustdocJsonFormatVersion::Latest,
+                ] {
+                    storage
+                        .store_one(
+                            &rustdoc_json_path(
+                                &package.name,
+                                &package.version,
+                                target,
+                                format_version,
+                            ),
+                            serde_json::to_vec(&serde_json::json!({
+                                "format_version": 42
+                            }))?,
+                        )
+                        .await?;
+                }
+            }
+        }
+
         // Many tests rely on the default-target being linux, so it should not
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
         // non-linux platforms.
-        let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
         let mut async_conn = db.async_conn().await;
         let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
         let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;

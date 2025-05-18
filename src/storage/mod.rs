@@ -815,6 +815,25 @@ pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
     format!("rustdoc/{name}/{version}.zip")
 }
 
+#[derive(strum::Display, Debug, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub(crate) enum RustdocJsonFormatVersion {
+    #[strum(serialize = "{0}")]
+    Version(u16),
+    Latest,
+}
+
+pub(crate) fn rustdoc_json_path(
+    name: &str,
+    version: &str,
+    target: &str,
+    format_version: RustdocJsonFormatVersion,
+) -> String {
+    format!(
+        "rustdoc-json/{name}/{version}/{target}/{name}_{version}_{target}_{format_version}.json.zst"
+    )
+}
+
 pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
     format!("sources/{name}/{version}.zip")
 }
