@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::web::rustdoc::RustdocPage;
 use anyhow::Context;
-use rinja::Template;
+use askama::Template;
 use std::sync::Arc;
 use tracing::trace;
 
@@ -88,12 +88,13 @@ impl TemplateData {
 }
 
 pub mod filters {
+    use askama::Values;
+    use askama::filters::Safe;
     use chrono::{DateTime, Utc};
-    use rinja::filters::Safe;
     use std::borrow::Cow;
 
     // Copied from `tera`.
-    pub fn escape_html(input: &str) -> rinja::Result<Cow<'_, str>> {
+    pub fn escape_html<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -115,7 +116,7 @@ pub mod filters {
     }
 
     // Copied from `tera`.
-    pub fn escape_xml(input: &str) -> rinja::Result<Cow<'_, str>> {
+    pub fn escape_xml<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
         if !input.chars().any(|c| "&<>\"'".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -135,11 +136,11 @@ pub mod filters {
 
     /// Prettily format a timestamp
     // TODO: This can be replaced by chrono
-    pub fn timeformat(value: &DateTime<Utc>) -> rinja::Result<String> {
+    pub fn timeformat(value: &DateTime<Utc>, _: &dyn Values) -> askama::Result<String> {
         Ok(crate::web::duration_to_str(*value))
     }
 
-    pub fn format_secs(mut value: f32) -> rinja::Result<String> {
+    pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
         const TIMES: &[&str] = &["seconds", "minutes", "hours"];
 
         let mut chosen_time = &TIMES[0];
@@ -166,8 +167,9 @@ pub mod filters {
     #[allow(clippy::unnecessary_wraps)]
     pub fn dedent<T: std::fmt::Display, I: Into<Option<i32>>>(
         value: T,
+        _: &dyn Values,
         levels: I,
-    ) -> rinja::Result<String> {
+    ) -> askama::Result<String> {
         let string = value.to_string();
 
         let unindented = if let Some(levels) = levels.into() {
@@ -200,7 +202,11 @@ pub mod filters {
         Ok(unindented)
     }
 
-    pub fn highlight(code: impl std::fmt::Display, lang: &str) -> rinja::Result<Safe<String>> {
+    pub fn highlight(
+        code: impl std::fmt::Display,
+        _: &dyn Values,
+        lang: &str,
+    ) -> askama::Result<Safe<String>> {
         let highlighted_code =
             crate::web::highlight::with_lang(Some(lang), &code.to_string(), None);
         Ok(Safe(format!(
@@ -209,7 +215,7 @@ pub mod filters {
         )))
     }
 
-    pub fn round(value: &f32, precision: u32) -> rinja::Result<String> {
+    pub fn round(value: &f32, _: &dyn Values, precision: u32) -> askama::Result<String> {
         let multiplier = if precision == 0 {
             1.0
         } else {
@@ -218,11 +224,18 @@ pub mod filters {
         Ok(((multiplier * *value).round() / multiplier).to_string())
     }
 
-    pub fn split_first<'a>(value: &'a str, pat: &str) -> rinja::Result<Option<&'a str>> {
+    pub fn split_first<'a>(
+        value: &'a str,
+        _: &dyn Values,
+        pat: &str,
+    ) -> askama::Result<Option<&'a str>> {
         Ok(value.split(pat).next())
     }
 
-    pub fn json_encode<T: ?Sized + serde::Serialize>(value: &T) -> rinja::Result<Safe<String>> {
+    pub fn json_encode<T: ?Sized + serde::Serialize>(
+        value: &T,
+        _: &dyn Values,
+    ) -> askama::Result<Safe<String>> {
         Ok(Safe(
             serde_json::to_string(value).expect("`encode_json` failed"),
         ))
@@ -230,31 +243,31 @@ pub mod filters {
 }
 
 pub trait RenderSolid {
-    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String>;
 }
 
 impl<T: font_awesome_as_a_crate::Solid> RenderSolid for T {
-    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+    fn render_solid(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String> {
         render("fa-solid", self.icon_name(), fw, spin, extra)
     }
 }
 
 pub trait RenderRegular {
-    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String>;
 }
 
 impl<T: font_awesome_as_a_crate::Regular> RenderRegular for T {
-    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+    fn render_regular(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String> {
         render("fa-regular", self.icon_name(), fw, spin, extra)
     }
 }
 
 pub trait RenderBrands {
-    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String>;
+    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String>;
 }
 
 impl<T: font_awesome_as_a_crate::Brands> RenderBrands for T {
-    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> rinja::filters::Safe<String> {
+    fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String> {
         render("fa-brands", self.icon_name(), fw, spin, extra)
     }
 }
@@ -265,7 +278,7 @@ fn render(
     fw: bool,
     spin: bool,
     extra: &str,
-) -> rinja::filters::Safe<String> {
+) -> askama::filters::Safe<String> {
     let mut classes = Vec::new();
     if fw {
         classes.push("fa-fw");
@@ -281,5 +294,5 @@ fn render(
         classes = classes.join(" "),
     );
 
-    rinja::filters::Safe(icon)
+    askama::filters::Safe(icon)
 }

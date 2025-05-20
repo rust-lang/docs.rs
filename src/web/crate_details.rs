@@ -10,14 +10,14 @@ use crate::{
     web::{
         MatchedRelease, ReqVersion,
         cache::CachePolicy,
-        encode_url_path,
-        error::{AxumNope, AxumResult},
+        error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         page::templates::{RenderRegular, RenderSolid, filters},
         rustdoc::RustdocHtmlParams,
     },
 };
 use anyhow::{Context, Result, anyhow};
+use askama::Template;
 use axum::{
     extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
@@ -25,7 +25,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use log::warn;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use serde_json::Value;
@@ -83,6 +82,7 @@ struct RepositoryMetadata {
 pub(crate) struct Release {
     pub id: ReleaseId,
     pub version: semver::Version,
+    #[allow(clippy::doc_overindented_list_items)]
     /// Aggregated build status of the release.
     /// * no builds -> build In progress
     /// * any build is successful -> Success
@@ -445,7 +445,6 @@ struct CrateDetailsPage {
     is_library: Option<bool>,
     last_successful_build: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
-    csp_nonce: String,
     source_size: Option<i64>,
     documentation_size: Option<i64>,
 }
@@ -476,7 +475,10 @@ pub(crate) async fn crate_details_handler(
 ) -> AxumResult<AxumResponse> {
     let req_version = params.version.ok_or_else(|| {
         AxumNope::Redirect(
-            format!("/crate/{}/{}", &params.name, ReqVersion::Latest),
+            EscapedURI::new(
+                &format!("/crate/{}/{}", &params.name, ReqVersion::Latest),
+                None,
+            ),
             CachePolicy::ForeverInCdn,
         )
     })?;
@@ -486,7 +488,7 @@ pub(crate) async fn crate_details_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{}/{}", &params.name, version),
+                EscapedURI::new(&format!("/crate/{}/{}", &params.name, version), None),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -545,7 +547,6 @@ pub(crate) async fn crate_details_handler(
         is_library,
         last_successful_build,
         rustdoc,
-        csp_nonce: String::new(),
         source_size,
         documentation_size,
     }
@@ -567,7 +568,6 @@ struct ReleaseList {
     crate_name: String,
     inner_path: String,
     target: String,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -649,7 +649,6 @@ pub(crate) async fn get_all_releases(
         target,
         inner_path,
         crate_name: params.name,
-        csp_nonce: String::new(),
     };
     Ok(res.into_response())
 }
@@ -677,7 +676,6 @@ struct PlatformList {
     inner_path: String,
     use_direct_platform_links: bool,
     current_target: String,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -699,23 +697,29 @@ pub(crate) async fn get_all_platforms_inner(
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/platforms/{}/{}/{}",
-                    corrected_name,
-                    req_version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!(
+                        "/platforms/{}/{}/{}",
+                        corrected_name,
+                        req_version,
+                        req_path.join("/")
+                    ),
+                    None,
+                ),
                 CachePolicy::NoCaching,
             )
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/platforms/{}/{}/{}",
-                    &params.name,
-                    version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!(
+                        "/platforms/{}/{}/{}",
+                        &params.name,
+                        version,
+                        req_path.join("/")
+                    ),
+                    None,
+                ),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -748,7 +752,6 @@ pub(crate) async fn get_all_platforms_inner(
             inner_path: "".into(),
             use_direct_platform_links: is_crate_root,
             current_target: "".into(),
-            csp_nonce: String::new(),
         }
         .into_response());
     }
@@ -803,7 +806,6 @@ pub(crate) async fn get_all_platforms_inner(
         inner_path,
         use_direct_platform_links: is_crate_root,
         current_target,
-        csp_nonce: String::new(),
     }
     .into_response())
 }
@@ -1747,7 +1749,7 @@ mod tests {
             let def_len = page
                 .select_first(r#"b[data-id="default-feature-len"]"#)
                 .unwrap();
-            assert_eq!(def_len.text_contents(), "3");
+            assert_eq!(def_len.text_contents(), "2");
             Ok(())
         });
     }
@@ -1991,8 +1993,7 @@ mod tests {
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();
-                    let url = attributes.get("href").expect("href").to_string();
-                    url
+                    attributes.get("href").expect("href").to_string()
                 })
                 .collect();
 

@@ -14,6 +14,24 @@ use tracing::error;
 
 use super::AxumErrorPage;
 
+#[derive(Debug)]
+pub struct EscapedURI(String);
+
+impl EscapedURI {
+    pub fn new(path: &str, query: Option<&str>) -> Self {
+        let mut path = encode_url_path(path);
+        if let Some(query) = query {
+            path.push('?');
+            path.push_str(query);
+        }
+        Self(path)
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AxumNope {
     #[error("Requested resource not found")]
@@ -35,7 +53,7 @@ pub enum AxumNope {
     #[error("bad request")]
     BadRequest(anyhow::Error),
     #[error("redirect")]
-    Redirect(String, CachePolicy),
+    Redirect(EscapedURI, CachePolicy),
 }
 
 // FUTURE: Ideally, the split between the 3 kinds of responses would
@@ -118,8 +136,8 @@ struct ErrorInfo {
     pub status: StatusCode,
 }
 
-fn redirect_with_policy(target: String, cache_policy: CachePolicy) -> AxumResponse {
-    match super::axum_cached_redirect(encode_url_path(&target), cache_policy) {
+fn redirect_with_policy(target: EscapedURI, cache_policy: CachePolicy) -> AxumResponse {
+    match super::axum_cached_redirect(target.0, cache_policy) {
         Ok(response) => response.into_response(),
         Err(err) => AxumNope::InternalError(err).into_response(),
     }
@@ -148,7 +166,6 @@ impl IntoResponse for AxumNope {
                     title,
                     message,
                     status,
-                    csp_nonce: String::new(),
                 }
                 .into_response()
             }
@@ -216,16 +233,18 @@ pub(crate) type JsonAxumResult<T> = Result<T, JsonAxumNope>;
 
 #[cfg(test)]
 mod tests {
-    use super::{AxumNope, IntoResponse};
+    use super::{AxumNope, EscapedURI, IntoResponse};
     use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use crate::web::cache::CachePolicy;
     use kuchikiki::traits::TendrilSink;
 
     #[test]
     fn test_redirect_error_encodes_url_path() {
-        let response =
-            AxumNope::Redirect("/something>".into(), CachePolicy::ForeverInCdnAndBrowser)
-                .into_response();
+        let response = AxumNope::Redirect(
+            EscapedURI::new("/something>", None),
+            CachePolicy::ForeverInCdnAndBrowser,
+        )
+        .into_response();
 
         assert_eq!(response.status(), 302);
         assert_eq!(response.headers().get("Location").unwrap(), "/something%3E");

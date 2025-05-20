@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Result, anyhow};
+use askama::Template;
 use axum::{
     extract::{Extension, Query},
     response::{IntoResponse, Response as AxumResponse},
@@ -22,7 +23,6 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
-use rinja::Template;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -237,7 +237,6 @@ async fn get_search_results(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HomePage {
     recent_releases: Vec<Release>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -249,10 +248,7 @@ pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoRes
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
 
-    Ok(HomePage {
-        recent_releases,
-        csp_nonce: String::new(),
-    })
+    Ok(HomePage { recent_releases })
 }
 
 #[derive(Template)]
@@ -260,7 +256,6 @@ pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoRes
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ReleaseFeed {
     recent_releases: Vec<Release>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! {
@@ -271,10 +266,7 @@ impl_axum_webpage! {
 pub(crate) async fn releases_feed_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_FEED, Order::ReleaseTime, true).await?;
-    Ok(ReleaseFeed {
-        recent_releases,
-        csp_nonce: String::new(),
-    })
+    Ok(ReleaseFeed { recent_releases })
 }
 
 #[derive(Template)]
@@ -288,7 +280,6 @@ struct ViewReleases {
     show_previous_page: bool,
     page_number: i64,
     owner: Option<String>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! { ViewReleases }
@@ -377,7 +368,6 @@ pub(crate) async fn releases_handler(
         show_previous_page,
         page_number,
         owner: None,
-        csp_nonce: String::new(),
     })
 }
 
@@ -430,7 +420,6 @@ pub(super) struct Search {
     /// This should always be `ReleaseType::Search`
     pub(super) release_type: ReleaseType,
     pub(super) status: http::StatusCode,
-    pub(super) csp_nonce: String,
 }
 
 impl Default for Search {
@@ -444,7 +433,6 @@ impl Default for Search {
             search_sort_by: None,
             release_type: ReleaseType::Search,
             status: http::StatusCode::OK,
-            csp_nonce: String::new(),
         }
     }
 }
@@ -646,7 +634,6 @@ struct ReleaseActivity {
     dates: Vec<String>,
     counts: Vec<i64>,
     failures: Vec<i64>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! { ReleaseActivity }
@@ -702,7 +689,6 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
             .collect(),
         counts: rows.iter().map(|rows| rows.counts).collect(),
         failures: rows.iter().map(|rows| rows.failures).collect(),
-        csp_nonce: String::new(),
     })
 }
 
@@ -715,7 +701,6 @@ struct BuildQueuePage {
     rebuild_queue: Vec<QueuedCrate>,
     active_cdn_deployments: Vec<String>,
     in_progress_builds: Vec<(String, String)>,
-    csp_nonce: String,
     expand_rebuild_queue: bool,
 }
 
@@ -793,7 +778,6 @@ pub(crate) async fn build_queue_handler(
         rebuild_queue,
         active_cdn_deployments,
         in_progress_builds,
-        csp_nonce: String::new(),
         expand_rebuild_queue: params.expand.is_some(),
     })
 }

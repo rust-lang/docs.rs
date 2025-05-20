@@ -5,7 +5,7 @@ mod tracked {
     use once_cell::sync::Lazy;
     use std::{
         collections::HashSet,
-        io::{Error, ErrorKind, Result},
+        io::{Error, Result},
         path::{Path, PathBuf},
         sync::Mutex,
     };
@@ -21,10 +21,7 @@ mod tracked {
             if !seen.contains(path) {
                 seen.insert(path.to_owned());
                 let path = path.to_str().ok_or_else(|| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("{} is a non-utf-8 path", path.display()),
-                    )
+                    Error::other(format!("{} is a non-utf-8 path", path.display()))
                 })?;
                 println!("cargo:rerun-if-changed={path}");
             }

@@ -80,11 +80,7 @@ impl DatabaseBackend {
         let result = if let Some(r) = range {
             // when we only want to get a range we can validate already if the range is small enough
             if (r.end() - r.start() + 1) > max_size as u64 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    crate::error::SizeLimitReached,
-                )
-                .into());
+                return Err(std::io::Error::other(crate::error::SizeLimitReached).into());
             }
             let range_start = i32::try_from(*r.start())?;
 
@@ -123,11 +119,7 @@ impl DatabaseBackend {
         };
 
         if result.is_too_big {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                crate::error::SizeLimitReached,
-            )
-            .into());
+            return Err(std::io::Error::other(crate::error::SizeLimitReached).into());
         }
 
         let compression = result.compression.map(|i| {

@@ -12,10 +12,10 @@ use crate::{
     },
 };
 use anyhow::Context as _;
+use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -39,7 +39,6 @@ struct BuildDetailsPage {
     build_details: BuildDetails,
     all_log_filenames: Vec<String>,
     current_filename: Option<String>,
-    csp_nonce: String,
 }
 
 impl_axum_webpage! { BuildDetailsPage }
@@ -155,7 +154,6 @@ pub(crate) async fn build_details_handler(
         },
         all_log_filenames,
         current_filename,
-        csp_nonce: String::new(),
     }
     .into_response())
 }

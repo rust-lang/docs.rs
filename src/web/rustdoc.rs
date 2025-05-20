@@ -11,7 +11,7 @@ use crate::{
         crate_details::CrateDetails,
         csp::Csp,
         encode_url_path,
-        error::{AxumNope, AxumResult},
+        error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         file::File,
         match_version,
@@ -22,6 +22,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, anyhow};
+use askama::Template;
 use axum::{
     extract::{Extension, Query},
     http::{StatusCode, Uri},
@@ -29,7 +30,6 @@ use axum::{
 };
 use lol_html::errors::RewritingError;
 use once_cell::sync::Lazy;
-use rinja::Template;
 use semver::Version;
 use serde::Deserialize;
 use std::{
@@ -253,7 +253,11 @@ pub(crate) async fn rustdoc_redirector_handler(
         .into_response())
     } else {
         Ok(axum_cached_redirect(
-            format!("/crate/{crate_name}/{}", matched_release.req_version),
+            EscapedURI::new(
+                &format!("/crate/{crate_name}/{}", matched_release.req_version),
+                uri.query(),
+            )
+            .as_str(),
             CachePolicy::ForeverInCdn,
         )?
         .into_response())
@@ -369,11 +373,15 @@ pub(crate) async fn rustdoc_html_server_handler(
         vers: &Version,
         path: &[&str],
         cache_policy: CachePolicy,
+        uri: &Uri,
     ) -> AxumResult<AxumResponse> {
         trace!("redirect");
-        // Format and parse the redirect url
         Ok(axum_cached_redirect(
-            encode_url_path(&format!("/{}/{}/{}", name, vers, path.join("/"))),
+            EscapedURI::new(
+                &format!("/{}/{}/{}", name, vers, path.join("/")),
+                uri.query(),
+            )
+            .as_str(),
             cache_policy,
         )?
         .into_response())
@@ -392,23 +400,19 @@ pub(crate) async fn rustdoc_html_server_handler(
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/{}/{}/{}",
-                    corrected_name,
-                    req_version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!("/{}/{}/{}", corrected_name, req_version, req_path.join("/")),
+                    uri.query(),
+                ),
                 CachePolicy::NoCaching,
             )
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                encode_url_path(&format!(
-                    "/{}/{}/{}",
-                    &params.name,
-                    version,
-                    req_path.join("/")
-                )),
+                EscapedURI::new(
+                    &format!("/{}/{}/{}", &params.name, version, req_path.join("/")),
+                    None,
+                ),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -439,6 +443,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             &krate.version,
             &req_path[1..],
             CachePolicy::ForeverInCdn,
+            &uri,
         );
     }
 
@@ -494,6 +499,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                         &krate.version,
                         &req_path,
                         CachePolicy::ForeverInCdn,
+                        &uri,
                     );
                 }
             }
@@ -2004,6 +2010,12 @@ mod test {
                 "/foo-ab/0.0.1/foo_ab/",
             )
             .await?;
+            // `-` becomes `_` but we keep the query arguments.
+            web.assert_redirect_unchecked(
+                "/foo-ab/0.0.1/foo_ab/?search=a",
+                "/foo_ab/0.0.1/foo_ab/?search=a",
+            )
+            .await?;
             Ok(())
         })
     }
@@ -2974,5 +2986,27 @@ mod test {
 
             Ok(())
         })
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn test_redirect_with_query_args(archive_storage: bool) {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("fake")
+                .version("0.0.1")
+                .archive_storage(archive_storage)
+                .rustdoc_file("fake/index.html")
+                .binary(true) // binary => rustdoc_status = false
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            web.assert_redirect("/fake?a=b", "/crate/fake/latest?a=b")
+                .await?;
+
+            Ok(())
+        });
     }
 }

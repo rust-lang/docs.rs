@@ -1,8 +1,8 @@
 use crate::web::page::templates::{Body, Head, Vendored};
 use crate::web::rustdoc::RustdocPage;
+use askama::Template;
 use lol_html::element;
 use lol_html::errors::RewritingError;
-use rinja::Template;
 
 /// Rewrite a rustdoc page to have the docs.rs topbar
 ///
@@ -45,7 +45,7 @@ pub(crate) fn rewrite_lol(
         rustdoc_body_class.set_attribute("tabindex", "-1")?;
         // Change the `body` to a `div`
         rustdoc_body_class.set_tag_name("div")?;
-        // Prepend the rinja content
+        // Prepend the askama content
         rustdoc_body_class.prepend(&body_html, ContentType::Html);
         // Wrap the transformed body and topbar into a <body> element
         rustdoc_body_class.before(r#"<body class="rustdoc-page">"#, ContentType::Html);

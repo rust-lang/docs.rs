@@ -303,7 +303,8 @@ impl RustwideBuilder {
             .run(|build| {
                 let metadata = Metadata::from_crate_root(build.host_source_dir())?;
 
-                let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true)?;
+                let res =
+                    self.execute_build(HOST_TARGET, true, build, &limits, &metadata, true, false)?;
                 if !res.result.successful {
                     bail!("failed to build dummy crate for {}", rustc_version);
                 }
@@ -351,7 +352,12 @@ impl RustwideBuilder {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
-        self.build_package(&package.name, &package.version, PackageKind::Local(path))
+        self.build_package(
+            &package.name,
+            &package.version,
+            PackageKind::Local(path),
+            false,
+        )
     }
 
     #[instrument(name = "docbuilder.build_package", parent = None, skip(self, name), fields(krate=name))]
@@ -360,6 +366,7 @@ impl RustwideBuilder {
         name: &str,
         version: &str,
         kind: PackageKind<'_>,
+        collect_metrics: bool,
     ) -> Result<BuildPackageSummary> {
         let (crate_id, release_id, build_id) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
@@ -369,7 +376,15 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(name, version, kind, crate_id, release_id, build_id) {
+        match self.build_package_inner(
+            name,
+            version,
+            kind,
+            crate_id,
+            release_id,
+            build_id,
+            collect_metrics,
+        ) {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -391,6 +406,7 @@ impl RustwideBuilder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_package_inner(
         &mut self,
         name: &str,
@@ -399,6 +415,7 @@ impl RustwideBuilder {
         crate_id: CrateId,
         release_id: ReleaseId,
         build_id: BuildId,
+        collect_metrics: bool,
     ) -> Result<bool> {
         info!("building package {} {}", name, version);
 
@@ -506,7 +523,7 @@ impl RustwideBuilder {
 
                 // Perform an initial build
                 let mut res =
-                    self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+                    self.execute_build(default_target, true, build, &limits, &metadata, false, collect_metrics)?;
 
                 // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                 let cargo_lock = build.host_source_dir().join("Cargo.lock");
@@ -528,7 +545,7 @@ impl RustwideBuilder {
                             .run_capture()?;
                     }
                     res =
-                        self.execute_build(default_target, true, build, &limits, &metadata, false)?;
+                        self.execute_build(default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
                 if res.result.successful {
@@ -565,6 +582,7 @@ impl RustwideBuilder {
                             local_storage.path(),
                             &mut successful_targets,
                             &metadata,
+                            collect_metrics,
                         )?;
                         target_build_logs.insert(target, target_res.build_log);
                     }
@@ -730,6 +748,7 @@ impl RustwideBuilder {
     }
 
     #[instrument(skip(self, build))]
+    #[allow(clippy::too_many_arguments)]
     fn build_target(
         &self,
         target: &str,
@@ -738,8 +757,17 @@ impl RustwideBuilder {
         local_storage: &Path,
         successful_targets: &mut Vec<String>,
         metadata: &Metadata,
+        collect_metrics: bool,
     ) -> Result<FullBuildResult> {
-        let target_res = self.execute_build(target, false, build, limits, metadata, false)?;
+        let target_res = self.execute_build(
+            target,
+            false,
+            build,
+            limits,
+            metadata,
+            false,
+            collect_metrics,
+        )?;
         if target_res.result.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
@@ -782,7 +810,7 @@ impl RustwideBuilder {
             items_with_examples: 0,
         };
 
-        self.prepare_command(build, target, metadata, limits, rustdoc_flags)?
+        self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
             .process_lines(&mut |line, _| {
                 if line.starts_with('{') && line.ends_with('}') {
                     let parsed = match serde_json::from_str::<HashMap<String, FileCoverage>>(line) {
@@ -810,6 +838,7 @@ impl RustwideBuilder {
     }
 
     #[instrument(skip(self, build))]
+    #[allow(clippy::too_many_arguments)]
     fn execute_build(
         &self,
         target: &str,
@@ -818,6 +847,7 @@ impl RustwideBuilder {
         limits: &Limits,
         metadata: &Metadata,
         create_essential_files: bool,
+        collect_metrics: bool,
     ) -> Result<FullBuildResult> {
         let cargo_metadata = CargoMetadata::load_from_rustwide(
             &self.workspace,
@@ -856,11 +886,33 @@ impl RustwideBuilder {
         let successful = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
             logging::capture(&storage, || {
-                self.prepare_command(build, target, metadata, limits, rustdoc_flags)
-                    .and_then(|command| command.run().map_err(Error::from))
-                    .is_ok()
+                self.prepare_command(
+                    build,
+                    target,
+                    metadata,
+                    limits,
+                    rustdoc_flags,
+                    collect_metrics,
+                )
+                .and_then(|command| command.run().map_err(Error::from))
+                .is_ok()
             })
         };
+
+        if collect_metrics {
+            if let Some(compiler_metric_target_dir) = &self.config.compiler_metrics_collection_path
+            {
+                let metric_output = build.host_target_dir().join("metrics/");
+                info!(
+                    "found {} files in metric dir, copy over to {} (exists: {})",
+                    fs::read_dir(&metric_output)?.count(),
+                    &compiler_metric_target_dir.to_string_lossy(),
+                    &compiler_metric_target_dir.exists(),
+                );
+                copy_dir_all(&metric_output, compiler_metric_target_dir)?;
+                fs::remove_dir_all(&metric_output)?;
+            }
+        }
 
         // For proc-macros, cargo will put the output in `target/doc`.
         // Move it to the target-specific directory for consistency with other builds.
@@ -899,6 +951,7 @@ impl RustwideBuilder {
         metadata: &Metadata,
         limits: &Limits,
         mut rustdoc_flags_extras: Vec<String>,
+        collect_metrics: bool,
     ) -> Result<Command<'ws, 'pl>> {
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
@@ -945,7 +998,7 @@ impl RustwideBuilder {
         ];
 
         rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
-        let cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
+        let mut cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
 
         // If the explicit target is not a tier one target, we need to install it.
         let has_build_std = cargo_args.windows(2).any(|args| {
@@ -964,6 +1017,21 @@ impl RustwideBuilder {
 
         for (key, val) in metadata.environment_variables() {
             command = command.env(key, val);
+        }
+
+        if collect_metrics && self.config.compiler_metrics_collection_path.is_some() {
+            // set the `./target/metrics/` directory inside the build container
+            // as a target directory for the metric files.
+            let flag = "-Zmetrics-dir=/opt/rustwide/target/metrics";
+
+            // this is how we can reach it from outside the container.
+            fs::create_dir_all(build.host_target_dir().join("metrics/"))?;
+
+            let rustdocflags = toml::Value::try_from(vec![flag])
+                .expect("serializing a string should never fail")
+                .to_string();
+            cargo_args.push("--config".into());
+            cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
         }
 
         Ok(command.args(&cargo_args))
@@ -1124,7 +1192,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1266,6 +1334,41 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn test_collect_metrics() {
+        wrapper(|env| {
+            let metrics_dir = tempfile::tempdir()?.into_path();
+
+            env.override_config(|cfg| {
+                cfg.compiler_metrics_collection_path = Some(metrics_dir.clone());
+                cfg.include_default_targets = false;
+            });
+
+            let crate_ = DUMMY_CRATE_NAME;
+            let version = DUMMY_CRATE_VERSION;
+
+            let mut builder = RustwideBuilder::init(env).unwrap();
+            builder.update_toolchain()?;
+            assert!(
+                builder
+                    .build_package(crate_, version, PackageKind::CratesIo, true)?
+                    .successful
+            );
+
+            let metric_files: Vec<_> = fs::read_dir(&metrics_dir)?
+                .filter_map(|di| di.ok())
+                .map(|di| di.path())
+                .collect();
+
+            assert_eq!(metric_files.len(), 1);
+
+            let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[ignore]
     fn test_build_binary_crate() {
         wrapper(|env| {
             // some binary crate
@@ -1282,7 +1385,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 !builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1402,7 +1505,7 @@ mod tests {
             assert!(
                 // not successful build
                 !builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1421,7 +1524,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1452,7 +1555,7 @@ mod tests {
             }
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1508,7 +1611,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1535,7 +1638,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1548,12 +1651,12 @@ mod tests {
     fn test_rustflags_are_passed_to_build_script() {
         wrapper(|env| {
             let crate_ = "proc-macro2";
-            let version = "1.0.33";
+            let version = "1.0.95";
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
             Ok(())
@@ -1576,7 +1679,7 @@ mod tests {
             // `Result` is `Ok`, but the build-result is `false`
             assert!(
                 !builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1604,7 +1707,7 @@ mod tests {
             builder.update_toolchain()?;
 
             // `Result` is `Ok`, but the build-result is `false`
-            let summary = builder.build_package(crate_, version, PackageKind::CratesIo)?;
+            let summary = builder.build_package(crate_, version, PackageKind::CratesIo, false)?;
 
             assert!(!summary.successful);
             assert!(summary.should_reattempt);
@@ -1648,7 +1751,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1673,7 +1776,7 @@ mod tests {
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo)?
+                    .build_package(crate_, version, PackageKind::CratesIo, false)?
                     .successful
             );
 
@@ -1760,7 +1863,12 @@ mod tests {
             let mut builder = RustwideBuilder::init(env)?;
             assert!(
                 builder
-                    .build_package(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION, PackageKind::CratesIo)?
+                    .build_package(
+                        DUMMY_CRATE_NAME,
+                        DUMMY_CRATE_VERSION,
+                        PackageKind::CratesIo,
+                        false
+                    )?
                     .successful
             );
             assert_eq!(old_version, builder.rustc_version()?);

@@ -39,7 +39,7 @@
                                     </li>
                                 {%- endfor %}
                             {%- endif -%}
-                        {%- else %}
+                        {%- else -%}
                             <li class="pure-menu-item">
                                 <span class="documented-info">
                                     Feature flags are not available for this release because the build failed before we could retrieve them,
@@ -65,7 +65,7 @@
                     {%- if features.is_empty() -%}
                         <p data-id="empty-features">This release does not have any feature flags.</p>
                     {%- else -%}
-                        <p>This version has <b>{{ features.len() }}</b> feature flags, <b data-id="default-feature-len">{{ default_features.len() }}</b> of them enabled by <b>default</b>.</p>
+                        <p>This version has <b>{{ features_count() }}</b> feature flags, <b data-id="default-feature-len">{{ enabled_default_features_count() }}</b> of them enabled by <b>default</b>.</p>
                         {%- for feature in features -%}
                             {%- let is_default = feature.name != "default" && is_default_feature(feature.name) -%}
                             <h3 id="{{ feature.name }}">{{ feature.name }}{%- if is_default  %} (default){%- endif -%}</h3>
@@ -93,7 +93,7 @@
                                                     /<a href="/crate/{{ dependency }}/{{ version }}/features#{{ feature }}">
                                                         {{- feature -}}
                                                     </a>
-                                            {% endmatch %}
+                                            {%- endmatch %}
                                             {%- if is_default %} <span class="is-default-feature">(default)</span>{%- endif -%}
                                         </li>
                                     {%- endfor -%}

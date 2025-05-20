@@ -10,8 +10,8 @@ use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
 use crate::web::page::templates::{RenderSolid, filters};
 use anyhow::{Context as _, Result, anyhow, bail};
+use askama::Template;
 use axum_extra::middleware::option_layer;
-use rinja::Template;
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -758,7 +758,6 @@ pub(crate) struct AxumErrorPage {
     /// The error message, displayed as a description
     pub message: Cow<'static, str>,
     pub status: StatusCode,
-    pub csp_nonce: String,
 }
 
 impl_axum_webpage! {

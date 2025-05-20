@@ -1,6 +1,7 @@
 use super::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
+use askama::Template;
 use axum::{
     Router as AxumRouter,
     extract::Request as AxumHttpRequest,
@@ -10,7 +11,6 @@ use axum::{
     routing::{MethodRouter, get, post},
 };
 use axum_extra::routing::RouterExt;
-use rinja::Template;
 use std::convert::Infallible;
 use tracing::{debug, instrument};
 
@@ -224,10 +224,6 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::builds::build_list_handler),
         )
         .route(
-            "/crate/{name}/{version}/builds.json",
-            get_internal(super::builds::build_list_json_handler),
-        )
-        .route(
             "/crate/{name}/{version}/rebuild",
             post_internal(super::builds::build_trigger_rebuild_handler),
         )
@@ -293,16 +289,12 @@ pub(super) fn build_axum_routes() -> AxumRouter {
                 #[derive(Template)]
                 #[template(path = "storage-change-detection.html")]
                 #[derive(Debug, Clone)]
-                struct StorageChangeDetection {
-                    csp_nonce: String,
-                }
+                struct StorageChangeDetection;
                 crate::impl_axum_webpage!(
                     StorageChangeDetection,
                     cache_policy = |_| CachePolicy::ForeverInCdnAndBrowser,
                 );
-                StorageChangeDetection {
-                    csp_nonce: String::new(),
-                }
+                StorageChangeDetection
             }),
         )
         .route_with_tsr(

@@ -4,7 +4,7 @@ use crate::{
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
-        error::{AxumNope, AxumResult},
+        error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         filters,
         headers::CanonicalUrl,
@@ -13,8 +13,8 @@ use crate::{
     },
 };
 use anyhow::anyhow;
+use askama::Template;
 use axum::response::IntoResponse;
-use rinja::Template;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
@@ -89,7 +89,6 @@ struct FeaturesPage {
     default_features: HashSet<String>,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
-    csp_nonce: String,
 }
 
 impl FeaturesPage {
@@ -117,6 +116,24 @@ impl FeaturesPage {
     pub(crate) fn use_direct_platform_links(&self) -> bool {
         true
     }
+
+    pub(crate) fn enabled_default_features_count(&self) -> usize {
+        self.default_features
+            .iter()
+            .filter(|f| !f.starts_with("dep:") && *f != "default" && !f.contains('/'))
+            .count()
+    }
+
+    pub(crate) fn features_count(&self) -> usize {
+        let Some(features) = &self.sorted_features else {
+            return 0;
+        };
+        if features.iter().any(|f| f.name == "default") {
+            features.len() - 1
+        } else {
+            features.len()
+        }
+    }
 }
 
 pub(crate) async fn build_features_handler(
@@ -128,7 +145,7 @@ pub(crate) async fn build_features_handler(
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                format!("/crate/{}/{}/features", &name, version),
+                EscapedURI::new(&format!("/crate/{}/{}/features", &name, version), None),
                 CachePolicy::ForeverInCdn,
             )
         })?
@@ -167,7 +184,6 @@ pub(crate) async fn build_features_handler(
         default_features,
         is_latest_url: req_version.is_latest(),
         canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
-        csp_nonce: String::new(),
     }
     .into_response())
 }
@@ -233,6 +249,7 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 mod tests {
     use super::*;
     use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
 
     #[test]
@@ -460,6 +477,48 @@ mod tests {
             let web = env.web_app().await;
             let resp = web.get("/crate/foo/0,1,0/features").await?;
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            Ok(())
+        });
+    }
+
+    // This test ensures that the count of feature flags is correct, in particular the count of
+    // features enabled by default.
+    #[test]
+    fn test_features_count() {
+        async_wrapper(|env| async move {
+            let features = vec![
+                (
+                    "default".to_owned(),
+                    vec![
+                        "bla".to_owned(),
+                        "dep:what".to_owned(),
+                        "whatever/wut".to_owned(),
+                    ],
+                ),
+                ("bla".to_owned(), vec![]),
+                ("blob".to_owned(), vec![]),
+            ];
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .features(features.into_iter().collect::<HashMap<_, _>>())
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+
+            let page = kuchikiki::parse_html()
+                .one(web.get("/crate/foo/0.1.0/features").await?.text().await?);
+            let text = page.select_first("#main > p").unwrap().text_contents();
+            // It should only contain one feature enabled by default since the others are either
+            // enabling a dependency (`dep:what`) or enabling a feature from a dependency
+            // (`whatever/wut`).
+            assert_eq!(
+                text,
+                "This version has 2 feature flags, 1 of them enabled by default."
+            );
+
             Ok(())
         });
     }

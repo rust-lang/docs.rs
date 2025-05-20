@@ -453,6 +453,7 @@ div.package-sheet-container {
 }
 
 $sidebar-side-padding: 10px;
+$collapsed-side-menu-width: 46px;
 
 div.package-page-container {
     padding-bottom: 50px;
@@ -735,6 +736,7 @@ div.docsrs-package-container {
             padding: 10px;
             border: 1px solid var(--color-doc-link-background);
             border-radius: 5px;
+            min-width: fit-content;
 
             .fas {
                 margin-top: 2px;
@@ -818,6 +820,14 @@ ul.pure-menu-list {
         cursor: pointer;
         border: 1px solid var(--color-border);
         display: none;
+
+        &:hover {
+            border-color: var(--color-standard);
+        }
+
+        button {
+            cursor: pointer;
+        }
     }
 }
 
@@ -889,7 +899,7 @@ ul.pure-menu-list {
     }
 
     #side-menu.collapsed {
-        max-width: 46px;
+        max-width: $collapsed-side-menu-width;
 
         ul {
             li:not(.toggle-source), .text {
@@ -907,6 +917,10 @@ ul.pure-menu-list {
         }
     }
 
+    #side-menu.collapsed + #source-code-container {
+        width: calc(100% - #{$collapsed-side-menu-width});
+    }
+
     #source-warning {
         height: 100%;
     }
@@ -914,7 +928,6 @@ ul.pure-menu-list {
 
 #source-code-container {
     display: inline-flex;
-    overflow: scroll;
 }
 #line-numbers {
     text-align: right;
@@ -941,6 +954,5 @@ ul.pure-menu-list {
     }
 }
 #source-code {
-    overflow: scroll;
     width: 100%;
 }

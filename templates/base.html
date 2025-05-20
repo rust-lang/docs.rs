@@ -17,6 +17,8 @@
 
         <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
 
+        {%- let csp_nonce = askama::get_value::<String>("csp_nonce").unwrap() -%}
+
         <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
         {%- block css -%}{%- endblock css -%}
 
