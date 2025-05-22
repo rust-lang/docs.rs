@@ -53,7 +53,7 @@ lol_html = "2.0.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 dashmap = "6.0.0"
 string_cache = "0.8.0"
-zip = {version = "2.3.0", default-features = false, features = ["bzip2"]}
+zip = {version = "4.0.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.5.0"
 getrandom = "0.3.1"
 itertools = { version = "0.14.0" }
