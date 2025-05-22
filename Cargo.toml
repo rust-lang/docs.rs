@@ -105,7 +105,7 @@ constant_time_eq = "0.4.2"
 procfs = "0.15.1"
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = "0.6.0"
 kuchikiki = "0.8"
 http02 = { version = "0.2.11", package = "http"}
 http-body-util = "0.1.0"
