@@ -415,7 +415,7 @@ async fn apply_middleware<C: Context>(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
             .layer(sentry_tower::NewSentryLayer::new_from_top())
-            .layer(sentry_tower::SentryHttpLayer::with_transaction())
+            .layer(sentry_tower::SentryHttpLayer::new().enable_transaction())
             .layer(middleware::from_fn(
                 set_sentry_transaction_name_from_axum_route,
             ))
