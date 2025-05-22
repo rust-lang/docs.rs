@@ -911,10 +911,10 @@ impl RustwideBuilder {
 
         for format_version in [format_version, RustdocJsonFormatVersion::Latest] {
             let _span = info_span!("store_json", %format_version).entered();
-            self.storage.store_one(
-                rustdoc_json_path(name, version, target, format_version),
-                compressed_json.clone(),
-            )?;
+            let path = rustdoc_json_path(name, version, target, format_version);
+
+            self.storage.store_one(&path, compressed_json.clone())?;
+            self.storage.set_public_access(&path, true)?;
         }
 
         Ok(())
@@ -1467,12 +1467,14 @@ mod tests {
                 // other targets too
                 for target in DEFAULT_TARGETS {
                     // check if rustdoc json files exist for all targets
-                    assert!(storage.exists(&rustdoc_json_path(
+                    let path = rustdoc_json_path(
                         crate_,
                         version,
                         target,
-                        RustdocJsonFormatVersion::Latest
-                    ))?);
+                        RustdocJsonFormatVersion::Latest,
+                    );
+                    assert!(storage.exists(&path)?);
+                    assert!(storage.get_public_access(&path)?);
 
                     let json_prefix = format!("rustdoc-json/{crate_}/{version}/{target}/");
                     let mut json_files: Vec<_> = storage
@@ -1481,8 +1483,6 @@ mod tests {
                         .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
                         .collect();
                     json_files.sort();
-                    dbg!(&json_prefix);
-                    dbg!(&json_files);
                     assert_eq!(
                         json_files,
                         vec![
