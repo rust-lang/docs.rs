@@ -1336,7 +1336,7 @@ mod tests {
     #[ignore]
     fn test_collect_metrics() {
         wrapper(|env| {
-            let metrics_dir = tempfile::tempdir()?.into_path();
+            let metrics_dir = tempfile::tempdir()?.keep();
 
             env.override_config(|cfg| {
                 cfg.compiler_metrics_collection_path = Some(metrics_dir.clone());
