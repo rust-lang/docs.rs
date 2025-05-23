@@ -44,6 +44,8 @@ pub enum AxumNope {
     OwnerNotFound,
     #[error("Requested crate does not have specified version")]
     VersionNotFound,
+    #[error("Requested release doesn't have docs for the given target")]
+    TargetNotFound,
     #[error("Search yielded no results")]
     NoResults,
     #[error("Unauthorized: {0}")]
@@ -77,6 +79,14 @@ impl AxumNope {
                 message: "no such build".into(),
                 status: StatusCode::NOT_FOUND,
             },
+            AxumNope::TargetNotFound => {
+                // user tried to navigate to a target that doesn't exist
+                ErrorInfo {
+                    title: "The requested target does not exist",
+                    message: "no such target".into(),
+                    status: StatusCode::NOT_FOUND,
+                }
+            }
             AxumNope::CrateNotFound => {
                 // user tried to navigate to a crate that doesn't exist
                 // TODO: Display the attempted crate and a link to a search for said crate

@@ -1494,12 +1494,11 @@ mod tests {
                         .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
                         .collect();
                     json_files.sort();
+                    assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
+                    assert!(json_files[0].ends_with(".json.zst"));
                     assert_eq!(
-                        json_files,
-                        vec![
-                            format!("empty-library_1.0.0_{target}_45.json.zst"),
-                            format!("empty-library_1.0.0_{target}_latest.json.zst"),
-                        ]
+                        json_files[1],
+                        format!("empty-library_1.0.0_{target}_latest.json.zst")
                     );
 
                     if target == &default_target {

@@ -34,6 +34,10 @@ centered
                         {% set text = crate::icons::IconDownload.render_solid(false, false, "") %}
                         {% set text = "{} <span class='title'>Download</span>"|format(text) %}
                         {% call macros::active_link(expected="download", href="/about/download", text=text) %}
+
+                        {% set text = crate::icons::IconFileCode.render_solid(false, false, "") %}
+                        {% set text = "{} <span class='title'>Rustdoc JSON</span>"|format(text) %}
+                        {% call macros::active_link(expected="rustdoc-json", href="/about/rustdoc-json", text=text) %}
                     </ul>
                 </div>
             </div>
