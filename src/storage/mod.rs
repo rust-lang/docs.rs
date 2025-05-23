@@ -22,14 +22,16 @@ use fn_error_context::context;
 use futures_util::stream::BoxStream;
 use mime::Mime;
 use path_slash::PathExt;
-use std::iter;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     fmt, fs,
     io::{self, BufReader},
+    num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
+use std::{iter, str::FromStr};
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
 use tracing::{error, info_span, instrument, trace};
 use walkdir::WalkDir;
@@ -815,12 +817,23 @@ pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
     format!("rustdoc/{name}/{version}.zip")
 }
 
-#[derive(strum::Display, Debug, PartialEq, Eq)]
+#[derive(strum::Display, Debug, PartialEq, Eq, Clone, SerializeDisplay, DeserializeFromStr)]
 #[strum(serialize_all = "snake_case")]
 pub(crate) enum RustdocJsonFormatVersion {
     #[strum(serialize = "{0}")]
     Version(u16),
     Latest,
+}
+
+impl FromStr for RustdocJsonFormatVersion {
+    type Err = ParseIntError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "latest" {
+            Ok(RustdocJsonFormatVersion::Latest)
+        } else {
+            s.parse::<u16>().map(RustdocJsonFormatVersion::Version)
+        }
+    }
 }
 
 pub(crate) fn rustdoc_json_path(
@@ -842,6 +855,25 @@ pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
 mod test {
     use super::*;
     use std::env;
+    use test_case::test_case;
+
+    #[test_case("latest", RustdocJsonFormatVersion::Latest)]
+    #[test_case("42", RustdocJsonFormatVersion::Version(42))]
+    fn test_json_format_version(input: &str, expected: RustdocJsonFormatVersion) {
+        // test Display
+        assert_eq!(expected.to_string(), input);
+        // test FromStr
+        assert_eq!(expected, input.parse().unwrap());
+
+        let json_input = format!("\"{input}\"");
+        // test Serialize
+        assert_eq!(serde_json::to_string(&expected).unwrap(), json_input);
+        // test Deserialize
+        assert_eq!(
+            serde_json::from_str::<RustdocJsonFormatVersion>(&json_input).unwrap(),
+            expected
+        );
+    }
 
     #[test]
     fn test_get_file_list() -> Result<()> {

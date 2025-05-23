@@ -3,7 +3,7 @@
 use crate::{
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
     db::Pool,
-    storage::rustdoc_archive_path,
+    storage::{RustdocJsonFormatVersion, rustdoc_archive_path, rustdoc_json_path},
     utils,
     web::{
         MetaData, ReqVersion, axum_cached_redirect, axum_parse_uri_with_params,
@@ -817,6 +817,72 @@ pub(crate) async fn badge_handler(
     ))
 }
 
+#[derive(Clone, Deserialize, Debug)]
+pub(crate) struct JsonDownloadParams {
+    pub(crate) name: String,
+    pub(crate) version: ReqVersion,
+    pub(crate) target: Option<String>,
+    pub(crate) format_version: Option<RustdocJsonFormatVersion>,
+}
+
+#[instrument(skip_all)]
+pub(crate) async fn json_download_handler(
+    Path(params): Path<JsonDownloadParams>,
+    mut conn: DbConnection,
+    Extension(config): Extension<Arc<Config>>,
+) -> AxumResult<impl IntoResponse> {
+    let matched_release = match_version(&mut conn, &params.name, &params.version)
+        .await?
+        .assume_exact_name()?;
+
+    if !matched_release.rustdoc_status() {
+        // without docs we'll never have JSON docs too
+        return Err(AxumNope::ResourceNotFound);
+    }
+
+    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+
+    let target = if let Some(wanted_target) = params.target {
+        if krate
+            .metadata
+            .doc_targets
+            .as_ref()
+            .expect("we are checking rustdoc_status() above, so we always have metadata")
+            .iter()
+            .any(|s| s == &wanted_target)
+        {
+            wanted_target
+        } else {
+            return Err(AxumNope::TargetNotFound);
+        }
+    } else {
+        krate
+            .metadata
+            .default_target
+            .as_ref()
+            .expect("we are checking rustdoc_status() above, so we always have metadata")
+            .to_string()
+    };
+
+    let format_version = params
+        .format_version
+        .unwrap_or(RustdocJsonFormatVersion::Latest);
+
+    let storage_path = rustdoc_json_path(
+        &krate.name,
+        &krate.version.to_string(),
+        &target,
+        format_version,
+    );
+
+    // since we didn't build rustdoc json for all releases yet,
+    // this redirect might redirect to a location that doesn't exist.
+    Ok(super::axum_cached_redirect(
+        format!("{}/{}", config.s3_static_root_path, storage_path),
+        CachePolicy::ForeverInCdn,
+    )?)
+}
+
 #[instrument(skip_all)]
 pub(crate) async fn download_handler(
     Path((name, req_version)): Path<(String, ReqVersion)>,
@@ -874,6 +940,7 @@ pub(crate) async fn static_asset_handler(
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::{
         Config,
         registry_api::{CrateOwner, OwnerKind},
@@ -3006,6 +3073,134 @@ mod test {
             web.assert_redirect("/fake?a=b", "/crate/fake/latest?a=b")
                 .await?;
 
+            Ok(())
+        });
+    }
+
+    #[test_case(
+        "latest/json",
+        "0.2.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest
+    )]
+    #[test_case(
+        "0.1/json",
+        "0.1.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest;
+        "semver"
+    )]
+    #[test_case(
+        "0.1.0/json",
+        "0.1.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest
+    )]
+    #[test_case(
+        "latest/json/latest",
+        "0.2.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest
+    )]
+    #[test_case(
+        "latest/json/42",
+        "0.2.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Version(42)
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json",
+        "0.2.0",
+        "i686-pc-windows-msvc",
+        RustdocJsonFormatVersion::Latest
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42",
+        "0.2.0",
+        "i686-pc-windows-msvc",
+        RustdocJsonFormatVersion::Version(42)
+    )]
+    fn json_download(
+        request_path_suffix: &str,
+        redirect_version: &str,
+        redirect_target: &str,
+        redirect_format_version: RustdocJsonFormatVersion,
+    ) {
+        async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into();
+            });
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("i686-pc-windows-msvc")
+                .create()
+                .await?;
+
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0")
+                .archive_storage(true)
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("i686-pc-windows-msvc")
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+
+            web.assert_redirect_cached_unchecked(
+                &format!("/crate/dummy/{request_path_suffix}"),
+                &format!("https://static.docs.rs/rustdoc-json/dummy/{redirect_version}/{redirect_target}/\
+                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json.zst"),
+                CachePolicy::ForeverInCdn,
+                &env.config(),
+            )
+            .await?;
+            Ok(())
+        });
+    }
+
+    #[test_case("0.1.0/json"; "rustdoc status false")]
+    #[test_case("0.2.0/unknown-target/json"; "unknown target")]
+    #[test_case("0.42.0/json"; "unknown version")]
+    fn json_download_not_found(request_path_suffix: &str) {
+        async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into();
+            });
+
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .archive_storage(true)
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("i686-pc-windows-msvc")
+                .binary(true) // binary => rustdoc_status = false
+                .create()
+                .await?;
+
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0")
+                .archive_storage(true)
+                .default_target("x86_64-unknown-linux-gnu")
+                .add_target("i686-pc-windows-msvc")
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+
+            let response = web
+                .get(&format!("/crate/dummy/{request_path_suffix}"))
+                .await?;
+
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }

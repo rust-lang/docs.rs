@@ -142,6 +142,7 @@ about_page!(AboutPageBadges, "core/about/badges.html");
 about_page!(AboutPageMetadata, "core/about/metadata.html");
 about_page!(AboutPageRedirection, "core/about/redirections.html");
 about_page!(AboutPageDownload, "core/about/download.html");
+about_page!(AboutPageRustdocJson, "core/about/rustdoc-json.html");
 
 pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<impl IntoResponse> {
     let subpage = match subpage {
@@ -168,6 +169,10 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
         .into_response(),
         "download" => AboutPageDownload {
             active_tab: "download",
+        }
+        .into_response(),
+        "rustdoc-json" => AboutPageRustdocJson {
+            active_tab: "rustdoc-json",
         }
         .into_response(),
         _ => {

@@ -1,0 +1,65 @@
+{% extends "about-base.html" %}
+
+{%- block title -%} Rustdoc JSON {%- endblock title -%}
+
+{%- block body -%}
+    <h1>Rustdoc JSON</h1>
+
+    <div class="about-page">
+        <div class="container pure-u-5-6 about">
+            <p>
+                docs.rs builds & hosts the <a href="https://doc.rust-lang.org/rustdoc/unstable-features.html#json-output"><code>rustdoc</code> JSON</a> output.
+            </p>
+            <p>
+                This structured version of the documentation can be used for inspecting the docs
+                and types of the crate in a programmatic way.
+            </p>
+            <p>
+                The JSON file you're downloading might have been built with an older version of <code>rustdoc</code>
+                so you might have to check the <code>format_version</code> attribute to determine how to parse the structure.
+                The <a href="https://docs.rs/rustdoc-types/"><code>rustdoc-types</code></a> crate helps with this.
+            </p>
+            <p><b>
+                We started building rustdoc JSON on 2025-05-23. So any release before that won't have a download
+                available until our rebuilds reached that release.
+            </b></p>
+            <h2>URLs</h2>
+            <p>
+                The download URLs can be generic or specific, depending on what you need. In case of rebuilds we
+                also keep old format versions around. The endpoints <i>redirect</i> to a download URL on
+                <code>https://static.docs.rs</code>. <b>Until we rebuilt all releases, the redirect target might
+                not exist.</b>
+            </p>
+            <p>
+                Here some URL examples you can use.
+            </p>
+            <table class="pure-table pure-table-horizontal">
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Redirects to JSON download of</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr>
+                        <td><a href="/crate/clap/latest/json">https://docs.rs/crate/clap/latest/json</a></td>
+                        <td>latest version, default target, latest format-version</td>
+                    </tr>
+                    <tr>
+                        <td><a href="/crate/clap/latest/json/42">https://docs.rs/crate/clap/latest/json/42</a></td>
+                        <td>latest version, default target, format-version 42</td>
+                    </tr>
+                    <tr>
+                        <td><a href="/crate/clap/%7E4/json">https://docs.rs/crate/clap/~4/json</a></td>
+                        <td>latest v4 via semver, default target, latest format-version</td>
+                    </tr>
+                    <tr>
+                        <td><a href="/crate/clap/latest/i686-pc-windows-msvc/json">https://docs.rs/crate/clap/latest/i686-pc-windows-msvc/json</a></td>
+                        <td>latest version, windows target, latest format-version</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+{%- endblock body %}
