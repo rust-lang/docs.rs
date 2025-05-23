@@ -1724,9 +1724,9 @@ mod tests {
         });
     }
 
+    #[test_case("thiserror-impl", "1.0.26")]
     #[test_case("scsys-macros", "0.2.6")]
     #[test_case("scsys-derive", "0.2.6")]
-    #[test_case("thiserror-impl", "1.0.26")]
     #[ignore]
     fn test_proc_macro(crate_: &str, version: &str) {
         wrapper(|env| {
@@ -1747,6 +1747,31 @@ mod tests {
             // source archive exists
             let source_archive = source_archive_path(crate_, version);
             assert!(storage.exists(&source_archive)?);
+
+            let path = rustdoc_json_path(
+                crate_,
+                version,
+                HOST_TARGET,
+                RustdocJsonFormatVersion::Latest,
+            );
+            assert!(storage.exists(&path)?);
+            assert!(storage.get_public_access(&path)?);
+
+            let json_prefix = format!("rustdoc-json/{crate_}/{version}/{}/", HOST_TARGET);
+            let mut json_files: Vec<_> = storage
+                .list_prefix(&json_prefix)
+                .filter_map(|res| res.ok())
+                .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
+                .collect();
+            json_files.sort();
+            dbg!(&json_files);
+            assert_eq!(
+                json_files,
+                vec![
+                    format!("{crate_}_{version}_{HOST_TARGET}_45.json.zst"),
+                    format!("{crate_}_{version}_{HOST_TARGET}_latest.json.zst"),
+                ]
+            );
 
             Ok(())
         });
