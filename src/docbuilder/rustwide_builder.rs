@@ -13,7 +13,7 @@ use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{
-    CompressionAlgorithm, RustdocJsonFormatVersion, compress, rustdoc_archive_path,
+    CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list, rustdoc_archive_path,
     rustdoc_json_path, source_archive_path,
 };
 use crate::utils::{
@@ -24,6 +24,7 @@ use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage
 use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use anyhow::{Context as _, Error, anyhow, bail};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
+use itertools::Itertools as _;
 use regex::Regex;
 use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
 use rustwide::logging::{self, LogStorage};
@@ -890,7 +891,16 @@ impl RustwideBuilder {
             })
             .next()
             .ok_or_else(|| {
-                anyhow!("no JSON file found in target/doc after successful rustdoc json build")
+                anyhow!(
+                    "no JSON file found in target/doc after successful rustdoc json build.\n\
+                     search directory: {}\n\
+                     files: {:?}",
+                    json_dir.to_string_lossy(),
+                    get_file_list(&json_dir)
+                        .filter_map(Result::ok)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .collect_vec(),
+                )
             })?;
 
         let format_version = {
@@ -1282,6 +1292,7 @@ mod tests {
     use crate::storage::CompressionAlgorithm;
     use crate::test::{AxumRouterTestExt, TestEnvironment, wrapper};
     use std::{io, iter};
+    use test_case::test_case;
 
     fn get_features(
         env: &TestEnvironment,
@@ -1700,12 +1711,12 @@ mod tests {
         });
     }
 
-    #[test]
+    #[test_case("scsys-macros", "0.2.6")]
+    #[test_case("scsys-derive", "0.2.6")]
+    #[test_case("thiserror-impl", "1.0.26")]
     #[ignore]
-    fn test_proc_macro() {
+    fn test_proc_macro(crate_: &str, version: &str) {
         wrapper(|env| {
-            let crate_ = "thiserror-impl";
-            let version = "1.0.26";
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(
