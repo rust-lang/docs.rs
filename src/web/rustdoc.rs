@@ -830,6 +830,7 @@ pub(crate) async fn json_download_handler(
     Path(params): Path<JsonDownloadParams>,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
+    Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
@@ -874,6 +875,10 @@ pub(crate) async fn json_download_handler(
         &target,
         format_version,
     );
+
+    if !storage.exists(&storage_path).await? {
+        return Err(AxumNope::ResourceNotFound);
+    }
 
     // since we didn't build rustdoc json for all releases yet,
     // this redirect might redirect to a location that doesn't exist.
@@ -3166,6 +3171,7 @@ mod test {
 
     #[test_case("0.1.0/json"; "rustdoc status false")]
     #[test_case("0.2.0/unknown-target/json"; "unknown target")]
+    #[test_case("0.2.0/json/99"; "target file doesnt exist")]
     #[test_case("0.42.0/json"; "unknown version")]
     fn json_download_not_found(request_path_suffix: &str) {
         async_wrapper(|env| async move {
