@@ -24,7 +24,8 @@ use mime::Mime;
 use path_slash::PathExt;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
-    fmt, fs,
+    fmt,
+    fs::{self, File},
     io::{self, BufReader},
     num::ParseIntError,
     ops::RangeInclusive,
@@ -569,6 +570,33 @@ impl AsyncStorage {
         Ok(alg)
     }
 
+    #[instrument(skip(self))]
+    pub(crate) async fn store_path(
+        &self,
+        target_path: impl Into<String> + std::fmt::Debug,
+        source_path: impl AsRef<Path> + std::fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        let target_path = target_path.into();
+        let source_path = source_path.as_ref();
+
+        let alg = CompressionAlgorithm::default();
+        let content = compress(BufReader::new(File::open(source_path)?), alg)?;
+
+        let mime = detect_mime(&target_path).to_owned();
+
+        self.store_inner(vec![Blob {
+            path: target_path,
+            mime,
+            content,
+            compression: Some(alg),
+            // this field is ignored by the backend
+            date_updated: Utc::now(),
+        }])
+        .await?;
+
+        Ok(alg)
+    }
+
     async fn store_inner(&self, batch: Vec<Blob>) -> Result<()> {
         match &self.backend {
             StorageBackend::Database(db) => db.store_batch(batch).await,
@@ -777,6 +805,18 @@ impl Storage {
         self.runtime.block_on(self.inner.store_one(path, content))
     }
 
+    // Store file into the backend at the given path (also used to detect mime type), returns the
+    // chosen compression algorithm
+    #[instrument(skip(self))]
+    pub(crate) fn store_path(
+        &self,
+        target_path: impl Into<String> + std::fmt::Debug,
+        source_path: impl AsRef<Path> + std::fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        self.runtime
+            .block_on(self.inner.store_path(target_path, source_path))
+    }
+
     /// sync wrapper for the list_prefix function
     /// purely for testing purposes since it collects all files into a Vec.
     #[cfg(test)]
@@ -843,7 +883,7 @@ pub(crate) fn rustdoc_json_path(
     format_version: RustdocJsonFormatVersion,
 ) -> String {
     format!(
-        "rustdoc-json/{name}/{version}/{target}/{name}_{version}_{target}_{format_version}.json.zst"
+        "rustdoc-json/{name}/{version}/{target}/{name}_{version}_{target}_{format_version}.json"
     )
 }
 
