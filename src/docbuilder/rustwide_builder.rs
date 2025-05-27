@@ -13,8 +13,8 @@ use crate::docbuilder::Limits;
 use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::storage::{
-    CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    RustdocJsonFormatVersion, get_file_list, rustdoc_archive_path, rustdoc_json_path,
+    source_archive_path,
 };
 use crate::utils::{
     CargoMetadata, ConfigName, copy_dir_all, get_config, parse_rustc_version, report_error,
@@ -909,21 +909,11 @@ impl RustwideBuilder {
                 .context("couldn't parse rustdoc json to find format version")?
         };
 
-        let compressed_json: Vec<u8> = {
-            let _span =
-                info_span!("compress_json", file_size = json_filename.metadata()?.len()).entered();
-
-            compress(
-                BufReader::new(File::open(&json_filename)?),
-                CompressionAlgorithm::Zstd,
-            )?
-        };
-
         for format_version in [format_version, RustdocJsonFormatVersion::Latest] {
             let _span = info_span!("store_json", %format_version).entered();
             let path = rustdoc_json_path(name, version, target, format_version);
 
-            self.storage.store_one(&path, compressed_json.clone())?;
+            self.storage.store_path(&path, &json_filename)?;
             self.storage.set_public_access(&path, true)?;
         }
 
@@ -1495,10 +1485,10 @@ mod tests {
                         .collect();
                     json_files.sort();
                     assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
-                    assert!(json_files[0].ends_with(".json.zst"));
+                    assert!(json_files[0].ends_with(".json"));
                     assert_eq!(
                         json_files[1],
-                        format!("empty-library_1.0.0_{target}_latest.json.zst")
+                        format!("empty-library_1.0.0_{target}_latest.json")
                     );
 
                     if target == &default_target {

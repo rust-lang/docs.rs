@@ -3155,7 +3155,7 @@ mod test {
             web.assert_redirect_cached_unchecked(
                 &format!("/crate/dummy/{request_path_suffix}"),
                 &format!("https://static.docs.rs/rustdoc-json/dummy/{redirect_version}/{redirect_target}/\
-                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json.zst"),
+                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json"),
                 CachePolicy::ForeverInCdn,
                 &env.config(),
             )
