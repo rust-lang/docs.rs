@@ -1,6 +1,6 @@
 use anyhow::Error;
-use bzip2::Compression;
 use bzip2::read::{BzDecoder, BzEncoder};
+use flate2::read::{GzDecoder, GzEncoder};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -29,6 +29,13 @@ pub enum CompressionAlgorithm {
     #[default]
     Zstd = 0,
     Bzip2 = 1,
+    Gzip = 2,
+}
+
+impl CompressionAlgorithm {
+    pub fn file_extension(&self) -> &'static str {
+        file_extension_for(*self)
+    }
 }
 
 impl std::convert::TryFrom<i32> for CompressionAlgorithm {
@@ -45,13 +52,36 @@ impl std::convert::TryFrom<i32> for CompressionAlgorithm {
     }
 }
 
+pub(crate) fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
+    match algorithm {
+        CompressionAlgorithm::Zstd => "zst",
+        CompressionAlgorithm::Bzip2 => "bz2",
+        CompressionAlgorithm::Gzip => "gz",
+    }
+}
+
+pub(crate) fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
+    match ext {
+        "zst" => Some(CompressionAlgorithm::Zstd),
+        "bz2" => Some(CompressionAlgorithm::Bzip2),
+        "gz" => Some(CompressionAlgorithm::Gzip),
+        _ => None,
+    }
+}
+
 // public for benchmarking
 pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
     match algorithm {
         CompressionAlgorithm::Zstd => Ok(zstd::encode_all(content, 9)?),
         CompressionAlgorithm::Bzip2 => {
-            let mut compressor = BzEncoder::new(content, Compression::best());
+            let mut compressor = BzEncoder::new(content, bzip2::Compression::best());
 
+            let mut data = vec![];
+            compressor.read_to_end(&mut data)?;
+            Ok(data)
+        }
+        CompressionAlgorithm::Gzip => {
+            let mut compressor = GzEncoder::new(content, flate2::Compression::default());
             let mut data = vec![];
             compressor.read_to_end(&mut data)?;
             Ok(data)
@@ -72,6 +102,9 @@ pub fn decompress(
         CompressionAlgorithm::Bzip2 => {
             io::copy(&mut BzDecoder::new(content), &mut buffer)?;
         }
+        CompressionAlgorithm::Gzip => {
+            io::copy(&mut GzDecoder::new(content), &mut buffer)?;
+        }
     }
 
     Ok(buffer.into_inner())
@@ -81,6 +114,7 @@ pub fn decompress(
 mod tests {
     use super::*;
     use strum::IntoEnumIterator;
+    use test_case::test_case;
 
     #[test]
     fn test_compression() {
@@ -134,9 +168,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_enum_display() {
-        assert_eq!(CompressionAlgorithm::Zstd.to_string(), "Zstd");
-        assert_eq!(CompressionAlgorithm::Bzip2.to_string(), "Bzip2");
+    #[test_case(CompressionAlgorithm::Zstd, "Zstd")]
+    #[test_case(CompressionAlgorithm::Bzip2, "Bzip2")]
+    #[test_case(CompressionAlgorithm::Gzip, "Gzip")]
+    fn test_enum_display(alg: CompressionAlgorithm, expected: &str) {
+        assert_eq!(alg.to_string(), expected);
+    }
+
+    #[test_case(CompressionAlgorithm::Zstd, "zst")]
+    #[test_case(CompressionAlgorithm::Bzip2, "bz2")]
+    #[test_case(CompressionAlgorithm::Gzip, "gz")]
+    fn test_file_extensions(alg: CompressionAlgorithm, expected: &str) {
+        assert_eq!(file_extension_for(alg), expected);
+        assert_eq!(compression_from_file_extension(expected), Some(alg));
     }
 }

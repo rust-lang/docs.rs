@@ -33,6 +33,18 @@ pub fn regex_capture_matches(c: &mut Criterion) {
                     5 * 1024 * 1024,
                 )
             });
+        })
+        .bench_function("compress gzip", |b| {
+            b.iter(|| compress(black_box(html_slice), CompressionAlgorithm::Gzip));
+        })
+        .bench_function("decompress gzip", |b| {
+            b.iter(|| {
+                decompress(
+                    black_box(html_slice),
+                    CompressionAlgorithm::Gzip,
+                    5 * 1024 * 1024,
+                )
+            });
         });
 }
 

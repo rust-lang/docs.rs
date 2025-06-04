@@ -5,11 +5,11 @@ use crate::db::types::BuildStatus;
 use crate::db::{
     BuildId, ReleaseId, initialize_build, initialize_crate, initialize_release, update_build_status,
 };
-use crate::docbuilder::DocCoverage;
+use crate::docbuilder::{DocCoverage, RUSTDOC_JSON_COMPRESSION_ALGORITHMS};
 use crate::error::Result;
 use crate::registry_api::{CrateData, CrateOwner, ReleaseData};
 use crate::storage::{
-    AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, rustdoc_archive_path,
+    AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, compress, rustdoc_archive_path,
     rustdoc_json_path, source_archive_path,
 };
 use crate::utils::{Dependency, MetadataPackage, Target};
@@ -521,23 +521,30 @@ impl<'a> FakeRelease<'a> {
                 targets.push(default_target.to_owned());
             }
             for target in &targets {
-                for format_version in [
-                    RustdocJsonFormatVersion::Version(42),
-                    RustdocJsonFormatVersion::Latest,
-                ] {
-                    storage
-                        .store_one(
-                            &rustdoc_json_path(
-                                &package.name,
-                                &package.version,
-                                target,
-                                format_version,
-                            ),
-                            serde_json::to_vec(&serde_json::json!({
-                                "format_version": 42
-                            }))?,
-                        )
-                        .await?;
+                let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({
+                    "format_version": 42
+                }))?;
+
+                for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
+                    let compressed_json: Vec<u8> = compress(&*dummy_rustdoc_json_content, *alg)?;
+
+                    for format_version in [
+                        RustdocJsonFormatVersion::Version(42),
+                        RustdocJsonFormatVersion::Latest,
+                    ] {
+                        storage
+                            .store_one_uncompressed(
+                                &rustdoc_json_path(
+                                    &package.name,
+                                    &package.version,
+                                    target,
+                                    format_version,
+                                    Some(*alg),
+                                ),
+                                compressed_json.clone(),
+                            )
+                            .await?;
+                    }
                 }
             }
         }

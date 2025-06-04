@@ -222,7 +222,7 @@ mod tests {
     use super::*;
     use crate::db::ReleaseId;
     use crate::registry_api::{CrateOwner, OwnerKind};
-    use crate::storage::rustdoc_json_path;
+    use crate::storage::{CompressionAlgorithm, rustdoc_json_path};
     use crate::test::{async_wrapper, fake_release_that_failed_before_build};
     use test_case::test_case;
 
@@ -413,6 +413,7 @@ mod tests {
                         version,
                         "x86_64-unknown-linux-gnu",
                         crate::storage::RustdocJsonFormatVersion::Latest,
+                        Some(CompressionAlgorithm::Zstd),
                     ))
                     .await
             }

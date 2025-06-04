@@ -47,6 +47,8 @@ pub(crate) fn detect_mime(file_path: impl AsRef<Path>) -> Mime {
                 Some("toml") => mimes::TEXT_TOML.clone(),
                 Some("js") => mime::TEXT_JAVASCRIPT,
                 Some("json") => mime::APPLICATION_JSON,
+                Some("gz") => mimes::APPLICATION_GZIP.clone(),
+                Some("zst") => mimes::APPLICATION_ZSTD.clone(),
                 _ => mime,
             }
         }
@@ -102,4 +104,28 @@ pub(crate) fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> V
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    // some standard mime types that mime-guess handles
+    #[test_case("txt", &mime::TEXT_PLAIN)]
+    #[test_case("html", &mime::TEXT_HTML)]
+    // overrides of other mime types and defaults for
+    // types mime-guess doesn't know about
+    #[test_case("md", &mimes::TEXT_MARKDOWN)]
+    #[test_case("rs", &mimes::TEXT_RUST)]
+    #[test_case("markdown", &mimes::TEXT_MARKDOWN)]
+    #[test_case("css", &mime::TEXT_CSS)]
+    #[test_case("toml", &mimes::TEXT_TOML)]
+    #[test_case("js", &mime::TEXT_JAVASCRIPT)]
+    #[test_case("json", &mime::APPLICATION_JSON)]
+    #[test_case("zst", &mimes::APPLICATION_ZSTD)]
+    #[test_case("gz", &mimes::APPLICATION_GZIP)]
+    fn test_detect_mime(ext: &str, expected: &Mime) {
+        assert_eq!(&detect_mime(format!("something.{ext}")), expected);
+    }
 }
