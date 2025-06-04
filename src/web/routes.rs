@@ -3,7 +3,7 @@ use super::{
 };
 use askama::Template;
 use axum::{
-    Router as AxumRouter,
+    Extension, Router as AxumRouter,
     extract::Request as AxumHttpRequest,
     handler::Handler as AxumHandler,
     middleware::{self, Next},
@@ -102,6 +102,13 @@ pub(super) fn build_metric_routes() -> AxumRouter {
         )
 }
 
+fn cached_permanent_redirect(uri: &str) -> impl IntoResponse {
+    (
+        Extension(CachePolicy::ForeverInCdnAndBrowser),
+        Redirect::permanent(uri),
+    )
+}
+
 pub(super) fn build_axum_routes() -> AxumRouter {
     // hint for naming axum routes:
     // when routes overlap, the route parameters at the same position
@@ -123,18 +130,18 @@ pub(super) fn build_axum_routes() -> AxumRouter {
         //   https://support.google.com/webmasters/answer/183668?hl=en
         .route(
             "/robots.txt",
-            get_static(|| async { Redirect::permanent("/-/static/robots.txt") }),
+            get_static(|| async { cached_permanent_redirect("/-/static/robots.txt") }),
         )
         .route(
             "/favicon.ico",
-            get_static(|| async { Redirect::permanent("/-/static/favicon.ico") }),
+            get_static(|| async { cached_permanent_redirect("/-/static/favicon.ico") }),
         )
         // `.nest` with fallbacks is currently broken, `.nest_service works
         // https://github.com/tokio-rs/axum/issues/3138
         .nest_service("/-/static", build_static_router())
         .route(
             "/opensearch.xml",
-            get_static(|| async { Redirect::permanent("/-/static/opensearch.xml") }),
+            get_static(|| async { cached_permanent_redirect("/-/static/opensearch.xml") }),
         )
         .route_with_tsr(
             "/sitemap.xml",
@@ -386,18 +393,34 @@ mod tests {
     fn test_root_redirects() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
+            let config = env.config();
             // These are "well-known" resources that will be requested from the root, but support
             // redirection
-            web.assert_redirect("/favicon.ico", "/-/static/favicon.ico")
-                .await?;
-            web.assert_redirect("/robots.txt", "/-/static/robots.txt")
-                .await?;
+            web.assert_redirect_cached(
+                "/favicon.ico",
+                "/-/static/favicon.ico",
+                CachePolicy::ForeverInCdnAndBrowser,
+                &config,
+            )
+            .await?;
+            web.assert_redirect_cached(
+                "/robots.txt",
+                "/-/static/robots.txt",
+                CachePolicy::ForeverInCdnAndBrowser,
+                &config,
+            )
+            .await?;
 
             // This has previously been served with a url pointing to the root, it may be
             // plausible to remove the redirects in the future, but for now we need to keep serving
             // it.
-            web.assert_redirect("/opensearch.xml", "/-/static/opensearch.xml")
-                .await?;
+            web.assert_redirect_cached(
+                "/opensearch.xml",
+                "/-/static/opensearch.xml",
+                CachePolicy::ForeverInCdnAndBrowser,
+                &config,
+            )
+            .await?;
 
             Ok(())
         });
