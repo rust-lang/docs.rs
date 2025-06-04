@@ -31,6 +31,11 @@
                 not exist.</b>
             </p>
             <p>
+                By default we use `zstd` compression, which is more space efficient and faster to decompress. For
+                more limited environments we also started supporting `gzip` compression. You can receive gzip by
+                adding `.gz` to the given URL.
+            </p>
+            <p>
                 Here some URL examples you can use.
             </p>
             <table class="pure-table pure-table-horizontal">
@@ -47,12 +52,20 @@
                         <td>latest version, default target, latest format-version</td>
                     </tr>
                     <tr>
+                        <td><a href="/crate/clap/latest/json.gz">https://docs.rs/crate/clap/latest/json.gz</a></td>
+                        <td>latest version, default target, latest format-version, gzip compression</td>
+                    </tr>
+                    <tr>
                         <td><a href="/crate/clap/latest/json/42">https://docs.rs/crate/clap/latest/json/42</a></td>
                         <td>latest version, default target, format-version 42</td>
                     </tr>
                     <tr>
                         <td><a href="/crate/clap/%7E4/json">https://docs.rs/crate/clap/~4/json</a></td>
                         <td>latest v4 via semver, default target, latest format-version</td>
+                    </tr>
+                    <tr>
+                        <td><a href="/crate/clap/%7E4/json.zst">https://docs.rs/crate/clap/~4/json.zst</a></td>
+                        <td>latest v4 via semver, default target, latest format-version, zstd compression</td>
                     </tr>
                     <tr>
                         <td><a href="/crate/clap/latest/i686-pc-windows-msvc/json">https://docs.rs/crate/clap/latest/i686-pc-windows-msvc/json</a></td>

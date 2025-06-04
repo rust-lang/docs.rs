@@ -44,6 +44,7 @@ prometheus = { version = "0.14.0", default-features = false }
 rustwide = { version = "0.19.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
+flate2 = "1.1.1"
 hostname = "0.4.0"
 path-slash = "0.2.0"
 once_cell = { version = "1.4.0", features = ["parking_lot"] }

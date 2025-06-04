@@ -3,7 +3,10 @@
 use crate::{
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
     db::Pool,
-    storage::{RustdocJsonFormatVersion, rustdoc_archive_path, rustdoc_json_path},
+    storage::{
+        CompressionAlgorithm, RustdocJsonFormatVersion,
+        compression::compression_from_file_extension, rustdoc_archive_path, rustdoc_json_path,
+    },
     utils,
     web::{
         MetaData, ReqVersion, axum_cached_redirect, axum_parse_uri_with_params,
@@ -37,6 +40,8 @@ use std::{
     sync::Arc,
 };
 use tracing::{Instrument, debug, error, info_span, instrument, trace};
+
+use super::extractors::PathFileExtension;
 
 static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
     HashMap::from([
@@ -822,7 +827,7 @@ pub(crate) struct JsonDownloadParams {
     pub(crate) name: String,
     pub(crate) version: ReqVersion,
     pub(crate) target: Option<String>,
-    pub(crate) format_version: Option<RustdocJsonFormatVersion>,
+    pub(crate) format_version: Option<String>,
 }
 
 #[instrument(skip_all)]
@@ -831,7 +836,20 @@ pub(crate) async fn json_download_handler(
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
+    file_extension: Option<PathFileExtension>,
 ) -> AxumResult<impl IntoResponse> {
+    // TODO: we could also additionally read the accept-encoding header here. But especially
+    // in combination with priorities it's complex to parse correctly. So for now only
+    // file extensions in the URL.
+    let wanted_compression =
+        if let Some(ext) = file_extension.map(|ext| ext.0) {
+            Some(compression_from_file_extension(&ext).ok_or_else(|| {
+                AxumNope::BadRequest(anyhow!("unknown compression file extension"))
+            })?)
+        } else {
+            None
+        };
+
     let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
         .assume_exact_name()?;
@@ -865,27 +883,72 @@ pub(crate) async fn json_download_handler(
             .to_string()
     };
 
-    let format_version = params
-        .format_version
-        .unwrap_or(RustdocJsonFormatVersion::Latest);
+    let wanted_format_version = if let Some(request_format_version) = params.format_version {
+        // axum doesn't support extension suffixes in the route yet, not as parameter, and not
+        // statically, when combined with a parameter (like `.../{format_version}.gz`).
+        // This is solved in matchit 0.8.6, but not yet in axum:
+        // https://github.com/ibraheemdev/matchit/issues/17
+        // https://github.com/tokio-rs/axum/pull/3143
+        //
+        // Because of this we have cases where `format_version` also contains a file extension
+        // suffix like `.zstd`. `wanted_compression` is already extracted above, so we only
+        // need to strip the extension from the `format_version` before trying to parse it.
+        let stripped_format_version = if let Some(wanted_compression) = wanted_compression {
+            request_format_version
+                .strip_suffix(&format!(".{}", wanted_compression.file_extension()))
+                .expect("should exist")
+        } else {
+            &request_format_version
+        };
+
+        stripped_format_version
+            .parse::<RustdocJsonFormatVersion>()
+            .context("can't parse format version")?
+    } else {
+        RustdocJsonFormatVersion::Latest
+    };
+
+    let wanted_compression = wanted_compression.unwrap_or_default();
 
     let storage_path = rustdoc_json_path(
         &krate.name,
         &krate.version.to_string(),
         &target,
-        format_version,
+        wanted_format_version,
+        Some(wanted_compression),
     );
 
-    if !storage.exists(&storage_path).await? {
-        return Err(AxumNope::ResourceNotFound);
-    }
+    let redirect = |storage_path: &str| {
+        super::axum_cached_redirect(
+            format!("{}/{}", config.s3_static_root_path, storage_path),
+            CachePolicy::ForeverInCdn,
+        )
+    };
 
-    // since we didn't build rustdoc json for all releases yet,
-    // this redirect might redirect to a location that doesn't exist.
-    Ok(super::axum_cached_redirect(
-        format!("{}/{}", config.s3_static_root_path, storage_path),
-        CachePolicy::ForeverInCdn,
-    )?)
+    if storage.exists(&storage_path).await? {
+        Ok(redirect(&storage_path)?)
+    } else {
+        // we have old files on the bucket where we stored zstd compressed files,
+        // with content-encoding=zstd & just a `.json` file extension.
+        // As a fallback, we redirect to that, if zstd was requested (which is also the default).
+        if wanted_compression == CompressionAlgorithm::Zstd {
+            let storage_path = rustdoc_json_path(
+                &krate.name,
+                &krate.version.to_string(),
+                &target,
+                wanted_format_version,
+                None,
+            );
+
+            if storage.exists(&storage_path).await? {
+                // we have an old file with a `.json` extension,
+                // redirect to that as fallback
+                return Ok(redirect(&storage_path)?);
+            }
+        }
+
+        Err(AxumNope::ResourceNotFound)
+    }
 }
 
 #[instrument(skip_all)]
@@ -948,7 +1011,9 @@ mod test {
     use super::*;
     use crate::{
         Config,
+        docbuilder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS,
         registry_api::{CrateOwner, OwnerKind},
+        storage::compression::file_extension_for,
         test::*,
         utils::Dependency,
         web::{cache::CachePolicy, encode_url_path},
@@ -3086,50 +3151,93 @@ mod test {
         "latest/json",
         "0.2.0",
         "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Zstd
+    )]
+    #[test_case(
+        "latest/json.gz",
+        "0.2.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Gzip
     )]
     #[test_case(
         "0.1/json",
         "0.1.0",
         "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest;
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Zstd;
         "semver"
     )]
     #[test_case(
         "0.1.0/json",
         "0.1.0",
         "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Zstd
     )]
     #[test_case(
         "latest/json/latest",
         "0.2.0",
         "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Zstd
+    )]
+    #[test_case(
+        "latest/json/latest.gz",
+        "0.2.0",
+        "x86_64-unknown-linux-gnu",
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Gzip
     )]
     #[test_case(
         "latest/json/42",
         "0.2.0",
         "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Version(42)
+        RustdocJsonFormatVersion::Version(42),
+        CompressionAlgorithm::Zstd
     )]
     #[test_case(
         "latest/i686-pc-windows-msvc/json",
         "0.2.0",
         "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Latest
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Zstd
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json.gz",
+        "0.2.0",
+        "i686-pc-windows-msvc",
+        RustdocJsonFormatVersion::Latest,
+        CompressionAlgorithm::Gzip
     )]
     #[test_case(
         "latest/i686-pc-windows-msvc/json/42",
         "0.2.0",
         "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Version(42)
+        RustdocJsonFormatVersion::Version(42),
+        CompressionAlgorithm::Zstd
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.gz",
+        "0.2.0",
+        "i686-pc-windows-msvc",
+        RustdocJsonFormatVersion::Version(42),
+        CompressionAlgorithm::Gzip
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.zst",
+        "0.2.0",
+        "i686-pc-windows-msvc",
+        RustdocJsonFormatVersion::Version(42),
+        CompressionAlgorithm::Zstd
     )]
     fn json_download(
         request_path_suffix: &str,
         redirect_version: &str,
         redirect_target: &str,
         redirect_format_version: RustdocJsonFormatVersion,
+        redirect_compression: CompressionAlgorithm,
     ) {
         async_wrapper(|env| async move {
             env.override_config(|config| {
@@ -3157,10 +3265,78 @@ mod test {
 
             let web = env.web_app().await;
 
+            let compression_ext = file_extension_for(redirect_compression);
+
             web.assert_redirect_cached_unchecked(
                 &format!("/crate/dummy/{request_path_suffix}"),
                 &format!("https://static.docs.rs/rustdoc-json/dummy/{redirect_version}/{redirect_target}/\
-                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json"),
+                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json.{compression_ext}"),
+                CachePolicy::ForeverInCdn,
+                &env.config(),
+            )
+            .await?;
+            Ok(())
+        });
+    }
+
+    #[test_case("")]
+    #[test_case(".zst")]
+    fn test_json_download_fallback_to_old_files_without_compression_extension(ext: &str) {
+        async_wrapper(|env| async move {
+            env.override_config(|config| {
+                config.s3_static_root_path = "https://static.docs.rs".into();
+            });
+
+            const NAME: &str = "dummy";
+            const VERSION: &str = "0.1.0";
+            const TARGET: &str = "x86_64-unknown-linux-gnu";
+            const FORMAT_VERSION: RustdocJsonFormatVersion = RustdocJsonFormatVersion::Latest;
+
+            env.fake_release()
+                .await
+                .name(NAME)
+                .version(VERSION)
+                .archive_storage(true)
+                .default_target(TARGET)
+                .create()
+                .await?;
+
+            let storage = env.async_storage().await;
+
+            let zstd_blob = storage
+                .get(
+                    &rustdoc_json_path(
+                        NAME,
+                        VERSION,
+                        TARGET,
+                        FORMAT_VERSION,
+                        Some(CompressionAlgorithm::Zstd),
+                    ),
+                    usize::MAX,
+                )
+                .await?;
+
+            for compression in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
+                let path =
+                    rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, Some(*compression));
+                storage.delete_prefix(&path).await?;
+                assert!(!storage.exists(&path).await?);
+            }
+            storage
+                .store_one(
+                    &rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, None),
+                    zstd_blob.content,
+                )
+                .await?;
+
+            let web = env.web_app().await;
+
+            web.assert_redirect_cached_unchecked(
+                &format!("/crate/dummy/latest/json{ext}"),
+                &format!(
+                    "https://static.docs.rs/rustdoc-json/{NAME}/{VERSION}/{TARGET}/\
+                    {NAME}_{VERSION}_{TARGET}_{FORMAT_VERSION}.json" // without .zstd
+                ),
                 CachePolicy::ForeverInCdn,
                 &env.config(),
             )

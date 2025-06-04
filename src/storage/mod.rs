@@ -1,5 +1,5 @@
 mod archive_index;
-mod compression;
+pub(crate) mod compression;
 mod database;
 mod s3;
 
@@ -22,7 +22,6 @@ use fn_error_context::context;
 use futures_util::stream::BoxStream;
 use mime::Mime;
 use path_slash::PathExt;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
     fmt,
     fs::{self, File},
@@ -543,6 +542,31 @@ impl AsyncStorage {
         self.store_inner(blobs).await
     }
 
+    // Store file into the backend at the given path, uncompressed.
+    // The path will also be used to determine the mime type.
+    #[instrument(skip(self, content))]
+    pub(crate) async fn store_one_uncompressed(
+        &self,
+        path: impl Into<String> + std::fmt::Debug,
+        content: impl Into<Vec<u8>>,
+    ) -> Result<()> {
+        let path = path.into();
+        let content = content.into();
+        let mime = detect_mime(&path).to_owned();
+
+        self.store_inner(vec![Blob {
+            path,
+            mime,
+            content,
+            compression: None,
+            // this field is ignored by the backend
+            date_updated: Utc::now(),
+        }])
+        .await?;
+
+        Ok(())
+    }
+
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
     #[instrument(skip(self, content))]
@@ -794,6 +818,18 @@ impl Storage {
         self.runtime.block_on(self.inner.store_blobs(blobs))
     }
 
+    // Store file into the backend at the given path, uncompressed.
+    // The path will also be used to determine the mime type.
+    #[instrument(skip(self, content))]
+    pub(crate) fn store_one_uncompressed(
+        &self,
+        path: impl Into<String> + std::fmt::Debug,
+        content: impl Into<Vec<u8>>,
+    ) -> Result<()> {
+        self.runtime
+            .block_on(self.inner.store_one_uncompressed(path, content))
+    }
+
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
     #[instrument(skip(self, content))]
@@ -857,7 +893,7 @@ pub(crate) fn rustdoc_archive_path(name: &str, version: &str) -> String {
     format!("rustdoc/{name}/{version}.zip")
 }
 
-#[derive(strum::Display, Debug, PartialEq, Eq, Clone, SerializeDisplay, DeserializeFromStr)]
+#[derive(strum::Display, Debug, PartialEq, Eq, Clone, Copy)]
 #[strum(serialize_all = "snake_case")]
 pub(crate) enum RustdocJsonFormatVersion {
     #[strum(serialize = "{0}")]
@@ -881,10 +917,18 @@ pub(crate) fn rustdoc_json_path(
     version: &str,
     target: &str,
     format_version: RustdocJsonFormatVersion,
+    compression_algorithm: Option<CompressionAlgorithm>,
 ) -> String {
-    format!(
+    let mut path = format!(
         "rustdoc-json/{name}/{version}/{target}/{name}_{version}_{target}_{format_version}.json"
-    )
+    );
+
+    if let Some(alg) = compression_algorithm {
+        path.push('.');
+        path.push_str(compression::file_extension_for(alg));
+    }
+
+    path
 }
 
 pub(crate) fn source_archive_path(name: &str, version: &str) -> String {
@@ -904,15 +948,6 @@ mod test {
         assert_eq!(expected.to_string(), input);
         // test FromStr
         assert_eq!(expected, input.parse().unwrap());
-
-        let json_input = format!("\"{input}\"");
-        // test Serialize
-        assert_eq!(serde_json::to_string(&expected).unwrap(), json_input);
-        // test Deserialize
-        assert_eq!(
-            serde_json::from_str::<RustdocJsonFormatVersion>(&json_input).unwrap(),
-            expected
-        );
     }
 
     #[test]
