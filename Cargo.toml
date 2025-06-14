@@ -141,8 +141,3 @@ harness = false
 name = "cratesfyi"
 test = false
 doc = false
-
-[patch.crates-io.onig_sys]
-# Once new version (> 69.8.1) is released, we can remove this patch.
-git = "https://github.com/rust-onig/rust-onig"
-rev = "c4378abcbf30d58cf5f230c0d2e6375f2be05a47"
