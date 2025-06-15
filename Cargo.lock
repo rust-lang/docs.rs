@@ -7968,8 +7968,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "onig_sys"
-version = "69.8.1"
-source = "git+https://github.com/rust-onig/rust-onig?rev=c4378abcbf30d58cf5f230c0d2e6375f2be05a47#c4378abcbf30d58cf5f230c0d2e6375f2be05a47"
