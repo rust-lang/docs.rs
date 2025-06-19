@@ -281,7 +281,10 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-        } else if (e.target.parentNode.classList.contains("pure-menu-has-children")) {
+        } else if (e.target.parentNode &&
+            e.target.parentNode.classList &&
+            e.target.parentNode.classList.contains("pure-menu-has-children")
+        ) {
             switch (e.key.toLowerCase()) {
                 case "arrowdown":
                 case "down":
