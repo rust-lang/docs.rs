@@ -1,8 +1,9 @@
-use crate::web::page::templates::{Body, Head, Vendored};
-use crate::web::rustdoc::RustdocPage;
+use crate::web::{
+    page::templates::{Body, Head, Vendored},
+    rustdoc::RustdocPage,
+};
 use askama::Template;
-use lol_html::element;
-use lol_html::errors::RewritingError;
+use lol_html::{element, errors::RewritingError};
 
 /// Rewrite a rustdoc page to have the docs.rs topbar
 ///
