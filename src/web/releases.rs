@@ -2174,7 +2174,7 @@ mod tests {
                 env.fake_release()
                     .await
                     .name("failed")
-                    .version(&format!("0.0.{}", i))
+                    .version(&format!("0.0.{i}"))
                     .build_result_failed()
                     .create()
                     .await?;

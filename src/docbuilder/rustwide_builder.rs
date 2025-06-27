@@ -433,7 +433,7 @@ impl RustwideBuilder {
                 // to sentry.
                 let mut conn = self.db.get_async().await?;
 
-                update_build_with_error(&mut conn, build_id, Some(&format!("{:?}", err))).await?;
+                update_build_with_error(&mut conn, build_id, Some(&format!("{err:?}"))).await?;
 
                 Ok(BuildPackageSummary {
                     successful: false,
@@ -1899,8 +1899,7 @@ mod tests {
             let source_archive = source_archive_path(crate_, version);
             assert!(
                 env.storage().exists(&source_archive)?,
-                "archive doesnt exist: {}",
-                source_archive
+                "archive doesnt exist: {source_archive}"
             );
 
             Ok(())

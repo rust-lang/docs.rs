@@ -68,7 +68,7 @@ impl Pool {
                         async move {
                             if schema != DEFAULT_SCHEMA {
                                 conn.execute(
-                                    format!("SET search_path TO {}, {};", schema, DEFAULT_SCHEMA)
+                                    format!("SET search_path TO {schema}, {DEFAULT_SCHEMA};")
                                         .as_str(),
                                 )
                                 .await?;

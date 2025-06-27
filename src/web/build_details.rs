@@ -99,7 +99,7 @@ pub(crate) async fn build_details_handler(
         // For a long time only for one target, then we started storing the logs for other targets
         // toFor a long time only for one target, then we started storing the logs for other
         // targets. In any case, all the logfiles are put into a folder we can just query.
-        let prefix = format!("build-logs/{}/", id);
+        let prefix = format!("build-logs/{id}/");
         let all_log_filenames: Vec<_> = storage
             .list_prefix(&prefix) // the result from S3 is ordered by key
             .await

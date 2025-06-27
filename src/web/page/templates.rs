@@ -209,10 +209,7 @@ pub mod filters {
     ) -> askama::Result<Safe<String>> {
         let highlighted_code =
             crate::web::highlight::with_lang(Some(lang), &code.to_string(), None);
-        Ok(Safe(format!(
-            "<pre><code>{}</code></pre>",
-            highlighted_code
-        )))
+        Ok(Safe(format!("<pre><code>{highlighted_code}</code></pre>")))
     }
 
     pub fn round(value: &f32, _: &dyn Values, precision: u32) -> askama::Result<String> {
