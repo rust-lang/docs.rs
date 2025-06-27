@@ -1,9 +1,9 @@
-use super::{Blob, FileRange};
+use super::{Blob, FileRange, StreamingBlob};
 use crate::{InstanceMetrics, db::Pool, error::Result};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;
-use std::sync::Arc;
+use std::{io, sync::Arc};
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
@@ -58,38 +58,27 @@ impl DatabaseBackend {
         }
     }
 
-    pub(super) async fn get(
+    pub(super) async fn get_stream(
         &self,
         path: &str,
-        max_size: usize,
         range: Option<FileRange>,
-    ) -> Result<Blob> {
-        // The maximum size for a BYTEA (the type used for `content`) is 1GB, so this cast is safe:
-        // https://www.postgresql.org/message-id/162867790712200946i7ba8eb92v908ac595c0c35aee%40mail.gmail.com
-        let max_size = max_size.min(i32::MAX as usize) as i32;
-
+    ) -> Result<StreamingBlob> {
         struct Result {
             path: String,
             mime: String,
             date_updated: DateTime<Utc>,
             compression: Option<i32>,
             content: Option<Vec<u8>>,
-            is_too_big: bool,
         }
 
         let result = if let Some(r) = range {
-            // when we only want to get a range we can validate already if the range is small enough
-            if (r.end() - r.start() + 1) > max_size as u64 {
-                return Err(std::io::Error::other(crate::error::SizeLimitReached).into());
-            }
             let range_start = i32::try_from(*r.start())?;
 
             sqlx::query_as!(
                 Result,
                 r#"SELECT
                      path, mime, date_updated, compression,
-                     substring(content from $2 for $3) as content,
-                     FALSE as "is_too_big!"
+                     substring(content from $2 for $3) as content
                  FROM files
                  WHERE path = $1;"#,
                 path,
@@ -105,35 +94,35 @@ impl DatabaseBackend {
             sqlx::query_as!(
                 Result,
                 r#"SELECT
-                     path, mime, date_updated, compression,
-                     (CASE WHEN LENGTH(content) <= $2 THEN content ELSE NULL END) AS content,
-                     (LENGTH(content) > $2) AS "is_too_big!"
+                     path,
+                     mime,
+                     date_updated,
+                     compression,
+                     content
                  FROM files
                  WHERE path = $1;"#,
                 path,
-                max_size,
             )
             .fetch_optional(&self.pool)
             .await?
             .ok_or(super::PathNotFoundError)?
         };
 
-        if result.is_too_big {
-            return Err(std::io::Error::other(crate::error::SizeLimitReached).into());
-        }
-
         let compression = result.compression.map(|i| {
             i.try_into()
                 .expect("invalid compression algorithm stored in database")
         });
-        Ok(Blob {
+        let content = result.content.unwrap_or_default();
+        let content_len = content.len();
+        Ok(StreamingBlob {
             path: result.path,
             mime: result
                 .mime
                 .parse()
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated: result.date_updated,
-            content: result.content.unwrap_or_default(),
+            content: Box::new(io::Cursor::new(content)),
+            content_length: content_len,
             compression,
         })
     }

@@ -1,4 +1,4 @@
-use super::{Blob, FileRange};
+use super::{Blob, FileRange, StreamingBlob};
 use crate::{Config, InstanceMetrics};
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
@@ -16,7 +16,7 @@ use futures_util::{
     pin_mut,
     stream::{FuturesUnordered, Stream, StreamExt},
 };
-use std::{io::Write, sync::Arc};
+use std::sync::Arc;
 use tracing::{error, warn};
 
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
@@ -174,12 +174,11 @@ impl S3Backend {
             .map(|_| ())
     }
 
-    pub(super) async fn get(
+    pub(super) async fn get_stream(
         &self,
         path: &str,
-        max_size: usize,
         range: Option<FileRange>,
-    ) -> Result<Blob, Error> {
+    ) -> Result<StreamingBlob, Error> {
         let res = self
             .client
             .get_object()
@@ -190,19 +189,6 @@ impl S3Backend {
             .await
             .convert_errors()?;
 
-        let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
-        content.reserve(
-            res.content_length
-                .and_then(|length| length.try_into().ok())
-                .unwrap_or(0),
-        );
-
-        let mut body = res.body;
-
-        while let Some(data) = body.next().await.transpose()? {
-            content.write_all(data.as_ref())?;
-        }
-
         let date_updated = res
             .last_modified
             // This is a bug from AWS, it should always have a modified date of when it was created if nothing else.
@@ -210,9 +196,9 @@ impl S3Backend {
             .and_then(|dt| dt.to_chrono_utc().ok())
             .unwrap_or_else(Utc::now);
 
-        let compression = res.content_encoding.and_then(|s| s.parse().ok());
+        let compression = res.content_encoding.as_ref().and_then(|s| s.parse().ok());
 
-        Ok(Blob {
+        Ok(StreamingBlob {
             path: path.into(),
             mime: res
                 .content_type
@@ -221,7 +207,11 @@ impl S3Backend {
                 .parse()
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated,
-            content: content.into_inner(),
+            content_length: res
+                .content_length
+                .and_then(|length| length.try_into().ok())
+                .unwrap_or(0),
+            content: Box::new(res.body.into_async_read()),
             compression,
         })
     }

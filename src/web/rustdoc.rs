@@ -16,7 +16,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
-        file::File,
+        file::{File, StreamingFile},
         match_version,
         page::{
             TemplateData,
@@ -75,7 +75,6 @@ pub(crate) struct RustdocRedirectorParams {
 /// See also https://github.com/rust-lang/docs.rs/pull/1889
 async fn try_serve_legacy_toolchain_asset(
     storage: Arc<AsyncStorage>,
-    config: Arc<Config>,
     path: impl AsRef<str>,
 ) -> AxumResult<AxumResponse> {
     let path = path.as_ref().to_owned();
@@ -87,18 +86,17 @@ async fn try_serve_legacy_toolchain_asset(
     // since new nightly versions will always put their
     // toolchain specific resources into the new folder,
     // which is reached via the new handler.
-    Ok(File::from_path(&storage, &path, &config)
+    Ok(StreamingFile::from_path(&storage, &path)
         .await
         .map(IntoResponse::into_response)?)
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
-#[instrument(skip(storage, config, conn))]
+#[instrument(skip(storage, conn))]
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
     mut conn: DbConnection,
     Query(query_pairs): Query<HashMap<String, String>>,
     uri: Uri,
@@ -129,7 +127,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             .binary_search(&extension)
             .is_ok()
         {
-            return try_serve_legacy_toolchain_asset(storage, config, params.name)
+            return try_serve_legacy_toolchain_asset(storage, params.name)
                 .instrument(info_span!("serve static asset"))
                 .await;
         }
@@ -183,7 +181,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                 let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
                 match storage
-                    .fetch_rustdoc_file(
+                    .stream_rustdoc_file(
                         &crate_name,
                         &krate.version.to_string(),
                         krate.latest_build_id,
@@ -192,7 +190,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                     )
                     .await
                 {
-                    Ok(blob) => Ok(File(blob).into_response()),
+                    Ok(blob) => Ok(StreamingFile(blob).into_response()),
                     Err(err) => {
                         if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
                             && !matches!(
@@ -208,7 +206,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                         // docs that were affected by this bug.
                         // https://github.com/rust-lang/docs.rs/issues/1979
                         if target.starts_with("search-") || target.starts_with("settings-") {
-                            try_serve_legacy_toolchain_asset(storage, config, target).await
+                            try_serve_legacy_toolchain_asset(storage, target).await
                         } else {
                             Err(err.into())
                         }
@@ -999,11 +997,10 @@ pub(crate) async fn download_handler(
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");
 
-    Ok(File::from_path(&storage, &storage_path, &config).await?)
+    Ok(StreamingFile::from_path(&storage, &storage_path).await?)
 }
 
 #[cfg(test)]

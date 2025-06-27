@@ -4,10 +4,10 @@ use super::cache::CachePolicy;
 use crate::{
     Config,
     error::Result,
-    storage::{AsyncStorage, Blob},
+    storage::{AsyncStorage, Blob, StreamingBlob},
 };
-
 use axum::{
+    body::Body,
     extract::Extension,
     http::{
         StatusCode,
@@ -15,6 +15,7 @@ use axum::{
     },
     response::{IntoResponse, Response as AxumResponse},
 };
+use tokio_util::io::ReaderStream;
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
@@ -49,6 +50,37 @@ impl IntoResponse for File {
             ],
             Extension(CachePolicy::ForeverInCdnAndBrowser),
             self.0.content,
+        )
+            .into_response()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StreamingFile(pub(crate) StreamingBlob);
+
+impl StreamingFile {
+    /// Gets file from database
+    pub(super) async fn from_path(storage: &AsyncStorage, path: &str) -> Result<StreamingFile> {
+        Ok(StreamingFile(storage.get_stream(path).await?))
+    }
+}
+
+impl IntoResponse for StreamingFile {
+    fn into_response(self) -> AxumResponse {
+        // Convert the AsyncBufRead into a Stream of Bytes
+        let stream = ReaderStream::new(self.0.content);
+        let body = Body::from_stream(stream);
+        (
+            StatusCode::OK,
+            [
+                (CONTENT_TYPE, self.0.mime.as_ref()),
+                (
+                    LAST_MODIFIED,
+                    &self.0.date_updated.format("%a, %d %b %Y %T %Z").to_string(),
+                ),
+            ],
+            Extension(CachePolicy::ForeverInCdnAndBrowser),
+            body,
         )
             .into_response()
     }

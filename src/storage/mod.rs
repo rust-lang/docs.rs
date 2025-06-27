@@ -25,14 +25,17 @@ use path_slash::PathExt;
 use std::{
     fmt,
     fs::{self, File},
-    io::{self, BufReader},
+    io::{self, BufReader, Write as _},
     num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use std::{iter, str::FromStr};
-use tokio::{io::AsyncWriteExt, runtime::Runtime};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt as _, AsyncWriteExt},
+    runtime::Runtime,
+};
 use tracing::{error, info_span, instrument, trace};
 use walkdir::WalkDir;
 
@@ -54,6 +57,80 @@ pub(crate) struct Blob {
 impl Blob {
     pub(crate) fn is_empty(&self) -> bool {
         self.mime == "application/x-empty"
+    }
+}
+
+pub(crate) struct StreamingBlob {
+    pub(crate) path: String,
+    pub(crate) mime: Mime,
+    pub(crate) date_updated: DateTime<Utc>,
+    pub(crate) compression: Option<CompressionAlgorithm>,
+    pub(crate) content_length: usize,
+    pub(crate) content: Box<dyn AsyncRead + Unpin + Send>,
+}
+
+impl std::fmt::Debug for StreamingBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StreamingBlob")
+            .field("path", &self.path)
+            .field("mime", &self.mime)
+            .field("date_updated", &self.date_updated)
+            .field("compression", &self.compression)
+            .finish()
+    }
+}
+
+impl StreamingBlob {
+    /// wrap the content stream in a streaming decompressor according to the
+    /// algorithm found in `compression` attribute.
+    pub(crate) fn decompress(mut self) -> Self {
+        let Some(alg) = self.compression else {
+            return self;
+        };
+
+        match alg {
+            CompressionAlgorithm::Zstd => {
+                self.content = Box::new(async_compression::tokio::bufread::ZstdDecoder::new(
+                    tokio::io::BufReader::new(self.content),
+                ))
+            }
+            CompressionAlgorithm::Bzip2 => {
+                self.content = Box::new(async_compression::tokio::bufread::BzDecoder::new(
+                    tokio::io::BufReader::new(self.content),
+                ))
+            }
+            CompressionAlgorithm::Gzip => {
+                self.content = Box::new(async_compression::tokio::bufread::GzipDecoder::new(
+                    tokio::io::BufReader::new(self.content),
+                ))
+            }
+        };
+        self.compression = None;
+        self
+    }
+
+    pub(crate) async fn materialize(mut self, max_size: usize) -> Result<Blob> {
+        self = self.decompress();
+
+        let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
+        content.reserve(self.content_length);
+
+        let mut buf = [0u8; 8 * 1024];
+        loop {
+            let n = self.content.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            content.write_all(&buf[..n])?;
+        }
+
+        Ok(Blob {
+            path: self.path,
+            mime: self.mime,
+            date_updated: self.date_updated,
+            content: content.into_inner(),
+            compression: self.compression,
+        })
     }
 }
 
@@ -210,6 +287,35 @@ impl AsyncStorage {
         })
     }
 
+    /// Fetch a rustdoc file from our blob storage.
+    /// * `name` - the crate name
+    /// * `version` - the crate version
+    /// * `latest_build_id` - the id of the most recent build. used purely to invalidate the local archive
+    ///   index cache, when `archive_storage` is `true.` Without it we wouldn't know that we have
+    ///   to invalidate the locally cached file after a rebuild.
+    /// * `path` - the wanted path inside the documentation.
+    /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
+    ///    where we can fetch the requested path from inside the ZIP file.
+    #[instrument]
+    pub(crate) async fn stream_rustdoc_file(
+        &self,
+        name: &str,
+        version: &str,
+        latest_build_id: Option<BuildId>,
+        path: &str,
+        archive_storage: bool,
+    ) -> Result<StreamingBlob> {
+        trace!("fetch rustdoc file");
+        Ok(if archive_storage {
+            self.stream_from_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
+                .await?
+        } else {
+            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
+            let remote_path = format!("rustdoc/{name}/{version}/{path}");
+            self.get_stream(&remote_path).await?
+        })
+    }
+
     #[context("fetching {path} from {name} {version} (archive: {archive_storage})")]
     pub(crate) async fn fetch_source_file(
         &self,
@@ -282,15 +388,16 @@ impl AsyncStorage {
 
     #[instrument]
     pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
-        let mut blob = match &self.backend {
-            StorageBackend::Database(db) => db.get(path, max_size, None).await,
-            StorageBackend::S3(s3) => s3.get(path, max_size, None).await,
+        self.get_stream(path).await?.materialize(max_size).await
+    }
+
+    #[instrument]
+    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
+        let blob = match &self.backend {
+            StorageBackend::Database(db) => db.get_stream(path, None).await,
+            StorageBackend::S3(s3) => s3.get_stream(path, None).await,
         }?;
-        if let Some(alg) = blob.compression {
-            blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
-            blob.compression = None;
-        }
-        Ok(blob)
+        Ok(blob.decompress())
     }
 
     #[instrument]
@@ -301,18 +408,28 @@ impl AsyncStorage {
         range: FileRange,
         compression: Option<CompressionAlgorithm>,
     ) -> Result<Blob> {
+        self.get_range_stream(path, range, compression)
+            .await?
+            .materialize(max_size)
+            .await
+    }
+
+    #[instrument]
+    pub(super) async fn get_range_stream(
+        &self,
+        path: &str,
+        range: FileRange,
+        compression: Option<CompressionAlgorithm>,
+    ) -> Result<StreamingBlob> {
         let mut blob = match &self.backend {
-            StorageBackend::Database(db) => db.get(path, max_size, Some(range)).await,
-            StorageBackend::S3(s3) => s3.get(path, max_size, Some(range)).await,
+            StorageBackend::Database(db) => db.get_stream(path, Some(range)).await,
+            StorageBackend::S3(s3) => s3.get_stream(path, Some(range)).await,
         }?;
         // `compression` represents the compression of the file-stream inside the archive.
         // We don't compress the whole archive, so the encoding of the archive's blob is irrelevant
         // here.
-        if let Some(alg) = compression {
-            blob.content = decompress(blob.content.as_slice(), alg, max_size)?;
-            blob.compression = None;
-        }
-        Ok(blob)
+        blob.compression = compression;
+        Ok(blob.decompress())
     }
 
     #[instrument]
@@ -385,6 +502,38 @@ impl AsyncStorage {
             mime: detect_mime(path),
             date_updated: blob.date_updated,
             content: blob.content,
+            compression: None,
+        })
+    }
+
+    #[instrument]
+    pub(crate) async fn stream_from_archive(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+        path: &str,
+    ) -> Result<StreamingBlob> {
+        let index_filename = self
+            .download_archive_index(archive_path, latest_build_id)
+            .await?;
+
+        let info = {
+            let path = path.to_owned();
+            spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
+        }?
+        .ok_or(PathNotFoundError)?;
+
+        let blob = self
+            .get_range_stream(archive_path, info.range(), Some(info.compression()))
+            .await?;
+        assert_eq!(blob.compression, None);
+
+        Ok(StreamingBlob {
+            path: format!("{archive_path}/{path}"),
+            mime: detect_mime(path),
+            date_updated: blob.date_updated,
+            content: blob.content,
+            content_length: blob.content_length,
             compression: None,
         })
     }
