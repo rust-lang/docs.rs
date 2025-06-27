@@ -49,7 +49,7 @@ pub struct GitLab {
 
 impl GitLab {
     pub fn new(host: &'static str, access_token: &Option<String>) -> Result<Self> {
-        Self::with_custom_endpoint(host, access_token, format!("https://{}/api/graphql", host))
+        Self::with_custom_endpoint(host, access_token, format!("https://{host}/api/graphql"))
     }
 
     pub fn with_custom_endpoint<E: AsRef<str>>(

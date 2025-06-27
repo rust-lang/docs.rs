@@ -788,7 +788,7 @@ pub(crate) async fn target_redirect_handler(
 
     Ok(axum_cached_redirect(
         axum_parse_uri_with_params(
-            &encode_url_path(&format!("/{name}/{}/{redirect_path}", req_version)),
+            &encode_url_path(&format!("/{name}/{req_version}/{redirect_path}")),
             query_args,
         )?,
         if req_version.is_latest() {

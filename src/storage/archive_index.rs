@@ -92,7 +92,7 @@ fn find_in_sqlite_index(conn: &Connection, search_for: &str) -> Result<Option<Fi
                 rusqlite::Error::FromSqlConversionFailure(
                     2,
                     rusqlite::types::Type::Integer,
-                    format!("invalid compression algorithm '{}' in database", value).into(),
+                    format!("invalid compression algorithm '{value}' in database").into(),
                 )
             })?,
         })

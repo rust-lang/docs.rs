@@ -633,9 +633,9 @@ pub(crate) async fn get_all_releases(
         .ok_or_else(|| anyhow!("empty target name for succesful release"))?;
 
     let inner_path = if inner_path.is_empty() {
-        format!("{}/index.html", target_name)
+        format!("{target_name}/index.html")
     } else {
-        format!("{}/{inner_path}", target_name)
+        format!("{target_name}/{inner_path}")
     };
 
     let target = if target.is_empty() {

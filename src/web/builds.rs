@@ -398,7 +398,7 @@ mod tests {
                         Request::builder()
                             .uri("/crate/foo/0.1.0/rebuild")
                             .method("POST")
-                            .header("Authorization", &format!("Bearer {}", correct_token))
+                            .header("Authorization", &format!("Bearer {correct_token}"))
                             .body(Body::empty())
                             .unwrap(),
                     )
@@ -418,7 +418,7 @@ mod tests {
                         Request::builder()
                             .uri("/crate/foo/0.1.0/rebuild")
                             .method("POST")
-                            .header("Authorization", &format!("Bearer {}", correct_token))
+                            .header("Authorization", &format!("Bearer {correct_token}"))
                             .body(Body::empty())
                             .unwrap(),
                     )

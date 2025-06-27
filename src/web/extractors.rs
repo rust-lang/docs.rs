@@ -167,11 +167,11 @@ mod tests {
             )
             .route(
                 "/optional/something.pdf",
-                get(|ext: Option<PathFileExtension>| async move { format!("option: {:?}", ext) }),
+                get(|ext: Option<PathFileExtension>| async move { format!("option: {ext:?}") }),
             )
             .route(
                 "/optional_missing/something",
-                get(|ext: Option<PathFileExtension>| async move { format!("option: {:?}", ext) }),
+                get(|ext: Option<PathFileExtension>| async move { format!("option: {ext:?}") }),
             );
 
         let res = app.get("/mandatory/something.pdf").await?;
