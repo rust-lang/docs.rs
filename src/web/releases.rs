@@ -33,6 +33,21 @@ use url::form_urlencoded;
 
 use super::cache::CachePolicy;
 
+// Introduce SearchError as new error type
+#[derive(Debug, thiserror::Error)]
+pub enum SearchError {
+    #[error("crates.io error: {0}")]
+    CratesIo(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<sqlx::Error> for SearchError {
+    fn from(err: sqlx::Error) -> Self {
+        SearchError::Other(anyhow::Error::from(err))
+    }
+}
+
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
 /// Releases in /releases page
@@ -149,8 +164,13 @@ async fn get_search_results(
     conn: &mut sqlx::PgConnection,
     registry: &RegistryApi,
     query_params: &str,
-) -> Result<SearchResult, anyhow::Error> {
-    let crate::registry_api::Search { crates, meta } = registry.search(query_params).await?;
+) -> Result<SearchResult, SearchError> {
+    // Capture responses returned by registry
+    let result = registry.search(query_params).await;
+    let crate::registry_api::Search { crates, meta } = match result {
+        Ok(results_from_search_request) => results_from_search_request,
+        Err(err) => return handle_registry_error(err),
+    };
 
     let names = Arc::new(
         crates
@@ -231,6 +251,37 @@ async fn get_search_results(
         prev_page: meta.prev_page,
         next_page: meta.next_page,
     })
+}
+
+// Categorize  errors from registry
+fn handle_registry_error(err: anyhow::Error) -> Result<SearchResult, SearchError> {
+    // Capture crates.io API error
+    if let Some(registry_request_error) = err.downcast_ref::<reqwest::Error>() {
+        if let Some(status) = registry_request_error.status() {
+            if status.is_client_error() || status.is_server_error() {
+                return Err(SearchError::CratesIo(format!(
+                    "crates.io returned {}: {}",
+                    status, registry_request_error
+                )));
+            }
+        }
+    }
+    // Move all other error types to this wrapper
+    Err(SearchError::Other(err))
+}
+
+//Error message to gracefully display
+fn create_search_error_response(query: String, sort_by: String) -> Search {
+    Search {
+        title: "Search service is not currently available".to_owned(),
+        releases: vec![],
+        search_query: Some(query),
+        search_sort_by: Some(sort_by),
+        previous_page_link: None,
+        next_page_link: None,
+        release_type: ReleaseType::Search,
+        status: http::StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 #[derive(Template)]
@@ -589,7 +640,7 @@ pub(crate) async fn search_handler(
             }
         }
 
-        get_search_results(&mut conn, &registry, query_params).await?
+        get_search_results(&mut conn, &registry, query_params).await
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -597,9 +648,22 @@ pub(crate) async fn search_handler(
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(&mut conn, &registry, &query_params).await?
+        get_search_results(&mut conn, &registry, &query_params).await
     } else {
         return Err(AxumNope::NoResults);
+    };
+
+    let search_result = match search_result {
+        Ok(result) => result,
+        Err(SearchError::CratesIo(_)) => {
+            // Return a user-friendly error response
+            return Ok(create_search_error_response(query, sort_by).into_response());
+        }
+        Err(SearchError::Other(err)) => {
+            // For other errors, propagate them normally
+            // NOTE - Errrors that are not 400x or 500x will be logged to Sentry
+            return Err(err.into());
+        }
     };
 
     let title = if search_result.results.is_empty() {
