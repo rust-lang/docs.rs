@@ -271,9 +271,12 @@ fn handle_registry_error(err: anyhow::Error) -> Result<SearchResult, SearchError
 }
 
 //Error message to gracefully display
-fn create_search_error_response(query: String, sort_by: String) -> Search {
+fn create_search_error_response(query: String, sort_by: String, error_message: String) -> Search {
     Search {
-        title: "Search service is not currently available".to_owned(),
+        title: format!(
+            "Search service is not currently available: {}",
+            error_message
+        ),
         releases: vec![],
         search_query: Some(query),
         search_sort_by: Some(sort_by),
@@ -655,9 +658,9 @@ pub(crate) async fn search_handler(
 
     let search_result = match search_result {
         Ok(result) => result,
-        Err(SearchError::CratesIo(_)) => {
+        Err(SearchError::CratesIo(error_message)) => {
             // Return a user-friendly error response
-            return Ok(create_search_error_response(query, sort_by).into_response());
+            return Ok(create_search_error_response(query, sort_by, error_message).into_response());
         }
         Err(SearchError::Other(err)) => {
             // For other errors, propagate them normally
@@ -1315,7 +1318,7 @@ mod tests {
                 .await
                 .get("/releases/search?query=doesnt_matter_here")
                 .await?;
-            assert_eq!(response.status(), 500);
+            assert_eq!(response.status(), 503);
 
             assert!(response.text().await?.contains(&format!("{status}")));
             Ok(())
