@@ -260,8 +260,7 @@ fn handle_registry_error(err: anyhow::Error) -> Result<SearchResult, SearchError
         if let Some(status) = registry_request_error.status() {
             if status.is_client_error() || status.is_server_error() {
                 return Err(SearchError::CratesIo(format!(
-                    "crates.io returned {}: {}",
-                    status, registry_request_error
+                    "crates.io returned {status}: {registry_request_error}"
                 )));
             }
         }
@@ -273,10 +272,7 @@ fn handle_registry_error(err: anyhow::Error) -> Result<SearchResult, SearchError
 //Error message to gracefully display
 fn create_search_error_response(query: String, sort_by: String, error_message: String) -> Search {
     Search {
-        title: format!(
-            "Search service is not currently available: {}",
-            error_message
-        ),
+        title: format!("Search service is not currently available: {error_message}"),
         releases: vec![],
         search_query: Some(query),
         search_sort_by: Some(sort_by),
