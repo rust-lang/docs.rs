@@ -256,14 +256,13 @@ async fn get_search_results(
 // Categorize  errors from registry
 fn handle_registry_error(err: anyhow::Error) -> Result<SearchResult, SearchError> {
     // Capture crates.io API error
-    if let Some(registry_request_error) = err.downcast_ref::<reqwest::Error>() {
-        if let Some(status) = registry_request_error.status() {
-            if status.is_client_error() || status.is_server_error() {
-                return Err(SearchError::CratesIo(format!(
-                    "crates.io returned {status}: {registry_request_error}"
-                )));
-            }
-        }
+    if let Some(registry_request_error) = err.downcast_ref::<reqwest::Error>()
+        && let Some(status) = registry_request_error.status()
+        && (status.is_client_error() || status.is_server_error())
+    {
+        return Err(SearchError::CratesIo(format!(
+            "crates.io returned {status}: {registry_request_error}"
+        )));
     }
     // Move all other error types to this wrapper
     Err(SearchError::Other(err))
