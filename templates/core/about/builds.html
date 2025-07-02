@@ -106,13 +106,15 @@
         </ul>
     </p>
 
-    <h4 id="failures-and-rebuilds"> <a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a> </h4>
-    <p>
-        If your crate fails to build for a reason not listed here, please <a href="{{ docsrs_repo|safe }}/issues">file an issue</a>.
-        Some build failures can be fixed by Docs.rs, e.g., by issuing a rebuild after a bug in Docs.rs has been fixed.
-    </p>
+    <h4 id="failures-and-rebuilds"><a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a></h4>
+
+    <p>If your crate fails to build for a reason not listed here, you can rebuild it from <a href="https://crates.io">crates.io</a> website as you can see below:</p>
+
+    <img src="/-/static/trigger-rebuild.png" alt="crates.io dropdown menu showing two items: yank and rebuild docs">
+
+    <p>Or you can <a href="{{ docsrs_repo|safe }}/issues">file an issue</a> if you think it's a <b>docs.rs</b> issue.</p>
 
     </div>
-    <br />
+    <br/>
     </div>
 {%- endblock body %}
