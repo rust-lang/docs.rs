@@ -263,40 +263,6 @@ impl AsyncStorage {
     /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
     ///    where we can fetch the requested path from inside the ZIP file.
     #[instrument]
-    pub(crate) async fn fetch_rustdoc_file(
-        &self,
-        name: &str,
-        version: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<Blob> {
-        trace!("fetch rustdoc file");
-        Ok(if archive_storage {
-            self.get_from_archive(
-                &rustdoc_archive_path(name, version),
-                latest_build_id,
-                path,
-                self.max_file_size_for(path),
-            )
-            .await?
-        } else {
-            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.get(&remote_path, self.max_file_size_for(path)).await?
-        })
-    }
-
-    /// Fetch a rustdoc file from our blob storage.
-    /// * `name` - the crate name
-    /// * `version` - the crate version
-    /// * `latest_build_id` - the id of the most recent build. used purely to invalidate the local archive
-    ///   index cache, when `archive_storage` is `true.` Without it we wouldn't know that we have
-    ///   to invalidate the locally cached file after a rebuild.
-    /// * `path` - the wanted path inside the documentation.
-    /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
-    ///    where we can fetch the requested path from inside the ZIP file.
-    #[instrument]
     pub(crate) async fn stream_rustdoc_file(
         &self,
         name: &str,
@@ -838,23 +804,6 @@ impl Storage {
     pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
         self.runtime
             .block_on(self.inner.set_public_access(path, public))
-    }
-
-    pub(crate) fn fetch_rustdoc_file(
-        &self,
-        name: &str,
-        version: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.fetch_rustdoc_file(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
     }
 
     pub(crate) fn fetch_source_file(

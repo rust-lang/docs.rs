@@ -4,7 +4,7 @@ use crate::{
     AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
     db::Pool,
     storage::{
-        CompressionAlgorithm, RustdocJsonFormatVersion,
+        CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob,
         compression::compression_from_file_extension, rustdoc_archive_path, rustdoc_json_path,
     },
     utils,
@@ -16,7 +16,7 @@ use crate::{
         encode_url_path,
         error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
-        file::{File, StreamingFile},
+        file::StreamingFile,
         match_version,
         page::{
             TemplateData,
@@ -27,11 +27,12 @@ use crate::{
 use anyhow::{Context as _, anyhow};
 use askama::Template;
 use axum::{
+    body::Body,
     extract::{Extension, Query},
     http::{StatusCode, Uri},
-    response::{Html, IntoResponse, Response as AxumResponse},
+    response::{IntoResponse, Response as AxumResponse},
 };
-use lol_html::errors::RewritingError;
+use http::{HeaderValue, header};
 use once_cell::sync::Lazy;
 use semver::Version;
 use serde::Deserialize;
@@ -286,30 +287,14 @@ pub struct RustdocPage {
 }
 
 impl RustdocPage {
-    fn into_response(
-        self,
-        rustdoc_html: &[u8],
+    async fn into_response(
+        self: &Arc<Self>,
+        template_data: Arc<TemplateData>,
+        metrics: Arc<InstanceMetrics>,
+        rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
-        metrics: &InstanceMetrics,
-        config: &Config,
-        file_path: &str,
     ) -> AxumResult<AxumResponse> {
         let is_latest_url = self.is_latest_url;
-
-        // Extract the head and body of the rustdoc file so that we can insert it into our own html
-        // while logging OOM errors from html rewriting
-        let html = match utils::rewrite_lol(rustdoc_html, max_parse_memory, &self) {
-            Err(RewritingError::MemoryLimitExceeded(..)) => {
-                metrics.html_rewrite_ooms.inc();
-
-                return Err(AxumNope::InternalError(anyhow!(
-                    "Failed to serve the rustdoc file '{}' because rewriting it surpassed the memory limit of {} bytes",
-                    file_path,
-                    config.max_parse_memory,
-                )));
-            }
-            result => result.context("error rewriting HTML")?,
-        };
 
         Ok((
             StatusCode::OK,
@@ -319,7 +304,17 @@ impl RustdocPage {
             } else {
                 CachePolicy::ForeverInCdnAndStaleInBrowser
             }),
-            Html(html),
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+            )],
+            Body::from_stream(utils::rewrite_rustdoc_html_stream(
+                template_data,
+                rustdoc_html.content,
+                max_parse_memory,
+                self.clone(),
+                metrics,
+            )),
         )
             .into_response())
     }
@@ -462,7 +457,7 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     // Attempt to load the file from the database
     let blob = match storage
-        .fetch_rustdoc_file(
+        .stream_rustdoc_file(
             &params.name,
             &krate.version.to_string(),
             krate.latest_build_id,
@@ -551,7 +546,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
-        return Ok(File(blob).into_response());
+        return Ok(StreamingFile(blob).into_response());
     }
 
     let latest_release = krate.latest_release()?;
@@ -621,33 +616,19 @@ pub(crate) async fn rustdoc_html_server_handler(
         .record(krate.crate_id, krate.release_id, target);
 
     // Build the page of documentation,
-    templates
-        .render_in_threadpool({
-            let metrics = metrics.clone();
-            move || {
-                let metadata = krate.metadata.clone();
-                Ok(RustdocPage {
-                    latest_path,
-                    permalink_path,
-                    inner_path,
-                    is_latest_version,
-                    is_latest_url: params.version.is_latest(),
-                    is_prerelease,
-                    metadata,
-                    krate,
-                    current_target,
-                }
-                .into_response(
-                    &blob.content,
-                    config.max_parse_memory,
-                    &metrics,
-                    &config,
-                    &storage_path,
-                ))
-            }
-        })
-        .instrument(info_span!("rewrite html"))
-        .await?
+    let page = Arc::new(RustdocPage {
+        latest_path,
+        permalink_path,
+        inner_path,
+        is_latest_version,
+        is_latest_url: params.version.is_latest(),
+        is_prerelease,
+        metadata: krate.metadata.clone(),
+        krate,
+        current_target,
+    });
+    page.into_response(templates, metrics, blob, config.max_parse_memory)
+        .await
 }
 
 /// Checks whether the given path exists.
