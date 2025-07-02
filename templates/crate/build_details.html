@@ -25,6 +25,10 @@
                 <strong>Build #{{ build_details.id }} {%- if let Some(build_time) = build_details.build_time %} {{ build_time.format("%F %T") }}{% endif %}</strong>
             </div>
 
+            {%- if build_details.build_status  == "failure" -%}
+                <p class="build-info">{{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }} Build failed. If you want to re-trigger a documentation build, you can do it on <a href="https://crates.io/crates/{{metadata.name}}/versions">crates.io</a>. You can find more information on <b>docs.rs</b> builds documentation on the <a href="/about/builds">builds page</a>.</p>
+            {%- endif -%}
+
             <ul>
                 {%- for filename in all_log_filenames -%}
                     <li>
