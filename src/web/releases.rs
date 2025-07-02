@@ -10,7 +10,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path},
         match_version,
-        page::templates::{RenderRegular, RenderSolid, filters},
+        page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
 };
 use anyhow::{Context as _, Result, anyhow};

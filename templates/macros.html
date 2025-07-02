@@ -1,32 +1,31 @@
 {#
-    Creates a list entry for active tabs. When the active tab is the same as `expected`, it will show the current tab as active.
-    * `expected` A string that represents the current tab, when `active_tab == expected` the current will be shown as active
-    * `href` A string used as the tab's link
-    * `text` A string used as the tab's text
-#}
-{% macro active_link(expected, href, text) %}
-    <li class="pure-menu-item">
-        <a class="pure-menu-link {% if active_tab == *expected %} pure-menu-active {% endif %}" href="{{ href }}">
-            {# safe: allow passing in HTML #}
-            {{ text|safe }}
-        </a>
-    </li>
-{% endmacro active_link %}
-
-{#
     Creates a list entry
     * `href` A string used as the tab's link
     * `text` A string used as the tab's text
     * `target` An optional target
     * `extra_classes` Optional extra css classes
 #}
-{% macro menu_link(href, text, target) %}
-    <li class="pure-menu-item">
-        <a class="pure-menu-link" href="{{ href }}" {% if !target.is_empty() -%} target="{{ target }}" {%- endif %}>
-            {{ text }}
-        </a>
+{% macro menu_link(href, text, target) -%}
+    <li class="pure-menu-item"> {#- -#}
+        <a class="pure-menu-link" href="{{ href }}"{% if !target.is_empty() %} target="{{ target }}" {%- endif %}>{{ text }}</a> {#- -#}
     </li>
-{% endmacro menu_link %}
+{%- endmacro menu_link %}
+
+{% macro menu_link_with_icon_solid(href, text, icon) -%}
+    <li class="pure-menu-item"> {#- -#}
+        <a class="pure-menu-link" href="{{ href }}">
+            {{- icon.render_solid(false, false, "") }} {{ text -}}
+        </a> {#- -#}
+    </li>
+{%- endmacro menu_link_with_icon_solid %}
+
+{% macro menu_link_with_icon_brand(href, text, icon) -%}
+    <li class="pure-menu-item"> {#- -#}
+        <a class="pure-menu-link" href="{{ href }}">
+            {{- icon.render_brands(false, false, "") }} {{ text -}}
+        </a> {#- -#}
+    </li>
+{%- endmacro menu_link_with_icon_brand %}
 
 {#
     Creates a formatted table showing the resource limits of a crate

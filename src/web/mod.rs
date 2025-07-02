@@ -8,7 +8,7 @@ use crate::db::ReleaseId;
 use crate::db::types::BuildStatus;
 use crate::utils::get_correct_docsrs_style_file;
 use crate::utils::report_error;
-use crate::web::page::templates::{RenderSolid, filters};
+use crate::web::page::templates::{RenderBrands, RenderSolid, filters};
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;

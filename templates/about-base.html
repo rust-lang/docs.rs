@@ -4,47 +4,6 @@
 centered
 {%- endblock body_classes -%}
 
-{% block header %}
-    <div class="docsrs-package-container">
-        <div class="container">
-            <div class="description-container">
-                <h1 id="crate-title" class="no-description">Docs.rs documentation</h1>
-                <div class="pure-menu pure-menu-horizontal">
-                    <ul class="pure-menu-list">
-                        {% set text = crate::icons::IconCircleInfo.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>About</span>"|format(text) %}
-                        {% call macros::active_link(expected="index", href="/about", text=text) %}
-
-                        {% set text = crate::icons::IconFonticons.render_brands(false, false, "") %}
-                        {% set text = "{} <span class='title'>Badges</span>"|format(text) %}
-                        {% call macros::active_link(expected="badges", href="/about/badges", text=text) %}
-
-                        {% set text = crate::icons::IconGears.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>Builds</span>"|format(text) %}
-                        {% call macros::active_link(expected="builds", href="/about/builds", text=text) %}
-
-                        {% set text = crate::icons::IconTable.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>Metadata</span>"|format(text) %}
-                        {% call macros::active_link(expected="metadata", href="/about/metadata", text=text) %}
-
-                        {% set text = crate::icons::IconRoad.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>Shorthand URLs</span>"|format(text) %}
-                        {% call macros::active_link(expected="redirections", href="/about/redirections", text=text) %}
-
-                        {% set text = crate::icons::IconDownload.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>Download</span>"|format(text) %}
-                        {% call macros::active_link(expected="download", href="/about/download", text=text) %}
-
-                        {% set text = crate::icons::IconFileCode.render_solid(false, false, "") %}
-                        {% set text = "{} <span class='title'>Rustdoc JSON</span>"|format(text) %}
-                        {% call macros::active_link(expected="rustdoc-json", href="/about/rustdoc-json", text=text) %}
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-{% endblock %}
-
 {%- block topbar -%}
     {% let search_query = Some(String::new()) %}
     {%- include "header/topbar.html" -%}
