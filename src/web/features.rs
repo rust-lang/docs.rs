@@ -9,7 +9,7 @@ use crate::{
         filters,
         headers::CanonicalUrl,
         match_version,
-        page::templates::{RenderRegular, RenderSolid},
+        page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
 use anyhow::anyhow;

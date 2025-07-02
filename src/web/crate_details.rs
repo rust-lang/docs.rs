@@ -12,7 +12,7 @@ use crate::{
         cache::CachePolicy,
         error::{AxumNope, AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
-        page::templates::{RenderRegular, RenderSolid, filters},
+        page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
         rustdoc::RustdocHtmlParams,
     },
 };

@@ -10,21 +10,51 @@
                     #}<li class="pure-menu-item pure-menu-has-children">
                         <a href="#" class="pure-menu-link" aria-label="docs.rs">docs.rs</a>
                         <ul class="pure-menu-children">
-                            {% call macros::menu_link(
+                            {%- call macros::menu_link_with_icon_solid(
                                 href="/about",
                                 text="About docs.rs",
-                                target="",
-                            ) %}
-                            {% call macros::menu_link(
+                                icon=crate::icons::IconCircleInfo,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_brand(
+                                href="/about/badges",
+                                text="Badges",
+                                icon=crate::icons::IconFonticons,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/about/builds",
+                                text="Builds",
+                                icon=crate::icons::IconGears,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/about/metadata",
+                                text="Metadata",
+                                icon=crate::icons::IconTable,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/about/redirections",
+                                text="Shorthand URLs",
+                                icon=crate::icons::IconRoad,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/about/download",
+                                text="Download",
+                                icon=crate::icons::IconDownload,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/about/rustdoc-json",
+                                text="Rustdoc JSON",
+                                icon=crate::icons::IconFileCode,
+                            ) -%}
+                            {%- call macros::menu_link_with_icon_solid(
+                                href="/releases/queue",
+                                text="Build queue",
+                                icon=crate::icons::IconGears,
+                            ) -%}
+                            {%- call macros::menu_link(
                                 href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs",
                                 text="Privacy policy",
                                 target="_blank"
-                            ) %}
-                            {% call macros::menu_link(
-                                href="/releases/queue",
-                                text="Build queue",
-                                target="",
-                            ) %}
+                            ) -%}
                         </ul>
                     </li>
                 </ul>

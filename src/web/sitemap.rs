@@ -129,9 +129,7 @@ macro_rules! about_page {
     ($ty:ident, $template:literal) => {
         #[derive(Template)]
         #[template(path = $template)]
-        struct $ty {
-            active_tab: &'static str,
-        }
+        struct $ty;
 
         impl_axum_webpage! { $ty }
     };
@@ -151,30 +149,12 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
     };
 
     let response = match &subpage[..] {
-        "about" | "index" => AboutPage {
-            active_tab: "index",
-        }
-        .into_response(),
-        "badges" => AboutPageBadges {
-            active_tab: "badges",
-        }
-        .into_response(),
-        "metadata" => AboutPageMetadata {
-            active_tab: "metadata",
-        }
-        .into_response(),
-        "redirections" => AboutPageRedirection {
-            active_tab: "redirections",
-        }
-        .into_response(),
-        "download" => AboutPageDownload {
-            active_tab: "download",
-        }
-        .into_response(),
-        "rustdoc-json" => AboutPageRustdocJson {
-            active_tab: "rustdoc-json",
-        }
-        .into_response(),
+        "about" | "index" => AboutPage.into_response(),
+        "badges" => AboutPageBadges.into_response(),
+        "metadata" => AboutPageMetadata.into_response(),
+        "redirections" => AboutPageRedirection.into_response(),
+        "download" => AboutPageDownload.into_response(),
+        "rustdoc-json" => AboutPageRustdocJson.into_response(),
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";

@@ -8,7 +8,7 @@ use crate::{
         extractors::{DbConnection, Path},
         file::File,
         filters,
-        page::templates::{RenderRegular, RenderSolid},
+        page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
 use anyhow::Context as _;

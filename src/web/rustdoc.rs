@@ -20,7 +20,7 @@ use crate::{
         match_version,
         page::{
             TemplateData,
-            templates::{RenderRegular, RenderSolid, filters},
+            templates::{RenderBrands, RenderRegular, RenderSolid, filters},
         },
     },
 };

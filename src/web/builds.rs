@@ -13,7 +13,7 @@ use crate::{
         error::{AxumResult, EscapedURI},
         extractors::{DbConnection, Path},
         filters, match_version,
-        page::templates::{RenderRegular, RenderSolid},
+        page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
 use anyhow::{Result, anyhow};
