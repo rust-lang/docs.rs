@@ -208,6 +208,11 @@ pre {
 div.container {
     max-width: 1160px;
     text-align: left;
+
+    img {
+        max-width: 100%;
+        margin: 5px 0;
+    }
 }
 
 body.centered div.container {
