@@ -5,15 +5,15 @@
     * `target` An optional target
     * `extra_classes` Optional extra css classes
 #}
-{% macro menu_link(href, text, target) -%}
+{% macro menu_link(href, text, target, icon="") -%}
     <li class="pure-menu-item"> {#- -#}
         <a class="pure-menu-link" href="{{ href }}"{% if !target.is_empty() %} target="{{ target }}" {%- endif %}>{{ text }}</a> {#- -#}
     </li>
 {%- endmacro menu_link %}
 
-{% macro menu_link_with_icon_solid(href, text, icon) -%}
+{% macro menu_link_with_icon_solid(href, text, icon, target="") -%}
     <li class="pure-menu-item"> {#- -#}
-        <a class="pure-menu-link" href="{{ href }}">
+        <a class="pure-menu-link" href="{{ href }}"{% if !target.is_empty() %} target="{{ target }}" {%- endif %}>
             {{- icon.render_solid(false, false, "") }} {{ text -}}
         </a> {#- -#}
     </li>

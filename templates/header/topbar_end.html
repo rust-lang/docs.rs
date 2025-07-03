@@ -50,10 +50,11 @@
                                 text="Build queue",
                                 icon=crate::icons::IconGears,
                             ) -%}
-                            {%- call macros::menu_link(
+                            {%- call macros::menu_link_with_icon_solid(
                                 href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs",
                                 text="Privacy policy",
-                                target="_blank"
+                                icon=crate::icons::IconShieldHalved,
+                                target="_blank",
                             ) -%}
                         </ul>
                     </li>
