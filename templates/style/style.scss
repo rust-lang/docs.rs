@@ -215,6 +215,15 @@ div.container {
     }
 }
 
+ul.aligned-icons .fa {
+    width: 1.5em;
+    display: inline-flex;
+}
+
+ul.aligned-icons .fa::before {
+    margin: 0 auto;
+}
+
 body.centered div.container {
     margin: 0 auto;
 }
