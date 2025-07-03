@@ -304,10 +304,6 @@ div.recent-releases-container {
         padding: 0.4em $search-result-right-left-padding;
         color: var(--color-standard);
 
-        a {
-            color: var(--color-standard);
-        }
-
         @media #{$media-lg} {
             padding: 0.4em 0;
             margin: 0 1em;
