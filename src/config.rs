@@ -120,7 +120,7 @@ pub struct Config {
     pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
 
-    #[allow(dead_code)]
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub(crate) disable_memory_limit: bool,
 
     // automatic rebuild configuration
