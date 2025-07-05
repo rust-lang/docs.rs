@@ -2293,4 +2293,43 @@ mod tests {
             Ok(())
         });
     }
+
+    #[test]
+    fn test_create_search_error_response() {
+        let response = create_search_error_response(
+            "test_query".to_string(),
+            "relevance".to_string(),
+            "Service temporarily unavailable".to_string(),
+        );
+        assert_eq!(
+            response.title,
+            "Search service is not currently available: Service temporarily unavailable"
+        );
+        assert_eq!(response.status, http::StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.release_type, ReleaseType::Search);
+    }
+
+    #[test]
+    fn crates_io_search_returns_status_code_5xx() {
+        async_wrapper(|env| async move {
+            let mut crates_io = mockito::Server::new_async().await;
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url().parse().unwrap();
+            });
+
+            crates_io
+                .mock("GET", "/api/v1/crates")
+                .with_status(500)
+                .create_async()
+                .await;
+
+            let response = env
+                .web_app()
+                .await
+                .get("/releases/search?query=anything_goes_here")
+                .await?;
+            assert_eq!(response.status(), 503);
+            Ok(())
+        })
+    }
 }
