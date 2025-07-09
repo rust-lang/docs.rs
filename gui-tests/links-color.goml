@@ -1,0 +1,17 @@
+// Checks that the links have the expected color.
+go-to: |DOC_PATH|
+show-text: true
+
+// First we enforce the theme to ensure we're testing in the right conditions.
+set-local-storage: {"rustdoc-theme": "light"}
+reload:
+
+// The "Recent releases" and the feed icon should have the default color.
+assert-css: ("//a[@href='/releases']", {"color": "#000"})
+assert-css: ("//a[@href='/releases/feed']", {"color": "#000"})
+// The release links should be different.
+assert-css: ("li a.release .name", {"color": "#4d76ae"}, ALL)
+
+go-to: |DOC_PATH| + "/crate/sysinfo/0.23.5/builds"
+// The builds link color should have the default color.
+assert-css: ("li a.release > div", {"color": "#000"}, ALL)
