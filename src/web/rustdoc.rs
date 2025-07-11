@@ -1016,6 +1016,7 @@ mod test {
         web::{cache::CachePolicy, encode_url_path},
     };
     use anyhow::Context;
+    use chrono::{NaiveDate, Utc};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use std::collections::BTreeMap;
@@ -2381,7 +2382,7 @@ mod test {
                     let anchor = page
                         .select(&selector)
                         .unwrap()
-                        .find(|a| a.text_contents().trim() == version)
+                        .find(|a| a.text_contents().trim().split(" ").next().unwrap() == version)
                         .unwrap();
                     let attributes = anchor.as_node().as_element().unwrap().attributes.borrow();
                     let classes = attributes.get("class").unwrap();
@@ -2391,6 +2392,59 @@ mod test {
 
             assert!(status("0.3.0").await?);
             assert!(!status("0.2.0").await?);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_crate_release_version_and_date() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("hexponent")
+                .version("0.3.0")
+                .release_time(
+                    NaiveDate::from_ymd_opt(2021, 1, 12)
+                        .unwrap()
+                        .and_hms_milli_opt(0, 0, 0, 0)
+                        .unwrap()
+                        .and_local_timezone(Utc)
+                        .unwrap(),
+                )
+                .create()
+                .await?;
+            env.fake_release()
+                .await
+                .name("hexponent")
+                .version("0.2.0")
+                .release_time(
+                    NaiveDate::from_ymd_opt(2020, 12, 1)
+                        .unwrap()
+                        .and_hms_milli_opt(0, 0, 0, 0)
+                        .unwrap()
+                        .and_local_timezone(Utc)
+                        .unwrap(),
+                )
+                .create()
+                .await?;
+            let web = env.web_app().await;
+
+            let status = |version, date| {
+                let web = web.clone();
+                async move {
+                    let page = kuchikiki::parse_html()
+                        .one(web.get("/crate/hexponent/0.3.0").await?.text().await?);
+                    let selector = format!(r#"ul > li a[href="/crate/hexponent/{version}"]"#);
+                    let full = format!("{version} ({date})");
+                    Result::<bool, anyhow::Error>::Ok(page.select(&selector).unwrap().any(|a| {
+                        eprintln!("++++++> {:?}", a.text_contents());
+                        a.text_contents().trim() == full
+                    }))
+                }
+            };
+
+            assert!(status("0.3.0", "2021/01/12").await?);
+            assert!(status("0.2.0", "2020/12/01").await?);
             Ok(())
         })
     }

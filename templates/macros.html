@@ -141,13 +141,16 @@
                 {% if !title.is_empty() %} title="{{ title }}"{% endif %}
                 {% if retain_fragment %}data-fragment="retain"{% endif %}
             >
-                {% if warning %}
-                    {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
-                {% endif %}
-                {% if release.build_status == "in_progress" %}
-                    {{ crate::icons::IconGear.render_solid(true, true, "") }}
-                {% endif %}
-                {{ release.version }}
+                {%- if warning -%}
+                    {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") -}}
+                {%+ endif -%}
+                {% if release.build_status == "in_progress" -%}
+                    {{ crate::icons::IconGear.render_solid(true, true, "") -}}
+                {%+ endif -%}
+                <b>{{ release.version }}</b>
+                {%- if let Some(release_time) = release.release_time -%}
+                    {# +#} ({{ release_time.format("%Y/%m/%d") }})
+                {%- endif -%}
             </a>
         </li>
     {%- endfor -%}

@@ -100,6 +100,7 @@ pub(crate) struct Release {
     pub is_library: Option<bool>,
     pub rustdoc_status: Option<bool>,
     pub target_name: Option<String>,
+    pub release_time: Option<DateTime<Utc>>,
 }
 
 impl CrateDetails {
@@ -382,6 +383,7 @@ pub(crate) async fn releases_for_crate(
              releases.yanked,
              releases.is_library,
              releases.rustdoc_status,
+             releases.release_time,
              releases.target_name
          FROM releases
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
@@ -412,6 +414,7 @@ pub(crate) async fn releases_for_crate(
             is_library: row.is_library,
             rustdoc_status: row.rustdoc_status,
             target_name: row.target_name,
+            release_time: row.release_time,
         }))
     })
     .try_collect()
@@ -1143,7 +1146,10 @@ mod tests {
                 .await?;
 
             let mut conn = db.async_conn().await;
-            let details = crate_details(&mut conn, "foo", "0.2.0", None).await;
+            let mut details = crate_details(&mut conn, "foo", "0.2.0", None).await;
+            for detail in &mut details.releases {
+                detail.release_time = None;
+            }
 
             assert_eq!(
                 details.releases,
@@ -1156,6 +1162,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[0].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
@@ -1165,6 +1172,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[1].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
@@ -1174,6 +1182,7 @@ mod tests {
                         rustdoc_status: Some(false),
                         id: details.releases[2].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
@@ -1183,6 +1192,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[3].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
@@ -1192,6 +1202,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[4].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
@@ -1201,6 +1212,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[5].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
@@ -1210,6 +1222,7 @@ mod tests {
                         rustdoc_status: Some(true),
                         id: details.releases[6].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
@@ -1219,6 +1232,7 @@ mod tests {
                         rustdoc_status: Some(false),
                         id: details.releases[7].id,
                         target_name: Some("foo".to_owned()),
+                        release_time: None,
                     },
                 ]
             );
