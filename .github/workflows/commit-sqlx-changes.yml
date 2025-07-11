@@ -1,0 +1,65 @@
+on:
+  pull_request_target:
+    branches:
+      - master
+    types: [closed]
+
+env:
+  RUST_BACKTRACE: 1
+  RUST_CACHE_KEY: rust-cache-20241114
+  DOCSRS_PREFIX: ignored/cratesfyi-prefix
+  DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@localhost:15432
+  DOCSRS_LOG: docs_rs=debug,rustwide=info
+  AWS_ACCESS_KEY_ID: cratesfyi
+  AWS_SECRET_ACCESS_KEY: secret_key
+  S3_ENDPOINT: http://localhost:9000
+  DOCSRS_INCLUDE_DEFAULT_TARGETS: false
+  DOCSRS_DOCKER_IMAGE: ghcr.io/rust-lang/crates-build-env/linux-micro
+  SENTRY_ENVIRONMENT: dev
+
+permissions:
+  contents: write
+
+jobs:
+  update-labels:
+    if: ${{ github.event.pull_request.merged }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
+
+      - name: install SQLX CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: run database migrations
+        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
+
+      - name: Commit sqlx changes on master branch if any
+        run: |
+          cp .env.sample .env
+          mkdir -p ${DOCSRS_PREFIX}/public-html
+          docker compose up -d db s3
+          # Give the database enough time to start up
+          sleep 5
+          # Make sure the database is actually working
+          psql "${DOCSRS_DATABASE_URL}"
+
+          just sqlx-prepare
+          # If there are differences in the SQLX files, then we push them on the master branch
+          if git status --porcelain .sqlx ; then
+            git config --global user.name 'Docs.rs developers'
+            git config --global user.email 'docs.rs@users.noreply.github.com'
+            git add .sqlx
+            git commit -m 'Update SQLX files'
+            git push
+          fi
+
+      - name: Clean up the database
+        run: docker compose down --volumes
