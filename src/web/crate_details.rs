@@ -314,7 +314,7 @@ impl CrateDetails {
         };
         let manifest = String::from_utf8(manifest.content)
             .context("parsing Cargo.toml")?
-            .parse::<toml::Value>()
+            .parse::<toml::Table>()
             .context("parsing Cargo.toml")?;
         let paths = match manifest.get("package").and_then(|p| p.get("readme")) {
             Some(toml::Value::Boolean(true)) => vec!["README.md"],
