@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 jobs:
-  update-labels:
+  commit-sqlx-changes:
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     steps:
@@ -35,13 +35,7 @@ jobs:
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
-      - name: install SQLX CLI
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: run database migrations
-        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
-
-      - name: Commit sqlx changes on master branch if any
+      - name: Launch postgres
         run: |
           cp .env.sample .env
           mkdir -p ${DOCSRS_PREFIX}/public-html
@@ -51,6 +45,11 @@ jobs:
           # Make sure the database is actually working
           psql "${DOCSRS_DATABASE_URL}"
 
+      - name: install SQLX CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Commit sqlx changes on master branch if any
+        run: |
           just sqlx-prepare
           # If there are differences in the SQLX files, then we push them on the master branch
           if git status --porcelain .sqlx ; then
