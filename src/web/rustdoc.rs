@@ -43,18 +43,129 @@ use tracing::{Instrument, debug, error, info_span, instrument, trace};
 
 use super::extractors::PathFileExtension;
 
-static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    HashMap::from([
-        ("alloc", "stable/alloc"),
-        ("core", "stable/core"),
-        ("proc_macro", "stable/proc_macro"),
-        ("proc-macro", "stable/proc_macro"),
-        ("std", "stable/std"),
-        ("test", "stable/test"),
-        ("rustc", "nightly/nightly-rustc"),
-        ("rustdoc", "nightly/nightly-rustc/rustdoc"),
-    ])
-});
+pub(crate) struct OfficialCrateDescription {
+    pub(crate) name: &'static str,
+    pub(crate) href: &'static str,
+    pub(crate) description: &'static str,
+}
+
+pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, OfficialCrateDescription>> =
+    Lazy::new(|| {
+        HashMap::from([
+            (
+                "alloc",
+                OfficialCrateDescription {
+                    name: "alloc",
+                    href: "https://doc.rust-lang.org/stable/alloc/",
+                    description: "Rust alloc library",
+                },
+            ),
+            (
+                "liballoc",
+                OfficialCrateDescription {
+                    name: "alloc",
+                    href: "https://doc.rust-lang.org/stable/alloc/",
+                    description: "Rust alloc library",
+                },
+            ),
+            (
+                "core",
+                OfficialCrateDescription {
+                    name: "core",
+                    href: "https://doc.rust-lang.org/stable/core/",
+                    description: "Rust core library",
+                },
+            ),
+            (
+                "libcore",
+                OfficialCrateDescription {
+                    name: "core",
+                    href: "https://doc.rust-lang.org/stable/core/",
+                    description: "Rust core library",
+                },
+            ),
+            (
+                "proc_macro",
+                OfficialCrateDescription {
+                    name: "proc_macro",
+                    href: "https://doc.rust-lang.org/stable/proc_macro/",
+                    description: "Rust proc_macro library",
+                },
+            ),
+            (
+                "libproc_macro",
+                OfficialCrateDescription {
+                    name: "proc_macro",
+                    href: "https://doc.rust-lang.org/stable/proc_macro/",
+                    description: "Rust proc_macro library",
+                },
+            ),
+            (
+                "proc-macro",
+                OfficialCrateDescription {
+                    name: "proc_macro",
+                    href: "https://doc.rust-lang.org/stable/proc_macro/",
+                    description: "Rust proc_macro library",
+                },
+            ),
+            (
+                "libproc-macro",
+                OfficialCrateDescription {
+                    name: "proc_macro",
+                    href: "https://doc.rust-lang.org/stable/proc_macro/",
+                    description: "Rust proc_macro library",
+                },
+            ),
+            (
+                "std",
+                OfficialCrateDescription {
+                    name: "std",
+                    href: "https://doc.rust-lang.org/stable/std/",
+                    description: "Rust standard library",
+                },
+            ),
+            (
+                "libstd",
+                OfficialCrateDescription {
+                    name: "std",
+                    href: "https://doc.rust-lang.org/stable/std/",
+                    description: "Rust standard library",
+                },
+            ),
+            (
+                "test",
+                OfficialCrateDescription {
+                    name: "test",
+                    href: "https://doc.rust-lang.org/stable/test/",
+                    description: "Rust test library",
+                },
+            ),
+            (
+                "libtest",
+                OfficialCrateDescription {
+                    name: "test",
+                    href: "https://doc.rust-lang.org/stable/test/",
+                    description: "Rust test library",
+                },
+            ),
+            (
+                "rustc",
+                OfficialCrateDescription {
+                    name: "rustc",
+                    href: "https://doc.rust-lang.org/nightly/nightly-rustc/",
+                    description: "rustc API",
+                },
+            ),
+            (
+                "rustdoc",
+                OfficialCrateDescription {
+                    name: "rustdoc",
+                    href: "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/",
+                    description: "rustdoc API",
+                },
+            ),
+        ])
+    });
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RustdocRedirectorParams {
@@ -151,10 +262,10 @@ pub(crate) async fn rustdoc_redirector_handler(
         None => (params.name.to_string(), None),
     };
 
-    if let Some(inner_path) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
+    if let Some(description) = DOC_RUST_LANG_ORG_REDIRECTS.get(crate_name.as_str()) {
         return Ok(redirect_to_doc(
             &query_pairs,
-            format!("https://doc.rust-lang.org/{inner_path}/"),
+            description.href.to_string(),
             CachePolicy::ForeverInCdnAndStaleInBrowser,
             path_in_crate.as_deref(),
         )?

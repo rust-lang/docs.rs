@@ -289,7 +289,9 @@ impl AxumRouterTestExt for axum::Router {
         // }
 
         if redirect_target != expected_target {
-            anyhow::bail!("got redirect to {redirect_target}");
+            anyhow::bail!(
+                "got redirect to `{redirect_target}`, expected redirect to `{expected_target}`",
+            );
         }
 
         Ok(response)
