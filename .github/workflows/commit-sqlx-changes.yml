@@ -48,6 +48,9 @@ jobs:
       - name: install SQLX CLI
         run: cargo install sqlx-cli --no-default-features --features postgres
 
+      - name: run database migrations
+        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
+
       - name: Commit sqlx changes on master branch if any
         run: |
           just sqlx-prepare
