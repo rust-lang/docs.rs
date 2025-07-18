@@ -52,7 +52,7 @@ jobs:
         run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
 
       - name: run sqlx prepare --check
-        run: just sqlx-check
+        run: just sqlx-prepare
 
       - name: test reverse migrations
         run: |

@@ -39,7 +39,7 @@
                     {%- if metadata.req_version.to_string() == "latest" -%}
                     <li class="pure-menu-item">
                         <a href="{% if permalink_path is defined %}{{permalink_path|safe}}{% endif %}" class="pure-menu-link description" id="permalink" title="Get a link to this specific version">
-                            {{ crate::icons::IconLink.render_solid(false, false, "") }} Permalink
+                            {{- crate::icons::IconLink.render_solid(false, false, "") }} Permalink
                         </a>
                     </li>
                     {%- endif -%}
