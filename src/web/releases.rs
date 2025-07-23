@@ -33,6 +33,25 @@ use url::form_urlencoded;
 
 use super::cache::CachePolicy;
 
+// Introduce SearchError as new error type
+#[derive(Debug, thiserror::Error)]
+pub enum SearchError {
+    #[error("got error from crates.io: {0}")]
+    CratesIo(String),
+    #[error("missing releases in crates.io response")]
+    MissingReleases,
+    #[error("missing metadata in crates.io response")]
+    MissingMetadata,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<sqlx::Error> for SearchError {
+    fn from(err: sqlx::Error) -> Self {
+        SearchError::Other(anyhow::Error::from(err))
+    }
+}
+
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
 /// Releases in /releases page
@@ -149,8 +168,13 @@ async fn get_search_results(
     conn: &mut sqlx::PgConnection,
     registry: &RegistryApi,
     query_params: &str,
-) -> Result<SearchResult, anyhow::Error> {
-    let crate::registry_api::Search { crates, meta } = registry.search(query_params).await?;
+) -> Result<SearchResult, SearchError> {
+    // Capture responses returned by registry
+    let result = registry.search(query_params).await;
+    let crate::registry_api::Search { crates, meta } = match result {
+        Ok(results_from_search_request) => results_from_search_request,
+        Err(err) => return Err(handle_registry_error(err)),
+    };
 
     let names = Arc::new(
         crates
@@ -231,6 +255,51 @@ async fn get_search_results(
         prev_page: meta.prev_page,
         next_page: meta.next_page,
     })
+}
+
+// Categorize  errors from registry
+fn handle_registry_error(err: anyhow::Error) -> SearchError {
+    // Capture crates.io API error
+    if let Some(registry_request_error) = err.downcast_ref::<reqwest::Error>()
+        && let Some(status) = registry_request_error.status()
+        && (status.is_client_error() || status.is_server_error())
+    {
+        return SearchError::CratesIo(format!(
+            "crates.io returned {status}: {registry_request_error}"
+        ));
+    }
+
+    // Errors from bail!() in RegistryApi::search()
+    let msg = err.to_string();
+    if msg.contains("missing releases in crates.io response") {
+        return SearchError::MissingReleases;
+    }
+    if msg.contains("missing metadata in crates.io response") {
+        return SearchError::MissingMetadata;
+    }
+    if msg.contains("got error from crates.io:") {
+        return SearchError::CratesIo(
+            msg.trim_start_matches("got error from crates.io:")
+                .trim()
+                .to_string(),
+        );
+    }
+    // Move all other error to this fallback wrapper
+    SearchError::Other(err)
+}
+
+//Error message to gracefully display
+fn create_search_error_response(query: String, sort_by: String, error_message: String) -> Search {
+    Search {
+        title: format!("Search service is not currently available: {error_message}"),
+        releases: vec![],
+        search_query: Some(query),
+        search_sort_by: Some(sort_by),
+        previous_page_link: None,
+        next_page_link: None,
+        release_type: ReleaseType::Search,
+        status: http::StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 #[derive(Template)]
@@ -589,7 +658,7 @@ pub(crate) async fn search_handler(
             }
         }
 
-        get_search_results(&mut conn, &registry, query_params).await?
+        get_search_results(&mut conn, &registry, query_params).await
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -597,9 +666,40 @@ pub(crate) async fn search_handler(
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
             .finish();
 
-        get_search_results(&mut conn, &registry, &query_params).await?
+        get_search_results(&mut conn, &registry, &query_params).await
     } else {
         return Err(AxumNope::NoResults);
+    };
+
+    let search_result = match search_result {
+        Ok(result) => result,
+        Err(SearchError::CratesIo(error_message)) => {
+            return Ok(create_search_error_response(
+                query,
+                sort_by,
+                format!("We're having issues communicating with crates.io: {error_message}"),
+            )
+            .into_response());
+        }
+        Err(SearchError::MissingReleases) => {
+            return Ok(create_search_error_response(
+                query,
+                sort_by,
+                "missing releases in crates.io response".to_string(),
+            )
+            .into_response());
+        }
+        Err(SearchError::MissingMetadata) => {
+            return Ok(create_search_error_response(
+                query,
+                sort_by,
+                "missing metadata in crates.io response".to_string(),
+            )
+            .into_response());
+        }
+        Err(SearchError::Other(err)) => {
+            return Err(err.into());
+        }
     };
 
     let title = if search_result.results.is_empty() {
@@ -1213,7 +1313,7 @@ mod tests {
                 .await
                 .get("/releases/search?query=doesnt_matter_here")
                 .await?;
-            assert_eq!(response.status(), 500);
+            assert_eq!(response.status(), http::StatusCode::SERVICE_UNAVAILABLE);
 
             assert!(
                 response
@@ -1251,7 +1351,7 @@ mod tests {
                 .await
                 .get("/releases/search?query=doesnt_matter_here")
                 .await?;
-            assert_eq!(response.status(), 500);
+            assert_eq!(response.status(), 503);
 
             assert!(response.text().await?.contains(&format!("{status}")));
             Ok(())
@@ -2230,5 +2330,53 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn test_create_search_error_response() {
+        let response = create_search_error_response(
+            "test_query".to_string().clone(),
+            "relevance".to_string().clone(),
+            "Service temporarily unavailable".to_string().clone(),
+        );
+        assert_eq!(
+            response.title,
+            "Search service is not currently available: Service temporarily unavailable"
+        );
+        assert_eq!(response.status, http::StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.release_type, ReleaseType::Search);
+        assert!(response.title.contains("Service temporarily unavailable"));
+    }
+
+    #[test]
+    fn crates_io_search_returns_status_code_5xx() {
+        async_wrapper(|env| async move {
+            let mut crates_io = mockito::Server::new_async().await;
+            env.override_config(|config| {
+                config.registry_api_host = crates_io.url().parse().unwrap();
+            });
+
+            crates_io
+                .mock("GET", "/api/v1/crates")
+                .with_status(500)
+                .create_async()
+                .await;
+
+            let response = env
+                .web_app()
+                .await
+                .get("/releases/search?query=anything_goes_here")
+                .await?;
+
+            assert_eq!(response.status(), http::StatusCode::SERVICE_UNAVAILABLE);
+            let parse_html = kuchikiki::parse_html().one(response.text().await?);
+
+            assert!(
+                parse_html
+                    .text_contents()
+                    .contains("We're having issues communicating with crates.io")
+            );
+            Ok(())
+        })
     }
 }
