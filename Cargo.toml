@@ -128,7 +128,7 @@ debug = "line-tables-only"
 
 [build-dependencies]
 time = "0.3"
-gix = { version = "0.72.1", default-features = false }
+gix = { version = "0.73.0", default-features = false }
 string_cache_codegen = "0.5.1"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
