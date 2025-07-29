@@ -69,9 +69,11 @@ impl TemplateData {
         F: FnOnce() -> Result<R> + Send + 'static,
         R: Send + 'static,
     {
+        let span = tracing::Span::current();
         let (send, recv) = tokio::sync::oneshot::channel();
         self.rendering_threadpool.spawn({
             move || {
+                let _guard = span.enter();
                 // the job may have been queued on the thread-pool for a while,
                 // if the request was closed in the meantime the receiver should have
                 // dropped and we don't need to bother rendering the template
