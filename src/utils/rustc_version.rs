@@ -1,8 +1,8 @@
 use crate::error::Result;
 use anyhow::{Context, anyhow};
 use chrono::prelude::*;
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Parses rustc commit hash from rustc version string
 pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
@@ -22,7 +22,7 @@ pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
 }
 
 pub(crate) fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<NaiveDate> {
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r" (\d+)-(\d+)-(\d+)\)$").unwrap());
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" (\d+)-(\d+)-(\d+)\)$").unwrap());
 
     let cap = RE
         .captures(version.as_ref())

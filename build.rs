@@ -2,15 +2,14 @@ use anyhow::{Context as _, Error, Result};
 use std::{env, path::Path};
 
 mod tracked {
-    use once_cell::sync::Lazy;
     use std::{
         collections::HashSet,
         io::{Error, Result},
         path::{Path, PathBuf},
-        sync::Mutex,
+        sync::{LazyLock, Mutex},
     };
 
-    static SEEN: Lazy<Mutex<HashSet<PathBuf>>> = Lazy::new(|| Mutex::new(HashSet::new()));
+    static SEEN: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
     pub(crate) fn track(path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();

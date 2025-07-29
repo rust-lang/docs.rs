@@ -1,9 +1,9 @@
 use mime::Mime;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 macro_rules! mime {
     ($id:ident, $mime:expr) => {
-        pub(crate) static $id: Lazy<Mime> = Lazy::new(|| $mime.parse().unwrap());
+        pub(crate) static $id: LazyLock<Mime> = LazyLock::new(|| $mime.parse().unwrap());
     };
 }
 

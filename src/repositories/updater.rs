@@ -5,10 +5,10 @@ use crate::{Config, db::Pool};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::LazyLock;
 use tracing::{debug, info, trace, warn};
 
 #[async_trait]
@@ -309,7 +309,7 @@ impl RepositoryStatsUpdater {
 }
 
 pub(crate) fn repository_name(url: &str) -> Option<RepositoryName> {
-    static RE: Lazy<Regex> = Lazy::new(|| {
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"https?://(?P<host>[^/]+)/(?P<owner>[\w\._/-]+)/(?P<repo>[\w\._-]+)").unwrap()
     });
 
