@@ -42,7 +42,11 @@ pub(crate) fn rewrite_rustdoc_html_stream<R>(
 where
     R: AsyncRead + Unpin + 'static,
 {
+    let span = tracing::info_span!("rewrite_rustdoc_html_stream");
+
     stream!({
+        let _guard = span.enter();
+
         let (input_sender, input_receiver) = std::sync::mpsc::channel::<Option<Vec<u8>>>();
         let (result_sender, mut result_receiver) = tokio::sync::mpsc::unbounded_channel::<Bytes>();
 
