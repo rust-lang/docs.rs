@@ -66,6 +66,7 @@ derive_builder = "0.20.2"
 # Async
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros"] }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
+tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 futures-util = "0.3.5"
 async-stream = "0.3.5"
 async-compression = { version = "0.4.25", features = ["tokio", "bzip2", "zstd", "gzip"] }
