@@ -33,12 +33,11 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use http::{HeaderValue, header};
-use once_cell::sync::Lazy;
 use semver::Version;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 use tracing::{Instrument, debug, error, info_span, instrument, trace};
 
@@ -50,8 +49,8 @@ pub(crate) struct OfficialCrateDescription {
     pub(crate) description: &'static str,
 }
 
-pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: Lazy<HashMap<&str, OfficialCrateDescription>> =
-    Lazy::new(|| {
+pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: LazyLock<HashMap<&str, OfficialCrateDescription>> =
+    LazyLock::new(|| {
         HashMap::from([
             (
                 "alloc",
