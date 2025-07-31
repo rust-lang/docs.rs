@@ -69,6 +69,7 @@ pub struct Release {
     pub(crate) build_time: Option<DateTime<Utc>>,
     pub(crate) stars: i32,
     pub(crate) has_unyanked_releases: Option<bool>,
+    pub(crate) href: Option<&'static str>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -143,6 +144,7 @@ pub(crate) async fn get_releases(
             build_time: row.get(5),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
             has_unyanked_releases: None,
+            href: None,
         })
         .try_collect()
         .await?)
@@ -161,6 +163,20 @@ struct SearchResult {
     pub next_page: Option<String>,
 }
 
+fn rust_lib_release(name: &str, description: &str, href: &'static str) -> ReleaseStatus {
+    ReleaseStatus::Available(Release {
+        name: name.to_string(),
+        version: String::new(),
+        description: Some(description.to_string()),
+        build_time: None,
+        target_name: None,
+        rustdoc_status: false,
+        stars: 0,
+        has_unyanked_releases: None,
+        href: Some(href),
+    })
+}
+
 /// Get the search results for a crate search query
 ///
 /// This delegates to the crates.io search API.
@@ -176,6 +192,7 @@ async fn get_search_results(
         Err(err) => return Err(handle_registry_error(err)),
     };
 
+ 
     let names = Arc::new(
         crates
             .into_iter()
@@ -230,28 +247,38 @@ async fn get_search_results(
                 rustdoc_status: row.rustdoc_status.unwrap_or(false),
                 stars: row.stars.unwrap_or(0),
                 has_unyanked_releases: row.has_unyanked_releases,
+                href: None,
             },
         )
     })
     .try_collect()
     .await?;
 
+    // start with the original names from crates.io to keep the original ranking,
+    // extend with the release/build information from docs.rs
+    // Crates that are not on docs.rs yet will not be returned.
+    let mut results = Vec::new();
+    if let Some(super::rustdoc::OfficialCrateDescription {
+        name,
+        href,
+        description,
+    }) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(query)
+    {
+        results.push(rust_lib_release(name, description, href))
+    }
+
     let names: Vec<String> =
         Arc::into_inner(names).expect("Arc still borrowed in `get_search_results`");
+    results.extend(names.into_iter().map(|name| {
+        if let Some(release) = crates.remove(&name) {
+            ReleaseStatus::Available(release)
+        } else {
+            ReleaseStatus::NotAvailable(name)
+        }
+    }));
+
     Ok(SearchResult {
-        // start with the original names from crates.io to keep the original ranking,
-        // extend with the release/build information from docs.rs
-        // Crates that are not on docs.rs yet will not be returned.
-        results: names
-            .into_iter()
-            .map(|name| {
-                if let Some(release) = crates.remove(&name) {
-                    ReleaseStatus::Available(release)
-                } else {
-                    ReleaseStatus::NotAvailable(name)
-                }
-            })
-            .collect(),
+        results,
         prev_page: meta.prev_page,
         next_page: meta.next_page,
     })
@@ -659,6 +686,7 @@ pub(crate) async fn search_handler(
         }
 
         get_search_results(&mut conn, &registry, query_params).await
+
     } else if !query.is_empty() {
         let query_params: String = form_urlencoded::Serializer::new(String::new())
             .append_pair("q", &query)
@@ -667,6 +695,7 @@ pub(crate) async fn search_handler(
             .finish();
 
         get_search_results(&mut conn, &registry, &query_params).await
+
     } else {
         return Err(AxumNope::NoResults);
     };

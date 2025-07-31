@@ -3,7 +3,7 @@
 pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
 pub(crate) use self::copy::copy_dir_all;
 pub use self::daemon::{start_daemon, watch_registry};
-pub(crate) use self::html::rewrite_lol;
+pub(crate) use self::html::rewrite_rustdoc_html_stream;
 pub use self::queue::{
     get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
     remove_crate_priority, set_crate_priority,
