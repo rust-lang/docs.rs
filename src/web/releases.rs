@@ -2376,6 +2376,11 @@ mod tests {
                     .text_contents()
                     .contains("We're having issues communicating with crates.io")
             );
+            assert!(
+                parse_html.text_contents().contains("501")
+                    || parse_html.text_contents().contains("500")
+            );
+            assert!(parse_html.text_contents().contains("crates.io returned"));
             Ok(())
         })
     }
