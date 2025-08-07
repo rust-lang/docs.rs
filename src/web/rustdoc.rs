@@ -2534,8 +2534,8 @@ mod test {
                 }
             };
 
-            assert!(status("0.3.0", "2021/01/12").await?);
-            assert!(status("0.2.0", "2020/12/01").await?);
+            assert!(status("0.3.0", "2021-01-12").await?);
+            assert!(status("0.2.0", "2020-12-01").await?);
             Ok(())
         })
     }
