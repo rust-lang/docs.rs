@@ -19,11 +19,14 @@ env:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   commit-sqlx-changes:
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
+    outputs:
+      output1: $
     steps:
       - uses: actions/checkout@v4
 
@@ -56,12 +59,30 @@ jobs:
           just sqlx-prepare
           # If there are differences in the SQLX files, then we push them on the master branch
           if git status --porcelain .sqlx ; then
-            git config --global user.name 'Docs.rs developers'
-            git config --global user.email 'docs.rs@users.noreply.github.com'
-            git add .sqlx
-            git commit -m 'Update SQLX files'
-            git push
+            echo "need_pr" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Clean up the database
         run: docker compose down --volumes
+
+  create-pull-request:
+    if: ${{ github.event.pull_request.merged }}
+    needs: commit-sqlx-changes
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+        OUTPUT1: $
+      - name: Open pull request
+        if: ${{ OUTPUT1 == 'need_or' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: Update SQLX files
+          committer: Docs.rs developers <docs.rs@users.noreply.github.com>
+          author: Docs.rs developers <docs.rs@users.noreply.github.com>
+          signoff: false
+          title: Update SQLX files
+          delete-branch: true
+          branch: update-sqlx-pr-${{ github.event.pull_request.number }}
+          title: Update SQLX files after #${{ github.event.pull_request.number }} changes
+          body: |
+            Following #${{ github.event.pull_request.number }} changes, here are the related SQLX files changes.
