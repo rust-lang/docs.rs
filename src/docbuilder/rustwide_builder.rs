@@ -299,10 +299,34 @@ impl RustwideBuilder {
     }
 
     pub fn add_essential_files(&mut self) -> Result<()> {
+        // Check if toolchain is available, install if needed
+        match self.detect_rustc_version() {
+            Ok(_) => {
+                info!("Toolchain is already installed");
+            }
+            Err(err) => {
+                // Check if the error is specifically due to missing toolchain
+                let err_msg = err.to_string();
+                if err_msg.contains("No such file or directory")
+                    || err_msg.contains("command not found")
+                    || err_msg.contains("not installed")
+                {
+                    info!("Installing nightly toolchain because it was not found");
+                    self.update_toolchain()?;
+                } else {
+                    // Don't try to install the toolchain if some other error occurred
+                    return Err(anyhow!(
+                        "Failed to detect rustc version: {}\n\nThis might indicate the nightly toolchain is not properly installed. Please run 'cratesfyi build update-toolchain' first.",
+                        err
+                    ));
+                }
+            }
+        }
+
         let rustc_version = self.rustc_version()?;
         let parsed_rustc_version = parse_rustc_version(&rustc_version)?;
 
-        info!("building a dummy crate to get essential files");
+        info!("building a dummy crate to get essential files for {rustc_version}");
 
         let limits = self.get_limits(DUMMY_CRATE_NAME)?;
 
