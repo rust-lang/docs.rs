@@ -1,5 +1,5 @@
 use crate::error::Result;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use syntect::{
     html::{ClassStyle, ClassedHTMLGenerator},
     parsing::{SyntaxReference, SyntaxSet},
@@ -13,7 +13,7 @@ const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;
 #[error("the code exceeded a highlighting limit")]
 pub struct LimitsExceeded;
 
-static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
+static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     static SYNTAX_DATA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/syntect.packdump"));
 
     let syntaxes: SyntaxSet = syntect::dumps::from_uncompressed_data(SYNTAX_DATA).unwrap();

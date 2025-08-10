@@ -149,7 +149,7 @@
                 {%+ endif -%}
                 <b>{{ release.version }}</b>
                 {%- if let Some(release_time) = release.release_time -%}
-                    {# +#} ({{ release_time.format("%Y/%m/%d") }})
+                    {# +#} ({{ release_time.format("%Y-%m-%d") }})
                 {%- endif -%}
             </a>
         </li>
