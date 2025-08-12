@@ -381,10 +381,9 @@ pub(crate) async fn handle_queued_invalidation_requests(
         if let Some(status) = cdn
             .invalidation_status(distribution_id, &row.cdn_reference)
             .await?
+            && !status.completed
         {
-            if !status.completed {
-                active_invalidations.push(status);
-            }
+            active_invalidations.push(status);
         }
     }
 
@@ -453,11 +452,10 @@ pub(crate) async fn handle_queued_invalidation_requests(
     )
     .fetch_one(&mut *conn)
     .await?
+        && (now - min_queued).to_std().unwrap_or_default() >= config.cdn_max_queued_age
     {
-        if (now - min_queued).to_std().unwrap_or_default() >= config.cdn_max_queued_age {
-            full_invalidation(cdn, metrics, conn, distribution_id).await?;
-            return Ok(());
-        }
+        full_invalidation(cdn, metrics, conn, distribution_id).await?;
+        return Ok(());
     }
 
     // create new an invalidation for the queued path patterns

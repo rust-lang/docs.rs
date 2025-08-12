@@ -129,10 +129,10 @@ where
         parts: &mut Parts,
         _state: &S,
     ) -> Result<Option<Self>, Self::Rejection> {
-        if let Some((_rest, last_component)) = parts.uri.path().rsplit_once('/') {
-            if let Some((_rest, ext)) = last_component.rsplit_once('.') {
-                return Ok(Some(PathFileExtension(ext.to_string())));
-            }
+        if let Some((_rest, last_component)) = parts.uri.path().rsplit_once('/')
+            && let Some((_rest, ext)) = last_component.rsplit_once('.')
+        {
+            return Ok(Some(PathFileExtension(ext.to_string())));
         }
 
         Ok(None)

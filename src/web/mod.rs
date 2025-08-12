@@ -257,7 +257,7 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
         // So when we only have pre-releases, `VersionReq::STAR` would lead to an
         // empty result.
         // In this case we just return the latest prerelease instead of nothing.
-        return releases.iter().find(|release| filter(release));
+        releases.iter().find(|release| filter(release))
     } else {
         None
     }

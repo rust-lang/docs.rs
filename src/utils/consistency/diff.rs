@@ -65,14 +65,14 @@ where
                             // is coming from the build queue, not the `releases`
                             // table.
                             // In this case, we skip this check.
-                            if let Some(db_yanked) = db_release.yanked {
-                                if db_yanked != index_yanked {
-                                    result.push(Difference::ReleaseYank(
-                                        db_crate.name.clone(),
-                                        db_release.version.clone(),
-                                        index_yanked,
-                                    ));
-                                }
+                            if let Some(db_yanked) = db_release.yanked
+                                && db_yanked != index_yanked
+                            {
+                                result.push(Difference::ReleaseYank(
+                                    db_crate.name.clone(),
+                                    db_release.version.clone(),
+                                    index_yanked,
+                                ));
                             }
                         }
                         Left(db_release) => result.push(Difference::ReleaseNotInIndex(
