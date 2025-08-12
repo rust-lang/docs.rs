@@ -25,7 +25,7 @@ jobs:
   sqlx:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # We check that all github actions workflows have valid syntax
       - name: Validate YAML file
@@ -76,7 +76,7 @@ jobs:
       SQLX_OFFLINE: 1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -112,7 +112,7 @@ jobs:
   GUI_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -140,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: update rust toolchain
         run: rustup component add rustfmt
 
@@ -151,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: update rust toolchain
         run: rustup component add clippy
@@ -169,7 +169,7 @@ jobs:
   eslint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: denoland/setup-deno@v2
       - name: install `just`
         run: sudo snap install --edge --classic just
