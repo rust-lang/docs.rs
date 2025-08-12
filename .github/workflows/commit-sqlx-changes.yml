@@ -70,17 +70,16 @@ jobs:
     needs: commit-sqlx-changes
     runs-on: ubuntu-latest
     env:
-      OUTPUT1: $
+      OUTPUT1: 
     steps:
       - name: Open pull request
-        if: ${{ OUTPUT1 == 'need_or' }}
+        if: ${{ needs.commit-sqlx-changes.outputs.output1 == 'need_or' }}
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: Update SQLX files
           committer: Docs.rs developers <docs.rs@users.noreply.github.com>
           author: Docs.rs developers <docs.rs@users.noreply.github.com>
           signoff: false
-          title: Update SQLX files
           delete-branch: true
           branch: update-sqlx-pr-${{ github.event.pull_request.number }}
           title: Update SQLX files after #${{ github.event.pull_request.number }} changes
