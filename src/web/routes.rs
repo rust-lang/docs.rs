@@ -70,17 +70,16 @@ async fn block_blacklisted_prefixes_middleware(
     request: AxumHttpRequest,
     next: Next,
 ) -> impl IntoResponse {
-    if let Some(first_component) = request.uri().path().trim_matches('/').split('/').next() {
-        if !first_component.is_empty()
-            && (INTERNAL_PREFIXES.binary_search(&first_component).is_ok())
-        {
-            debug!(
-                first_component = first_component,
-                uri = ?request.uri(),
-                "blocking blacklisted prefix"
-            );
-            return AxumNope::CrateNotFound.into_response();
-        }
+    if let Some(first_component) = request.uri().path().trim_matches('/').split('/').next()
+        && !first_component.is_empty()
+        && (INTERNAL_PREFIXES.binary_search(&first_component).is_ok())
+    {
+        debug!(
+            first_component = first_component,
+            uri = ?request.uri(),
+            "blocking blacklisted prefix"
+        );
+        return AxumNope::CrateNotFound.into_response();
     }
 
     next.run(request).await

@@ -233,28 +233,27 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
-    if let Some((_, extension)) = params.name.rsplit_once('.') {
-        if ["css", "js", "png", "svg", "woff", "woff2"]
+    if let Some((_, extension)) = params.name.rsplit_once('.')
+        && ["css", "js", "png", "svg", "woff", "woff2"]
             .binary_search(&extension)
             .is_ok()
-        {
-            return try_serve_legacy_toolchain_asset(storage, params.name)
-                .instrument(info_span!("serve static asset"))
-                .await;
-        }
+    {
+        return try_serve_legacy_toolchain_asset(storage, params.name)
+            .instrument(info_span!("serve static asset"))
+            .await;
     }
 
-    if let Some((_, extension)) = uri.path().rsplit_once('.') {
-        if extension == "ico" {
-            // redirect all ico requests
-            // originally from:
-            // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
-            return Ok(axum_cached_redirect(
-                "/-/static/favicon.ico",
-                CachePolicy::ForeverInCdnAndBrowser,
-            )?
-            .into_response());
-        }
+    if let Some((_, extension)) = uri.path().rsplit_once('.')
+        && extension == "ico"
+    {
+        // redirect all ico requests
+        // originally from:
+        // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
+        return Ok(axum_cached_redirect(
+            "/-/static/favicon.ico",
+            CachePolicy::ForeverInCdnAndBrowser,
+        )?
+        .into_response());
     }
 
     let (crate_name, path_in_crate) = match params.name.split_once("::") {
@@ -285,48 +284,45 @@ pub(crate) async fn rustdoc_redirector_handler(
     let crate_name = matched_release.name.clone();
 
     // we might get requests to crate-specific JS/CSS files here.
-    if let Some(ref target) = params.target {
-        if target.ends_with(".js") || target.ends_with(".css") {
-            // this URL is actually from a crate-internal path, serve it there instead
-            return async {
-                let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    if let Some(ref target) = params.target
+        && (target.ends_with(".js") || target.ends_with(".css"))
+    {
+        // this URL is actually from a crate-internal path, serve it there instead
+        return async {
+            let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
-                match storage
-                    .stream_rustdoc_file(
-                        &crate_name,
-                        &krate.version.to_string(),
-                        krate.latest_build_id,
-                        target,
-                        krate.archive_storage,
-                    )
-                    .await
-                {
-                    Ok(blob) => Ok(StreamingFile(blob).into_response()),
-                    Err(err) => {
-                        if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
-                            && !matches!(
-                                err.downcast_ref(),
-                                Some(crate::storage::PathNotFoundError)
-                            )
-                        {
-                            debug!(?target, ?err, "got error serving file");
-                        }
-                        // FIXME: we sometimes still get requests for toolchain
-                        // specific static assets under the crate/version/ path.
-                        // This is fixed in rustdoc, but pending a rebuild for
-                        // docs that were affected by this bug.
-                        // https://github.com/rust-lang/docs.rs/issues/1979
-                        if target.starts_with("search-") || target.starts_with("settings-") {
-                            try_serve_legacy_toolchain_asset(storage, target).await
-                        } else {
-                            Err(err.into())
-                        }
+            match storage
+                .stream_rustdoc_file(
+                    &crate_name,
+                    &krate.version.to_string(),
+                    krate.latest_build_id,
+                    target,
+                    krate.archive_storage,
+                )
+                .await
+            {
+                Ok(blob) => Ok(StreamingFile(blob).into_response()),
+                Err(err) => {
+                    if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
+                        && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+                    {
+                        debug!(?target, ?err, "got error serving file");
+                    }
+                    // FIXME: we sometimes still get requests for toolchain
+                    // specific static assets under the crate/version/ path.
+                    // This is fixed in rustdoc, but pending a rebuild for
+                    // docs that were affected by this bug.
+                    // https://github.com/rust-lang/docs.rs/issues/1979
+                    if target.starts_with("search-") || target.starts_with("settings-") {
+                        try_serve_legacy_toolchain_asset(storage, target).await
+                    } else {
+                        Err(err.into())
                     }
                 }
             }
-            .instrument(info_span!("serve asset for crate"))
-            .await;
         }
+        .instrument(info_span!("serve asset for crate"))
+        .await;
     }
 
     let matched_release = matched_release.into_canonical_req_version();
@@ -849,10 +845,10 @@ pub(crate) async fn target_redirect_handler(
             pieces.remove(0);
         }
 
-        if let Some(last) = pieces.last_mut() {
-            if last.is_empty() {
-                *last = "index.html".to_string();
-            }
+        if let Some(last) = pieces.last_mut()
+            && last.is_empty()
+        {
+            *last = "index.html".to_string();
         }
 
         pieces.join("/")

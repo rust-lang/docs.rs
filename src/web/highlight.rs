@@ -55,10 +55,10 @@ fn select_syntax(
     default: Option<&str>,
 ) -> &'static SyntaxReference {
     name.and_then(|name| {
-        if name.is_empty() {
-            if let Some(default) = default {
-                return SYNTAXES.find_syntax_by_token(default);
-            }
+        if name.is_empty()
+            && let Some(default) = default
+        {
+            return SYNTAXES.find_syntax_by_token(default);
         }
         SYNTAXES.find_syntax_by_token(name).or_else(|| {
             name.rsplit_once('.')
