@@ -69,9 +69,9 @@ jobs:
     if: ${{ github.event.pull_request.merged }}
     needs: commit-sqlx-changes
     runs-on: ubuntu-latest
+    env:
+      OUTPUT1: $
     steps:
-      - env:
-        OUTPUT1: $
       - name: Open pull request
         if: ${{ OUTPUT1 == 'need_or' }}
         uses: peter-evans/create-pull-request@v7
