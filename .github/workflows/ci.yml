@@ -27,6 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # We check that all github actions workflows have valid syntax
+      - name: Validate YAML file
+        uses: raven-actions/actionlint@v2
+        with:
+          files: .github/workflow/*
+          flags: "-ignore SC2086" # ignore some shellcheck errors
+
       - name: install `just`
         run: sudo snap install --edge --classic just
 
