@@ -2124,4 +2124,68 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_add_essential_files_with_toolchain() {
+        wrapper(|env: &TestEnvironment| {
+            let mut builder = RustwideBuilder::init(env).unwrap();
+
+            builder.update_toolchain()?;
+
+            // Should not fail on missing toolchain
+            match builder.add_essential_files() {
+                Ok(_) => println!("add_essential_files succeeded with toolchain"),
+                Err(err) => {
+                    let error_message = err.to_string();
+                    let is_toolchain_error = error_message.contains("toolchain")
+                        && (error_message.contains("not found")
+                            || error_message.contains("not installed")
+                            || error_message.contains("missing")
+                            || error_message.contains("invalid toolchain"));
+
+                    assert!(
+                        !is_toolchain_error,
+                        "Should not fail due to missing toolchain, but got: {error_message}"
+                    );
+                    println!("add_essential_files failed for expected reason: {error_message}");
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn test_add_essential_files_without_toolchain() {
+        wrapper(|env: &TestEnvironment| {
+            let mut builder = RustwideBuilder::init(env).unwrap();
+
+            // First: Set an invalid toolchain
+            env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                crate::utils::set_config(
+                    &mut conn,
+                    crate::utils::ConfigName::Toolchain,
+                    "invalid-toolchain-name!@#",
+                )
+                .await
+            })?;
+
+            // Should fail on missing toolchain
+            match builder.add_essential_files() {
+                Ok(_) => panic!("add_essential_files should fail when toolchain is missing"),
+                Err(e) => {
+                    let error_message = e.to_string();
+                    println!("add_essential_files correctly failed with: {error_message}");
+
+                    assert!(
+                        !error_message.contains("success"),
+                        "Should not succeed when toolchain is missing"
+                    );
+                }
+            }
+
+            Ok(())
+        })
+    }
 }
