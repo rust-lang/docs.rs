@@ -68,13 +68,8 @@ jobs:
       - name: Clean up the database
         run: docker compose down --volumes
 
-  create-pull-request:
-    if: ${{ github.event.pull_request.merged }}
-    needs: commit-sqlx-changes
-    runs-on: ubuntu-latest
-    steps:
       - name: Open pull request
-        if: ${{ needs.commit-sqlx-changes.outputs.need_pr == '1' }}
+        if: ${{ steps.sqlx_check.outputs.need_pr == '1' }}
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: Update SQLX files
@@ -83,6 +78,6 @@ jobs:
           signoff: false
           delete-branch: true
           branch: update-sqlx-pr-${{ github.event.pull_request.number }}
-          title: Update SQLX files after #${{ github.event.pull_request.number }} changes
+          title: Update SQLX files after \#${{ github.event.pull_request.number }} changes
           body: |
             Following #${{ github.event.pull_request.number }} changes, here are the related SQLX files changes.
