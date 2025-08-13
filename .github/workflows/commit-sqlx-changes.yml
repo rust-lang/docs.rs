@@ -78,6 +78,6 @@ jobs:
           signoff: false
           delete-branch: true
           branch: update-sqlx-pr-${{ github.event.pull_request.number }}
-          title: Update SQLX files after \#${{ github.event.pull_request.number }} changes
+          title: Update SQLX files
           body: |
             Following #${{ github.event.pull_request.number }} changes, here are the related SQLX files changes.
