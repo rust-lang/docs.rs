@@ -26,7 +26,7 @@ jobs:
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     outputs:
-      output1: $
+      need_pr: ${{ steps.sqlx_check.outputs.need_pr }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,11 +55,14 @@ jobs:
         run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
 
       - name: Commit sqlx changes on master branch if any
+        id: sqlx_check
         run: |
           just sqlx-prepare
           # If there are differences in the SQLX files, then we push them on the master branch
           if git status --porcelain .sqlx ; then
-            echo "need_pr" >> "$GITHUB_OUTPUT"
+            echo "need_pr=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "need_pr=0" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Clean up the database
@@ -69,11 +72,9 @@ jobs:
     if: ${{ github.event.pull_request.merged }}
     needs: commit-sqlx-changes
     runs-on: ubuntu-latest
-    env:
-      OUTPUT1: 
     steps:
       - name: Open pull request
-        if: ${{ needs.commit-sqlx-changes.outputs.output1 == 'need_or' }}
+        if: ${{ needs.commit-sqlx-changes.outputs.need_pr == '1' }}
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: Update SQLX files
