@@ -239,11 +239,11 @@ impl AxumRouterTestExt for axum::Router {
         let mut path = path.to_owned();
         for _ in 0..=10 {
             let response = self.get(&path).await?;
-            if response.status().is_redirection() {
-                if let Some(target) = response.redirect_target() {
-                    path = target.to_owned();
-                    continue;
-                }
+            if response.status().is_redirection()
+                && let Some(target) = response.redirect_target()
+            {
+                path = target.to_owned();
+                continue;
             }
             return Ok(response);
         }
@@ -409,10 +409,10 @@ impl TestEnvironment {
                 .expect("failed to cleanup after tests");
         }
 
-        if let Some(config) = self.config.get() {
-            if config.local_archive_cache_path.exists() {
-                fs::remove_dir_all(&config.local_archive_cache_path).unwrap();
-            }
+        if let Some(config) = self.config.get()
+            && config.local_archive_cache_path.exists()
+        {
+            fs::remove_dir_all(&config.local_archive_cache_path).unwrap();
         }
     }
 
@@ -610,7 +610,7 @@ impl TestEnvironment {
             .expect("could not build axum app")
     }
 
-    pub(crate) async fn fake_release(&self) -> fakes::FakeRelease {
+    pub(crate) async fn fake_release(&self) -> fakes::FakeRelease<'_> {
         fakes::FakeRelease::new(self.async_db().await, self.async_storage().await)
     }
 }

@@ -649,6 +649,7 @@ mod test {
     use crate::test::*;
     use crate::utils::CargoMetadata;
     use chrono::NaiveDate;
+    use std::slice;
     use test_case::test_case;
 
     #[test]
@@ -965,7 +966,7 @@ mod test {
                 kind: OwnerKind::User,
             };
 
-            update_owners_in_database(&mut conn, &[owner1.clone()], crate_id).await?;
+            update_owners_in_database(&mut conn, slice::from_ref(&owner1), crate_id).await?;
 
             let owner_def = sqlx::query!(
                 r#"SELECT login, avatar, kind as "kind: OwnerKind"
@@ -1005,7 +1006,7 @@ mod test {
                 kind: OwnerKind::User,
             };
 
-            update_owners_in_database(&mut conn, &[owner1.clone()], crate_id).await?;
+            update_owners_in_database(&mut conn, slice::from_ref(&owner1), crate_id).await?;
 
             let owner_def = sqlx::query!(
                 r#"SELECT login, avatar, kind as "kind: OwnerKind"
@@ -1056,7 +1057,7 @@ mod test {
                 avatar: "avatar2".into(),
                 kind: OwnerKind::Team,
             };
-            update_owners_in_database(&mut conn, &[updated_owner.clone()], crate_id).await?;
+            update_owners_in_database(&mut conn, slice::from_ref(&updated_owner), crate_id).await?;
 
             let owner_def =
                 sqlx::query!(r#"SELECT login, avatar, kind as "kind: OwnerKind" FROM owners"#)

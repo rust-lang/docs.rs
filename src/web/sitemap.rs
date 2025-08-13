@@ -61,10 +61,10 @@ pub(crate) async fn sitemap_handler(
 ) -> AxumResult<impl IntoResponse> {
     if letter.len() != 1 {
         return Err(AxumNope::ResourceNotFound);
-    } else if let Some(ch) = letter.chars().next() {
-        if !(ch.is_ascii_lowercase()) {
-            return Err(AxumNope::ResourceNotFound);
-        }
+    } else if let Some(ch) = letter.chars().next()
+        && !(ch.is_ascii_lowercase())
+    {
+        return Err(AxumNope::ResourceNotFound);
     }
 
     let releases: Vec<_> = sqlx::query!(

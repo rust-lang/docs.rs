@@ -308,7 +308,7 @@ impl RepositoryStatsUpdater {
     }
 }
 
-pub(crate) fn repository_name(url: &str) -> Option<RepositoryName> {
+pub(crate) fn repository_name(url: &str) -> Option<RepositoryName<'_>> {
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"https?://(?P<host>[^/]+)/(?P<owner>[\w\._/-]+)/(?P<repo>[\w\._-]+)").unwrap()
     });

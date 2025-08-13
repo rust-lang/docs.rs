@@ -99,53 +99,47 @@ where
 
         match difference {
             diff::Difference::CrateNotInIndex(name) => {
-                if !dry_run {
-                    if let Err(err) = delete::delete_crate(&mut conn, &storage, &config, name).await
-                    {
-                        warn!("{:?}", err);
-                    }
+                if !dry_run
+                    && let Err(err) = delete::delete_crate(&mut conn, &storage, &config, name).await
+                {
+                    warn!("{:?}", err);
                 }
                 result.crates_deleted += 1;
             }
             diff::Difference::CrateNotInDb(name, versions) => {
                 for version in versions {
-                    if !dry_run {
-                        if let Err(err) = build_queue
+                    if !dry_run
+                        && let Err(err) = build_queue
                             .add_crate(name, version, BUILD_PRIORITY, None)
                             .await
-                        {
-                            warn!("{:?}", err);
-                        }
+                    {
+                        warn!("{:?}", err);
                     }
                     result.builds_queued += 1;
                 }
             }
             diff::Difference::ReleaseNotInIndex(name, version) => {
-                if !dry_run {
-                    if let Err(err) =
+                if !dry_run
+                    && let Err(err) =
                         delete::delete_version(&mut conn, &storage, &config, name, version).await
-                    {
-                        warn!("{:?}", err);
-                    }
+                {
+                    warn!("{:?}", err);
                 }
                 result.releases_deleted += 1;
             }
             diff::Difference::ReleaseNotInDb(name, version) => {
-                if !dry_run {
-                    if let Err(err) = build_queue
+                if !dry_run
+                    && let Err(err) = build_queue
                         .add_crate(name, version, BUILD_PRIORITY, None)
                         .await
-                    {
-                        warn!("{:?}", err);
-                    }
+                {
+                    warn!("{:?}", err);
                 }
                 result.builds_queued += 1;
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
-                if !dry_run {
-                    if let Err(err) = build_queue.set_yanked(name, version, *yanked).await {
-                        warn!("{:?}", err);
-                    }
+                if !dry_run && let Err(err) = build_queue.set_yanked(name, version, *yanked).await {
+                    warn!("{:?}", err);
                 }
                 result.yanks_corrected += 1;
             }

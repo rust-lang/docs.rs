@@ -19,13 +19,21 @@ env:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   commit-sqlx-changes:
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
+    outputs:
+      need_pr: ${{ steps.sqlx_check.outputs.need_pr }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Ensure repository is up to date
+        run: |
+          git fetch origin
+          git rebase origin/master
 
       - name: install `just`
         run: sudo snap install --edge --classic just
@@ -52,16 +60,29 @@ jobs:
         run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
 
       - name: Commit sqlx changes on master branch if any
+        id: sqlx_check
         run: |
           just sqlx-prepare
           # If there are differences in the SQLX files, then we push them on the master branch
           if git status --porcelain .sqlx ; then
-            git config --global user.name 'Docs.rs developers'
-            git config --global user.email 'docs.rs@users.noreply.github.com'
-            git add .sqlx
-            git commit -m 'Update SQLX files'
-            git push
+            echo "need_pr=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "need_pr=0" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Clean up the database
         run: docker compose down --volumes
+
+      - name: Open pull request
+        if: ${{ steps.sqlx_check.outputs.need_pr == '1' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: Update SQLX files
+          committer: Docs.rs developers <docs.rs@users.noreply.github.com>
+          author: Docs.rs developers <docs.rs@users.noreply.github.com>
+          signoff: false
+          delete-branch: true
+          branch: update-sqlx-pr-${{ github.event.pull_request.number }}
+          title: Update SQLX files
+          body: |
+            Following #${{ github.event.pull_request.number }} changes, here are the related SQLX files changes.

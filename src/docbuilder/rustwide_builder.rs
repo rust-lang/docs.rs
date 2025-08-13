@@ -610,8 +610,8 @@ impl RustwideBuilder {
                         self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
-                if res.result.successful {
-                    if let Some(name) = res.cargo_metadata.root().library_name() {
+                if res.result.successful
+                    && let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
                         has_docs = host_target
                             .join(default_target)
@@ -619,7 +619,6 @@ impl RustwideBuilder {
                             .join(name)
                             .is_dir();
                     }
-                }
 
                 let mut target_build_logs = HashMap::new();
                 let documentation_size = if has_docs {
@@ -1101,19 +1100,18 @@ impl RustwideBuilder {
             })
         };
 
-        if collect_metrics {
-            if let Some(compiler_metric_target_dir) = &self.config.compiler_metrics_collection_path
-            {
-                let metric_output = build.host_target_dir().join("metrics/");
-                info!(
-                    "found {} files in metric dir, copy over to {} (exists: {})",
-                    fs::read_dir(&metric_output)?.count(),
-                    &compiler_metric_target_dir.to_string_lossy(),
-                    &compiler_metric_target_dir.exists(),
-                );
-                copy_dir_all(&metric_output, compiler_metric_target_dir)?;
-                fs::remove_dir_all(&metric_output)?;
-            }
+        if collect_metrics
+            && let Some(compiler_metric_target_dir) = &self.config.compiler_metrics_collection_path
+        {
+            let metric_output = build.host_target_dir().join("metrics/");
+            info!(
+                "found {} files in metric dir, copy over to {} (exists: {})",
+                fs::read_dir(&metric_output)?.count(),
+                &compiler_metric_target_dir.to_string_lossy(),
+                &compiler_metric_target_dir.exists(),
+            );
+            copy_dir_all(&metric_output, compiler_metric_target_dir)?;
+            fs::remove_dir_all(&metric_output)?;
         }
 
         // For proc-macros, cargo will put the output in `target/doc`.

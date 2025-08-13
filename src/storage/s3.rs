@@ -51,16 +51,16 @@ where
         match self {
             Ok(result) => Ok(result),
             Err(err) => {
-                if let Some(err_code) = err.code() {
-                    if NOT_FOUND_ERROR_CODES.contains(&err_code) {
-                        return Err(super::PathNotFoundError.into());
-                    }
+                if let Some(err_code) = err.code()
+                    && NOT_FOUND_ERROR_CODES.contains(&err_code)
+                {
+                    return Err(super::PathNotFoundError.into());
                 }
 
-                if let SdkError::ServiceError(err) = &err {
-                    if err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16() {
-                        return Err(super::PathNotFoundError.into());
-                    }
+                if let SdkError::ServiceError(err) = &err
+                    && err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
+                {
+                    return Err(super::PathNotFoundError.into());
                 }
 
                 Err(err.into())
