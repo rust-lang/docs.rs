@@ -140,6 +140,7 @@ div.nav-container {
 
         .pure-menu-item a.pure-menu-link {
             padding: 6.4px 5px 6.4px 5px;
+            align-content: center;
 
             @media #{$media-sm} {
                 padding: 6.4px 10px 6.4px 10px;
@@ -148,6 +149,7 @@ div.nav-container {
 
         .docsrs-logo, .pure-menu-item .pure-menu-text {
             padding: 6.4px 10px 6.4px 10px;
+            align-content: center;
         }
 
         @media #{$media-md} {
