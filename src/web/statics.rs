@@ -16,6 +16,8 @@ const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
 const RUSTDOC_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/rustdoc.css"));
 const RUSTDOC_2021_12_05_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2021-12-05.css"));
+const RUSTDOC_2025_08_20_CSS: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2025-08-20.css"));
 
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     (
@@ -66,6 +68,10 @@ pub(crate) fn build_static_router() -> AxumRouter {
         .route(
             "/rustdoc-2021-12-05.css",
             get_static(|| async { build_static_css_response(RUSTDOC_2021_12_05_CSS) }),
+        )
+        .route(
+            "/rustdoc-2025-08-20.css",
+            get_static(|| async { build_static_css_response(RUSTDOC_2025_08_20_CSS) }),
         )
         .fallback_service(
             get_service(ServeDir::new("static").fallback(ServeDir::new("vendor")))
