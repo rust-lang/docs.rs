@@ -9,13 +9,13 @@ assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 
 // We check the same in "mobile mode".
 set-window-size: (600, 1000)
-wait-for-css-false: (".rustdoc .mobile-topbar", {"display": "none"})
-assert-position: (".rustdoc .mobile-topbar", {"y": |topbar_height|, "x": 0})
+wait-for-css-false: ("rustdoc-topbar", {"display": "none"})
+assert-position: ("rustdoc-topbar", {"y": |topbar_height|, "x": 0})
 // We check when the sidebar is shown now.
-click: ".rustdoc .mobile-topbar .sidebar-menu-toggle"
+click: "rustdoc-topbar .sidebar-menu-toggle"
 wait-for: ".rustdoc .sidebar.shown"
 // The mobile sidebar is supposed to be under the rustdoc mobile topbar + docs.rs topbar.
-store-size: (".rustdoc .mobile-topbar", {"height": rustdoc_topbar_height})
+store-size: ("rustdoc-topbar", {"height": rustdoc_topbar_height})
 assert-position: (".rustdoc .sidebar.shown", {
     "y": |topbar_height| + |rustdoc_topbar_height|,
     "x": 0,
