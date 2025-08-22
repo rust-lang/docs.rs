@@ -84,7 +84,7 @@ where
 {
     let mut result = HandleResult::default();
 
-    let mut conn = ctx.async_pool.get_async().await?;
+    let mut conn = ctx.pool.get_async().await?;
 
     for difference in iter {
         println!("{difference}");

@@ -187,7 +187,7 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.async_pool().await?)?;
+            let metrics_serialized = metrics.gather(&env.pool().await?)?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.name() == "docsrs_routes_visited")
