@@ -83,12 +83,10 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-fn build_workspace<C: Context>(context: &C) -> Result<Workspace> {
-    let config = context.config()?;
-
-    let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
-        .running_inside_docker(config.inside_docker);
-    if let Some(custom_image) = &config.docker_image {
+fn build_workspace(context: &Context) -> Result<Workspace> {
+    let mut builder = WorkspaceBuilder::new(&context.config.rustwide_workspace, USER_AGENT)
+        .running_inside_docker(context.config.inside_docker);
+    if let Some(custom_image) = &context.config.docker_image {
         let image = match SandboxImage::local(custom_image) {
             Ok(i) => i,
             Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
@@ -127,35 +125,29 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init<C: Context>(context: &C) -> Result<Self> {
-        let config = context.config()?;
-        let pool = context.pool()?;
-        let runtime = context.runtime()?;
-        let toolchain = runtime.block_on(async {
-            let mut conn = pool.get_async().await?;
+    pub fn init(context: &Context) -> Result<Self> {
+        let toolchain = context.runtime.block_on(async {
+            let mut conn = context.pool.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
 
         Ok(RustwideBuilder {
             workspace: build_workspace(context)?,
             toolchain,
-            config,
-            db: pool,
-            runtime: runtime.clone(),
-            storage: context.storage()?,
-            async_storage: runtime.block_on(context.async_storage())?,
-            metrics: context.instance_metrics()?,
-            registry_api: context.registry_api()?,
-            repository_stats_updater: context.repository_stats_updater()?,
+            config: context.config.clone(),
+            db: context.pool.clone(),
+            runtime: context.runtime.clone(),
+            storage: context.storage.clone(),
+            async_storage: context.async_storage.clone(),
+            metrics: context.instance_metrics.clone(),
+            registry_api: context.registry_api.clone(),
+            repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
         })
     }
 
-    pub fn reinitialize_workspace_if_interval_passed<C: Context>(
-        &mut self,
-        context: &C,
-    ) -> Result<()> {
-        let interval = context.config()?.build_workspace_reinitialization_interval;
+    pub fn reinitialize_workspace_if_interval_passed(&mut self, context: &Context) -> Result<()> {
+        let interval = context.config.build_workspace_reinitialization_interval;
         if self.workspace_initialize_time.elapsed() >= interval {
             info!("start reinitialize workspace again");
             self.workspace = build_workspace(context)?;

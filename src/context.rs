@@ -1,27 +1,28 @@
 use crate::cdn::CdnBackend;
 use crate::db::Pool;
-use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::{
     AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
 };
-use std::{future::Future, sync::Arc};
+use bon::Builder;
+use std::sync::Arc;
 use tokio::runtime::Runtime;
 
-pub trait Context {
-    fn config(&self) -> Result<Arc<Config>>;
-    fn async_build_queue(&self) -> impl Future<Output = Result<Arc<AsyncBuildQueue>>> + Send;
-    fn build_queue(&self) -> Result<Arc<BuildQueue>>;
-    fn storage(&self) -> Result<Arc<Storage>>;
-    fn async_storage(&self) -> impl Future<Output = Result<Arc<AsyncStorage>>> + Send;
-    fn cdn(&self) -> impl Future<Output = Result<Arc<CdnBackend>>> + Send;
-    fn pool(&self) -> Result<Pool>;
-    fn async_pool(&self) -> impl Future<Output = Result<Pool>> + Send;
-    fn service_metrics(&self) -> Result<Arc<ServiceMetrics>>;
-    fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>>;
-    fn index(&self) -> Result<Arc<Index>>;
-    fn registry_api(&self) -> Result<Arc<RegistryApi>>;
-    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>>;
-    fn runtime(&self) -> Result<Arc<Runtime>>;
+#[derive(Builder)]
+pub struct Context {
+    pub config: Arc<Config>,
+    pub async_build_queue: Arc<AsyncBuildQueue>,
+    pub build_queue: Arc<BuildQueue>,
+    pub storage: Arc<Storage>,
+    pub async_storage: Arc<AsyncStorage>,
+    pub cdn: Arc<CdnBackend>,
+    pub pool: Pool,
+    pub async_pool: Pool,
+    pub service_metrics: Arc<ServiceMetrics>,
+    pub instance_metrics: Arc<InstanceMetrics>,
+    pub index: Arc<Index>,
+    pub registry_api: Arc<RegistryApi>,
+    pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
+    pub runtime: Arc<Runtime>,
 }

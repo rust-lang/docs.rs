@@ -609,9 +609,9 @@ impl BuildQueue {
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
     ///
     /// Note that this will return `Ok(true)` even if the package failed to build.
-    pub(crate) fn build_next_queue_package<C: Context>(
+    pub(crate) fn build_next_queue_package(
         &self,
-        context: &C,
+        context: &Context,
         builder: &mut RustwideBuilder,
     ) -> Result<bool> {
         let mut processed = false;

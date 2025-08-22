@@ -52,11 +52,11 @@ pub async fn watch_registry(
     }
 }
 
-fn start_registry_watcher<C: Context>(context: &C) -> Result<(), Error> {
-    let build_queue = context.runtime()?.block_on(context.async_build_queue())?;
-    let config = context.config()?;
-    let index = context.index()?;
-    let runtime = context.runtime()?;
+fn start_registry_watcher(context: &Context) -> Result<(), Error> {
+    let build_queue = context.async_build_queue.clone();
+    let config = context.config.clone();
+    let index = context.index.clone();
+    let runtime = context.runtime.clone();
 
     runtime.spawn(async {
         // space this out to prevent it from clashing against the queue-builder thread on launch
@@ -68,13 +68,13 @@ fn start_registry_watcher<C: Context>(context: &C) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn start_background_repository_stats_updater<C: Context>(context: &C) -> Result<(), Error> {
+pub fn start_background_repository_stats_updater(context: &Context) -> Result<(), Error> {
     // This call will still skip github repositories updates and continue if no token is provided
     // (gitlab doesn't require to have a token). The only time this can return an error is when
     // creating a pool or if config fails, which shouldn't happen here because this is run right at
     // startup.
-    let updater = context.repository_stats_updater()?;
-    let runtime = context.runtime()?;
+    let updater = context.repository_stats_updater.clone();
+    let runtime = context.runtime.clone();
     async_cron(
         &runtime,
         "repository stats updater",
@@ -90,11 +90,11 @@ pub fn start_background_repository_stats_updater<C: Context>(context: &C) -> Res
     Ok(())
 }
 
-pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Error> {
-    let runtime = context.runtime()?;
-    let pool = context.pool()?;
-    let config = context.config()?;
-    let build_queue = runtime.block_on(context.async_build_queue())?;
+pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    let pool = context.pool.clone();
+    let config = context.config.clone();
+    let build_queue = context.async_build_queue.clone();
 
     if config.max_queued_rebuilds.is_none() {
         info!("rebuild config incomplete, skipping rebuild queueing");
@@ -119,12 +119,12 @@ pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Err
     Ok(())
 }
 
-pub fn start_background_cdn_invalidator<C: Context>(context: &C) -> Result<(), Error> {
-    let metrics = context.instance_metrics()?;
-    let config = context.config()?;
-    let pool = context.pool()?;
-    let runtime = context.runtime()?;
-    let cdn = runtime.block_on(context.cdn())?;
+pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
+    let metrics = context.instance_metrics.clone();
+    let config = context.config.clone();
+    let pool = context.pool.clone();
+    let runtime = context.runtime.clone();
+    let cdn = context.cdn.clone();
 
     if config.cloudfront_distribution_id_web.is_none()
         && config.cloudfront_distribution_id_static.is_none()
@@ -178,12 +178,7 @@ pub fn start_background_cdn_invalidator<C: Context>(context: &C) -> Result<(), E
     Ok(())
 }
 
-pub fn start_daemon<C: Context + Send + Sync + 'static>(
-    context: C,
-    enable_registry_watcher: bool,
-) -> Result<(), Error> {
-    let context = Arc::new(context);
-
+pub fn start_daemon(context: Arc<Context>, enable_registry_watcher: bool) -> Result<(), Error> {
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
@@ -198,8 +193,8 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
     }
 
     // build new crates every minute
-    let build_queue = context.build_queue()?;
-    let config = context.config()?;
+    let build_queue = context.build_queue.clone();
+    let config = context.config.clone();
     let rustwide_builder = RustwideBuilder::init(&*context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())

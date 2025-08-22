@@ -400,16 +400,12 @@ async fn set_sentry_transaction_name_from_axum_route(
     next.run(request).await
 }
 
-async fn apply_middleware<C: Context>(
+async fn apply_middleware(
     router: AxumRouter,
-    context: &C,
+    context: &Context,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
-    let config = context.config()?;
     let has_templates = template_data.is_some();
-
-    let async_storage = context.async_storage().await?;
-    let build_queue = context.async_build_queue().await?;
 
     Ok(router.layer(
         ServiceBuilder::new()
@@ -421,18 +417,21 @@ async fn apply_middleware<C: Context>(
             ))
             .layer(CatchPanicLayer::new())
             .layer(option_layer(
-                config
+                context
+                    .config
                     .report_request_timeouts
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
-            .layer(option_layer(config.request_timeout.map(TimeoutLayer::new)))
-            .layer(Extension(context.async_pool().await?))
-            .layer(Extension(build_queue))
-            .layer(Extension(context.service_metrics()?))
-            .layer(Extension(context.instance_metrics()?))
-            .layer(Extension(context.config()?))
-            .layer(Extension(context.registry_api()?))
-            .layer(Extension(async_storage))
+            .layer(option_layer(
+                context.config.request_timeout.map(TimeoutLayer::new),
+            ))
+            .layer(Extension(context.pool.clone()))
+            .layer(Extension(context.async_build_queue.clone()))
+            .layer(Extension(context.service_metrics.clone()))
+            .layer(Extension(context.instance_metrics.clone()))
+            .layer(Extension(context.config.clone()))
+            .layer(Extension(context.registry_api.clone()))
+            .layer(Extension(context.async_storage.clone()))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(
@@ -442,20 +441,20 @@ async fn apply_middleware<C: Context>(
     ))
 }
 
-pub(crate) async fn build_axum_app<C: Context>(
-    context: &C,
+pub(crate) async fn build_axum_app(
+    context: &Context,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
     apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
 }
 
-pub(crate) async fn build_metrics_axum_app<C: Context>(context: &C) -> Result<AxumRouter, Error> {
+pub(crate) async fn build_metrics_axum_app(context: &Context) -> Result<AxumRouter, Error> {
     apply_middleware(routes::build_metric_routes(), context, None).await
 }
 
-pub fn start_background_metrics_webserver<C: Context>(
+pub fn start_background_metrics_webserver(
     addr: Option<SocketAddr>,
-    context: &C,
+    context: &Context,
 ) -> Result<(), Error> {
     let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND);
 
@@ -465,7 +464,7 @@ pub fn start_background_metrics_webserver<C: Context>(
         axum_addr.port()
     );
 
-    let runtime = context.runtime()?;
+    let runtime = context.runtime.clone();
     let metrics_axum_app = runtime
         .block_on(build_metrics_axum_app(context))?
         .into_make_service();
@@ -493,8 +492,8 @@ pub fn start_background_metrics_webserver<C: Context>(
 }
 
 #[instrument(skip_all)]
-pub fn start_web_server<C: Context>(addr: Option<SocketAddr>, context: &C) -> Result<(), Error> {
-    let template_data = Arc::new(TemplateData::new(context.config()?.render_threads)?);
+pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(), Error> {
+    let template_data = Arc::new(TemplateData::new(context.config.render_threads)?);
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
@@ -504,13 +503,7 @@ pub fn start_web_server<C: Context>(addr: Option<SocketAddr>, context: &C) -> Re
         axum_addr.port()
     );
 
-    // initialize the storage and the repo-updater in sync context
-    // so it can stay sync for now and doesn't fail when they would
-    // be initialized while starting the server below.
-    context.storage()?;
-    context.repository_stats_updater()?;
-
-    context.runtime()?.block_on(async {
+    context.runtime.block_on(async {
         let app = build_axum_app(context, template_data)
             .await?
             .into_make_service();

@@ -24,18 +24,16 @@ const BUILD_PRIORITY: i32 = 15;
 ///
 /// Even when activities fail, the command can just be re-run. While the diff calculation will
 /// be repeated, we won't re-execute fixing activities.
-pub async fn run_check<C: Context>(ctx: &C, dry_run: bool) -> Result<()> {
-    let index = ctx.index()?;
-
+pub async fn run_check(ctx: &Context, dry_run: bool) -> Result<()> {
     info!("Loading data from database...");
-    let mut conn = ctx.async_pool().await?.get_async().await?;
-    let db_data = db::load(&mut conn, &*ctx.config()?)
+    let mut conn = ctx.pool.get_async().await?;
+    let db_data = db::load(&mut conn, &*ctx.config)
         .await
         .context("Loading crate data from database for consistency check")?;
 
     tracing::info!("Loading data from index...");
     let index_data = spawn_blocking({
-        let index = index.clone();
+        let index = ctx.index.clone();
         move || index::load(&index)
     })
     .await
@@ -80,19 +78,13 @@ struct HandleResult {
     yanks_corrected: u32,
 }
 
-async fn handle_diff<'a, I, C>(ctx: &C, iter: I, dry_run: bool) -> Result<HandleResult>
+async fn handle_diff<'a, I>(ctx: &Context, iter: I, dry_run: bool) -> Result<HandleResult>
 where
     I: Iterator<Item = &'a diff::Difference>,
-    C: Context,
 {
     let mut result = HandleResult::default();
 
-    let config = ctx.config()?;
-
-    let storage = ctx.async_storage().await?;
-    let build_queue = ctx.async_build_queue().await?;
-
-    let mut conn = ctx.async_pool().await?.get_async().await?;
+    let mut conn = ctx.async_pool.get_async().await?;
 
     for difference in iter {
         println!("{difference}");
@@ -100,7 +92,8 @@ where
         match difference {
             diff::Difference::CrateNotInIndex(name) => {
                 if !dry_run
-                    && let Err(err) = delete::delete_crate(&mut conn, &storage, &config, name).await
+                    && let Err(err) =
+                        delete::delete_crate(&mut conn, &ctx.async_storage, &ctx.config, name).await
                 {
                     warn!("{:?}", err);
                 }
@@ -109,7 +102,8 @@ where
             diff::Difference::CrateNotInDb(name, versions) => {
                 for version in versions {
                     if !dry_run
-                        && let Err(err) = build_queue
+                        && let Err(err) = ctx
+                            .async_build_queue
                             .add_crate(name, version, BUILD_PRIORITY, None)
                             .await
                     {
@@ -120,8 +114,14 @@ where
             }
             diff::Difference::ReleaseNotInIndex(name, version) => {
                 if !dry_run
-                    && let Err(err) =
-                        delete::delete_version(&mut conn, &storage, &config, name, version).await
+                    && let Err(err) = delete::delete_version(
+                        &mut conn,
+                        &ctx.async_storage,
+                        &ctx.config,
+                        name,
+                        version,
+                    )
+                    .await
                 {
                     warn!("{:?}", err);
                 }
@@ -129,7 +129,8 @@ where
             }
             diff::Difference::ReleaseNotInDb(name, version) => {
                 if !dry_run
-                    && let Err(err) = build_queue
+                    && let Err(err) = ctx
+                        .async_build_queue
                         .add_crate(name, version, BUILD_PRIORITY, None)
                         .await
                 {
@@ -138,7 +139,12 @@ where
                 result.builds_queued += 1;
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
-                if !dry_run && let Err(err) = build_queue.set_yanked(name, version, *yanked).await {
+                if !dry_run
+                    && let Err(err) = ctx
+                        .async_build_queue
+                        .set_yanked(name, version, *yanked)
+                        .await
+                {
                     warn!("{:?}", err);
                 }
                 result.yanks_corrected += 1;

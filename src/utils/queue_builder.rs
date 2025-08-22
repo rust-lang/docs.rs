@@ -7,8 +7,8 @@ use std::time::Duration;
 use std::{fs, io, path::Path, thread};
 use tracing::{debug, error, warn};
 
-pub fn queue_builder<C: Context>(
-    context: &C,
+pub fn queue_builder(
+    context: &Context,
     mut builder: RustwideBuilder,
     build_queue: Arc<BuildQueue>,
     config: Arc<Config>,
