@@ -26,16 +26,18 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn from_config(config: Config) -> Result<Self> {
+    pub fn from_config(config: Config) -> Result<Self> {
         let config = Arc::new(config);
         let runtime = Arc::new(runtime::Builder::new_multi_thread().enable_all().build()?);
 
         let instance_metrics = Arc::new(InstanceMetrics::new()?);
 
         let pool = Pool::new(&config, runtime.clone(), instance_metrics.clone())?;
-        let async_storage = Arc::new(
-            AsyncStorage::new(pool.clone(), instance_metrics.clone(), config.clone()).await?,
-        );
+        let async_storage = Arc::new(runtime.block_on(AsyncStorage::new(
+            pool.clone(),
+            instance_metrics.clone(),
+            config.clone(),
+        ))?);
 
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
@@ -48,7 +50,7 @@ impl Context {
 
         let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
 
-        let cdn = Arc::new(CdnBackend::new(&config).await);
+        let cdn = Arc::new(runtime.block_on(CdnBackend::new(&config)));
 
         let index = Arc::new({
             let path = config.registry_index_path.clone();
