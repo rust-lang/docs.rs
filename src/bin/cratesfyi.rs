@@ -656,8 +656,8 @@ impl DatabaseSubcommand {
                     let mut conn = ctx.pool.get_async().await?;
                     db::delete_version(
                         &mut conn,
-                        &*ctx.async_storage,
-                        &*ctx.config,
+                        &ctx.async_storage,
+                        &ctx.config,
                         &name,
                         &version,
                     )
@@ -670,7 +670,7 @@ impl DatabaseSubcommand {
                 .runtime
                 .block_on(async move {
                     let mut conn = ctx.pool.get_async().await?;
-                    db::delete_crate(&mut conn, &*ctx.async_storage, &*ctx.config, &name).await
+                    db::delete_crate(&mut conn, &ctx.async_storage, &ctx.config, &name).await
                 })
                 .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,

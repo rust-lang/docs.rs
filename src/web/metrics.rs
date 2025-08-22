@@ -110,7 +110,6 @@ pub(crate) async fn request_recorder(
 
 #[cfg(test)]
 mod tests {
-    use crate::Context;
     use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use std::collections::HashMap;
 
@@ -187,7 +186,7 @@ mod tests {
             }
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.pool().await?)?;
+            let metrics_serialized = metrics.gather(&env.context.pool)?;
             let all_routes_visited = metrics_serialized
                 .iter()
                 .find(|x| x.name() == "docsrs_routes_visited")

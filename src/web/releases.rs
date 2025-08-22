@@ -828,7 +828,7 @@ mod tests {
     #[test]
     fn test_release_list_with_incomplete_release_and_successful_build() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let crate_id = initialize_crate(&mut conn, "foo").await?;
@@ -863,7 +863,7 @@ mod tests {
     #[test]
     fn get_releases_by_stars() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
 
             env.fake_release()
                 .await
@@ -986,7 +986,7 @@ mod tests {
             // crate in the db breaks this test.
             // That's why we reset the id-sequence to zero for this test.
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#)
                 .execute(&mut *conn)
                 .await?;
@@ -1443,7 +1443,7 @@ mod tests {
                 .await?;
 
             // release that failed in the fetch-step, will miss some details
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             fake_release_that_failed_before_build(
                 &mut conn,
                 "failed_hard",
@@ -1802,7 +1802,7 @@ mod tests {
 
             let web = env.web_app().await;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             cdn::queue_crate_invalidation(&mut conn, &env.config(), "krate_2").await?;
 
             let content =
@@ -1849,7 +1849,7 @@ mod tests {
                     .any(|el| el.text_contents().contains("active CDN deployments"))
             );
 
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue.add_crate("foo", "1.0.0", 0, None).await?;
             queue.add_crate("bar", "0.1.0", -10, None).await?;
             queue.add_crate("baz", "0.0.1", 10, None).await?;
@@ -1889,7 +1889,7 @@ mod tests {
             let web = env.web_app().await;
 
             // we have two queued releases, where the build for one is already in progress
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue.add_crate("foo", "1.0.0", 0, None).await?;
             queue.add_crate("bar", "0.1.0", 0, None).await?;
 
@@ -1964,7 +1964,7 @@ mod tests {
     fn test_releases_rebuild_queue_with_crates() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue
                 .add_crate("foo", "1.0.0", REBUILD_PRIORITY, None)
                 .await?;

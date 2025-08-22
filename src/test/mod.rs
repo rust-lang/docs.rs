@@ -17,7 +17,6 @@ use axum::{Router, body::Body, http::Request, response::Response as AxumResponse
 use fn_error_context::context;
 use futures_util::{FutureExt, stream::TryStreamExt};
 use http_body_util::BodyExt; // for `collect`
-use once_cell::sync::OnceCell;
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
 use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
@@ -351,19 +350,8 @@ impl AxumRouterTestExt for axum::Router {
 }
 
 pub(crate) struct TestEnvironment {
-    build_queue: OnceCell<Arc<BuildQueue>>,
-    async_build_queue: tokio::sync::OnceCell<Arc<AsyncBuildQueue>>,
-    config: OnceCell<Arc<Config>>,
-    db: tokio::sync::OnceCell<TestDatabase>,
-    storage: OnceCell<Arc<Storage>>,
-    async_storage: tokio::sync::OnceCell<Arc<AsyncStorage>>,
-    cdn: tokio::sync::OnceCell<Arc<CdnBackend>>,
-    index: OnceCell<Arc<Index>>,
-    registry_api: OnceCell<Arc<RegistryApi>>,
-    runtime: OnceCell<Arc<Runtime>>,
-    instance_metrics: OnceCell<Arc<InstanceMetrics>>,
-    service_metrics: OnceCell<Arc<ServiceMetrics>>,
-    repository_stats_updater: OnceCell<Arc<RepositoryStatsUpdater>>,
+    pub context: Context,
+    db: TestDatabase,
 }
 
 pub(crate) fn init_logger() {
@@ -385,38 +373,95 @@ pub(crate) fn init_logger() {
 impl TestEnvironment {
     fn new() -> Self {
         init_logger();
+
+        let config = Arc::new(TestEnvironment::base_config());
+        let runtime = Arc::new(
+            Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to initialize runtime"),
+        );
+
+        let instance_metrics =
+            Arc::new(InstanceMetrics::new().expect("failed to initialize the instance metrics"));
+
+        let test_db = TestDatabase::new(&config, runtime.clone(), instance_metrics.clone())
+            .expect("can't initialize test database");
+        let pool = test_db.pool();
+
+        let async_storage = Arc::new(
+            runtime
+                .block_on(AsyncStorage::new(
+                    pool.clone(),
+                    instance_metrics.clone(),
+                    config.clone(),
+                ))
+                .expect("can't create async storage"),
+        );
+
+        let async_build_queue = Arc::new(AsyncBuildQueue::new(
+            pool.clone(),
+            instance_metrics.clone(),
+            config.clone(),
+            async_storage.clone(),
+        ));
+
+        let build_queue = Arc::new(BuildQueue::new(runtime.clone(), async_build_queue.clone()));
+
+        let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
+
+        let cdn = Arc::new(runtime.block_on(CdnBackend::new(&config)));
+
+        let index = Arc::new({
+            let path = config.registry_index_path.clone();
+            if let Some(registry_url) = config.registry_url.clone() {
+                Index::from_url(path, registry_url)
+            } else {
+                Index::new(path)
+            }
+            .expect("can't create Index")
+        });
+
         Self {
-            build_queue: OnceCell::new(),
-            async_build_queue: tokio::sync::OnceCell::new(),
-            config: OnceCell::new(),
-            db: tokio::sync::OnceCell::new(),
-            storage: OnceCell::new(),
-            async_storage: tokio::sync::OnceCell::new(),
-            cdn: tokio::sync::OnceCell::new(),
-            index: OnceCell::new(),
-            registry_api: OnceCell::new(),
-            instance_metrics: OnceCell::new(),
-            service_metrics: OnceCell::new(),
-            runtime: OnceCell::new(),
-            repository_stats_updater: OnceCell::new(),
+            context: Context {
+                config: config.clone(),
+                async_build_queue,
+                build_queue,
+                storage,
+                async_storage,
+                cdn,
+                pool: pool.clone(),
+                service_metrics: Arc::new(
+                    ServiceMetrics::new().expect("can't initialize service metrics"),
+                ),
+                instance_metrics,
+                index,
+                registry_api: Arc::new(
+                    RegistryApi::new(
+                        config.registry_api_host.clone(),
+                        config.crates_io_api_call_retries,
+                    )
+                    .expect("can't create registry api"),
+                ),
+                repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
+                runtime,
+            },
+            db: test_db,
         }
     }
 
     fn cleanup(self) {
-        if let Some(storage) = self.storage.get() {
-            storage
-                .cleanup_after_test()
-                .expect("failed to cleanup after tests");
-        }
+        self.context
+            .storage
+            .cleanup_after_test()
+            .expect("failed to cleanup after tests");
 
-        if let Some(config) = self.config.get()
-            && config.local_archive_cache_path.exists()
-        {
-            fs::remove_dir_all(&config.local_archive_cache_path).unwrap();
+        if self.context.config.local_archive_cache_path.exists() {
+            fs::remove_dir_all(&self.context.config.local_archive_cache_path).unwrap();
         }
     }
 
-    pub(crate) fn base_config(&self) -> Config {
+    pub(crate) fn base_config() -> Config {
         let mut config = Config::from_env().expect("failed to get base config");
 
         // create index directory
@@ -446,230 +491,79 @@ impl TestEnvironment {
     }
 
     pub(crate) fn override_config(&self, f: impl FnOnce(&mut Config)) {
-        let mut config = self.base_config();
+        let mut config = Self::base_config();
         f(&mut config);
 
-        if self.config.set(Arc::new(config)).is_err() {
+        if self.context.config.set(Arc::new(config)).is_err() {
             panic!("can't call override_config after the configuration is accessed!");
         }
     }
 
-    pub(crate) async fn async_build_queue(&self) -> Arc<AsyncBuildQueue> {
-        self.async_build_queue
-            .get_or_init(|| async {
-                Arc::new(AsyncBuildQueue::new(
-                    self.async_db().await.pool(),
-                    self.instance_metrics(),
-                    self.config(),
-                    self.async_storage().await,
-                ))
-            })
-            .await
-            .clone()
+    pub(crate) fn async_build_queue(&self) -> Arc<AsyncBuildQueue> {
+        self.context.async_build_queue.clone()
     }
 
     pub(crate) fn build_queue(&self) -> Arc<BuildQueue> {
-        let runtime = self.runtime();
-        self.build_queue
-            .get_or_init(|| {
-                Arc::new(BuildQueue::new(
-                    runtime.clone(),
-                    runtime.block_on(self.async_build_queue()),
-                ))
-            })
-            .clone()
+        self.context.build_queue.clone()
     }
 
-    pub(crate) async fn cdn(&self) -> Arc<CdnBackend> {
-        self.cdn
-            .get_or_init(|| async { Arc::new(CdnBackend::new(&self.config()).await) })
-            .await
-            .clone()
+    pub(crate) fn cdn(&self) -> Arc<CdnBackend> {
+        self.context.cdn.clone()
     }
 
     pub(crate) fn config(&self) -> Arc<Config> {
-        self.config
-            .get_or_init(|| Arc::new(self.base_config()))
-            .clone()
+        self.context.config.clone()
     }
 
-    pub(crate) async fn async_storage(&self) -> Arc<AsyncStorage> {
-        self.async_storage
-            .get_or_init(|| async {
-                let db = self.async_db().await;
-                Arc::new(
-                    AsyncStorage::new(db.pool(), self.instance_metrics(), self.config())
-                        .await
-                        .expect("failed to initialize the async storage"),
-                )
-            })
-            .await
-            .clone()
+    pub(crate) fn async_storage(&self) -> Arc<AsyncStorage> {
+        self.context.async_storage.clone()
     }
 
     pub(crate) fn storage(&self) -> Arc<Storage> {
-        let runtime = self.runtime();
-        self.storage
-            .get_or_init(|| {
-                Arc::new(Storage::new(
-                    runtime.block_on(self.async_storage()),
-                    runtime,
-                ))
-            })
-            .clone()
+        self.context.storage.clone()
     }
 
     pub(crate) fn instance_metrics(&self) -> Arc<InstanceMetrics> {
-        self.instance_metrics
-            .get_or_init(|| {
-                Arc::new(InstanceMetrics::new().expect("failed to initialize the instance metrics"))
-            })
-            .clone()
+        self.context.instance_metrics.clone()
     }
 
     pub(crate) fn service_metrics(&self) -> Arc<ServiceMetrics> {
-        self.service_metrics
-            .get_or_init(|| {
-                Arc::new(ServiceMetrics::new().expect("failed to initialize the service metrics"))
-            })
-            .clone()
+        self.context.service_metrics.clone()
     }
 
     pub(crate) fn runtime(&self) -> Arc<Runtime> {
-        self.runtime
-            .get_or_init(|| {
-                Arc::new(
-                    Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("failed to initialize runtime"),
-                )
-            })
-            .clone()
+        self.context.runtime.clone()
     }
 
     pub(crate) fn index(&self) -> Arc<Index> {
-        self.index
-            .get_or_init(|| {
-                Arc::new(
-                    Index::new(self.config().registry_index_path.clone())
-                        .expect("failed to initialize the index"),
-                )
-            })
-            .clone()
+        self.context.index.clone()
     }
 
     pub(crate) fn registry_api(&self) -> Arc<RegistryApi> {
-        self.registry_api
-            .get_or_init(|| {
-                Arc::new(
-                    RegistryApi::new(
-                        self.config().registry_api_host.clone(),
-                        self.config().crates_io_api_call_retries,
-                    )
-                    .expect("failed to initialize the registry api"),
-                )
-            })
-            .clone()
+        self.context.registry_api.clone()
     }
 
     pub(crate) fn repository_stats_updater(&self) -> Arc<RepositoryStatsUpdater> {
-        self.repository_stats_updater
-            .get_or_init(|| {
-                Arc::new(RepositoryStatsUpdater::new(
-                    &self.config(),
-                    self.pool().expect("failed to get the pool"),
-                ))
-            })
-            .clone()
+        self.context.repository_stats_updater.clone()
     }
 
     pub(crate) fn db(&self) -> &TestDatabase {
-        self.runtime().block_on(self.async_db())
+        &self.db
     }
 
-    pub(crate) async fn async_db(&self) -> &TestDatabase {
-        self.db
-            .get_or_init(|| async {
-                let config = self.config();
-                let runtime = self.runtime();
-                let instance_metrics = self.instance_metrics();
-                self.runtime()
-                    .spawn_blocking(move || TestDatabase::new(&config, runtime, instance_metrics))
-                    .await
-                    .unwrap()
-                    .expect("failed to initialize the db")
-            })
-            .await
+    pub(crate) fn async_db(&self) -> &TestDatabase {
+        &self.db
     }
 
     pub(crate) async fn web_app(&self) -> Router {
         let template_data = Arc::new(TemplateData::new(1).unwrap());
-        build_axum_app(self, template_data)
+        build_axum_app(&self.context, template_data)
             .await
             .expect("could not build axum app")
     }
 
     pub(crate) async fn fake_release(&self) -> fakes::FakeRelease<'_> {
-        fakes::FakeRelease::new(self.async_db().await, self.async_storage().await)
-    }
-}
-
-impl Context for TestEnvironment {
-    fn config(&self) -> Result<Arc<Config>> {
-        Ok(TestEnvironment::config(self))
-    }
-
-    async fn async_build_queue(&self) -> Result<Arc<AsyncBuildQueue>> {
-        Ok(TestEnvironment::async_build_queue(self).await)
-    }
-
-    fn build_queue(&self) -> Result<Arc<BuildQueue>> {
-        Ok(TestEnvironment::build_queue(self))
-    }
-
-    fn storage(&self) -> Result<Arc<Storage>> {
-        Ok(TestEnvironment::storage(self))
-    }
-
-    async fn async_storage(&self) -> Result<Arc<AsyncStorage>> {
-        Ok(TestEnvironment::async_storage(self).await)
-    }
-
-    async fn cdn(&self) -> Result<Arc<CdnBackend>> {
-        Ok(TestEnvironment::cdn(self).await)
-    }
-
-    async fn async_pool(&self) -> Result<Pool> {
-        Ok(self.async_db().await.pool())
-    }
-
-    fn pool(&self) -> Result<Pool> {
-        Ok(self.db().pool())
-    }
-
-    fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>> {
-        Ok(self.instance_metrics())
-    }
-
-    fn service_metrics(&self) -> Result<Arc<ServiceMetrics>> {
-        Ok(self.service_metrics())
-    }
-
-    fn index(&self) -> Result<Arc<Index>> {
-        Ok(self.index())
-    }
-
-    fn registry_api(&self) -> Result<Arc<RegistryApi>> {
-        Ok(self.registry_api())
-    }
-
-    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>> {
-        Ok(self.repository_stats_updater())
-    }
-
-    fn runtime(&self) -> Result<Arc<Runtime>> {
-        Ok(self.runtime())
+        fakes::FakeRelease::new(self.async_db(), self.async_storage())
     }
 }
 

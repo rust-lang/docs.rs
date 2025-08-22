@@ -754,10 +754,10 @@ mod tests {
                 .create()
                 .await?;
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
             assert!(build_queue.queued_crates().await?.is_empty());
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
 
             let queue = build_queue.queued_crates().await?;
@@ -777,7 +777,7 @@ mod tests {
                 config.max_queued_rebuilds = Some(1);
             });
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
             build_queue
                 .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
                 .await?;
@@ -785,7 +785,7 @@ mod tests {
                 .add_crate("foo2", "0.1.0", REBUILD_PRIORITY, None)
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!("UPDATE queue SET attempt = 99")
                 .execute(&mut *conn)
                 .await?;
@@ -803,7 +803,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
             queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
 
             assert_eq!(build_queue.queued_crates().await?.len(), 1);
@@ -819,7 +819,7 @@ mod tests {
                 config.max_queued_rebuilds = Some(1);
             });
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
             build_queue
                 .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
                 .await?;
@@ -838,10 +838,10 @@ mod tests {
                 .create()
                 .await?;
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
             assert_eq!(build_queue.queued_crates().await?.len(), 2);
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             queue_rebuilds(&mut conn, &env.config(), &build_queue).await?;
 
             assert_eq!(build_queue.queued_crates().await?.len(), 2);
@@ -853,7 +853,7 @@ mod tests {
     #[test]
     fn test_add_duplicate_doesnt_fail_last_priority_wins() {
         crate::test::async_wrapper(|env| async move {
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
 
             queue.add_crate("some_crate", "0.1.1", 0, None).await?;
             queue.add_crate("some_crate", "0.1.1", 9, None).await?;
@@ -873,9 +873,9 @@ mod tests {
                 config.build_attempts = 5;
             });
 
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!(
                 "
                 INSERT INTO queue (name, version, priority, attempt, last_attempt )
@@ -910,11 +910,11 @@ mod tests {
     #[test]
     fn test_has_build_queued() {
         crate::test::async_wrapper(|env| async move {
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
 
             queue.add_crate("dummy", "0.1.1", 0, None).await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(queue.has_build_queued("dummy", "0.1.1").await.unwrap());
 
             sqlx::query!("UPDATE queue SET attempt = 6")
@@ -955,7 +955,7 @@ mod tests {
 
             runtime.block_on(async {
                 // fake the build-attempt timestamp so it's older
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 sqlx::query!(
                     "UPDATE queue SET last_attempt = $1",
                     Utc::now() - chrono::Duration::try_seconds(60).unwrap()
@@ -1060,7 +1060,7 @@ mod tests {
                 env.runtime()
                     .block_on(async {
                         cdn::queued_or_active_crate_invalidations(
-                            &mut *env.async_db().await.async_conn().await,
+                            &mut *env.async_db().async_conn().await,
                         )
                         .await
                     })?
@@ -1087,7 +1087,7 @@ mod tests {
             let fetch_invalidations = || {
                 env.runtime()
                     .block_on(async {
-                        let mut conn = env.async_db().await.async_conn().await;
+                        let mut conn = env.async_db().async_conn().await;
                         cdn::queued_or_active_crate_invalidations(&mut conn).await
                     })
                     .unwrap()
@@ -1323,7 +1323,7 @@ mod tests {
     fn test_broken_db_reference_breaks() {
         crate::test::wrapper(|env| {
             env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")
                     .await
                     .unwrap();

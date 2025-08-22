@@ -1296,7 +1296,7 @@ mod tests {
         version: &str,
     ) -> Result<Option<Vec<Feature>>, sqlx::Error> {
         env.runtime().block_on(async {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query_scalar!(
                 r#"SELECT
                         releases.features "features?: Vec<Feature>"
@@ -1356,7 +1356,7 @@ mod tests {
             storage.store_one(&old_rustdoc_file, Vec::new())?;
             storage.store_one(&old_source_file, Vec::new())?;
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1366,7 +1366,7 @@ mod tests {
 
             // check release record in the db (default and other targets)
             let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 sqlx::query!(
                     r#"SELECT
                         r.rustdoc_status,
@@ -1548,7 +1548,7 @@ mod tests {
             let crate_ = DUMMY_CRATE_NAME;
             let version = DUMMY_CRATE_VERSION;
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1583,7 +1583,7 @@ mod tests {
             storage.store_one(&old_rustdoc_file, Vec::new())?;
             storage.store_one(&old_source_file, Vec::new())?;
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 !builder
@@ -1593,7 +1593,7 @@ mod tests {
 
             // check release record in the db (default and other targets)
             let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 sqlx::query!(
                     "SELECT
                         r.rustdoc_status,
@@ -1642,7 +1642,7 @@ mod tests {
 
             // create a successful release & build in the database
             let release_id = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 let crate_id = initialize_crate(&mut conn, crate_).await?;
                 let release_id = initialize_release(&mut conn, crate_id, version).await?;
                 let build_id = initialize_build(&mut conn, release_id).await?;
@@ -1687,7 +1687,7 @@ mod tests {
             fn check_rustdoc_status(env: &TestEnvironment, rid: ReleaseId) -> Result<()> {
                 assert_eq!(
                     env.runtime().block_on(async {
-                        let mut conn = env.async_db().await.async_conn().await;
+                        let mut conn = env.async_db().async_conn().await;
                         sqlx::query_scalar!(
                             "SELECT rustdoc_status FROM releases WHERE id = $1",
                             rid.0
@@ -1702,7 +1702,7 @@ mod tests {
 
             check_rustdoc_status(env, release_id)?;
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 // not successful build
@@ -1722,7 +1722,7 @@ mod tests {
     #[ignore]
     fn test_proc_macro(crate_: &str, version: &str) {
         wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1750,7 +1750,7 @@ mod tests {
         wrapper(|env| {
             let crate_ = "windows-win";
             let version = "2.4.1";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             if builder.toolchain.as_ci().is_some() {
                 return Ok(());
@@ -1809,7 +1809,7 @@ mod tests {
             //  * there is a newer version of the dependency available that correctly builds
             let crate_ = "docs_rs_test_incorrect_lockfile";
             let version = "0.1.2";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1836,7 +1836,7 @@ mod tests {
             // would not have had its details pulled down from the sparse-index.
             let crate_ = "docs_rs_test_incorrect_lockfile";
             let version = "0.2.0";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1854,7 +1854,7 @@ mod tests {
         wrapper(|env| {
             let crate_ = "proc-macro2";
             let version = "1.0.95";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1875,7 +1875,7 @@ mod tests {
             // added. Will fail when we try to build.
             let crate_ = "simconnect-sys";
             let version = "0.23.1";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
 
             // `Result` is `Ok`, but the build-result is `false`
@@ -1904,7 +1904,7 @@ mod tests {
             // package without Cargo.toml, so fails directly in the fetch stage.
             let crate_ = "emheap";
             let version = "0.1.0";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
 
             // `Result` is `Ok`, but the build-result is `false`
@@ -1914,7 +1914,7 @@ mod tests {
             assert!(summary.should_reattempt);
 
             let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
+                let mut conn = env.async_db().async_conn().await;
                 sqlx::query!(
                     r#"SELECT
                        rustc_version,
@@ -1948,7 +1948,7 @@ mod tests {
         wrapper(|env| {
             let crate_ = "serde";
             let version = "1.0.152";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1973,7 +1973,7 @@ mod tests {
         wrapper(|env| {
             let crate_ = "stylish-core";
             let version = "0.1.1";
-            let mut builder = RustwideBuilder::init(env).unwrap();
+            let mut builder = RustwideBuilder::init(&env.context).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -1996,7 +1996,7 @@ mod tests {
     #[ignore]
     fn test_build_std() {
         wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env)?;
+            let mut builder = RustwideBuilder::init(&env.context)?;
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -2011,9 +2011,9 @@ mod tests {
     #[ignore]
     fn test_workspace_reinitialize_at_once() {
         wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env)?;
+            let mut builder = RustwideBuilder::init(&env.context)?;
             builder.update_toolchain()?;
-            builder.reinitialize_workspace_if_interval_passed(env)?;
+            builder.reinitialize_workspace_if_interval_passed(&env.context)?;
             assert!(
                 builder
                     .build_local_package(Path::new("tests/crates/build-std"))?
@@ -2032,7 +2032,7 @@ mod tests {
             env.override_config(|cfg: &mut Config| {
                 cfg.build_workspace_reinitialization_interval = Duration::from_secs(1)
             });
-            let mut builder = RustwideBuilder::init(env)?;
+            let mut builder = RustwideBuilder::init(&env.context)?;
             builder.update_toolchain()?;
             assert!(
                 builder
@@ -2040,7 +2040,7 @@ mod tests {
                     .successful
             );
             sleep(Duration::from_secs(1));
-            builder.reinitialize_workspace_if_interval_passed(env)?;
+            builder.reinitialize_workspace_if_interval_passed(&env.context)?;
             assert!(
                 builder
                     .build_local_package(Path::new("tests/crates/build-std"))?
@@ -2054,14 +2054,14 @@ mod tests {
     #[ignore]
     fn test_new_builder_detects_existing_rustc() {
         wrapper(|env: &TestEnvironment| {
-            let mut builder = RustwideBuilder::init(env)?;
+            let mut builder = RustwideBuilder::init(&env.context)?;
             builder.update_toolchain()?;
             let old_version = builder.rustc_version()?;
             drop(builder);
 
             // new builder should detect the existing rustc version from the previous builder
             // (simulating running `update-toolchain` and `build crate` in separate invocations)
-            let mut builder = RustwideBuilder::init(env)?;
+            let mut builder = RustwideBuilder::init(&env.context)?;
             assert!(
                 builder
                     .build_package(

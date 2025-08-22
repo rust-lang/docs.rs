@@ -250,7 +250,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(get_id(&mut conn, "some-package").await.is_ok());
 
             Ok(())
@@ -261,7 +261,7 @@ mod tests {
     #[test_case(false)]
     fn test_delete_crate(archive_storage: bool) {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             // Create fake packages in the database
             let pkg1_v1_id = env
@@ -300,7 +300,6 @@ mod tests {
             ] {
                 assert!(
                     env.async_storage()
-                        .await
                         .rustdoc_file_exists(
                             pkg,
                             version,
@@ -312,13 +311,7 @@ mod tests {
                 );
             }
 
-            delete_crate(
-                &mut conn,
-                &*env.async_storage().await,
-                &env.config(),
-                "package-1",
-            )
-            .await?;
+            delete_crate(&mut conn, &*env.async_storage(), &env.config(), "package-1").await?;
 
             assert!(!crate_exists(&mut conn, "package-1").await?);
             assert!(crate_exists(&mut conn, "package-2").await?);
@@ -329,7 +322,6 @@ mod tests {
             // files for package 2 still exists
             assert!(
                 env.async_storage()
-                    .await
                     .rustdoc_file_exists(
                         "package-2",
                         "1.0.0",
@@ -344,20 +336,17 @@ mod tests {
             if archive_storage {
                 assert!(
                     !env.async_storage()
-                        .await
                         .exists(&rustdoc_archive_path("package-1", "1.0.0"))
                         .await?
                 );
                 assert!(
                     !env.async_storage()
-                        .await
                         .exists(&rustdoc_archive_path("package-1", "2.0.0"))
                         .await?
                 );
             } else {
                 assert!(
                     !env.async_storage()
-                        .await
                         .rustdoc_file_exists(
                             "package-1",
                             "1.0.0",
@@ -369,7 +358,6 @@ mod tests {
                 );
                 assert!(
                     !env.async_storage()
-                        .await
                         .rustdoc_file_exists(
                             "package-1",
                             "2.0.0",
@@ -418,7 +406,7 @@ mod tests {
                     .await
             }
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let v1 = env
                 .fake_release()
                 .await
@@ -435,11 +423,10 @@ mod tests {
             assert!(release_exists(&mut conn, v1).await?);
             assert!(
                 env.async_storage()
-                    .await
                     .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage().await, "1.0.0").await?);
+            assert!(json_exists(&*env.async_storage(), "1.0.0").await?);
             let crate_id = sqlx::query_scalar!(
                 r#"SELECT crate_id as "crate_id: CrateId" FROM releases WHERE id = $1"#,
                 v1.0
@@ -467,11 +454,10 @@ mod tests {
             assert!(release_exists(&mut conn, v2).await?);
             assert!(
                 env.async_storage()
-                    .await
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage().await, "2.0.0").await?);
+            assert!(json_exists(&*env.async_storage(), "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]
@@ -479,7 +465,7 @@ mod tests {
 
             delete_version(
                 &mut conn,
-                &*env.async_storage().await,
+                &*env.async_storage(),
                 &env.config(),
                 "a",
                 "1.0.0",
@@ -490,11 +476,11 @@ mod tests {
                 // for archive storage the archive and index files
                 // need to be cleaned up.
                 let rustdoc_archive = rustdoc_archive_path("a", "1.0.0");
-                assert!(!env.async_storage().await.exists(&rustdoc_archive).await?);
+                assert!(!env.async_storage().exists(&rustdoc_archive).await?);
 
                 // local and remote index are gone too
                 let archive_index = format!("{rustdoc_archive}.index");
-                assert!(!env.async_storage().await.exists(&archive_index).await?);
+                assert!(!env.async_storage().exists(&archive_index).await?);
                 assert!(
                     !env.config()
                         .local_archive_cache_path
@@ -504,21 +490,19 @@ mod tests {
             } else {
                 assert!(
                     !env.async_storage()
-                        .await
                         .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                         .await?
                 );
             }
-            assert!(!json_exists(&*env.async_storage().await, "1.0.0").await?);
+            assert!(!json_exists(&*env.async_storage(), "1.0.0").await?);
 
             assert!(release_exists(&mut conn, v2).await?);
             assert!(
                 env.async_storage()
-                    .await
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage().await, "2.0.0").await?);
+            assert!(json_exists(&*env.async_storage(), "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]
@@ -536,7 +520,7 @@ mod tests {
     #[test]
     fn test_delete_incomplete_version() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let (release_id, _) =
@@ -545,7 +529,7 @@ mod tests {
 
             delete_version(
                 &mut conn,
-                &*env.async_storage().await,
+                &*env.async_storage(),
                 &env.config(),
                 "a",
                 "1.0.0",
@@ -561,14 +545,14 @@ mod tests {
     #[test]
     fn test_delete_incomplete_crate() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let (release_id, _) =
                 fake_release_that_failed_before_build(&mut conn, "a", "1.0.0", "some-error")
                     .await?;
 
-            delete_crate(&mut conn, &*env.async_storage().await, &env.config(), "a").await?;
+            delete_crate(&mut conn, &*env.async_storage(), &env.config(), "a").await?;
 
             assert!(!crate_exists(&mut conn, "a").await?);
             assert!(!release_exists(&mut conn, release_id).await?);

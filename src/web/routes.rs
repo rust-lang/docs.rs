@@ -459,7 +459,7 @@ mod tests {
     fn serve_rustdoc_content() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
             storage
                 .store_one("/rustdoc-static/style.css", "content".as_bytes())
                 .await?;

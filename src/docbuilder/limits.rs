@@ -76,7 +76,7 @@ mod test {
     #[test]
     fn retrieve_limits() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let defaults = Limits::new(&env.config());
@@ -134,7 +134,7 @@ mod test {
     #[test]
     fn targets_default_to_one_with_timeout() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
             let krate = "hexponent";
             Overrides::save(
@@ -160,7 +160,7 @@ mod test {
                 config.build_default_memory_limit = Some(6 * GB);
             });
 
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
@@ -173,7 +173,7 @@ mod test {
     #[test]
     fn overrides_dont_lower_memory_limit() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let defaults = Limits::new(&env.config());

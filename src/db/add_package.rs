@@ -655,7 +655,7 @@ mod test {
     #[test]
     fn test_set_build_to_error() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
             let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
@@ -689,7 +689,7 @@ mod test {
     #[test]
     fn test_finish_build_success_valid_rustc_date() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
             let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
@@ -738,7 +738,7 @@ mod test {
     #[test]
     fn test_finish_build_success_invalid_rustc_date() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
             let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
@@ -783,7 +783,7 @@ mod test {
     #[test]
     fn test_finish_build_error() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
             let release_id = initialize_release(&mut conn, crate_id, "0.1.0").await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
@@ -826,7 +826,7 @@ mod test {
     #[test]
     fn new_keywords() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             let release_id = env
                 .fake_release()
@@ -913,7 +913,7 @@ mod test {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let kw_r = sqlx::query!(
                 r#"SELECT
                     kw.name as "name!",
@@ -957,7 +957,7 @@ mod test {
     #[test]
     fn new_owner_long_avatar() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             let owner1 = CrateOwner {
@@ -997,7 +997,7 @@ mod test {
     #[test]
     fn new_owners() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             let owner1 = CrateOwner {
@@ -1037,7 +1037,7 @@ mod test {
     #[test]
     fn update_owner_details() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             // set initial owner details
@@ -1086,7 +1086,7 @@ mod test {
     #[test]
     fn add_new_owners_and_delete_old() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, "krate").await?;
 
             // set initial owner details
@@ -1203,7 +1203,7 @@ mod test {
     #[test]
     fn test_initialize_crate() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             let name = "krate";
             let crate_id = initialize_crate(&mut conn, name).await?;
@@ -1227,7 +1227,7 @@ mod test {
     #[test]
     fn test_initialize_release() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let name = "krate";
             let version = "0.1.0";
             let crate_id = initialize_crate(&mut conn, name).await?;
@@ -1254,7 +1254,7 @@ mod test {
     #[test]
     fn test_initialize_build() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let name = "krate";
             let version = "0.1.0";
             let crate_id = initialize_crate(&mut conn, name).await?;
@@ -1281,7 +1281,7 @@ mod test {
     #[test]
     fn test_long_crate_name() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             let name: String = "krate".repeat(100);
             let crate_id = initialize_crate(&mut conn, &name).await?;
@@ -1299,7 +1299,7 @@ mod test {
     #[test]
     fn test_long_release_version() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             let crate_id = initialize_crate(&mut conn, "krate").await?;
             let version: String = "version".repeat(100);

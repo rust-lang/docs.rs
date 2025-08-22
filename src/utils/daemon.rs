@@ -186,29 +186,29 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     info!("Starting web server");
     let webserver_thread = thread::spawn({
         let context = context.clone();
-        move || start_web_server(None, &*context)
+        move || start_web_server(None, &context)
     });
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(&*context)?;
+        start_registry_watcher(&context)?;
     }
 
     // build new crates every minute
     let build_queue = context.build_queue.clone();
     let config = context.config.clone();
-    let rustwide_builder = RustwideBuilder::init(&*context)?;
+    let rustwide_builder = RustwideBuilder::init(&context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn({
             let context = context.clone();
-            move || queue_builder(&*context, rustwide_builder, build_queue, config).unwrap()
+            move || queue_builder(&context, rustwide_builder, build_queue, config).unwrap()
         })
         .unwrap();
 
-    start_background_repository_stats_updater(&*context)?;
-    start_background_cdn_invalidator(&*context)?;
-    start_background_queue_rebuild(&*context)?;
+    start_background_repository_stats_updater(&context)?;
+    start_background_cdn_invalidator(&context)?;
+    start_background_queue_rebuild(&context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.

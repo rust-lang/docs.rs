@@ -699,7 +699,7 @@ mod tests {
                 config.cdn_backend = CdnKind::CloudFront;
             });
 
-            assert!(matches!(*env.cdn().await, CdnBackend::CloudFront { .. }));
+            assert!(matches!(*env.cdn(), CdnBackend::CloudFront { .. }));
             assert!(matches!(
                 CdnBackend::new(&env.config()).await,
                 CdnBackend::CloudFront { .. }
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn create_dummy() {
         async_wrapper(|env| async move {
-            assert!(matches!(*env.cdn().await, CdnBackend::Dummy { .. }));
+            assert!(matches!(*env.cdn(), CdnBackend::Dummy { .. }));
             assert!(matches!(
                 CdnBackend::new(&env.config()).await,
                 CdnBackend::Dummy { .. }
@@ -731,7 +731,7 @@ mod tests {
             });
 
             let config = env.config();
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
                     .await?
@@ -757,9 +757,9 @@ mod tests {
                 config.cdn_max_queued_age = Duration::from_secs(0);
             });
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
             let config = env.config();
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
                     .await?
@@ -813,7 +813,7 @@ mod tests {
             assert!(active_invalidations(&cdn, "distribution_id_web").is_empty());
             assert!(active_invalidations(&cdn, "distribution_id_static").is_empty());
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
             let config = env.config();
 
             // now handle the queued invalidations
@@ -865,9 +865,9 @@ mod tests {
                 config.cloudfront_distribution_id_static = Some("distribution_id_static".into());
             });
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
             let config = env.config();
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
                     .await?
@@ -921,7 +921,7 @@ mod tests {
             assert!(active_invalidations(&cdn, "distribution_id_web").is_empty());
             assert!(active_invalidations(&cdn, "distribution_id_static").is_empty());
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
             let config = env.config();
 
             // now handle the queued invalidations
@@ -1001,7 +1001,7 @@ mod tests {
                 config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
             });
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
 
             // create an invalidation with 15 paths, so we're over the limit
             let already_running_invalidation = cdn
@@ -1013,7 +1013,7 @@ mod tests {
                 )
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
                     .await?
@@ -1049,7 +1049,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn().await,
+                &*env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1083,7 +1083,7 @@ mod tests {
                 config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
             });
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
 
             // create an invalidation with 15 paths, so we're over the limit
             let already_running_invalidation = cdn
@@ -1093,7 +1093,7 @@ mod tests {
                 )
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
                     .await?
@@ -1112,7 +1112,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn().await,
+                &*env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1143,7 +1143,7 @@ mod tests {
             // now handle again
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn().await,
+                &*env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1174,9 +1174,9 @@ mod tests {
                 config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
             });
 
-            let cdn = env.cdn().await;
+            let cdn = env.cdn();
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             // no invalidation is queued
             assert!(
                 queued_or_active_crate_invalidations(&mut conn)
@@ -1187,7 +1187,7 @@ mod tests {
             // run the handler
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn().await,
+                &*env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",

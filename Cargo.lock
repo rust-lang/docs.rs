@@ -2005,6 +2005,7 @@ name = "docs-rs"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "askama",
  "async-compression",
  "async-stream",

@@ -2398,7 +2398,7 @@ mod test {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
             sqlx::query!(
                     r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#, id.0
@@ -3057,7 +3057,6 @@ mod test {
             .await?;
             assert!(
                 env.async_storage()
-                    .await
                     .get_public_access("rustdoc/dummy/0.1.0.zip")
                     .await?
             );
@@ -3080,7 +3079,7 @@ mod test {
                 .await?;
 
             let web = env.web_app().await;
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
 
             // disable public access to be sure that the handler will enable it
             storage
@@ -3132,7 +3131,6 @@ mod test {
             .await?;
             assert!(
                 env.async_storage()
-                    .await
                     .get_public_access("rustdoc/dummy/0.2.0.zip")
                     .await?
             );
@@ -3175,7 +3173,7 @@ mod test {
                 .create()
                 .await?;
 
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
             storage.store_one("asset.js", *b"content").await?;
             storage.store_one(path, *b"more_content").await?;
 
@@ -3439,7 +3437,7 @@ mod test {
                 .create()
                 .await?;
 
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
 
             let zstd_blob = storage
                 .get(

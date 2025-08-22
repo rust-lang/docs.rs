@@ -27,7 +27,7 @@ const BUILD_PRIORITY: i32 = 15;
 pub async fn run_check(ctx: &Context, dry_run: bool) -> Result<()> {
     info!("Loading data from database...");
     let mut conn = ctx.pool.get_async().await?;
-    let db_data = db::load(&mut conn, &*ctx.config)
+    let db_data = db::load(&mut conn, &ctx.config)
         .await
         .context("Loading crate data from database for consistency check")?;
 
@@ -163,7 +163,7 @@ mod tests {
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
-        let mut conn = env.async_db().await.async_conn().await;
+        let mut conn = env.async_db().async_conn().await;
         Ok(sqlx::query_scalar(sql).fetch_one(&mut *conn).await?)
     }
 
@@ -171,7 +171,7 @@ mod tests {
     where
         O: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
     {
-        let mut conn = env.async_db().await.async_conn().await;
+        let mut conn = env.async_db().async_conn().await;
         Ok::<_, anyhow::Error>(
             sqlx::query(sql)
                 .fetch_all(&mut *conn)
@@ -196,7 +196,7 @@ mod tests {
             let diff = [Difference::CrateNotInIndex("krate".into())];
 
             // calling with dry-run leads to no change
-            handle_diff(&*env, diff.iter(), true).await?;
+            handle_diff(&env.context, diff.iter(), true).await?;
 
             assert_eq!(
                 count(&env, "SELECT count(*) FROM crates WHERE name = 'krate'").await?,
@@ -204,7 +204,7 @@ mod tests {
             );
 
             // without dry-run the crate will be deleted
-            handle_diff(&*env, diff.iter(), false).await?;
+            handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
                 count(&env, "SELECT count(*) FROM crates WHERE name = 'krate'").await?,
@@ -238,11 +238,11 @@ mod tests {
 
             assert_eq!(count(&env, "SELECT count(*) FROM releases").await?, 2);
 
-            handle_diff(&*env, diff.iter(), true).await?;
+            handle_diff(&env.context, diff.iter(), true).await?;
 
             assert_eq!(count(&env, "SELECT count(*) FROM releases").await?, 2);
 
-            handle_diff(&*env, diff.iter(), false).await?;
+            handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
                 single_row::<String>(&env, "SELECT version FROM releases").await?,
@@ -270,14 +270,14 @@ mod tests {
                 false,
             )];
 
-            handle_diff(&*env, diff.iter(), true).await?;
+            handle_diff(&env.context, diff.iter(), true).await?;
 
             assert_eq!(
                 single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
                 vec![true]
             );
 
-            handle_diff(&*env, diff.iter(), false).await?;
+            handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
                 single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
@@ -293,13 +293,13 @@ mod tests {
         async_wrapper(|env| async move {
             let diff = [Difference::ReleaseNotInDb("krate".into(), "0.1.1".into())];
 
-            handle_diff(&*env, diff.iter(), true).await?;
+            handle_diff(&env.context, diff.iter(), true).await?;
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
 
             assert!(build_queue.queued_crates().await?.is_empty());
 
-            handle_diff(&*env, diff.iter(), false).await?;
+            handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
                 build_queue
@@ -322,13 +322,13 @@ mod tests {
                 vec!["0.1.1".into(), "0.1.2".into()],
             )];
 
-            handle_diff(&*env, diff.iter(), true).await?;
+            handle_diff(&env.context, diff.iter(), true).await?;
 
-            let build_queue = env.async_build_queue().await;
+            let build_queue = env.async_build_queue();
 
             assert!(build_queue.queued_crates().await?.is_empty());
 
-            handle_diff(&*env, diff.iter(), false).await?;
+            handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
                 build_queue
