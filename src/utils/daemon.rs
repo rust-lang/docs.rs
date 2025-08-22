@@ -178,7 +178,9 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
     Ok(())
 }
 
-pub fn start_daemon(context: Arc<Context>, enable_registry_watcher: bool) -> Result<(), Error> {
+pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(), Error> {
+    let context = Arc::new(context);
+
     // Start the web server before doing anything more expensive
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
