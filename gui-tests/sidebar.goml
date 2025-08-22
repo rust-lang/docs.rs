@@ -9,6 +9,7 @@ assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 
 // We check the same in "mobile mode".
 set-window-size: (600, 1000)
+wait-for-css-false: (".rustdoc .mobile-topbar", {"display": "none"})
 assert-position: (".rustdoc .mobile-topbar", {"y": |topbar_height|, "x": 0})
 // We check when the sidebar is shown now.
 click: ".rustdoc .mobile-topbar .sidebar-menu-toggle"
@@ -27,8 +28,8 @@ set-window-size: (1000, 1000)
 wait-for: ".main-heading a.src"
 click: ".main-heading a.src"
 
-// We wait for the page to load...
-wait-for: ".rustdoc.src"
+// We wait for the page to load (by waiting for the sidebar to be filled)...
+wait-for: "#src-sidebar"
 // We check that the sidebar has the correct position.
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 // We expand the sidebar.
