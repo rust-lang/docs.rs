@@ -6,7 +6,7 @@
 // the crate page we control the whole page
 
 go-to: |DOC_PATH| + "/sysinfo"
-set-local-storage: { "rustdoc-theme": null }
+set-local-storage: { "rustdoc-theme": "light" }
 wait-for-css: (".nav-container", { "background-color": "rgb(255, 255, 255)" })
 go-to: |DOC_PATH| + "/crate/sysinfo"
 wait-for-css: ("body", { "background-color": "rgb(255, 255, 255)" })
