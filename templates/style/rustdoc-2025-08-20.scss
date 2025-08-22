@@ -1,0 +1,10 @@
+@import "rustdoc-2021-12-05";
+
+// This file is needed to overload the previous docs.rs style. It is added into crates generated
+// using rustdoc after https://github.com/rust-lang/rust/pull/144476 has been merged.
+
+.rustdoc.src {
+    #sidebar-button {
+        top: calc(8px + #{$top-navbar-height});
+    }
+}

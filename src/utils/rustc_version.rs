@@ -44,8 +44,11 @@ pub(crate) fn parse_rustc_date<S: AsRef<str>>(version: S) -> Result<NaiveDate> {
 /// generate this version of this crate.
 pub fn get_correct_docsrs_style_file(version: &str) -> Result<String> {
     let date = parse_rustc_date(version)?;
+    // This is the date where https://github.com/rust-lang/rust/pull/144476 was merged.
+    if NaiveDate::from_ymd_opt(2025, 8, 20).unwrap() < date {
+        Ok("rustdoc-2025-08-20.css".to_owned())
     // This is the date where https://github.com/rust-lang/rust/pull/91356 was merged.
-    if NaiveDate::from_ymd_opt(2021, 12, 5).unwrap() < date {
+    } else if NaiveDate::from_ymd_opt(2021, 12, 5).unwrap() < date {
         // If this is the new rustdoc layout, we need the newer docs.rs CSS file.
         Ok("rustdoc-2021-12-05.css".to_owned())
     } else {
