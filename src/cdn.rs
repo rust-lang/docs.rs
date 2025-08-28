@@ -1049,7 +1049,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn(),
+                &env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1112,7 +1112,7 @@ mod tests {
             // handle the queued invalidations
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn(),
+                &env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1143,7 +1143,7 @@ mod tests {
             // now handle again
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn(),
+                &env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",
@@ -1187,7 +1187,7 @@ mod tests {
             // run the handler
             handle_queued_invalidation_requests(
                 &env.config(),
-                &*env.cdn(),
+                &env.cdn(),
                 &env.instance_metrics(),
                 &mut conn,
                 "distribution_id_web",

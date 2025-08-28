@@ -101,7 +101,7 @@ mod tests {
             env.fake_release().await.create().await?;
 
             let mut file = File::from_path(
-                &*env.async_storage(),
+                &env.async_storage(),
                 "rustdoc/fake-package/1.0.0/fake-package/index.html",
                 &env.config(),
             )
@@ -153,7 +153,7 @@ mod tests {
                 let env = env.clone();
                 async move {
                     File::from_path(
-                        &*env.async_storage(),
+                        &env.async_storage(),
                         &format!("rustdoc/dummy/0.1.0/{path}"),
                         &env.config(),
                     )

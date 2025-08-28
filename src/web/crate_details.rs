@@ -2203,7 +2203,7 @@ mod tests {
             let mut conn = env.async_db().async_conn().await;
             let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
             assert!(matches!(
-                details.fetch_readme(&*env.async_storage()).await,
+                details.fetch_readme(&env.async_storage()).await,
                 Ok(None)
             ));
             Ok(())

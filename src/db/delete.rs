@@ -311,7 +311,7 @@ mod tests {
                 );
             }
 
-            delete_crate(&mut conn, &*env.async_storage(), &env.config(), "package-1").await?;
+            delete_crate(&mut conn, &env.async_storage(), &env.config(), "package-1").await?;
 
             assert!(!crate_exists(&mut conn, "package-1").await?);
             assert!(crate_exists(&mut conn, "package-2").await?);
@@ -426,7 +426,7 @@ mod tests {
                     .rustdoc_file_exists("a", "1.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage(), "1.0.0").await?);
+            assert!(json_exists(&env.async_storage(), "1.0.0").await?);
             let crate_id = sqlx::query_scalar!(
                 r#"SELECT crate_id as "crate_id: CrateId" FROM releases WHERE id = $1"#,
                 v1.0
@@ -457,20 +457,13 @@ mod tests {
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage(), "2.0.0").await?);
+            assert!(json_exists(&env.async_storage(), "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]
             );
 
-            delete_version(
-                &mut conn,
-                &*env.async_storage(),
-                &env.config(),
-                "a",
-                "1.0.0",
-            )
-            .await?;
+            delete_version(&mut conn, &env.async_storage(), &env.config(), "a", "1.0.0").await?;
             assert!(!release_exists(&mut conn, v1).await?);
             if archive_storage {
                 // for archive storage the archive and index files
@@ -494,7 +487,7 @@ mod tests {
                         .await?
                 );
             }
-            assert!(!json_exists(&*env.async_storage(), "1.0.0").await?);
+            assert!(!json_exists(&env.async_storage(), "1.0.0").await?);
 
             assert!(release_exists(&mut conn, v2).await?);
             assert!(
@@ -502,7 +495,7 @@ mod tests {
                     .rustdoc_file_exists("a", "2.0.0", None, "a/index.html", archive_storage)
                     .await?
             );
-            assert!(json_exists(&*env.async_storage(), "2.0.0").await?);
+            assert!(json_exists(&env.async_storage(), "2.0.0").await?);
             assert_eq!(
                 owners(&mut conn, crate_id).await?,
                 vec!["Peter Rabbit".to_string()]
@@ -527,14 +520,7 @@ mod tests {
                 fake_release_that_failed_before_build(&mut conn, "a", "1.0.0", "some-error")
                     .await?;
 
-            delete_version(
-                &mut conn,
-                &*env.async_storage(),
-                &env.config(),
-                "a",
-                "1.0.0",
-            )
-            .await?;
+            delete_version(&mut conn, &env.async_storage(), &env.config(), "a", "1.0.0").await?;
 
             assert!(!release_exists(&mut conn, release_id).await?);
 
@@ -552,7 +538,7 @@ mod tests {
                 fake_release_that_failed_before_build(&mut conn, "a", "1.0.0", "some-error")
                     .await?;
 
-            delete_crate(&mut conn, &*env.async_storage(), &env.config(), "a").await?;
+            delete_crate(&mut conn, &env.async_storage(), &env.config(), "a").await?;
 
             assert!(!crate_exists(&mut conn, "a").await?);
             assert!(!release_exists(&mut conn, release_id).await?);
