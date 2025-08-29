@@ -20,7 +20,7 @@ exclude = [
 sentry = { version = "0.42.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 log = "0.4"
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
 tracing-log = "0.2.0"
 regex = "1"
 clap = { version = "4.0.22", features = [ "derive" ] }
