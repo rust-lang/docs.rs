@@ -32,11 +32,12 @@ fi
 
 . .env
 
+set +e # We disable the "exit right away if command failed" setting.
 cargo run -- start-web-server &
 SERVER_PID=$!
 
 # status="docker run . -v `pwd`:/build/out:ro gui_tests"
-docker compose run gui_tests
+docker compose run --rm gui_tests
 status=$?
 kill $SERVER_PID
 exit $status

@@ -57,10 +57,6 @@ RUN apt-get install -y \
   xdg-utils \
   wget
 
-# Install rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y --default-toolchain nightly --no-modify-path --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
-
 RUN curl -sL https://nodejs.org/dist/v22.13.1/node-v22.13.1-linux-x64.tar.xz | tar -xJ
 ENV PATH="/node-v22.13.1-linux-x64/bin:${PATH}"
 ENV NODE_PATH="/node-v22.13.1-linux-x64/lib/node_modules/"
@@ -69,13 +65,13 @@ WORKDIR /build
 
 RUN mkdir out
 
+COPY ../package.json /build/package.json
+
 # For now, we need to use `--unsafe-perm=true` to go around an issue when npm tries
 # to create a new folder. For reference:
 # https://github.com/puppeteer/puppeteer/issues/375
 #
 # We also specify the version in case we need to update it to go around cache limitations.
-RUN npm install -g browser-ui-test@0.21.1 --unsafe-perm=true
-
-EXPOSE 3000
+RUN npm install --unsafe-perm=true --loglevel verbose --force
 
 CMD ["node", "/build/out/gui-tests/tester.js"]
