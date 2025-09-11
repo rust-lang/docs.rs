@@ -2916,6 +2916,7 @@ version = "0.43.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd1543cd9b8abcbcebaa1a666a5c168ee2cda4dea50d3961ee0e6d1c42f81e5b"
 dependencies = [
+ "bytes",
  "crc32fast",
  "crossbeam-channel",
  "flate2",
@@ -3748,8 +3749,11 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f7cc0179fc89d53c54e1f9ce51229494864ab4bf136132d69db1b011741ca3"
 dependencies = [
+ "base64 0.22.1",
  "bstr",
+ "curl",
  "gix-command",
+ "gix-credentials 0.30.0",
  "gix-features 0.43.1",
  "gix-packetline",
  "gix-quote",
