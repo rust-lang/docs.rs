@@ -41,7 +41,7 @@ comrak = { version = "0.41.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.9.2"
 prometheus = { version = "0.14.0", default-features = false }
-rustwide = { version = "0.19.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
 flate2 = "1.1.1"
