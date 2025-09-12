@@ -31,7 +31,7 @@ crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.12", features = ["json", "gzip"] }
 semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
-sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "chrono" ] }
+sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
 url = { version = "2.1.1", features = ["serde"] }
 docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
@@ -58,7 +58,6 @@ zip = {version = "5.1.1", default-features = false, features = ["bzip2"]}
 bzip2 = "0.6.0"
 getrandom = "0.3.1"
 itertools = { version = "0.14.0" }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
 hex = "0.4.3"
 derive_more = { version = "2.0.0", features = ["display"] }
 

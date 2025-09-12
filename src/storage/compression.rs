@@ -7,6 +7,7 @@ use std::{
     io::{self, Read},
 };
 use strum::{Display, EnumIter, EnumString, FromRepr};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
@@ -85,6 +86,52 @@ pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<V
             let mut data = vec![];
             compressor.read_to_end(&mut data)?;
             Ok(data)
+        }
+    }
+}
+
+/// Wrap an AsyncWrite sink for compression using the specified algorithm.
+///
+/// Will return an AsyncWrite you can just write data to, we will compress
+/// the data, and then write the compressed data into the provided output sink.
+pub fn wrap_writer_for_compression<'a>(
+    output_sink: impl AsyncWrite + Unpin + Send + 'a,
+    algorithm: CompressionAlgorithm,
+) -> Box<dyn AsyncWrite + Unpin + 'a> {
+    use async_compression::tokio::write;
+    use tokio::io;
+
+    match algorithm {
+        CompressionAlgorithm::Zstd => {
+            Box::new(io::BufWriter::new(write::ZstdEncoder::new(output_sink)))
+        }
+        CompressionAlgorithm::Bzip2 => {
+            Box::new(io::BufWriter::new(write::BzEncoder::new(output_sink)))
+        }
+        CompressionAlgorithm::Gzip => {
+            Box::new(io::BufWriter::new(write::GzipEncoder::new(output_sink)))
+        }
+    }
+}
+
+/// Wrap an AsyncRead for decompression.
+///
+/// You provide an AsyncRead that gives us the compressed data. With the
+/// wrapper we return you can then read decompressed data from the wrapper.
+pub fn wrap_reader_for_decompression<'a>(
+    input: impl AsyncRead + Unpin + Send + 'a,
+    algorithm: CompressionAlgorithm,
+) -> Box<dyn AsyncRead + Unpin + Send + 'a> {
+    use async_compression::tokio::bufread;
+    use tokio::io;
+
+    match algorithm {
+        CompressionAlgorithm::Zstd => {
+            Box::new(bufread::ZstdDecoder::new(io::BufReader::new(input)))
+        }
+        CompressionAlgorithm::Bzip2 => Box::new(bufread::BzDecoder::new(io::BufReader::new(input))),
+        CompressionAlgorithm::Gzip => {
+            Box::new(bufread::GzipDecoder::new(io::BufReader::new(input)))
         }
     }
 }
