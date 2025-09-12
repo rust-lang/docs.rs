@@ -1,4 +1,9 @@
-use std::io::{Error as IoError, Write};
+use std::{
+    io::{self, Write},
+    pin::Pin,
+    task,
+};
+use tokio::io::AsyncWrite;
 
 pub(crate) struct SizedBuffer {
     inner: Vec<u8>,
@@ -27,16 +32,45 @@ impl SizedBuffer {
 }
 
 impl Write for SizedBuffer {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.inner.len() + buf.len() > self.limit {
-            Err(IoError::other(crate::error::SizeLimitReached))
+            Err(io::Error::other(crate::error::SizeLimitReached))
         } else {
             self.inner.write(buf)
         }
     }
 
-    fn flush(&mut self) -> Result<(), IoError> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
+    }
+}
+
+impl AsyncWrite for SizedBuffer {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _cx: &mut task::Context<'_>,
+        buf: &[u8],
+    ) -> task::Poll<io::Result<usize>> {
+        let mut this = self.get_mut();
+        match io::Write::write(&mut this, buf) {
+            Ok(n) => task::Poll::Ready(Ok(n)),
+            Err(e) => task::Poll::Ready(Err(e)),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut task::Context<'_>) -> task::Poll<io::Result<()>> {
+        let mut this = self.get_mut();
+        match io::Write::flush(&mut this) {
+            Ok(()) => task::Poll::Ready(Ok(())),
+            Err(e) => task::Poll::Ready(Err(e)),
+        }
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        _cx: &mut task::Context<'_>,
+    ) -> task::Poll<io::Result<()>> {
+        task::Poll::Ready(Ok(()))
     }
 }
 

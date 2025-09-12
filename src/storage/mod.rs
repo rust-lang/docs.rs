@@ -4,6 +4,7 @@ mod database;
 mod s3;
 
 pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
+use self::compression::{wrap_reader_for_decompression, wrap_writer_for_compression};
 use self::database::DatabaseBackend;
 use self::s3::S3Backend;
 use crate::{
@@ -25,7 +26,7 @@ use path_slash::PathExt;
 use std::{
     fmt,
     fs::{self, File},
-    io::{self, BufReader, Write as _},
+    io::{self, BufReader},
     num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
@@ -33,7 +34,7 @@ use std::{
 };
 use std::{iter, str::FromStr};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt as _, AsyncWriteExt},
+    io::{AsyncRead, AsyncWriteExt},
     runtime::Runtime,
 };
 use tracing::{error, info_span, instrument, trace};
@@ -88,23 +89,7 @@ impl StreamingBlob {
             return self;
         };
 
-        match alg {
-            CompressionAlgorithm::Zstd => {
-                self.content = Box::new(async_compression::tokio::bufread::ZstdDecoder::new(
-                    tokio::io::BufReader::new(self.content),
-                ))
-            }
-            CompressionAlgorithm::Bzip2 => {
-                self.content = Box::new(async_compression::tokio::bufread::BzDecoder::new(
-                    tokio::io::BufReader::new(self.content),
-                ))
-            }
-            CompressionAlgorithm::Gzip => {
-                self.content = Box::new(async_compression::tokio::bufread::GzipDecoder::new(
-                    tokio::io::BufReader::new(self.content),
-                ))
-            }
-        };
+        self.content = wrap_reader_for_decompression(self.content, alg);
         self.compression = None;
         self
     }
@@ -115,14 +100,7 @@ impl StreamingBlob {
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
         content.reserve(self.content_length);
 
-        let mut buf = [0u8; 8 * 1024];
-        loop {
-            let n = self.content.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            content.write_all(&buf[..n])?;
-        }
+        tokio::io::copy(&mut self.content, &mut content).await?;
 
         Ok(Blob {
             path: self.path,
@@ -335,13 +313,9 @@ impl AsyncStorage {
             .download_archive_index(archive_path, latest_build_id)
             .await
         {
-            Ok(index_filename) => Ok({
-                let path = path.to_owned();
-                spawn_blocking(move || {
-                    Ok(archive_index::find_in_file(index_filename, &path)?.is_some())
-                })
+            Ok(index_filename) => Ok(archive_index::find_in_file(index_filename, path)
                 .await?
-            }),
+                .is_some()),
             Err(err) => {
                 if err.downcast_ref::<PathNotFoundError>().is_some() {
                     Ok(false)
@@ -447,11 +421,9 @@ impl AsyncStorage {
             .download_archive_index(archive_path, latest_build_id)
             .await?;
 
-        let info = {
-            let path = path.to_owned();
-            spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
-        }?
-        .ok_or(PathNotFoundError)?;
+        let info = archive_index::find_in_file(index_filename, path)
+            .await?
+            .ok_or(PathNotFoundError)?;
 
         let blob = self
             .get_range(
@@ -483,11 +455,9 @@ impl AsyncStorage {
             .download_archive_index(archive_path, latest_build_id)
             .await?;
 
-        let info = {
-            let path = path.to_owned();
-            spawn_blocking(move || archive_index::find_in_file(index_filename, &path)).await
-        }?
-        .ok_or(PathNotFoundError)?;
+        let info = archive_index::find_in_file(index_filename, path)
+            .await?
+            .ok_or(PathNotFoundError)?;
 
         let blob = self
             .get_range_stream(archive_path, info.range(), Some(info.compression()))
@@ -510,11 +480,10 @@ impl AsyncStorage {
         archive_path: &str,
         root_dir: &Path,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
-        let (zip_content, compressed_index_content, alg, remote_index_path, file_paths) =
+        let (mut zip_content,    file_paths) =
             spawn_blocking({
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
-                let temp_dir = self.config.temp_dir.clone();
 
                 move || {
                     let mut file_paths = Vec::new();
@@ -530,7 +499,7 @@ impl AsyncStorage {
                     // also has to be added as supported algorithm for storage compression, together
                     // with a mapping in `storage::archive_index::Index::new_from_zip`.
 
-                    let mut zip_content = {
+                    let zip_content = {
                         let _span =
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
@@ -550,31 +519,34 @@ impl AsyncStorage {
                         zip.finish()?.into_inner()
                     };
 
-                    let remote_index_path = format!("{}.index", &archive_path);
-                    let alg = CompressionAlgorithm::default();
-                    let compressed_index_content = {
-                        let _span = info_span!("create_archive_index", %remote_index_path).entered();
-
-                        fs::create_dir_all(&temp_dir)?;
-                        let local_index_path =
-                            tempfile::NamedTempFile::new_in(&temp_dir)?.into_temp_path();
-                        archive_index::create(
-                            &mut io::Cursor::new(&mut zip_content),
-                            &local_index_path,
-                        )?;
-
-                        compress(BufReader::new(fs::File::open(&local_index_path)?), alg)?
-                    };
                     Ok((
                         zip_content,
-                        compressed_index_content,
-                        alg,
-                        remote_index_path,
-                        file_paths,
+                        file_paths
                     ))
                 }
             })
             .await?;
+
+        let alg = CompressionAlgorithm::default();
+        let remote_index_path = format!("{}.index", &archive_path);
+        let compressed_index_content = {
+            let _span = info_span!("create_archive_index", %remote_index_path).entered();
+
+            tokio::fs::create_dir_all(&self.config.temp_dir).await?;
+            let local_index_path =
+                tempfile::NamedTempFile::new_in(&self.config.temp_dir)?.into_temp_path();
+
+            archive_index::create(&mut io::Cursor::new(&mut zip_content), &local_index_path)
+                .await?;
+
+            let mut buf: Vec<u8> = Vec::new();
+            tokio::io::copy(
+                &mut tokio::io::BufReader::new(tokio::fs::File::open(&local_index_path).await?),
+                &mut wrap_writer_for_compression(&mut buf, alg),
+            )
+            .await?;
+            buf
+        };
 
         self.store_inner(vec![
             Blob {
