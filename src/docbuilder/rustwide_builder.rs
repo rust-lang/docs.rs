@@ -1472,9 +1472,9 @@ mod tests {
                 assert_eq!(
                     targets,
                     vec![
+                        "aarch64-apple-darwin",
                         "i686-pc-windows-msvc",
                         "i686-unknown-linux-gnu",
-                        "x86_64-apple-darwin",
                         "x86_64-pc-windows-msvc",
                         "x86_64-unknown-linux-gnu",
                     ]
@@ -1676,7 +1676,7 @@ mod tests {
                     vec![
                         "i686-pc-windows-msvc".into(),
                         "i686-unknown-linux-gnu".into(),
-                        "x86_64-apple-darwin".into(),
+                        "aarch64-apple-darwin".into(),
                         "x86_64-pc-windows-msvc".into(),
                         "x86_64-unknown-linux-gnu".into(),
                     ],
