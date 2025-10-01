@@ -59,7 +59,7 @@ pub const HOST_TARGET: &str = env!("DOCSRS_METADATA_HOST_TARGET");
 pub const DEFAULT_TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
     "i686-unknown-linux-gnu",
-    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",
 ];
@@ -92,7 +92,7 @@ pub enum MetadataError {
 /// all-features = true
 /// no-default-features = true
 /// default-target = "x86_64-unknown-linux-gnu"
-/// targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+/// targets = [ "aarch64-apple-darwin", "x86_64-pc-windows-msvc" ]
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
 /// ```
@@ -379,7 +379,7 @@ mod test_parsing {
             all-features = true
             no-default-features = true
             default-target = "x86_64-unknown-linux-gnu"
-            targets = [ "x86_64-apple-darwin", "x86_64-pc-windows-msvc" ]
+            targets = [ "aarch64-apple-darwin", "x86_64-pc-windows-msvc" ]
             rustc-args = [ "--example-rustc-arg" ]
             rustdoc-args = [ "--example-rustdoc-arg" ]
             cargo-args = [ "-Zbuild-std" ]
@@ -405,7 +405,7 @@ mod test_parsing {
 
         let targets = metadata.targets.expect("should have explicit target");
         assert_eq!(targets.len(), 2);
-        assert_eq!(targets[0], "x86_64-apple-darwin");
+        assert_eq!(targets[0], "aarch64-apple-darwin");
         assert_eq!(targets[1], "x86_64-pc-windows-msvc");
 
         let rustc_args = metadata.rustc_args;

@@ -23,7 +23,7 @@ default-target = "x86_64-unknown-linux-gnu"
 #
 # Default targets:
 # - x86_64-unknown-linux-gnu
-# - x86_64-apple-darwin
+# - aarch64-apple-darwin
 # - x86_64-pc-windows-msvc
 # - i686-unknown-linux-gnu
 # - i686-pc-windows-msvc
@@ -34,7 +34,7 @@ default-target = "x86_64-unknown-linux-gnu"
 # Otherwise, these `targets` are built in addition to the default target.
 # If both `default-target` and `targets` are unset,
 #   all tier-one targets will be built and `x86_64-unknown-linux-gnu` will be used as the default target.
-targets = ["x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
 
 # Additional `RUSTFLAGS` to set (default: [])
 rustc-args = ["--example-rustc-arg"]

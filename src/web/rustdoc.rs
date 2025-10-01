@@ -2247,7 +2247,7 @@ mod test {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
             assert_eq!(
-                web.get("/crate/fdsafdsafdsafdsa/0.1.0/target-redirect/x86_64-apple-darwin/")
+                web.get("/crate/fdsafdsafdsafdsa/0.1.0/target-redirect/aarch64-apple-darwin/")
                     .await?
                     .status(),
                 StatusCode::NOT_FOUND,
@@ -2320,7 +2320,7 @@ mod test {
                 .await?;
             let web = env.web_app().await;
             web.assert_redirect(
-                "/crate/dummy/0.1.0/target-redirect/x86_64-apple-darwin",
+                "/crate/dummy/0.1.0/target-redirect/aarch64-apple-darwin",
                 "/dummy/0.1.0/dummy/",
             )
             .await?;
@@ -2329,12 +2329,12 @@ mod test {
                 .name("dummy")
                 .version("0.2.0")
                 .archive_storage(archive_storage)
-                .add_platform("x86_64-apple-darwin")
+                .add_platform("aarch64-apple-darwin")
                 .create()
                 .await?;
             web.assert_redirect(
-                "/crate/dummy/0.2.0/target-redirect/x86_64-apple-darwin",
-                "/dummy/0.2.0/x86_64-apple-darwin/dummy/",
+                "/crate/dummy/0.2.0/target-redirect/aarch64-apple-darwin",
+                "/dummy/0.2.0/aarch64-apple-darwin/dummy/",
             )
             .await?;
             web.assert_redirect(
