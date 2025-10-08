@@ -37,7 +37,7 @@ docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
 backtrace = "0.3.61"
 thiserror = "2.0.3"
-comrak = { version = "0.41.0", default-features = false }
+comrak = { version = "0.43.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.9.2"
 prometheus = { version = "0.14.0", default-features = false }
