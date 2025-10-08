@@ -187,7 +187,6 @@ impl AsyncStorage {
         config: Arc<Config>,
     ) -> Result<Self> {
         Ok(Self {
-            config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
@@ -196,6 +195,7 @@ impl AsyncStorage {
                     StorageBackend::S3(Box::new(S3Backend::new(metrics, &config).await?))
                 }
             },
+            config,
         })
     }
 

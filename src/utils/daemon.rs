@@ -19,8 +19,8 @@ use tracing::{debug, info};
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
 pub async fn watch_registry(
-    build_queue: Arc<AsyncBuildQueue>,
-    config: Arc<Config>,
+    build_queue: &AsyncBuildQueue,
+    config: &Config,
     index: Arc<Index>,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
@@ -56,13 +56,12 @@ fn start_registry_watcher(context: &Context) -> Result<(), Error> {
     let build_queue = context.async_build_queue.clone();
     let config = context.config.clone();
     let index = context.index.clone();
-    let runtime = context.runtime.clone();
 
-    runtime.spawn(async {
+    context.runtime.spawn(async move {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(build_queue, config, index).await
+        watch_registry(&build_queue, &config, index).await
     });
 
     Ok(())
@@ -195,14 +194,12 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     }
 
     // build new crates every minute
-    let build_queue = context.build_queue.clone();
-    let config = context.config.clone();
     let rustwide_builder = RustwideBuilder::init(&context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn({
             let context = context.clone();
-            move || queue_builder(&context, rustwide_builder, build_queue, config).unwrap()
+            move || queue_builder(&context, rustwide_builder).unwrap()
         })
         .unwrap();
 

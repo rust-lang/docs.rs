@@ -205,13 +205,9 @@ impl CommandLine {
 
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
-                ctx.runtime.block_on(async {
-                    docs_rs::utils::watch_registry(
-                        ctx.async_build_queue.clone(),
-                        ctx.config.clone(),
-                        ctx.index.clone(),
-                    )
-                    .await
+                ctx.runtime.block_on(async move {
+                    docs_rs::utils::watch_registry(&ctx.async_build_queue, &ctx.config, ctx.index)
+                        .await
                 })?;
             }
             Self::StartBuildServer {
@@ -219,10 +215,7 @@ impl CommandLine {
             } => {
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
-                let build_queue = ctx.build_queue.clone();
-                let config = ctx.config.clone();
-                let rustwide_builder = RustwideBuilder::init(&ctx)?;
-                queue_builder(&ctx, rustwide_builder, build_queue, config)?;
+                queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
@@ -654,14 +647,8 @@ impl DatabaseSubcommand {
                 .runtime
                 .block_on(async move {
                     let mut conn = ctx.pool.get_async().await?;
-                    db::delete_version(
-                        &mut conn,
-                        &ctx.async_storage,
-                        &ctx.config,
-                        &name,
-                        &version,
-                    )
-                    .await
+                    db::delete_version(&mut conn, &ctx.async_storage, &ctx.config, &name, &version)
+                        .await
                 })
                 .context("failed to delete the version")?,
             Self::Delete {

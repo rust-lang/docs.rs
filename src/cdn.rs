@@ -51,7 +51,7 @@ pub enum CdnBackend {
 }
 
 impl CdnBackend {
-    pub async fn new(config: &Arc<Config>) -> CdnBackend {
+    pub async fn new(config: &Config) -> CdnBackend {
         match config.cdn_backend {
             CdnKind::CloudFront => {
                 let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
