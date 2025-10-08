@@ -25,9 +25,32 @@ use tower::ServiceExt;
 use tracing::error;
 
 #[track_caller]
-pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
-    let env = TestEnvironment::new();
+pub(crate) fn wrapper_with_config(
+    override_config: impl FnOnce(&mut Config),
+    f: impl FnOnce(&TestEnvironment) -> Result<()>,
+) {
+    let mut config = TestEnvironment::base_config();
+    override_config(&mut config);
+    let env = TestEnvironment::with_config(config);
     f(&env).expect("test failed");
+}
+
+#[track_caller]
+pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
+    wrapper_with_config(|_| {}, f)
+}
+
+pub(crate) fn async_wrapper_with_config<F, Fut>(override_config: impl FnOnce(&mut Config), f: F)
+where
+    F: FnOnce(Rc<TestEnvironment>) -> Fut,
+    Fut: Future<Output = Result<()>>,
+{
+    let mut config = TestEnvironment::base_config();
+    override_config(&mut config);
+
+    let env = Rc::new(TestEnvironment::with_config(config));
+
+    env.runtime().block_on(f(env.clone())).expect("test failed");
 }
 
 pub(crate) fn async_wrapper<F, Fut>(f: F)
@@ -35,9 +58,7 @@ where
     F: FnOnce(Rc<TestEnvironment>) -> Fut,
     Fut: Future<Output = Result<()>>,
 {
-    let env = Rc::new(TestEnvironment::new());
-
-    env.runtime().block_on(f(env.clone())).expect("test failed");
+    async_wrapper_with_config(|_| {}, f)
 }
 
 pub(crate) trait AxumResponseTestExt {
@@ -330,10 +351,6 @@ pub(crate) fn init_logger() {
 }
 
 impl TestEnvironment {
-    fn new() -> Self {
-        Self::with_config(Self::base_config())
-    }
-
     fn with_config(config: Config) -> Self {
         init_logger();
 
@@ -440,16 +457,6 @@ impl TestEnvironment {
         config.include_default_targets = true;
 
         config
-    }
-
-    pub(crate) fn override_config(&self, f: impl FnOnce(&mut Config)) {
-        let mut config = Self::base_config();
-        f(&mut config);
-
-        // FIXME: fix
-        // if self.context.config.set(Arc::new(config)).is_err() {
-        //     panic!("can't call override_config after the configuration is accessed!");
-        // }
     }
 
     pub(crate) fn async_build_queue(&self) -> Arc<AsyncBuildQueue> {

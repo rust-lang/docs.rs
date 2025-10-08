@@ -155,19 +155,20 @@ mod test {
 
     #[test]
     fn config_default_memory_limit() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
+        async_wrapper_with_config(
+            |config| {
                 config.build_default_memory_limit = Some(6 * GB);
-            });
+            },
+            |env| async move {
+                let db = env.async_db();
+                let mut conn = db.async_conn().await;
 
-            let db = env.async_db();
-            let mut conn = db.async_conn().await;
+                let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
+                assert_eq!(limits.memory, 6 * GB);
 
-            let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
-            assert_eq!(limits.memory, 6 * GB);
-
-            Ok(())
-        })
+                Ok(())
+            },
+        )
     }
 
     #[test]
