@@ -2,7 +2,7 @@ use crate::web::highlight;
 use comrak::{
     ExtensionOptions, Options, Plugins, RenderPlugins, adapters::SyntaxHighlighterAdapter,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 #[derive(Debug)]
 struct CodeAdapter<F>(F, Option<&'static str>);
@@ -12,10 +12,10 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
 {
     fn write_highlighted(
         &self,
-        output: &mut dyn std::io::Write,
+        output: &mut dyn fmt::Write,
         lang: Option<&str>,
         code: &str,
-    ) -> std::io::Result<()> {
+    ) -> Result<(), fmt::Error> {
         // comrak does not treat `,` as an info-string delimiter, so we do that here
         // TODO: https://github.com/kivikakk/comrak/issues/246
         let lang = lang.and_then(|lang| lang.split(',').next());
@@ -24,17 +24,17 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
 
     fn write_pre_tag(
         &self,
-        output: &mut dyn std::io::Write,
+        output: &mut dyn fmt::Write,
         attributes: HashMap<String, String>,
-    ) -> std::io::Result<()> {
+    ) -> Result<(), fmt::Error> {
         write_opening_tag(output, "pre", &attributes)
     }
 
     fn write_code_tag(
         &self,
-        output: &mut dyn std::io::Write,
+        output: &mut dyn fmt::Write,
         attributes: HashMap<String, String>,
-    ) -> std::io::Result<()> {
+    ) -> Result<(), fmt::Error> {
         // similarly to above, since comrak does not treat `,` as an info-string delimiter it will
         // try to apply `class="language-rust,ignore"` for the info-string `rust,ignore`, so we
         // have to detect that case and fixup the class here
@@ -54,10 +54,10 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
 }
 
 fn write_opening_tag(
-    output: &mut dyn std::io::Write,
+    output: &mut dyn fmt::Write,
     tag: &str,
     attributes: &HashMap<String, String>,
-) -> std::io::Result<()> {
+) -> Result<(), fmt::Error> {
     write!(output, "<{tag}")?;
     for (attr, val) in attributes {
         write!(output, " {attr}=\"{val}\"")?;
