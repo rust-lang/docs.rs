@@ -1295,6 +1295,7 @@ mod tests {
     use crate::registry_api::ReleaseData;
     use crate::storage::{CompressionAlgorithm, compression};
     use crate::test::{AxumRouterTestExt, TestEnvironment, wrapper};
+    use pretty_assertions::assert_eq;
     use std::{io, iter};
     use test_case::test_case;
 
@@ -1979,21 +1980,25 @@ mod tests {
     #[ignore]
     fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() {
         wrapper(|env| {
-            let crate_ = "stylish-core";
-            let version = "0.1.1";
             let mut builder = RustwideBuilder::init(env).unwrap();
             builder.update_toolchain()?;
             assert!(
                 builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
+                    .build_local_package(Path::new("tests/crates/optional-dep"))?
                     .successful
             );
 
-            assert!(
-                !get_features(env, crate_, version)?
+            assert_eq!(
+                get_features(env, "optional-dep", "0.0.1")?
                     .unwrap()
                     .iter()
-                    .any(|f| f.name == "with_builtin_macros")
+                    .map(|f| f.name.to_owned())
+                    .sorted()
+                    .collect_vec(),
+                // "regex" feature is not in the list,
+                // because we don't have implicit features for optional dependencies
+                // with `dep` syntax any more.
+                vec!["alloc", "default", "optional_regex", "std"]
             );
 
             Ok(())
