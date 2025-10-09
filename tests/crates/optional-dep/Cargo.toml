@@ -1,0 +1,13 @@
+[package]
+name = "optional-dep"
+version = "0.0.1"
+edition = "2024"
+
+[features]
+default = ["std"]
+std = ["alloc"]
+alloc = []
+optional_regex = ["dep:regex"]
+
+[dependencies]
+regex = { version = "1.11.3", optional = true }
