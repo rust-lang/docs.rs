@@ -1105,6 +1105,7 @@ mod test {
     use anyhow::Context;
     use chrono::{NaiveDate, Utc};
     use kuchikiki::traits::TendrilSink;
+    use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
     use std::collections::BTreeMap;
     use test_case::test_case;
@@ -2687,15 +2688,15 @@ mod test {
             let releases_response = env
                 .web_app()
                 .await
-                .get("/crate/hexponent/0.3.1/menus/releases")
+                .get("/crate/hexponent/0.3.1/menus/releases/x86_64-unknown-linux-gnu/hexponent/index.html")
                 .await?;
             assert!(releases_response.status().is_success());
             releases_response.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
             assert_eq!(
                 parse_release_links_from_menu(&releases_response.text().await?),
                 vec![
-                    "/crate/hexponent/0.3.1/target-redirect/hexponent/index.html".to_owned(),
-                    "/crate/hexponent/0.3.0/target-redirect/hexponent/index.html".to_owned(),
+                    "/crate/hexponent/0.3.1/target-redirect/x86_64-unknown-linux-gnu/hexponent/index.html".to_owned(),
+                    "/crate/hexponent/0.3.0/target-redirect/x86_64-unknown-linux-gnu/hexponent/index.html".to_owned(),
                 ]
             );
 

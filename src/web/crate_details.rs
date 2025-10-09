@@ -584,8 +584,9 @@ pub(crate) async fn get_all_releases(
     Path(params): Path<RustdocHtmlParams>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
-    let req_path: String = params.path.clone().unwrap_or_default();
-    let req_path: Vec<&str> = req_path.split('/').collect();
+    // NOTE: we're getting RustDocHtmlParams here, where both target and path are optional.
+    // Due to how this handler is used in the `releases_list` macro, we always get both values.
+    // both values (when used in the topbar).
 
     let matched_release = match_version(&mut conn, &params.name, &params.version)
         .await?
@@ -599,61 +600,26 @@ pub(crate) async fn get_all_releases(
         return Err(AxumNope::CrateNotFound);
     }
 
-    let doc_targets = sqlx::query_scalar!(
-        "SELECT
-            releases.doc_targets
-         FROM releases
-         WHERE releases.id = $1;",
-        matched_release.id().0,
-    )
-    .fetch_optional(&mut *conn)
-    .await?
-    .ok_or(AxumNope::CrateNotFound)?
-    .map(MetaData::parse_doc_targets)
-    .ok_or_else(|| anyhow!("empty doc targets for successful release"))?;
-
-    let inner;
-    let (target, inner_path) = {
-        let mut inner_path = req_path.clone();
-
-        let target = if inner_path.len() > 1
-            && doc_targets
-                .iter()
-                .any(|s| Some(s) == params.target.as_ref())
-        {
-            inner_path.remove(0);
-            params.target.as_ref().unwrap()
-        } else {
-            ""
-        };
-
-        inner = inner_path.join("/");
-        (target, inner.trim_end_matches('/'))
-    };
-
-    let target_name = matched_release
-        .target_name()
-        .ok_or_else(|| anyhow!("empty target name for succesful release"))?;
-
-    let inner_path = if inner_path.is_empty() {
-        format!("{target_name}/index.html")
+    // NOTE: we don't check if the target exists here.
+    // If the target doesn't exist, the target-redirect will think
+    // it's part of the `inner_path`, don't find the file in storage,
+    // and redirect to a search.
+    let target = if let Some(req_target) = params.target {
+        format!("{req_target}/")
     } else {
-        format!("{target_name}/{inner_path}")
-    };
-
-    let target = if target.is_empty() {
         String::new()
-    } else {
-        format!("{target}/")
     };
 
-    let res = ReleaseList {
+    let inner_path = params.path.unwrap_or_default();
+    let inner_path = inner_path.trim_end_matches('/');
+
+    Ok(ReleaseList {
         releases: matched_release.all_releases,
         target,
-        inner_path,
+        inner_path: inner_path.to_string(),
         crate_name: params.name,
-    };
-    Ok(res.into_response())
+    }
+    .into_response())
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2033,6 +1999,17 @@ mod tests {
                 .add_target("x86_64-unknown-linux-gnu")
                 .create()
                 .await?;
+
+            check_links(
+                // https://github.com/rust-lang/docs.rs/issues/2922
+                &env,
+                "/crate/dummy-ba/0.5.0/menus/releases/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html",
+                vec![
+                    "/crate/dummy-ba/0.5.0/target-redirect/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html".to_string(),
+                    "/crate/dummy-ba/0.4.0/target-redirect/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html".to_string(),
+                ],
+            )
+            .await;
 
             check_links(
                 &env,
