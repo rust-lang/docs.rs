@@ -35,7 +35,7 @@ use std::{
 use std::{iter, str::FromStr};
 use tokio::{
     io::{AsyncRead, AsyncWriteExt},
-    runtime::Runtime,
+    runtime,
 };
 use tracing::{error, info_span, instrument, trace};
 use walkdir::WalkDir;
@@ -150,10 +150,10 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Box<dyn Iterator<Item = Result<
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid storage backend")]
-pub(crate) struct InvalidStorageBackendError;
+pub struct InvalidStorageBackendError;
 
 #[derive(Debug)]
-pub(crate) enum StorageKind {
+pub enum StorageKind {
     Database,
     S3,
 }
@@ -187,7 +187,6 @@ impl AsyncStorage {
         config: Arc<Config>,
     ) -> Result<Self> {
         Ok(Self {
-            config: config.clone(),
             backend: match config.storage_backend {
                 StorageKind::Database => {
                     StorageBackend::Database(DatabaseBackend::new(pool, metrics))
@@ -196,6 +195,7 @@ impl AsyncStorage {
                     StorageBackend::S3(Box::new(S3Backend::new(metrics, &config).await?))
                 }
             },
+            config,
         })
     }
 
@@ -756,12 +756,12 @@ impl std::fmt::Debug for AsyncStorage {
 /// Sync wrapper around `AsyncStorage` for parts of the codebase that are not async.
 pub struct Storage {
     inner: Arc<AsyncStorage>,
-    runtime: Arc<Runtime>,
+    runtime: runtime::Handle,
 }
 
 #[allow(dead_code)]
 impl Storage {
-    pub fn new(inner: Arc<AsyncStorage>, runtime: Arc<Runtime>) -> Self {
+    pub fn new(inner: Arc<AsyncStorage>, runtime: runtime::Handle) -> Self {
         Self { inner, runtime }
     }
 
@@ -948,8 +948,8 @@ impl Storage {
     // we leak the web server, and Drop isn't executed in that case (since the leaked web server
     // still holds a reference to the storage).
     #[cfg(test)]
-    pub(crate) fn cleanup_after_test(&self) -> Result<()> {
-        self.runtime.block_on(self.inner.cleanup_after_test())
+    pub(crate) async fn cleanup_after_test(&self) -> Result<()> {
+        self.inner.cleanup_after_test().await
     }
 }
 
@@ -1531,14 +1531,14 @@ mod backend_tests {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
-                    use crate::storage::{Storage, StorageKind};
-                    use std::sync::Arc;
+                    use crate::storage::{ StorageKind};
 
-                    fn get_storage(env: &TestEnvironment) -> Arc<Storage> {
-                        env.override_config(|config| {
-                            config.storage_backend = $config;
-                        });
-                        env.storage()
+                    fn get_env() -> anyhow::Result<crate::test::TestEnvironment> {
+                        crate::test::TestEnvironment::with_config_and_runtime(
+                            TestEnvironment::base_config()
+                                .storage_backend($config)
+                                .build()?
+                        )
                     }
 
                     backend_tests!(@tests $tests);
@@ -1549,20 +1549,18 @@ mod backend_tests {
         (@tests { $($test:ident,)* }) => {
             $(
                 #[test]
-                fn $test() {
-                    crate::test::wrapper(|env| {
-                        super::$test(&*get_storage(env))
-                    });
+                fn $test() -> anyhow::Result<()> {
+                    let env = get_env()?;
+                    super::$test(&*env.storage())
                 }
             )*
         };
         (@tests_with_metrics { $($test:ident,)* }) => {
             $(
                 #[test]
-                fn $test() {
-                    crate::test::wrapper(|env| {
-                        super::$test(&*get_storage(env), &*env.instance_metrics())
-                    });
+                fn $test() -> anyhow::Result<()> {
+                    let env = get_env()?;
+                    super::$test(&*env.storage(), &*env.instance_metrics())
                 }
             )*
         };

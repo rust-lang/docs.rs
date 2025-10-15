@@ -4,7 +4,8 @@ use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Durati
 use tracing::trace;
 use url::Url;
 
-#[derive(Debug)]
+#[derive(Debug, derive_builder::Builder)]
+#[builder(pattern = "owned")]
 pub struct Config {
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
@@ -29,11 +30,17 @@ pub struct Config {
     pub(crate) s3_bucket: String,
     pub(crate) s3_region: String,
     pub(crate) s3_endpoint: Option<String>,
+
+    // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
+    // Accidentally turning this on outside of the test suite might cause data loss in the
+    // production environment.
     #[cfg(test)]
+    #[builder(default)]
     pub(crate) s3_bucket_is_temporary: bool,
 
     // CloudFront domain which we can access
     // public S3 files through
+    #[cfg_attr(test, builder(setter(into)))]
     pub(crate) s3_static_root_path: String,
 
     // Github authentication
@@ -126,7 +133,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
+    pub fn from_env() -> Result<ConfigBuilder> {
         let old_vars = [
             ("CRATESFYI_PREFIX", "DOCSRS_PREFIX"),
             ("CRATESFYI_DATABASE_URL", "DOCSRS_DATABASE_URL"),
@@ -149,105 +156,82 @@ impl Config {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         let temp_dir = prefix.join("tmp");
 
-        Ok(Self {
-            build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5)?,
-            delay_between_build_attempts: Duration::from_secs(env::<u64>(
+        Ok(ConfigBuilder::default()
+            .build_attempts(env("DOCSRS_BUILD_ATTEMPTS", 5u16)?)
+            .delay_between_build_attempts(Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
                 60,
-            )?),
-            delay_between_registry_fetches: Duration::from_secs(env::<u64>(
+            )?))
+            .delay_between_registry_fetches(Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 60,
-            )?),
-
-            crates_io_api_call_retries: env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3)?,
-
-            registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
-            registry_url: maybe_env("REGISTRY_URL")?,
-            registry_api_host: env(
+            )?))
+            .crates_io_api_call_retries(env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3u32)?)
+            .registry_index_path(env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?)
+            .registry_url(maybe_env("REGISTRY_URL")?)
+            .registry_api_host(env(
                 "DOCSRS_REGISTRY_API_HOST",
                 "https://crates.io".parse().unwrap(),
-            )?,
-            prefix: prefix.clone(),
-
-            database_url: require_env("DOCSRS_DATABASE_URL")?,
-            max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
-            min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10)?,
-
-            storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?,
-
-            aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6)?,
-
-            s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
-            s3_region: env("S3_REGION", "us-west-1".to_string())?,
-            s3_endpoint: maybe_env("S3_ENDPOINT")?,
-            // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
-            // Accidentally turning this on outside of the test suite might cause data loss in the
-            // production environment.
-            #[cfg(test)]
-            s3_bucket_is_temporary: false,
-
-            s3_static_root_path: env(
+            )?)
+            .prefix(prefix.clone())
+            .database_url(require_env("DOCSRS_DATABASE_URL")?)
+            .max_pool_size(env("DOCSRS_MAX_POOL_SIZE", 90u32)?)
+            .min_pool_idle(env("DOCSRS_MIN_POOL_IDLE", 10u32)?)
+            .storage_backend(env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?)
+            .aws_sdk_max_retries(env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?)
+            .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
+            .s3_region(env("S3_REGION", "us-west-1".to_string())?)
+            .s3_endpoint(maybe_env("S3_ENDPOINT")?)
+            .s3_static_root_path(env(
                 "DOCSRS_S3_STATIC_ROOT_PATH",
                 "https://static.docs.rs".to_string(),
-            )?,
-
-            github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
-            github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500)?,
-
-            gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
-
-            cratesio_token: maybe_env("DOCSRS_CRATESIO_TOKEN")?,
-
-            max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
-            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
+            )?)
+            .github_accesstoken(maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?)
+            .github_updater_min_rate_limit(env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?)
+            .gitlab_accesstoken(maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?)
+            .cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
+            .max_file_size(env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?)
+            .max_file_size_html(env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?)
             // LOL HTML only uses as much memory as the size of the start tag!
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
-            max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
-            registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
-            render_threads: env("DOCSRS_RENDER_THREADS", num_cpus::get())?,
-            request_timeout: maybe_env::<u64>("DOCSRS_REQUEST_TIMEOUT")?.map(Duration::from_secs),
-            report_request_timeouts: env("DOCSRS_REPORT_REQUEST_TIMEOUTS", false)?,
-
-            random_crate_search_view_size: env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?,
-
-            csp_report_only: env("DOCSRS_CSP_REPORT_ONLY", false)?,
-
-            cache_control_stale_while_revalidate: maybe_env(
+            .max_parse_memory(env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?)
+            .registry_gc_interval(env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?)
+            .render_threads(env("DOCSRS_RENDER_THREADS", num_cpus::get())?)
+            .request_timeout(maybe_env::<u64>("DOCSRS_REQUEST_TIMEOUT")?.map(Duration::from_secs))
+            .report_request_timeouts(env("DOCSRS_REPORT_REQUEST_TIMEOUTS", false)?)
+            .random_crate_search_view_size(env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE", 500)?)
+            .csp_report_only(env("DOCSRS_CSP_REPORT_ONLY", false)?)
+            .cache_control_stale_while_revalidate(maybe_env(
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
-            )?,
-
-            cache_invalidatable_responses: env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?,
-
-            cdn_backend: env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?,
-            cdn_max_queued_age: Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?),
-
-            cloudfront_distribution_id_web: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?,
-            cloudfront_distribution_id_static: maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?,
-
-            local_archive_cache_path: env(
+            )?)
+            .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
+            .cdn_backend(env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?)
+            .cdn_max_queued_age(Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?))
+            .cloudfront_distribution_id_web(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?)
+            .cloudfront_distribution_id_static(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?)
+            .local_archive_cache_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
-            )?,
-
-            compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
-
-            temp_dir,
-
-            rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
-            inside_docker: env("DOCSRS_DOCKER", false)?,
-            docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
-                .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-            build_cpu_limit: maybe_env("DOCSRS_BUILD_CPU_LIMIT")?,
-            build_default_memory_limit: maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?,
-            include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
-            disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
-            build_workspace_reinitialization_interval: Duration::from_secs(env(
+            )?)
+            .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
+            .temp_dir(temp_dir)
+            .rustwide_workspace(env(
+                "DOCSRS_RUSTWIDE_WORKSPACE",
+                PathBuf::from(".workspace"),
+            )?)
+            .inside_docker(env("DOCSRS_DOCKER", false)?)
+            .docker_image(
+                maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?.or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
+            )
+            .build_cpu_limit(maybe_env("DOCSRS_BUILD_CPU_LIMIT")?)
+            .build_default_memory_limit(maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?)
+            .include_default_targets(env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?)
+            .disable_memory_limit(env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?)
+            .build_workspace_reinitialization_interval(Duration::from_secs(env(
                 "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
                 86400,
-            )?),
-            max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
-        })
+            )?))
+            .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?))
     }
 }
 

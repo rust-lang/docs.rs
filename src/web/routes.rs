@@ -403,14 +403,14 @@ mod tests {
                 "/favicon.ico",
                 "/-/static/favicon.ico",
                 CachePolicy::ForeverInCdnAndBrowser,
-                &config,
+                config,
             )
             .await?;
             web.assert_redirect_cached(
                 "/robots.txt",
                 "/-/static/robots.txt",
                 CachePolicy::ForeverInCdnAndBrowser,
-                &config,
+                config,
             )
             .await?;
 
@@ -421,7 +421,7 @@ mod tests {
                 "/opensearch.xml",
                 "/-/static/opensearch.xml",
                 CachePolicy::ForeverInCdnAndBrowser,
-                &config,
+                config,
             )
             .await?;
 
@@ -438,7 +438,7 @@ mod tests {
                 .get("/-/rustdoc.static/style.css")
                 .await?;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             Ok(())
         })
     }
@@ -447,7 +447,7 @@ mod tests {
     fn serve_rustdoc_content() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
             storage
                 .store_one("/rustdoc-static/style.css", "content".as_bytes())
                 .await?;
@@ -457,7 +457,7 @@ mod tests {
 
             let response = web.get("/-/rustdoc.static/style.css").await?;
             assert!(response.status().is_success());
-            response.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            response.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(response.text().await?, "content");
 
             assert_eq!(

@@ -76,14 +76,14 @@ mod test {
     #[test]
     fn retrieve_limits() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
-            let defaults = Limits::new(&env.config());
+            let defaults = Limits::new(env.config());
 
             let krate = "hexponent";
             // limits work if no crate has limits set
-            let hexponent = Limits::for_crate(&env.config(), &mut conn, krate).await?;
+            let hexponent = Limits::for_crate(env.config(), &mut conn, krate).await?;
             assert_eq!(hexponent, defaults);
 
             Overrides::save(
@@ -96,7 +96,7 @@ mod test {
             )
             .await?;
             // limits work if crate has limits set
-            let hexponent = Limits::for_crate(&env.config(), &mut conn, krate).await?;
+            let hexponent = Limits::for_crate(env.config(), &mut conn, krate).await?;
             assert_eq!(
                 hexponent,
                 Limits {
@@ -125,7 +125,7 @@ mod test {
             .await?;
             assert_eq!(
                 limits,
-                Limits::for_crate(&env.config(), &mut conn, krate).await?
+                Limits::for_crate(env.config(), &mut conn, krate).await?
             );
             Ok(())
         })
@@ -134,7 +134,7 @@ mod test {
     #[test]
     fn targets_default_to_one_with_timeout() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
             let krate = "hexponent";
             Overrides::save(
@@ -146,37 +146,38 @@ mod test {
                 },
             )
             .await?;
-            let limits = Limits::for_crate(&env.config(), &mut conn, krate).await?;
+            let limits = Limits::for_crate(env.config(), &mut conn, krate).await?;
             assert_eq!(limits.targets, 1);
 
             Ok(())
         })
     }
 
-    #[test]
-    fn config_default_memory_limit() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.build_default_memory_limit = Some(6 * GB);
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn config_default_memory_limit() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .build_default_memory_limit(Some(6 * GB))
+                .build()?,
+        )
+        .await?;
 
-            let db = env.async_db().await;
-            let mut conn = db.async_conn().await;
+        let db = env.async_db();
+        let mut conn = db.async_conn().await;
 
-            let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
-            assert_eq!(limits.memory, 6 * GB);
+        let limits = Limits::for_crate(env.config(), &mut conn, "krate").await?;
+        assert_eq!(limits.memory, 6 * GB);
 
-            Ok(())
-        })
+        Ok(())
     }
 
     #[test]
     fn overrides_dont_lower_memory_limit() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
-            let defaults = Limits::new(&env.config());
+            let defaults = Limits::new(env.config());
 
             Overrides::save(
                 &mut conn,
@@ -188,7 +189,7 @@ mod test {
             )
             .await?;
 
-            let limits = Limits::for_crate(&env.config(), &mut conn, "krate").await?;
+            let limits = Limits::for_crate(env.config(), &mut conn, "krate").await?;
             assert_eq!(limits, defaults);
 
             Ok(())

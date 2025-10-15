@@ -1102,7 +1102,7 @@ mod test {
         utils::Dependency,
         web::{cache::CachePolicy, encode_url_path},
     };
-    use anyhow::Context;
+    use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -1168,7 +1168,7 @@ mod test {
             web.assert_success_cached(
                 "/krate/0.1.0/help.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             Ok(())
@@ -1204,54 +1204,54 @@ mod test {
                 .create()
                 .await?;
             let web = env.web_app().await;
-            web.assert_success_cached("/", CachePolicy::ShortInCdnAndBrowser, &env.config())
+            web.assert_success_cached("/", CachePolicy::ShortInCdnAndBrowser, env.config())
                 .await?;
             web.assert_success_cached(
                 "/crate/buggy/0.1.0",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/directory_1/index.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/directory_2.html/index.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/directory_3/.gitignore",
                 CachePolicy::ForeverInCdnAndBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/settings.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/scrape-examples-help.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/all.html",
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_success_cached(
                 "/buggy/0.1.0/directory_4/empty_file_no_ext",
                 CachePolicy::ForeverInCdnAndBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             Ok(())
@@ -1277,14 +1277,14 @@ mod test {
             web.assert_success_cached(
                 base,
                 CachePolicy::ForeverInCdnAndStaleInBrowser,
-                &env.config(),
+                env.config(),
             )
             .await?;
             web.assert_redirect_cached(
                 "/dummy/0.1.0/x86_64-unknown-linux-gnu/dummy/",
                 base,
                 CachePolicy::ForeverInCdn,
-                &env.config(),
+                env.config(),
             )
             .await?;
 
@@ -1352,7 +1352,7 @@ mod test {
                 .get("/dummy/latest/dummy/")
                 .await?
                 .error_for_status()?;
-            resp.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
@@ -1361,38 +1361,36 @@ mod test {
         })
     }
 
-    #[test]
-    fn cache_headers_on_version() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.cache_control_stale_while_revalidate = Some(2592000);
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cache_headers_on_version() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .cache_control_stale_while_revalidate(Some(2592000))
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .rustdoc_file("dummy/index.html")
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .rustdoc_file("dummy/index.html")
+            .create()
+            .await?;
 
-            let web = env.web_app().await;
+        let web = env.web_app().await;
 
-            {
-                let resp = web.get("/dummy/latest/dummy/").await?;
-                resp.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
-            }
+        {
+            let resp = web.get("/dummy/latest/dummy/").await?;
+            resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+        }
 
-            {
-                let resp = web.get("/dummy/0.1.0/dummy/").await?;
-                resp.assert_cache_control(
-                    CachePolicy::ForeverInCdnAndStaleInBrowser,
-                    &env.config(),
-                );
-            }
-            Ok(())
-        })
+        {
+            let resp = web.get("/dummy/0.1.0/dummy/").await?;
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+        }
+        Ok(())
     }
 
     #[test_case(true)]
@@ -1423,7 +1421,7 @@ mod test {
 
             // check it works at all
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/", &web, &env.config()).await?;
+                latest_version_redirect("/dummy/0.1.0/dummy/", &web, env.config()).await?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
@@ -1431,13 +1429,13 @@ mod test {
 
             // check it keeps the subpage
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/blah/", &web, &env.config()).await?;
+                latest_version_redirect("/dummy/0.1.0/dummy/blah/", &web, env.config()).await?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/blah/index.html"
             );
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &web, &env.config())
+                latest_version_redirect("/dummy/0.1.0/dummy/blah/blah.html", &web, env.config())
                     .await?;
             assert_eq!(
                 redirect,
@@ -1448,7 +1446,7 @@ mod test {
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/dummy/struct.will-be-deleted.html",
                 &web,
-                &env.config(),
+                env.config(),
             )
             .await?;
             assert_eq!(
@@ -1487,7 +1485,7 @@ mod test {
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/index.html",
                 &web,
-                &env.config(),
+                env.config(),
             )
             .await?;
             assert_eq!(
@@ -1498,7 +1496,7 @@ mod test {
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/",
                 &web,
-                &env.config(),
+                env.config(),
             )
             .await?;
             assert_eq!(
@@ -1509,7 +1507,7 @@ mod test {
             let redirect = latest_version_redirect(
                 "/dummy/0.1.0/x86_64-pc-windows-msvc/dummy/struct.Blah.html",
                 &web,
-                &env.config(),
+                env.config(),
             )
             .await?;
             assert_eq!(
@@ -1544,7 +1542,7 @@ mod test {
 
             let web = env.web_app().await;
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/", &web, &env.config()).await?;
+                latest_version_redirect("/dummy/0.1.0/dummy/", &web, env.config()).await?;
             assert_eq!(redirect, "/crate/dummy/latest");
 
             Ok(())
@@ -1583,14 +1581,14 @@ mod test {
 
             let web = env.web_app().await;
             let redirect =
-                latest_version_redirect("/dummy/0.1.0/dummy/", &web, &env.config()).await?;
+                latest_version_redirect("/dummy/0.1.0/dummy/", &web, env.config()).await?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
             );
 
             let redirect =
-                latest_version_redirect("/dummy/0.2.1/dummy/", &web, &env.config()).await?;
+                latest_version_redirect("/dummy/0.2.1/dummy/", &web, env.config()).await?;
             assert_eq!(
                 redirect,
                 "/crate/dummy/latest/target-redirect/x86_64-unknown-linux-gnu/dummy/index.html"
@@ -1660,7 +1658,7 @@ mod test {
                     "/zstd/badge.svg",
                     "https://img.shields.io/docsrs/zstd/latest",
                     CachePolicy::ForeverInCdnAndBrowser,
-                    &env.config(),
+                    env.config(),
                 )
                 .await?;
             assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
@@ -2399,7 +2397,7 @@ mod test {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
             sqlx::query!(
                     r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#, id.0
@@ -2608,7 +2606,7 @@ mod test {
                 latest_version_redirect(
                     "/tungstenite/0.10.0/tungstenite/?search=String%20-%3E%20Message",
                     &env.web_app().await,
-                    &env.config()
+                    env.config()
                 )
                 .await?,
                 "/crate/tungstenite/latest/target-redirect/x86_64-unknown-linux-gnu/tungstenite/index.html?search=String%20-%3E%20Message",
@@ -2641,7 +2639,7 @@ mod test {
                 latest_version_redirect(
                     "/pyo3/0.2.7/src/pyo3/objects/exc.rs.html",
                     &web,
-                    &env.config(),
+                    env.config(),
                 )
                 .await?,
                 target_redirect
@@ -2691,7 +2689,7 @@ mod test {
                 .get("/crate/hexponent/0.3.1/menus/releases/x86_64-unknown-linux-gnu/hexponent/index.html")
                 .await?;
             assert!(releases_response.status().is_success());
-            releases_response.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
+            releases_response.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
             assert_eq!(
                 parse_release_links_from_menu(&releases_response.text().await?),
                 vec![
@@ -2707,7 +2705,7 @@ mod test {
                 .get("/crate/hexponent/0.3.1/menus/releases/hexponent/something.html")
                 .await?;
             assert!(releases_response.status().is_success());
-            releases_response.assert_cache_control(CachePolicy::ForeverInCdn, &env.config());
+            releases_response.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
             assert_eq!(
                 parse_release_links_from_menu(&releases_response.text().await?),
                 vec![
@@ -3007,7 +3005,7 @@ mod test {
             let web = env.web_app().await;
 
             let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
@@ -3027,118 +3025,122 @@ mod test {
             let web = env.web_app().await;
 
             let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
 
-    #[test]
-    fn download_semver() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into()
-            });
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .create()
-                .await?;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn download_semver() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            let web = env.web_app().await;
-
-            web.assert_redirect_cached_unchecked(
-                "/crate/dummy/0.1/download",
-                "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
-                CachePolicy::ForeverInCdn,
-                &env.config(),
-            )
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .create()
             .await?;
-            assert!(
-                env.async_storage()
-                    .await
-                    .get_public_access("rustdoc/dummy/0.1.0.zip")
-                    .await?
-            );
-            Ok(())
-        });
+
+        let web = env.web_app().await;
+
+        web.assert_redirect_cached_unchecked(
+            "/crate/dummy/0.1/download",
+            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+            CachePolicy::ForeverInCdn,
+            env.config(),
+        )
+        .await?;
+        assert!(
+            env.async_storage()
+                .get_public_access("rustdoc/dummy/0.1.0.zip")
+                .await?
+        );
+        Ok(())
     }
 
-    #[test]
-    fn download_specific_version() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into()
-            });
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .create()
-                .await?;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn download_specfic_version() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            let web = env.web_app().await;
-            let storage = env.async_storage().await;
-
-            // disable public access to be sure that the handler will enable it
-            storage
-                .set_public_access("rustdoc/dummy/0.1.0.zip", false)
-                .await?;
-
-            web.assert_redirect_cached_unchecked(
-                "/crate/dummy/0.1.0/download",
-                "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
-                CachePolicy::ForeverInCdn,
-                &env.config(),
-            )
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .create()
             .await?;
-            assert!(storage.get_public_access("rustdoc/dummy/0.1.0.zip").await?);
-            Ok(())
-        });
+
+        let web = env.web_app().await;
+        let storage = env.async_storage();
+
+        // disable public access to be sure that the handler will enable it
+        storage
+            .set_public_access("rustdoc/dummy/0.1.0.zip", false)
+            .await?;
+
+        web.assert_redirect_cached_unchecked(
+            "/crate/dummy/0.1.0/download",
+            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+            CachePolicy::ForeverInCdn,
+            env.config(),
+        )
+        .await?;
+        assert!(storage.get_public_access("rustdoc/dummy/0.1.0.zip").await?);
+        Ok(())
     }
 
-    #[test]
-    fn download_latest_version() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into()
-            });
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .create()
-                .await?;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn download_latest_version() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .archive_storage(true)
-                .create()
-                .await?;
-
-            let web = env.web_app().await;
-
-            web.assert_redirect_cached_unchecked(
-                "/crate/dummy/latest/download",
-                "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
-                CachePolicy::ForeverInCdn,
-                &env.config(),
-            )
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .create()
             .await?;
-            assert!(
-                env.async_storage()
-                    .await
-                    .get_public_access("rustdoc/dummy/0.2.0.zip")
-                    .await?
-            );
-            Ok(())
-        });
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .archive_storage(true)
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        web.assert_redirect_cached_unchecked(
+            "/crate/dummy/latest/download",
+            "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
+            CachePolicy::ForeverInCdn,
+            env.config(),
+        )
+        .await?;
+        assert!(
+            env.async_storage()
+                .get_public_access("rustdoc/dummy/0.2.0.zip")
+                .await?
+        );
+        Ok(())
     }
 
     #[test_case("something.js")]
@@ -3176,7 +3178,7 @@ mod test {
                 .create()
                 .await?;
 
-            let storage = env.async_storage().await;
+            let storage = env.async_storage();
             storage.store_one("asset.js", *b"content").await?;
             storage.store_one(path, *b"more_content").await?;
 
@@ -3213,7 +3215,7 @@ mod test {
                 "/clap/2.24.0/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20%5B%60Display%60%5D",
                 "/crate/clap/2.24.0/target-redirect/i686-pc-windows-gnu/clap/which%20is%20a%20part%20of%20[%60Display%60]",
                 CachePolicy::ForeverInCdn,
-                &env.config(),
+                env.config(),
             ).await?;
 
             Ok(())
@@ -3236,7 +3238,7 @@ mod test {
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for/clap/",
                 CachePolicy::ForeverInCdn,
-                &env.config(),
+                env.config(),
             ).await?;
 
             Ok(())
@@ -3257,7 +3259,7 @@ mod test {
                 .await?;
             let web = env.web_app().await;
 
-            web.assert_redirect_cached(path, expected, CachePolicy::ForeverInCdn, &env.config())
+            web.assert_redirect_cached(path, expected, CachePolicy::ForeverInCdn, env.config())
                 .await?;
 
             Ok(())
@@ -3371,158 +3373,166 @@ mod test {
         RustdocJsonFormatVersion::Version(42),
         CompressionAlgorithm::Zstd
     )]
-    fn json_download(
+    #[tokio::test(flavor = "multi_thread")]
+    async fn json_download(
         request_path_suffix: &str,
         redirect_version: &str,
         redirect_target: &str,
         redirect_format_version: RustdocJsonFormatVersion,
         redirect_compression: CompressionAlgorithm,
-    ) {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into();
-            });
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .default_target("x86_64-unknown-linux-gnu")
-                .add_target("i686-pc-windows-msvc")
-                .create()
-                .await?;
+    ) -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .archive_storage(true)
-                .default_target("x86_64-unknown-linux-gnu")
-                .add_target("i686-pc-windows-msvc")
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .create()
+            .await?;
 
-            let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .create()
+            .await?;
 
-            let compression_ext = file_extension_for(redirect_compression);
+        let web = env.web_app().await;
 
-            web.assert_redirect_cached_unchecked(
+        let compression_ext = file_extension_for(redirect_compression);
+
+        web.assert_redirect_cached_unchecked(
                 &format!("/crate/dummy/{request_path_suffix}"),
                 &format!("https://static.docs.rs/rustdoc-json/dummy/{redirect_version}/{redirect_target}/\
                     dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json.{compression_ext}"),
                 CachePolicy::ForeverInCdn,
-                &env.config(),
+                env.config(),
             )
             .await?;
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test_case("")]
     #[test_case(".zst")]
-    fn test_json_download_fallback_to_old_files_without_compression_extension(ext: &str) {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_json_download_fallback_to_old_files_without_compression_extension(
+        ext: &str,
+    ) -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            const NAME: &str = "dummy";
-            const VERSION: &str = "0.1.0";
-            const TARGET: &str = "x86_64-unknown-linux-gnu";
-            const FORMAT_VERSION: RustdocJsonFormatVersion = RustdocJsonFormatVersion::Latest;
+        const NAME: &str = "dummy";
+        const VERSION: &str = "0.1.0";
+        const TARGET: &str = "x86_64-unknown-linux-gnu";
+        const FORMAT_VERSION: RustdocJsonFormatVersion = RustdocJsonFormatVersion::Latest;
 
-            env.fake_release()
-                .await
-                .name(NAME)
-                .version(VERSION)
-                .archive_storage(true)
-                .default_target(TARGET)
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name(NAME)
+            .version(VERSION)
+            .archive_storage(true)
+            .default_target(TARGET)
+            .create()
+            .await?;
 
-            let storage = env.async_storage().await;
+        let storage = env.async_storage();
 
-            let zstd_blob = storage
-                .get(
-                    &rustdoc_json_path(
-                        NAME,
-                        VERSION,
-                        TARGET,
-                        FORMAT_VERSION,
-                        Some(CompressionAlgorithm::Zstd),
-                    ),
-                    usize::MAX,
-                )
-                .await?;
-
-            for compression in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-                let path =
-                    rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, Some(*compression));
-                storage.delete_prefix(&path).await?;
-                assert!(!storage.exists(&path).await?);
-            }
-            storage
-                .store_one(
-                    &rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, None),
-                    zstd_blob.content,
-                )
-                .await?;
-
-            let web = env.web_app().await;
-
-            web.assert_redirect_cached_unchecked(
-                &format!("/crate/dummy/latest/json{ext}"),
-                &format!(
-                    "https://static.docs.rs/rustdoc-json/{NAME}/{VERSION}/{TARGET}/\
-                    {NAME}_{VERSION}_{TARGET}_{FORMAT_VERSION}.json" // without .zstd
+        let zstd_blob = storage
+            .get(
+                &rustdoc_json_path(
+                    NAME,
+                    VERSION,
+                    TARGET,
+                    FORMAT_VERSION,
+                    Some(CompressionAlgorithm::Zstd),
                 ),
-                CachePolicy::ForeverInCdn,
-                &env.config(),
+                usize::MAX,
             )
             .await?;
-            Ok(())
-        });
+
+        for compression in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
+            let path = rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, Some(*compression));
+            storage.delete_prefix(&path).await?;
+            assert!(!storage.exists(&path).await?);
+        }
+        storage
+            .store_one(
+                &rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, None),
+                zstd_blob.content,
+            )
+            .await?;
+
+        let web = env.web_app().await;
+
+        web.assert_redirect_cached_unchecked(
+            &format!("/crate/dummy/latest/json{ext}"),
+            &format!(
+                "https://static.docs.rs/rustdoc-json/{NAME}/{VERSION}/{TARGET}/\
+                    {NAME}_{VERSION}_{TARGET}_{FORMAT_VERSION}.json" // without .zstd
+            ),
+            CachePolicy::ForeverInCdn,
+            env.config(),
+        )
+        .await?;
+        Ok(())
     }
 
     #[test_case("0.1.0/json"; "rustdoc status false")]
     #[test_case("0.2.0/unknown-target/json"; "unknown target")]
     #[test_case("0.2.0/json/99"; "target file doesnt exist")]
     #[test_case("0.42.0/json"; "unknown version")]
-    fn json_download_not_found(request_path_suffix: &str) {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.s3_static_root_path = "https://static.docs.rs".into();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn json_download_not_found(request_path_suffix: &str) -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .s3_static_root_path("https://static.docs.rs")
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(true)
-                .default_target("x86_64-unknown-linux-gnu")
-                .add_target("i686-pc-windows-msvc")
-                .binary(true) // binary => rustdoc_status = false
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .binary(true) // binary => rustdoc_status = false
+            .create()
+            .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .archive_storage(true)
-                .default_target("x86_64-unknown-linux-gnu")
-                .add_target("i686-pc-windows-msvc")
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .create()
+            .await?;
 
-            let web = env.web_app().await;
+        let web = env.web_app().await;
 
-            let response = web
-                .get(&format!("/crate/dummy/{request_path_suffix}"))
-                .await?;
+        let response = web
+            .get(&format!("/crate/dummy/{request_path_suffix}"))
+            .await?;
 
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
-            Ok(())
-        });
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        Ok(())
     }
 }

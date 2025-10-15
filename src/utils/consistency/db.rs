@@ -68,7 +68,6 @@ mod tests {
     fn test_load() {
         async_wrapper(|env| async move {
             env.async_build_queue()
-                .await
                 .add_crate("queued", "0.0.1", 0, None)
                 .await?;
             env.fake_release()
@@ -85,8 +84,8 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
-            let result = load(&mut conn, &env.config()).await?;
+            let mut conn = env.async_db().async_conn().await;
+            let result = load(&mut conn, env.config()).await?;
 
             assert_eq!(
                 result,

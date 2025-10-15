@@ -71,7 +71,7 @@ mod tests {
     #[test]
     fn test_list_blacklist() {
         crate::test::async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             // crates are added out of order to verify sorting
             add_crate(&mut conn, "crate A").await?;
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn test_add_to_and_remove_from_blacklist() {
         crate::test::async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             assert!(!is_blacklisted(&mut conn, "crate foo").await?);
             add_crate(&mut conn, "crate foo").await?;
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn test_add_twice_to_blacklist() {
         crate::test::async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             add_crate(&mut conn, "crate foo").await?;
             assert!(add_crate(&mut conn, "crate foo").await.is_err());
@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn test_remove_non_existing_crate() {
         crate::test::async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
 
             assert!(remove_crate(&mut conn, "crate foo").await.is_err());
 
