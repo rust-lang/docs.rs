@@ -70,7 +70,7 @@ mod tests {
                 .await
                 .get_and_follow_redirects(&format!("/crate/foo/{version}/status.json"))
                 .await?;
-            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, &env.config());
+            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(response.headers()["access-control-allow-origin"], "*");
             assert_eq!(response.status(), StatusCode::OK);
             let value: serde_json::Value = serde_json::from_str(&response.text().await?)?;
@@ -101,7 +101,7 @@ mod tests {
             let redirect = web
                 .assert_redirect("/crate/foo/*/status.json", "/crate/foo/latest/status.json")
                 .await?;
-            redirect.assert_cache_control(CachePolicy::NoStoreMustRevalidate, &env.config());
+            redirect.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(redirect.headers()["access-control-allow-origin"], "*");
 
             Ok(())
@@ -126,7 +126,7 @@ mod tests {
                     "/crate/foo/0.1.0/status.json",
                 )
                 .await?;
-            redirect.assert_cache_control(CachePolicy::NoStoreMustRevalidate, &env.config());
+            redirect.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(redirect.headers()["access-control-allow-origin"], "*");
 
             Ok(())
@@ -152,7 +152,7 @@ mod tests {
                 .await
                 .get_and_follow_redirects(&format!("/crate/foo/{version}/status.json"))
                 .await?;
-            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, &env.config());
+            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(response.headers()["access-control-allow-origin"], "*");
             dbg!(&response);
             assert_eq!(response.status(), StatusCode::OK);
@@ -194,7 +194,7 @@ mod tests {
                 .await
                 .get_and_follow_redirects(&format!("/crate/{krate}/{version}/status.json"))
                 .await?;
-            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, &env.config());
+            response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(response.headers()["access-control-allow-origin"], "*");
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())

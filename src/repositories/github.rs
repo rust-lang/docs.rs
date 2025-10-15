@@ -269,6 +269,17 @@ mod tests {
     use super::{Config, GitHub};
     use crate::repositories::RateLimitReached;
     use crate::repositories::updater::{RepositoryForge, repository_name};
+    use crate::test::TestEnvironment;
+    use anyhow::Result;
+
+    const TEST_TOKEN: &str = "qsjdnfqdq";
+
+    fn github_config() -> anyhow::Result<Config> {
+        TestEnvironment::base_config()
+            .github_accesstoken(Some(TEST_TOKEN.to_owned()))
+            .build()
+            .map_err(Into::into)
+    }
 
     async fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {
         let server = mockito::Server::new_async().await;
@@ -279,109 +290,97 @@ mod tests {
         (server, updater)
     }
 
-    #[test]
-    fn test_rate_limit_fail() {
-        crate::test::async_wrapper(|env| async move {
-            let mut config = env.base_config();
-            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config).await;
+    #[tokio::test]
+    async fn test_rate_limit_fail() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
 
-            let _m1 = server
-                .mock("POST", "/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(
-                    r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
-                )
-                .create();
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
+            )
+            .create();
 
-            match updater.fetch_repositories(&[String::new()]).await {
-                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-            }
-            Ok(())
-        });
+        match updater.fetch_repositories(&[String::new()]).await {
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+        }
+        Ok(())
     }
 
-    #[test]
-    fn test_rate_limit_manual() {
-        crate::test::async_wrapper(|env| async move {
-            let mut config = env.base_config();
-            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config).await;
+    #[tokio::test]
+    async fn test_rate_limit_manual() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
 
-            let _m1 = server
-                .mock("POST", "/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
-                .create();
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
+            .create();
 
-            match updater.fetch_repositories(&[String::new()]).await {
-                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-            }
-            Ok(())
-        });
+        match updater.fetch_repositories(&[String::new()]).await {
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+        }
+        Ok(())
     }
 
-    #[test]
-    fn not_found() {
-        crate::test::async_wrapper(|env| async move {
-            let mut config = env.base_config();
-            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config).await;
+    #[tokio::test]
+    async fn not_found() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
 
-            let _m1 = server
-                .mock("POST", "/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(
-                    r#"{"data": {"nodes": [], "rateLimit": {"remaining": 100000}}, "errors":
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data": {"nodes": [], "rateLimit": {"remaining": 100000}}, "errors":
                     [{"type": "NOT_FOUND", "path": ["nodes", 0], "message": "none"}]}"#,
-                )
-                .create();
+            )
+            .create();
 
-            match updater.fetch_repositories(&[String::new()]).await {
-                Ok(res) => {
-                    assert_eq!(res.missing, vec![String::new()]);
-                    assert_eq!(res.present.len(), 0);
-                }
-                x => panic!("Failed: {x:?}"),
+        match updater.fetch_repositories(&[String::new()]).await {
+            Ok(res) => {
+                assert_eq!(res.missing, vec![String::new()]);
+                assert_eq!(res.present.len(), 0);
             }
-            Ok(())
-        });
+            x => panic!("Failed: {x:?}"),
+        }
+        Ok(())
     }
 
-    #[test]
-    fn get_repository_info() {
-        crate::test::async_wrapper(|env| async move {
-            let mut config = env.base_config();
-            config.github_accesstoken = Some("qsjdnfqdq".to_owned());
-            let (mut server, updater) = mock_server_and_github(&config).await;
+    #[tokio::test]
+    async fn get_repository_info() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
 
-            let _m1 = server
-                .mock("POST", "/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(
-                    r#"{"data": {"repository": {"id": "hello", "nameWithOwner": "foo/bar",
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data": {"repository": {"id": "hello", "nameWithOwner": "foo/bar",
                     "description": "this is", "stargazerCount": 10, "forkCount": 11,
                     "issues": {"totalCount": 12}}}}"#,
-                )
-                .create();
+            )
+            .create();
 
-            let repo = updater
-                .fetch_repository(
-                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
-                )
-                .await
-                .expect("fetch_repository failed")
-                .unwrap();
+        let repo = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .expect("fetch_repository failed")
+            .unwrap();
 
-            assert_eq!(repo.id, "hello");
-            assert_eq!(repo.name_with_owner, "foo/bar");
-            assert_eq!(repo.description, Some("this is".to_owned()));
-            assert_eq!(repo.stars, 10);
-            assert_eq!(repo.forks, 11);
-            assert_eq!(repo.issues, 12);
-            Ok(())
-        });
+        assert_eq!(repo.id, "hello");
+        assert_eq!(repo.name_with_owner, "foo/bar");
+        assert_eq!(repo.description, Some("this is".to_owned()));
+        assert_eq!(repo.stars, 10);
+        assert_eq!(repo.forks, 11);
+        assert_eq!(repo.issues, 12);
+        Ok(())
     }
 }

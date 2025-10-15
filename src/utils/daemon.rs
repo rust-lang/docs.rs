@@ -12,15 +12,15 @@ use std::future::Future;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tokio::{runtime::Runtime, task::spawn_blocking, time::Instant};
+use tokio::{runtime, task::spawn_blocking, time::Instant};
 use tracing::{debug, info};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
 pub async fn watch_registry(
-    build_queue: Arc<AsyncBuildQueue>,
-    config: Arc<Config>,
+    build_queue: &AsyncBuildQueue,
+    config: &Config,
     index: Arc<Index>,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
@@ -52,29 +52,28 @@ pub async fn watch_registry(
     }
 }
 
-fn start_registry_watcher<C: Context>(context: &C) -> Result<(), Error> {
-    let build_queue = context.runtime()?.block_on(context.async_build_queue())?;
-    let config = context.config()?;
-    let index = context.index()?;
-    let runtime = context.runtime()?;
+fn start_registry_watcher(context: &Context) -> Result<(), Error> {
+    let build_queue = context.async_build_queue.clone();
+    let config = context.config.clone();
+    let index = context.index.clone();
 
-    runtime.spawn(async {
+    context.runtime.spawn(async move {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(build_queue, config, index).await
+        watch_registry(&build_queue, &config, index).await
     });
 
     Ok(())
 }
 
-pub fn start_background_repository_stats_updater<C: Context>(context: &C) -> Result<(), Error> {
+pub fn start_background_repository_stats_updater(context: &Context) -> Result<(), Error> {
     // This call will still skip github repositories updates and continue if no token is provided
     // (gitlab doesn't require to have a token). The only time this can return an error is when
     // creating a pool or if config fails, which shouldn't happen here because this is run right at
     // startup.
-    let updater = context.repository_stats_updater()?;
-    let runtime = context.runtime()?;
+    let updater = context.repository_stats_updater.clone();
+    let runtime = context.runtime.clone();
     async_cron(
         &runtime,
         "repository stats updater",
@@ -90,11 +89,11 @@ pub fn start_background_repository_stats_updater<C: Context>(context: &C) -> Res
     Ok(())
 }
 
-pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Error> {
-    let runtime = context.runtime()?;
-    let pool = context.pool()?;
-    let config = context.config()?;
-    let build_queue = runtime.block_on(context.async_build_queue())?;
+pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    let pool = context.pool.clone();
+    let config = context.config.clone();
+    let build_queue = context.async_build_queue.clone();
 
     if config.max_queued_rebuilds.is_none() {
         info!("rebuild config incomplete, skipping rebuild queueing");
@@ -119,12 +118,12 @@ pub fn start_background_queue_rebuild<C: Context>(context: &C) -> Result<(), Err
     Ok(())
 }
 
-pub fn start_background_cdn_invalidator<C: Context>(context: &C) -> Result<(), Error> {
-    let metrics = context.instance_metrics()?;
-    let config = context.config()?;
-    let pool = context.pool()?;
-    let runtime = context.runtime()?;
-    let cdn = runtime.block_on(context.cdn())?;
+pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
+    let metrics = context.instance_metrics.clone();
+    let config = context.config.clone();
+    let pool = context.pool.clone();
+    let runtime = context.runtime.clone();
+    let cdn = context.cdn.clone();
 
     if config.cloudfront_distribution_id_web.is_none()
         && config.cloudfront_distribution_id_static.is_none()
@@ -178,10 +177,7 @@ pub fn start_background_cdn_invalidator<C: Context>(context: &C) -> Result<(), E
     Ok(())
 }
 
-pub fn start_daemon<C: Context + Send + Sync + 'static>(
-    context: C,
-    enable_registry_watcher: bool,
-) -> Result<(), Error> {
+pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(), Error> {
     let context = Arc::new(context);
 
     // Start the web server before doing anything more expensive
@@ -189,29 +185,27 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
     info!("Starting web server");
     let webserver_thread = thread::spawn({
         let context = context.clone();
-        move || start_web_server(None, &*context)
+        move || start_web_server(None, &context)
     });
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(&*context)?;
+        start_registry_watcher(&context)?;
     }
 
     // build new crates every minute
-    let build_queue = context.build_queue()?;
-    let config = context.config()?;
-    let rustwide_builder = RustwideBuilder::init(&*context)?;
+    let rustwide_builder = RustwideBuilder::init(&context)?;
     thread::Builder::new()
         .name("build queue reader".to_string())
         .spawn({
             let context = context.clone();
-            move || queue_builder(&*context, rustwide_builder, build_queue, config).unwrap()
+            move || queue_builder(&context, rustwide_builder).unwrap()
         })
         .unwrap();
 
-    start_background_repository_stats_updater(&*context)?;
-    start_background_cdn_invalidator(&*context)?;
-    start_background_queue_rebuild(&*context)?;
+    start_background_repository_stats_updater(&context)?;
+    start_background_cdn_invalidator(&context)?;
+    start_background_queue_rebuild(&context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.
@@ -220,8 +214,12 @@ pub fn start_daemon<C: Context + Send + Sync + 'static>(
         .map_err(|err| anyhow!("web server panicked: {:?}", err))?
 }
 
-pub(crate) fn async_cron<F, Fut>(runtime: &Runtime, name: &'static str, interval: Duration, exec: F)
-where
+pub(crate) fn async_cron<F, Fut>(
+    runtime: &runtime::Handle,
+    name: &'static str,
+    interval: Duration,
+    exec: F,
+) where
     Fut: Future<Output = Result<(), Error>> + Send,
     F: Fn() -> Fut + Send + 'static,
 {

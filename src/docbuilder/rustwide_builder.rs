@@ -37,7 +37,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::runtime::Runtime;
+use tokio::runtime;
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -83,12 +83,10 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-fn build_workspace<C: Context>(context: &C) -> Result<Workspace> {
-    let config = context.config()?;
-
-    let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
-        .running_inside_docker(config.inside_docker);
-    if let Some(custom_image) = &config.docker_image {
+fn build_workspace(context: &Context) -> Result<Workspace> {
+    let mut builder = WorkspaceBuilder::new(&context.config.rustwide_workspace, USER_AGENT)
+        .running_inside_docker(context.config.inside_docker);
+    if let Some(custom_image) = &context.config.docker_image {
         let image = match SandboxImage::local(custom_image) {
             Ok(i) => i,
             Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
@@ -115,7 +113,7 @@ pub enum PackageKind<'a> {
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
-    runtime: Arc<Runtime>,
+    runtime: runtime::Handle,
     config: Arc<Config>,
     db: Pool,
     storage: Arc<Storage>,
@@ -127,35 +125,29 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init<C: Context>(context: &C) -> Result<Self> {
-        let config = context.config()?;
-        let pool = context.pool()?;
-        let runtime = context.runtime()?;
-        let toolchain = runtime.block_on(async {
-            let mut conn = pool.get_async().await?;
+    pub fn init(context: &Context) -> Result<Self> {
+        let toolchain = context.runtime.block_on(async {
+            let mut conn = context.pool.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
 
         Ok(RustwideBuilder {
             workspace: build_workspace(context)?,
             toolchain,
-            config,
-            db: pool,
-            runtime: runtime.clone(),
-            storage: context.storage()?,
-            async_storage: runtime.block_on(context.async_storage())?,
-            metrics: context.instance_metrics()?,
-            registry_api: context.registry_api()?,
-            repository_stats_updater: context.repository_stats_updater()?,
+            config: context.config.clone(),
+            db: context.pool.clone(),
+            runtime: context.runtime.clone(),
+            storage: context.storage.clone(),
+            async_storage: context.async_storage.clone(),
+            metrics: context.instance_metrics.clone(),
+            registry_api: context.registry_api.clone(),
+            repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
         })
     }
 
-    pub fn reinitialize_workspace_if_interval_passed<C: Context>(
-        &mut self,
-        context: &C,
-    ) -> Result<()> {
-        let interval = context.config()?.build_workspace_reinitialization_interval;
+    pub fn reinitialize_workspace_if_interval_passed(&mut self, context: &Context) -> Result<()> {
+        let interval = context.config.build_workspace_reinitialization_interval;
         if self.workspace_initialize_time.elapsed() >= interval {
             info!("start reinitialize workspace again");
             self.workspace = build_workspace(context)?;
@@ -1293,7 +1285,7 @@ mod tests {
     use crate::db::types::Feature;
     use crate::registry_api::ReleaseData;
     use crate::storage::{CompressionAlgorithm, compression};
-    use crate::test::{AxumRouterTestExt, TestEnvironment, wrapper};
+    use crate::test::{AxumRouterTestExt, TestEnvironment};
     use pretty_assertions::assert_eq;
     use std::{io, iter};
     use test_case::test_case;
@@ -1304,7 +1296,7 @@ mod tests {
         version: &str,
     ) -> Result<Option<Vec<Feature>>, sqlx::Error> {
         env.runtime().block_on(async {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query_scalar!(
                 r#"SELECT
                         releases.features "features?: Vec<Feature>"
@@ -1351,32 +1343,33 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_build_crate() {
-        wrapper(|env| {
-            let crate_ = DUMMY_CRATE_NAME;
-            let crate_path = crate_.replace('-', "_");
-            let version = DUMMY_CRATE_VERSION;
-            let default_target = "x86_64-unknown-linux-gnu";
+    fn test_build_crate() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            let storage = env.storage();
-            let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
-            let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
-            storage.store_one(&old_rustdoc_file, Vec::new())?;
-            storage.store_one(&old_source_file, Vec::new())?;
+        let crate_ = DUMMY_CRATE_NAME;
+        let crate_path = crate_.replace('-', "_");
+        let version = DUMMY_CRATE_VERSION;
+        let default_target = "x86_64-unknown-linux-gnu";
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+        let storage = env.storage();
+        let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
+        let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
+        storage.store_one(&old_rustdoc_file, Vec::new())?;
+        storage.store_one(&old_source_file, Vec::new())?;
 
-            // check release record in the db (default and other targets)
-            let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
-                sqlx::query!(
-                    r#"SELECT
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
+
+        // check release record in the db (default and other targets)
+        let row = env.runtime().block_on(async {
+            let mut conn = env.async_db().async_conn().await;
+            sqlx::query!(
+                r#"SELECT
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
@@ -1396,214 +1389,209 @@ mod tests {
                     WHERE
                         c.name = $1 AND
                         r.version = $2"#,
-                    crate_,
-                    version,
-                )
-                .fetch_one(&mut *conn)
-                .await
-            })?;
+                crate_,
+                version,
+            )
+            .fetch_one(&mut *conn)
+            .await
+        })?;
 
-            assert_eq!(row.rustdoc_status, Some(true));
-            assert_eq!(row.default_target, Some(default_target.into()));
-            assert!(row.total_items.is_some());
-            assert!(row.archive_storage);
-            assert!(!row.docsrs_version.unwrap().is_empty());
-            assert!(!row.rustc_version.unwrap().is_empty());
-            assert_eq!(row.build_status.unwrap(), "success");
-            assert!(row.source_size > 0);
-            assert!(row.documentation_size.unwrap() > 0);
+        assert_eq!(row.rustdoc_status, Some(true));
+        assert_eq!(row.default_target, Some(default_target.into()));
+        assert!(row.total_items.is_some());
+        assert!(row.archive_storage);
+        assert!(!row.docsrs_version.unwrap().is_empty());
+        assert!(!row.rustc_version.unwrap().is_empty());
+        assert_eq!(row.build_status.unwrap(), "success");
+        assert!(row.source_size > 0);
+        assert!(row.documentation_size.unwrap() > 0);
 
-            let mut targets: Vec<String> = row
-                .doc_targets
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|v| v.as_str().unwrap().to_owned())
-                .collect();
-            targets.sort();
+        let mut targets: Vec<String> = row
+            .doc_targets
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect();
+        targets.sort();
 
-            let runtime = env.runtime();
-            let web = runtime.block_on(env.web_app());
+        let runtime = env.runtime();
+        let web = runtime.block_on(env.web_app());
 
-            // old rustdoc & source files are gone
-            assert!(!storage.exists(&old_rustdoc_file)?);
-            assert!(!storage.exists(&old_source_file)?);
+        // old rustdoc & source files are gone
+        assert!(!storage.exists(&old_rustdoc_file)?);
+        assert!(!storage.exists(&old_source_file)?);
 
-            // doc archive exists
-            let doc_archive = rustdoc_archive_path(crate_, version);
-            assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
+        // doc archive exists
+        let doc_archive = rustdoc_archive_path(crate_, version);
+        assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
 
-            // source archive exists
-            let source_archive = source_archive_path(crate_, version);
-            assert!(storage.exists(&source_archive)?, "{}", source_archive);
+        // source archive exists
+        let source_archive = source_archive_path(crate_, version);
+        assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
-            // default target was built and is accessible
-            assert!(storage.exists_in_archive(
-                &doc_archive,
-                None,
-                &format!("{crate_path}/index.html"),
-            )?);
-            runtime.block_on(web.assert_success(&format!("/{crate_}/{version}/{crate_path}/")))?;
+        // default target was built and is accessible
+        assert!(storage.exists_in_archive(
+            &doc_archive,
+            None,
+            &format!("{crate_path}/index.html"),
+        )?);
+        runtime.block_on(web.assert_success(&format!("/{crate_}/{version}/{crate_path}/")))?;
 
-            // source is also packaged
-            assert!(storage.exists_in_archive(&source_archive, None, "src/lib.rs",)?);
-            runtime.block_on(
-                web.assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs")),
-            )?;
-            assert!(!storage.exists_in_archive(
-                &doc_archive,
-                None,
-                &format!("{default_target}/{crate_path}/index.html"),
-            )?);
+        // source is also packaged
+        assert!(storage.exists_in_archive(&source_archive, None, "src/lib.rs",)?);
+        runtime.block_on(
+            web.assert_success(&format!("/crate/{crate_}/{version}/source/src/lib.rs")),
+        )?;
+        assert!(!storage.exists_in_archive(
+            &doc_archive,
+            None,
+            &format!("{default_target}/{crate_path}/index.html"),
+        )?);
 
-            let default_target_url =
-                format!("/{crate_}/{version}/{default_target}/{crate_path}/index.html");
-            runtime.block_on(web.assert_redirect(
-                &default_target_url,
-                &format!("/{crate_}/{version}/{crate_path}/index.html"),
-            ))?;
+        let default_target_url =
+            format!("/{crate_}/{version}/{default_target}/{crate_path}/index.html");
+        runtime.block_on(web.assert_redirect(
+            &default_target_url,
+            &format!("/{crate_}/{version}/{crate_path}/index.html"),
+        ))?;
 
-            // Non-dist toolchains only have a single target, and of course
-            // if include_default_targets is false we won't have this full list
-            // of targets.
-            if builder.toolchain.as_dist().is_some() && env.config().include_default_targets {
-                assert_eq!(
-                    targets,
-                    vec![
-                        "aarch64-apple-darwin",
-                        "aarch64-unknown-linux-gnu",
-                        "i686-pc-windows-msvc",
-                        "x86_64-pc-windows-msvc",
-                        "x86_64-unknown-linux-gnu",
-                    ]
-                );
+        // Non-dist toolchains only have a single target, and of course
+        // if include_default_targets is false we won't have this full list
+        // of targets.
+        if builder.toolchain.as_dist().is_some() && env.config().include_default_targets {
+            assert_eq!(
+                targets,
+                vec![
+                    "aarch64-apple-darwin",
+                    "aarch64-unknown-linux-gnu",
+                    "i686-pc-windows-msvc",
+                    "x86_64-pc-windows-msvc",
+                    "x86_64-unknown-linux-gnu",
+                ]
+            );
 
-                // other targets too
-                for target in DEFAULT_TARGETS {
-                    for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-                        // check if rustdoc json files exist for all targets
-                        let path = rustdoc_json_path(
-                            crate_,
-                            version,
-                            target,
-                            RustdocJsonFormatVersion::Latest,
-                            Some(*alg),
-                        );
-                        assert!(storage.exists(&path)?);
-                        assert!(storage.get_public_access(&path)?);
+            // other targets too
+            for target in DEFAULT_TARGETS {
+                for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
+                    // check if rustdoc json files exist for all targets
+                    let path = rustdoc_json_path(
+                        crate_,
+                        version,
+                        target,
+                        RustdocJsonFormatVersion::Latest,
+                        Some(*alg),
+                    );
+                    assert!(storage.exists(&path)?);
+                    assert!(storage.get_public_access(&path)?);
 
-                        let ext = compression::file_extension_for(*alg);
+                    let ext = compression::file_extension_for(*alg);
 
-                        let json_prefix = format!("rustdoc-json/{crate_}/{version}/{target}/");
-                        let mut json_files: Vec<_> = storage
-                            .list_prefix(&json_prefix)
-                            .filter_map(|res| res.ok())
-                            .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
-                            .collect();
-                        json_files.retain(|f| f.ends_with(&format!(".json.{ext}")));
-                        json_files.sort();
-                        dbg!(&json_files);
-                        assert!(
-                            json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_"))
-                        );
+                    let json_prefix = format!("rustdoc-json/{crate_}/{version}/{target}/");
+                    let mut json_files: Vec<_> = storage
+                        .list_prefix(&json_prefix)
+                        .filter_map(|res| res.ok())
+                        .map(|f| f.strip_prefix(&json_prefix).unwrap().to_owned())
+                        .collect();
+                    json_files.retain(|f| f.ends_with(&format!(".json.{ext}")));
+                    json_files.sort();
+                    dbg!(&json_files);
+                    assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
 
-                        assert!(json_files[0].ends_with(&format!(".json.{ext}")));
-                        assert_eq!(
-                            json_files[1],
-                            format!("empty-library_1.0.0_{target}_latest.json.{ext}")
-                        );
-                    }
-
-                    if target == &default_target {
-                        continue;
-                    }
-                    let target_docs_present = storage.exists_in_archive(
-                        &doc_archive,
-                        None,
-                        &format!("{target}/{crate_path}/index.html"),
-                    )?;
-
-                    let target_url =
-                        format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
-
-                    assert!(target_docs_present);
-                    runtime.block_on(web.assert_success(&target_url))?;
-
-                    assert!(
-                        storage
-                            .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
-                            .unwrap()
+                    assert!(json_files[0].ends_with(&format!(".json.{ext}")));
+                    assert_eq!(
+                        json_files[1],
+                        format!("empty-library_1.0.0_{target}_latest.json.{ext}")
                     );
                 }
+
+                if target == &default_target {
+                    continue;
+                }
+                let target_docs_present = storage.exists_in_archive(
+                    &doc_archive,
+                    None,
+                    &format!("{target}/{crate_path}/index.html"),
+                )?;
+
+                let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
+
+                assert!(target_docs_present);
+                runtime.block_on(web.assert_success(&target_url))?;
+
+                assert!(
+                    storage
+                        .exists(&format!("build-logs/{}/{target}.txt", row.build_id))
+                        .unwrap()
+                );
             }
-
-            Ok(())
-        })
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_collect_metrics() {
-        wrapper(|env| {
-            let metrics_dir = tempfile::tempdir()?.keep();
+    fn test_collect_metrics() -> Result<()> {
+        let metrics_dir = tempfile::tempdir().unwrap().keep();
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .compiler_metrics_collection_path(Some(metrics_dir.clone()))
+                .include_default_targets(false)
+                .build()?,
+        )?;
 
-            env.override_config(|cfg| {
-                cfg.compiler_metrics_collection_path = Some(metrics_dir.clone());
-                cfg.include_default_targets = false;
-            });
+        let crate_ = DUMMY_CRATE_NAME;
+        let version = DUMMY_CRATE_VERSION;
 
-            let crate_ = DUMMY_CRATE_NAME;
-            let version = DUMMY_CRATE_VERSION;
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, true)?
+                .successful
+        );
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, true)?
-                    .successful
-            );
+        let metric_files: Vec<_> = fs::read_dir(&metrics_dir)?
+            .filter_map(|di| di.ok())
+            .map(|di| di.path())
+            .collect();
 
-            let metric_files: Vec<_> = fs::read_dir(&metrics_dir)?
-                .filter_map(|di| di.ok())
-                .map(|di| di.path())
-                .collect();
+        assert_eq!(metric_files.len(), 1);
 
-            assert_eq!(metric_files.len(), 1);
+        let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
 
-            let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
-
-            Ok(())
-        })
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_build_binary_crate() {
-        wrapper(|env| {
-            // some binary crate
-            let crate_ = "heater";
-            let version = "0.2.3";
+    fn test_build_binary_crate() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            let storage = env.storage();
-            let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
-            let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
-            storage.store_one(&old_rustdoc_file, Vec::new())?;
-            storage.store_one(&old_source_file, Vec::new())?;
+        // some binary crate
+        let crate_ = "heater";
+        let version = "0.2.3";
 
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                !builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+        let storage = env.storage();
+        let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
+        let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
+        storage.store_one(&old_rustdoc_file, Vec::new())?;
+        storage.store_one(&old_source_file, Vec::new())?;
 
-            // check release record in the db (default and other targets)
-            let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
-                sqlx::query!(
-                    "SELECT
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            !builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
+
+        // check release record in the db (default and other targets)
+        let row = env.runtime().block_on(async {
+            let mut conn = env.async_db().async_conn().await;
+            sqlx::query!(
+                "SELECT
                         r.rustdoc_status,
                         r.is_library
                     FROM
@@ -1613,318 +1601,319 @@ mod tests {
                     WHERE
                         c.name = $1 AND
                         r.version = $2",
-                    crate_,
-                    version
-                )
-                .fetch_one(&mut *conn)
-                .await
-            })?;
+                crate_,
+                version
+            )
+            .fetch_one(&mut *conn)
+            .await
+        })?;
 
-            assert_eq!(row.rustdoc_status, Some(false));
-            assert_eq!(row.is_library, Some(false));
+        assert_eq!(row.rustdoc_status, Some(false));
+        assert_eq!(row.is_library, Some(false));
 
-            // doc archive exists
-            let doc_archive = rustdoc_archive_path(crate_, version);
-            assert!(!storage.exists(&doc_archive)?);
+        // doc archive exists
+        let doc_archive = rustdoc_archive_path(crate_, version);
+        assert!(!storage.exists(&doc_archive)?);
 
-            // source archive exists
-            let source_archive = source_archive_path(crate_, version);
-            assert!(storage.exists(&source_archive)?);
+        // source archive exists
+        let source_archive = source_archive_path(crate_, version);
+        assert!(storage.exists(&source_archive)?);
 
-            // old rustdoc & source files still exist
-            assert!(storage.exists(&old_rustdoc_file)?);
-            assert!(storage.exists(&old_source_file)?);
+        // old rustdoc & source files still exist
+        assert!(storage.exists(&old_rustdoc_file)?);
+        assert!(storage.exists(&old_source_file)?);
 
-            Ok(())
-        })
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_failed_build_with_existing_successful_release() {
-        wrapper(|env| {
-            // rand 0.8.5 fails to build with recent nightly versions
-            // https://github.com/rust-lang/docs.rs/issues/26750
-            let crate_ = "rand";
-            let version = "0.8.5";
+    fn test_failed_build_with_existing_successful_release() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            // create a successful release & build in the database
-            let release_id = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
-                let crate_id = initialize_crate(&mut conn, crate_).await?;
-                let release_id = initialize_release(&mut conn, crate_id, version).await?;
-                let build_id = initialize_build(&mut conn, release_id).await?;
-                finish_build(
-                    &mut conn,
-                    build_id,
-                    "some-version",
-                    "other-version",
-                    BuildStatus::Success,
-                    None,
-                    None,
-                )
-                .await?;
-                finish_release(
-                    &mut conn,
-                    crate_id,
-                    release_id,
-                    &MetadataPackage::default(),
-                    Path::new("/unknown/"),
-                    "x86_64-unknown-linux-gnu",
-                    serde_json::Value::Array(vec![]),
-                    vec![
-                        "i686-pc-windows-msvc".into(),
-                        "aarch64-unknown-linux-gnu".into(),
-                        "aarch64-apple-darwin".into(),
-                        "x86_64-pc-windows-msvc".into(),
-                        "x86_64-unknown-linux-gnu".into(),
-                    ],
-                    &ReleaseData::default(),
-                    true,
-                    false,
-                    iter::once(CompressionAlgorithm::Bzip2),
-                    None,
-                    true,
-                    42,
-                )
-                .await?;
+        // rand 0.8.5 fails to build with recent nightly versions
+        // https://github.com/rust-lang/docs.rs/issues/26750
+        let crate_ = "rand";
+        let version = "0.8.5";
 
-                Ok::<_, anyhow::Error>(release_id)
-            })?;
+        // create a successful release & build in the database
+        let release_id = env.runtime().block_on(async {
+            let mut conn = env.async_db().async_conn().await;
+            let crate_id = initialize_crate(&mut conn, crate_).await?;
+            let release_id = initialize_release(&mut conn, crate_id, version).await?;
+            let build_id = initialize_build(&mut conn, release_id).await?;
+            finish_build(
+                &mut conn,
+                build_id,
+                "some-version",
+                "other-version",
+                BuildStatus::Success,
+                None,
+                None,
+            )
+            .await?;
+            finish_release(
+                &mut conn,
+                crate_id,
+                release_id,
+                &MetadataPackage::default(),
+                Path::new("/unknown/"),
+                "x86_64-unknown-linux-gnu",
+                serde_json::Value::Array(vec![]),
+                vec![
+                    "i686-pc-windows-msvc".into(),
+                    "aarch64-unknown-linux-gnu".into(),
+                    "aarch64-apple-darwin".into(),
+                    "x86_64-pc-windows-msvc".into(),
+                    "x86_64-unknown-linux-gnu".into(),
+                ],
+                &ReleaseData::default(),
+                true,
+                false,
+                iter::once(CompressionAlgorithm::Bzip2),
+                None,
+                true,
+                42,
+            )
+            .await?;
 
-            fn check_rustdoc_status(env: &TestEnvironment, rid: ReleaseId) -> Result<()> {
-                assert_eq!(
-                    env.runtime().block_on(async {
-                        let mut conn = env.async_db().await.async_conn().await;
-                        sqlx::query_scalar!(
-                            "SELECT rustdoc_status FROM releases WHERE id = $1",
-                            rid.0
-                        )
+            Ok::<_, anyhow::Error>(release_id)
+        })?;
+
+        fn check_rustdoc_status(env: &TestEnvironment, rid: ReleaseId) -> Result<()> {
+            assert_eq!(
+                env.runtime().block_on(async {
+                    let mut conn = env.async_db().async_conn().await;
+                    sqlx::query_scalar!("SELECT rustdoc_status FROM releases WHERE id = $1", rid.0)
                         .fetch_one(&mut *conn)
                         .await
-                    })?,
-                    Some(true)
-                );
-                Ok(())
-            }
-
-            check_rustdoc_status(env, release_id)?;
-
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                // not successful build
-                !builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
+                })?,
+                Some(true)
             );
-
-            check_rustdoc_status(env, release_id)?;
             Ok(())
-        });
+        }
+
+        check_rustdoc_status(&env, release_id)?;
+
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            // not successful build
+            !builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
+
+        check_rustdoc_status(&env, release_id)?;
+        Ok(())
     }
 
     #[test_case("scsys-macros", "0.2.6")]
     #[test_case("scsys-derive", "0.2.6")]
     #[test_case("thiserror-impl", "1.0.26")]
     #[ignore]
-    fn test_proc_macro(crate_: &str, version: &str) {
-        wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+    fn test_proc_macro(crate_: &str, version: &str) -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            let storage = env.storage();
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            // doc archive exists
-            let doc_archive = rustdoc_archive_path(crate_, version);
-            assert!(storage.exists(&doc_archive)?);
+        let storage = env.storage();
 
-            // source archive exists
-            let source_archive = source_archive_path(crate_, version);
-            assert!(storage.exists(&source_archive)?);
+        // doc archive exists
+        let doc_archive = rustdoc_archive_path(crate_, version);
+        assert!(storage.exists(&doc_archive)?);
 
-            Ok(())
-        });
+        // source archive exists
+        let source_archive = source_archive_path(crate_, version);
+        assert!(storage.exists(&source_archive)?);
+
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_cross_compile_non_host_default() {
-        wrapper(|env| {
-            let crate_ = "windows-win";
-            let version = "2.4.1";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            if builder.toolchain.as_ci().is_some() {
-                return Ok(());
-            }
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+    fn test_cross_compile_non_host_default() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            let storage = env.storage();
+        let crate_ = "windows-win";
+        let version = "2.4.1";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        if builder.toolchain.as_ci().is_some() {
+            return Ok(());
+        }
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            // doc archive exists
-            let doc_archive = rustdoc_archive_path(crate_, version);
-            assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
+        let storage = env.storage();
 
-            // source archive exists
-            let source_archive = source_archive_path(crate_, version);
-            assert!(storage.exists(&source_archive)?, "{}", source_archive);
+        // doc archive exists
+        let doc_archive = rustdoc_archive_path(crate_, version);
+        assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
 
-            let target = "x86_64-unknown-linux-gnu";
-            let crate_path = crate_.replace('-', "_");
-            let target_docs_present = storage.exists_in_archive(
-                &doc_archive,
-                None,
-                &format!("{target}/{crate_path}/index.html"),
-            )?;
-            assert!(target_docs_present);
+        // source archive exists
+        let source_archive = source_archive_path(crate_, version);
+        assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
-            env.runtime().block_on(async {
-                let web = env.web_app().await;
-                let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
+        let target = "x86_64-unknown-linux-gnu";
+        let crate_path = crate_.replace('-', "_");
+        let target_docs_present = storage.exists_in_archive(
+            &doc_archive,
+            None,
+            &format!("{target}/{crate_path}/index.html"),
+        )?;
+        assert!(target_docs_present);
 
-                web.assert_success(&target_url).await
-            })?;
+        env.runtime().block_on(async {
+            let web = env.web_app().await;
+            let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
 
-            Ok(())
-        });
+            web.assert_success(&target_url).await
+        })?;
+
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_locked_fails_unlocked_needs_new_deps() {
-        wrapper(|env| {
-            env.override_config(|cfg| cfg.include_default_targets = false);
+    fn test_locked_fails_unlocked_needs_new_deps() -> Result<()> {
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .include_default_targets(false)
+                .build()?,
+        )?;
 
-            // if the corrected dependency of the crate was already downloaded we need to remove it
-            remove_cache_files(env, "rand_core", "0.5.1")?;
+        // if the corrected dependency of the crate was already downloaded we need to remove it
+        remove_cache_files(&env, "rand_core", "0.5.1")?;
 
-            // Specific setup required:
-            //  * crate has a binary so that it is published with a lockfile
-            //  * crate has a library so that it is documented by docs.rs
-            //  * crate has an optional dependency
-            //  * metadata enables the optional dependency for docs.rs
-            //  * `cargo doc` fails with the version of the dependency in the lockfile
-            //  * there is a newer version of the dependency available that correctly builds
-            let crate_ = "docs_rs_test_incorrect_lockfile";
-            let version = "0.1.2";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+        // Specific setup required:
+        //  * crate has a binary so that it is published with a lockfile
+        //  * crate has a library so that it is documented by docs.rs
+        //  * crate has an optional dependency
+        //  * metadata enables the optional dependency for docs.rs
+        //  * `cargo doc` fails with the version of the dependency in the lockfile
+        //  * there is a newer version of the dependency available that correctly builds
+        let crate_ = "docs_rs_test_incorrect_lockfile";
+        let version = "0.1.2";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_locked_fails_unlocked_needs_new_unknown_deps() {
-        wrapper(|env| {
-            env.override_config(|cfg| cfg.include_default_targets = false);
+    fn test_locked_fails_unlocked_needs_new_unknown_deps() -> Result<()> {
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .include_default_targets(false)
+                .build()?,
+        )?;
 
-            // if the corrected dependency of the crate was already downloaded we need to remove it
-            remove_cache_files(env, "value-bag-sval2", "1.4.1")?;
+        // if the corrected dependency of the crate was already downloaded we need to remove it
+        remove_cache_files(&env, "value-bag-sval2", "1.4.1")?;
 
-            // Similar to above, this crate fails to build with the published
-            // lockfile, but generating a new working lockfile requires
-            // introducing a completely new dependency (not just version) which
-            // would not have had its details pulled down from the sparse-index.
-            let crate_ = "docs_rs_test_incorrect_lockfile";
-            let version = "0.2.0";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+        // Similar to above, this crate fails to build with the published
+        // lockfile, but generating a new working lockfile requires
+        // introducing a completely new dependency (not just version) which
+        // would not have had its details pulled down from the sparse-index.
+        let crate_ = "docs_rs_test_incorrect_lockfile";
+        let version = "0.2.0";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_rustflags_are_passed_to_build_script() {
-        wrapper(|env| {
-            let crate_ = "proc-macro2";
-            let version = "1.0.95";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
-            Ok(())
-        });
+    fn test_rustflags_are_passed_to_build_script() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
+
+        let crate_ = "proc-macro2";
+        let version = "1.0.95";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_sources_are_added_even_for_build_failures_before_build() {
-        wrapper(|env| {
-            // https://github.com/rust-lang/docs.rs/issues/2523
-            // package with invalid cargo metadata.
-            // Will succeed in the crate fetch step, so sources are
-            // added. Will fail when we try to build.
-            let crate_ = "simconnect-sys";
-            let version = "0.23.1";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
+    fn test_sources_are_added_even_for_build_failures_before_build() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            // `Result` is `Ok`, but the build-result is `false`
-            assert!(
-                !builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+        // https://github.com/rust-lang/docs.rs/issues/2523
+        // package with invalid cargo metadata.
+        // Will succeed in the crate fetch step, so sources are
+        // added. Will fail when we try to build.
+        let crate_ = "simconnect-sys";
+        let version = "0.23.1";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
 
-            // source archive exists
-            let source_archive = source_archive_path(crate_, version);
-            assert!(
-                env.storage().exists(&source_archive)?,
-                "archive doesnt exist: {source_archive}"
-            );
+        // `Result` is `Ok`, but the build-result is `false`
+        assert!(
+            !builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            Ok(())
-        });
+        // source archive exists
+        let source_archive = source_archive_path(crate_, version);
+        assert!(
+            env.storage().exists(&source_archive)?,
+            "archive doesnt exist: {source_archive}"
+        );
+
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_build_failures_before_build() {
-        wrapper(|env| {
-            // https://github.com/rust-lang/docs.rs/issues/2491
-            // package without Cargo.toml, so fails directly in the fetch stage.
-            let crate_ = "emheap";
-            let version = "0.1.0";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
+    fn test_build_failures_before_build() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            // `Result` is `Ok`, but the build-result is `false`
-            let summary = builder.build_package(crate_, version, PackageKind::CratesIo, false)?;
+        // https://github.com/rust-lang/docs.rs/issues/2491
+        // package without Cargo.toml, so fails directly in the fetch stage.
+        let crate_ = "emheap";
+        let version = "0.1.0";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
 
-            assert!(!summary.successful);
-            assert!(summary.should_reattempt);
+        // `Result` is `Ok`, but the build-result is `false`
+        let summary = builder.build_package(crate_, version, PackageKind::CratesIo, false)?;
 
-            let row = env.runtime().block_on(async {
-                let mut conn = env.async_db().await.async_conn().await;
-                sqlx::query!(
-                    r#"SELECT
+        assert!(!summary.successful);
+        assert!(summary.should_reattempt);
+
+        let row = env.runtime().block_on(async {
+            let mut conn = env.async_db().async_conn().await;
+            sqlx::query!(
+                r#"SELECT
                        rustc_version,
                        docsrs_version,
                        build_status as "build_status: BuildStatus",
@@ -1934,160 +1923,161 @@ mod tests {
                        INNER JOIN releases as r on c.id = r.crate_id
                        INNER JOIN builds as b on b.rid = r.id
                        WHERE c.name = $1 and r.version = $2"#,
-                    crate_,
-                    version,
-                )
-                .fetch_one(&mut *conn)
-                .await
-            })?;
+                crate_,
+                version,
+            )
+            .fetch_one(&mut *conn)
+            .await
+        })?;
 
-            assert!(row.rustc_version.is_none());
-            assert!(row.docsrs_version.is_none());
-            assert_eq!(row.build_status, BuildStatus::Failure);
-            assert!(row.errors.unwrap().contains("missing Cargo.toml"));
+        assert!(row.rustc_version.is_none());
+        assert!(row.docsrs_version.is_none());
+        assert_eq!(row.build_status, BuildStatus::Failure);
+        assert!(row.errors.unwrap().contains("missing Cargo.toml"));
 
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_implicit_features_for_optional_dependencies() {
-        wrapper(|env| {
-            let crate_ = "serde";
-            let version = "1.0.152";
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_package(crate_, version, PackageKind::CratesIo, false)?
-                    .successful
-            );
+    fn test_implicit_features_for_optional_dependencies() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            assert!(
-                get_features(env, crate_, version)?
-                    .unwrap()
-                    .iter()
-                    .any(|f| f.name == "serde_derive")
-            );
+        let crate_ = "serde";
+        let version = "1.0.152";
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .successful
+        );
 
-            Ok(())
-        });
+        assert!(
+            get_features(&env, crate_, version)?
+                .unwrap()
+                .iter()
+                .any(|f| f.name == "serde_derive")
+        );
+
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() {
-        wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env).unwrap();
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_local_package(Path::new("tests/crates/optional-dep"))?
-                    .successful
-            );
+    fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            assert_eq!(
-                get_features(env, "optional-dep", "0.0.1")?
-                    .unwrap()
-                    .iter()
-                    .map(|f| f.name.to_owned())
-                    .sorted()
-                    .collect_vec(),
-                // "regex" feature is not in the list,
-                // because we don't have implicit features for optional dependencies
-                // with `dep` syntax any more.
-                vec!["alloc", "default", "optional_regex", "std"]
-            );
+        let mut builder = RustwideBuilder::init(&env.context).unwrap();
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/optional-dep"))?
+                .successful
+        );
 
-            Ok(())
-        });
+        assert_eq!(
+            get_features(&env, "optional-dep", "0.0.1")?
+                .unwrap()
+                .iter()
+                .map(|f| f.name.to_owned())
+                .sorted()
+                .collect_vec(),
+            // "regex" feature is not in the list,
+            // because we don't have implicit features for optional dependencies
+            // with `dep` syntax any more.
+            vec!["alloc", "default", "optional_regex", "std"]
+        );
+
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_build_std() {
-        wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env)?;
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_local_package(Path::new("tests/crates/build-std"))?
-                    .successful
-            );
-            Ok(())
-        })
+    fn test_build_std() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
+
+        let mut builder = RustwideBuilder::init(&env.context)?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/build-std"))?
+                .successful
+        );
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_workspace_reinitialize_at_once() {
-        wrapper(|env| {
-            let mut builder = RustwideBuilder::init(env)?;
-            builder.update_toolchain()?;
-            builder.reinitialize_workspace_if_interval_passed(env)?;
-            assert!(
-                builder
-                    .build_local_package(Path::new("tests/crates/build-std"))?
-                    .successful
-            );
-            Ok(())
-        })
+    fn test_workspace_reinitialize_at_once() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
+
+        let mut builder = RustwideBuilder::init(&env.context)?;
+        builder.update_toolchain()?;
+        builder.reinitialize_workspace_if_interval_passed(&env.context)?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/build-std"))?
+                .successful
+        );
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_workspace_reinitialize_after_interval() {
+    fn test_workspace_reinitialize_after_interval() -> Result<()> {
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .build_workspace_reinitialization_interval(Duration::from_secs(1))
+                .build()?,
+        )?;
+
         use std::thread::sleep;
         use std::time::Duration;
-        wrapper(|env: &TestEnvironment| {
-            env.override_config(|cfg: &mut Config| {
-                cfg.build_workspace_reinitialization_interval = Duration::from_secs(1)
-            });
-            let mut builder = RustwideBuilder::init(env)?;
-            builder.update_toolchain()?;
-            assert!(
-                builder
-                    .build_local_package(Path::new("tests/crates/build-std"))?
-                    .successful
-            );
-            sleep(Duration::from_secs(1));
-            builder.reinitialize_workspace_if_interval_passed(env)?;
-            assert!(
-                builder
-                    .build_local_package(Path::new("tests/crates/build-std"))?
-                    .successful
-            );
-            Ok(())
-        })
+
+        let mut builder = RustwideBuilder::init(&env.context)?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/build-std"))?
+                .successful
+        );
+        sleep(Duration::from_secs(1));
+        builder.reinitialize_workspace_if_interval_passed(&env.context)?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/build-std"))?
+                .successful
+        );
+        Ok(())
     }
 
     #[test]
     #[ignore]
-    fn test_new_builder_detects_existing_rustc() {
-        wrapper(|env: &TestEnvironment| {
-            let mut builder = RustwideBuilder::init(env)?;
-            builder.update_toolchain()?;
-            let old_version = builder.rustc_version()?;
-            drop(builder);
+    fn test_new_builder_detects_existing_rustc() -> Result<()> {
+        let env = TestEnvironment::new_with_runtime()?;
 
-            // new builder should detect the existing rustc version from the previous builder
-            // (simulating running `update-toolchain` and `build crate` in separate invocations)
-            let mut builder = RustwideBuilder::init(env)?;
-            assert!(
-                builder
-                    .build_package(
-                        DUMMY_CRATE_NAME,
-                        DUMMY_CRATE_VERSION,
-                        PackageKind::CratesIo,
-                        false
-                    )?
-                    .successful
-            );
-            assert_eq!(old_version, builder.rustc_version()?);
+        let mut builder = RustwideBuilder::init(&env.context)?;
+        builder.update_toolchain()?;
+        let old_version = builder.rustc_version()?;
+        drop(builder);
 
-            Ok(())
-        })
+        // new builder should detect the existing rustc version from the previous builder
+        // (simulating running `update-toolchain` and `build crate` in separate invocations)
+        let mut builder = RustwideBuilder::init(&env.context)?;
+        assert!(
+            builder
+                .build_package(
+                    DUMMY_CRATE_NAME,
+                    DUMMY_CRATE_VERSION,
+                    PackageKind::CratesIo,
+                    false
+                )?
+                .successful
+        );
+        assert_eq!(old_version, builder.rustc_version()?);
+
+        Ok(())
     }
 
     #[test]
