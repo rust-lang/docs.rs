@@ -113,7 +113,7 @@ mod tests {
 
             let resp = web.get("/-/static/style.css").await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
@@ -132,7 +132,7 @@ mod tests {
 
             let resp = web.get("/-/static/vendored.css").await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/css".parse().unwrap()),
@@ -172,7 +172,7 @@ mod tests {
 
             let resp = web.get(path).await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),
                 Some(&"text/javascript".parse().unwrap()),
@@ -202,7 +202,7 @@ mod tests {
                     let resp = web.get(&url).await?;
 
                     assert!(resp.status().is_success(), "failed to fetch {url:?}");
-                    resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, &env.config());
+                    resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
                     assert_eq!(
                         resp.bytes().await?,
                         fs::read(path).unwrap(),
@@ -219,7 +219,7 @@ mod tests {
     fn static_file_that_doesnt_exist() {
         async_wrapper(|env| async move {
             let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
             Ok(())

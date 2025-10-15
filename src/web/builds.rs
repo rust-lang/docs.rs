@@ -205,11 +205,12 @@ mod tests {
     use crate::{
         db::Overrides,
         test::{
-            AxumResponseTestExt, AxumRouterTestExt, FakeBuild, async_wrapper,
+            AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
             fake_release_that_failed_before_build,
         },
         web::cache::CachePolicy,
     };
+    use anyhow::Result;
     use axum::{body::Body, http::Request};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
@@ -218,7 +219,7 @@ mod tests {
     #[test]
     fn build_list_empty_build() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
 
             let response = env
@@ -227,7 +228,7 @@ mod tests {
                 .get("/crate/foo/0.1.0/builds")
                 .await?
                 .error_for_status()?;
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             let page = kuchikiki::parse_html().one(response.text().await?);
 
             let rows: Vec<_> = page
@@ -271,7 +272,7 @@ mod tests {
                 .await?;
 
             let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             let page = kuchikiki::parse_html().one(response.text().await?);
 
             let rows: Vec<_> = page
@@ -291,154 +292,161 @@ mod tests {
         });
     }
 
-    #[test]
-    fn build_trigger_rebuild_missing_config() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| config.cratesio_token = None);
-            env.fake_release()
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_trigger_rebuild_missing_config() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .cratesio_token(None)
+                .build()?,
+        )
+        .await?;
+
+        env.fake_release()
+            .await
+            .name("foo")
+            .version("0.1.0")
+            .create()
+            .await?;
+
+        {
+            let response = env
+                .web_app()
                 .await
-                .name("foo")
-                .version("0.1.0")
-                .create()
+                .get("/crate/regex/1.3.1/rebuild")
                 .await?;
+            // Needs POST
+            assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        }
 
-            {
-                let response = env
-                    .web_app()
-                    .await
-                    .get("/crate/regex/1.3.1/rebuild")
-                    .await?;
-                // Needs POST
-                assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
-            }
+        {
+            let response = env
+                .web_app()
+                .await
+                .post("/crate/regex/1.3.1/rebuild")
+                .await?;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let json: serde_json::Value = response.json().await?;
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "title": "Unauthorized",
+                    "message": "Endpoint is not configured"
+                })
+            );
+        }
 
-            {
-                let response = env
-                    .web_app()
-                    .await
-                    .post("/crate/regex/1.3.1/rebuild")
-                    .await?;
-                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let json: serde_json::Value = response.json().await?;
-                assert_eq!(
-                    json,
-                    serde_json::json!({
-                        "title": "Unauthorized",
-                        "message": "Endpoint is not configured"
-                    })
-                );
-            }
-
-            Ok(())
-        })
+        Ok(())
     }
 
-    #[test]
-    fn build_trigger_rebuild_with_config() {
-        async_wrapper(|env| async move {
-            let correct_token = "foo137";
-            env.override_config(|config| config.cratesio_token = Some(correct_token.into()));
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_trigger_rebuild_with_config() -> Result<()> {
+        let correct_token = "foo137";
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .cratesio_token(Some(correct_token.into()))
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
+        env.fake_release()
+            .await
+            .name("foo")
+            .version("0.1.0")
+            .create()
+            .await?;
+
+        {
+            let response = env
+                .web_app()
                 .await
-                .name("foo")
-                .version("0.1.0")
-                .create()
+                .post("/crate/regex/1.3.1/rebuild")
                 .await?;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let json: serde_json::Value = response.json().await?;
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "title": "Unauthorized",
+                    "message": "Missing authentication token"
+                })
+            );
+        }
 
-            {
-                let response = env
-                    .web_app()
-                    .await
-                    .post("/crate/regex/1.3.1/rebuild")
-                    .await?;
-                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let json: serde_json::Value = response.json().await?;
-                assert_eq!(
-                    json,
-                    serde_json::json!({
-                        "title": "Unauthorized",
-                        "message": "Missing authentication token"
-                    })
-                );
-            }
+        {
+            let app = env.web_app().await;
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/crate/regex/1.3.1/rebuild")
+                        .method("POST")
+                        .header("Authorization", "Bearer someinvalidtoken")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let json: serde_json::Value = response.json().await?;
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "title": "Unauthorized",
+                    "message": "The token used for authentication is not valid"
+                })
+            );
+        }
 
-            {
-                let app = env.web_app().await;
-                let response = app
-                    .oneshot(
-                        Request::builder()
-                            .uri("/crate/regex/1.3.1/rebuild")
-                            .method("POST")
-                            .header("Authorization", "Bearer someinvalidtoken")
-                            .body(Body::empty())
-                            .unwrap(),
-                    )
-                    .await?;
-                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-                let json: serde_json::Value = response.json().await?;
-                assert_eq!(
-                    json,
-                    serde_json::json!({
-                        "title": "Unauthorized",
-                        "message": "The token used for authentication is not valid"
-                    })
-                );
-            }
+        let build_queue = env.async_build_queue();
 
-            let build_queue = env.async_build_queue().await;
+        assert_eq!(build_queue.pending_count().await?, 0);
+        assert!(!build_queue.has_build_queued("foo", "0.1.0").await?);
 
-            assert_eq!(build_queue.pending_count().await?, 0);
-            assert!(!build_queue.has_build_queued("foo", "0.1.0").await?);
+        {
+            let app = env.web_app().await;
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/crate/foo/0.1.0/rebuild")
+                        .method("POST")
+                        .header("Authorization", &format!("Bearer {correct_token}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::CREATED);
+            let json: serde_json::Value = response.json().await?;
+            assert_eq!(json, serde_json::json!({}));
+        }
 
-            {
-                let app = env.web_app().await;
-                let response = app
-                    .oneshot(
-                        Request::builder()
-                            .uri("/crate/foo/0.1.0/rebuild")
-                            .method("POST")
-                            .header("Authorization", &format!("Bearer {correct_token}"))
-                            .body(Body::empty())
-                            .unwrap(),
-                    )
-                    .await?;
-                assert_eq!(response.status(), StatusCode::CREATED);
-                let json: serde_json::Value = response.json().await?;
-                assert_eq!(json, serde_json::json!({}));
-            }
+        assert_eq!(build_queue.pending_count().await?, 1);
+        assert!(build_queue.has_build_queued("foo", "0.1.0").await?);
 
-            assert_eq!(build_queue.pending_count().await?, 1);
-            assert!(build_queue.has_build_queued("foo", "0.1.0").await?);
+        {
+            let app = env.web_app().await;
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/crate/foo/0.1.0/rebuild")
+                        .method("POST")
+                        .header("Authorization", &format!("Bearer {correct_token}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let json: serde_json::Value = response.json().await?;
+            assert_eq!(
+                json,
+                serde_json::json!({
+                    "title": "Bad request",
+                    "message": "crate foo 0.1.0 already queued for rebuild"
+                })
+            );
+        }
 
-            {
-                let app = env.web_app().await;
-                let response = app
-                    .oneshot(
-                        Request::builder()
-                            .uri("/crate/foo/0.1.0/rebuild")
-                            .method("POST")
-                            .header("Authorization", &format!("Bearer {correct_token}"))
-                            .body(Body::empty())
-                            .unwrap(),
-                    )
-                    .await?;
-                assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-                let json: serde_json::Value = response.json().await?;
-                assert_eq!(
-                    json,
-                    serde_json::json!({
-                        "title": "Bad request",
-                        "message": "crate foo 0.1.0 already queued for rebuild"
-                    })
-                );
-            }
+        assert_eq!(build_queue.pending_count().await?, 1);
+        assert!(build_queue.has_build_queued("foo", "0.1.0").await?);
 
-            assert_eq!(build_queue.pending_count().await?, 1);
-            assert!(build_queue.has_build_queued("foo", "0.1.0").await?);
-
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
@@ -454,7 +462,7 @@ mod tests {
 
             let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
 
-            response.assert_cache_control(CachePolicy::NoCaching, &env.config());
+            response.assert_cache_control(CachePolicy::NoCaching, env.config());
             let page = kuchikiki::parse_html().one(response.text().await?);
 
             let rows: Vec<_> = page
@@ -488,7 +496,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             let limits = Overrides {
                 memory: Some(6 * 1024 * 1024 * 1024),
                 targets: Some(1),
