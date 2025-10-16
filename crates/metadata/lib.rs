@@ -58,7 +58,7 @@ pub const HOST_TARGET: &str = env!("DOCSRS_METADATA_HOST_TARGET");
 /// [tier one]: https://doc.rust-lang.org/nightly/rustc/platform-support.html#tier-1
 pub const DEFAULT_TARGETS: &[&str] = &[
     "i686-pc-windows-msvc",
-    "i686-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",

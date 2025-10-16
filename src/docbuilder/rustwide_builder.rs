@@ -1473,8 +1473,8 @@ mod tests {
                     targets,
                     vec![
                         "aarch64-apple-darwin",
+                        "aarch64-unknown-linux-gnu",
                         "i686-pc-windows-msvc",
-                        "i686-unknown-linux-gnu",
                         "x86_64-pc-windows-msvc",
                         "x86_64-unknown-linux-gnu",
                     ]
@@ -1675,7 +1675,7 @@ mod tests {
                     serde_json::Value::Array(vec![]),
                     vec![
                         "i686-pc-windows-msvc".into(),
-                        "i686-unknown-linux-gnu".into(),
+                        "aarch64-unknown-linux-gnu".into(),
                         "aarch64-apple-darwin".into(),
                         "x86_64-pc-windows-msvc".into(),
                         "x86_64-unknown-linux-gnu".into(),
