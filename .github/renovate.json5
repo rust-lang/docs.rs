@@ -1,0 +1,16 @@
+{
+  extends: [
+    "config:recommended",
+    "schedule:weekly",
+    ":prConcurrentLimitNone",
+    ":prHourlyLimitNone",
+  ],
+  semanticCommits: "enabled",
+  rangeStrategy: "replace",
+  rebaseWhen: "conflicted",
+  lockFileMaintenance: {
+    enabled: true,
+    extends: ["schedule:weekly"],
+    groupName: "lockfile maintenance",
+  },
+}
