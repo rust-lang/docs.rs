@@ -91,7 +91,7 @@ mod test {
     #[test]
     fn retrieve_overrides() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let krate = "hexponent";

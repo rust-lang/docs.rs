@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn set_priority() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             set_crate_priority(&mut conn, "docsrs-%", -100).await?;
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn remove_priority() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             set_crate_priority(&mut conn, "docsrs-%", -100).await?;
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn get_priority() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             set_crate_priority(&mut conn, "docsrs-%", -100).await?;
@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn get_default_priority() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             assert_eq!(

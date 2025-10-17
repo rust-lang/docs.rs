@@ -814,7 +814,7 @@ mod tests {
     use crate::db::{finish_build, initialize_build, initialize_crate, initialize_release};
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
-        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, async_wrapper,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
         fake_release_that_failed_before_build,
     };
     use anyhow::Error;
@@ -828,7 +828,7 @@ mod tests {
     #[test]
     fn test_release_list_with_incomplete_release_and_successful_build() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
             let mut conn = db.async_conn().await;
 
             let crate_id = initialize_crate(&mut conn, "foo").await?;
@@ -863,7 +863,7 @@ mod tests {
     #[test]
     fn get_releases_by_stars() {
         async_wrapper(|env| async move {
-            let db = env.async_db().await;
+            let db = env.async_db();
 
             env.fake_release()
                 .await
@@ -986,7 +986,7 @@ mod tests {
             // crate in the db breaks this test.
             // That's why we reset the id-sequence to zero for this test.
 
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#)
                 .execute(&mut *conn)
                 .await?;
@@ -1055,139 +1055,144 @@ mod tests {
         })
     }
 
-    #[test]
-    fn search_result_can_retrieve_sort_by_from_pagination() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search_result_can_retrieve_sort_by_from_pagination() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
+
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
+
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .create()
+            .await?;
+
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+                Matcher::UrlEncoded("page".into(), "2".into()),
+                Matcher::UrlEncoded("sort".into(), "recent-updates".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                    ],
+                    "meta": {
+                        "next_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=2",
+                        "prev_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=1",
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        // click the "Next Page" Button, the "Sort by" SelectBox should keep the same option.
+        let next_page_url = format!(
+            "/releases/search?paginate={}",
+            b64.encode("?q=some_random_crate&sort=recent-updates&per_page=30&page=2"),
+        );
+        let response = web.get(&next_page_url).await?;
+        assert!(response.status().is_success());
+
+        let page = kuchikiki::parse_html().one(response.text().await?);
+        let is_target_option_selected = page
+            .select("#nav-sort > option")
+            .expect("missing option")
+            .any(|el| {
+                let attributes = el.attributes.borrow();
+                attributes.get("selected").is_some()
+                    && attributes.get("value").unwrap() == "recent-updates"
             });
+        assert!(is_target_option_selected);
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
-
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                    Matcher::UrlEncoded("page".into(), "2".into()),
-                    Matcher::UrlEncoded("sort".into(), "recent-updates".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                        ],
-                        "meta": {
-                            "next_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=2",
-                            "prev_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=1",
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async().await;
-
-            // click the "Next Page" Button, the "Sort by" SelectBox should keep the same option.
-            let next_page_url = format!(
-                "/releases/search?paginate={}",
-                b64.encode("?q=some_random_crate&sort=recent-updates&per_page=30&page=2"),
-            );
-            let response = web.get(&next_page_url).await?;
-            assert!(response.status().is_success());
-
-            let page = kuchikiki::parse_html().one(response.text().await?);
-            let is_target_option_selected = page
-                .select("#nav-sort > option")
-                .expect("missing option")
-                .any(|el| {
-                    let attributes = el.attributes.borrow();
-                    attributes.get("selected").is_some()
-                        && attributes.get("value").unwrap() == "recent-updates"
-                });
-            assert!(is_target_option_selected);
-
-            Ok(())
-        })
+        Ok(())
     }
 
-    #[test]
-    fn search_result_passes_cratesio_pagination_links() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search_result_passes_cratesio_pagination_links() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                        ],
-                        "meta": {
-                            "next_page": "?some=parameters&that=cratesio&might=return",
-                            "prev_page": "?and=the&parameters=for&the=previouspage",
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .create()
+            .await?;
 
-            let response = web.get("/releases/search?query=some_random_crate").await?;
-            assert!(response.status().is_success());
-
-            let page = kuchikiki::parse_html().one(response.text().await?);
-
-            let other_search_links: Vec<_> = page
-                .select("a")
-                .expect("missing link")
-                .map(|el| {
-                    let attributes = el.attributes.borrow();
-                    attributes.get("href").unwrap().to_string()
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                    ],
+                    "meta": {
+                        "next_page": "?some=parameters&that=cratesio&might=return",
+                        "prev_page": "?and=the&parameters=for&the=previouspage",
+                    }
                 })
-                .filter(|url| url.starts_with("/releases/search?"))
-                .collect();
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
-            assert_eq!(other_search_links.len(), 2);
-            assert_eq!(
-                other_search_links[0],
-                format!(
-                    "/releases/search?paginate={}",
-                    b64.encode("?and=the&parameters=for&the=previouspage"),
-                )
-            );
-            assert_eq!(
-                other_search_links[1],
-                format!(
-                    "/releases/search?paginate={}",
-                    b64.encode("?some=parameters&that=cratesio&might=return")
-                )
-            );
+        let response = web.get("/releases/search?query=some_random_crate").await?;
+        assert!(response.status().is_success());
 
-            Ok(())
-        })
+        let page = kuchikiki::parse_html().one(response.text().await?);
+
+        let other_search_links: Vec<_> = page
+            .select("a")
+            .expect("missing link")
+            .map(|el| {
+                let attributes = el.attributes.borrow();
+                attributes.get("href").unwrap().to_string()
+            })
+            .filter(|url| url.starts_with("/releases/search?"))
+            .collect();
+
+        assert_eq!(other_search_links.len(), 2);
+        assert_eq!(
+            other_search_links[0],
+            format!(
+                "/releases/search?paginate={}",
+                b64.encode("?and=the&parameters=for&the=previouspage"),
+            )
+        );
+        assert_eq!(
+            other_search_links[1],
+            format!(
+                "/releases/search?paginate={}",
+                b64.encode("?some=parameters&that=cratesio&might=return")
+            )
+        );
+
+        Ok(())
     }
 
     #[test]
@@ -1206,294 +1211,307 @@ mod tests {
         })
     }
 
-    #[test]
-    fn crates_io_errors_as_status_code_200() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.crates_io_api_call_retries = 0;
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crates_io_errors_as_status_code_200() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "errors": [
-                            { "detail": "error name 1" },
-                            { "detail": "error name 2" },
-                        ]
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .crates_io_api_call_retries(0)
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let response = env
-                .web_app()
-                .await
-                .get("/releases/search?query=doesnt_matter_here")
-                .await?;
-            assert_eq!(response.status(), 500);
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [
+                        { "detail": "error name 1" },
+                        { "detail": "error name 2" },
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
-            assert!(
-                response
-                    .text()
-                    .await?
-                    .contains("error name 1\nerror name 2")
-            );
-            Ok(())
-        })
+        let response = env
+            .web_app()
+            .await
+            .get("/releases/search?query=doesnt_matter_here")
+            .await?;
+        assert_eq!(response.status(), 500);
+
+        assert!(
+            response
+                .text()
+                .await?
+                .contains("error name 1\nerror name 2")
+        );
+        Ok(())
     }
 
     #[test_case(StatusCode::NOT_FOUND)]
     #[test_case(StatusCode::INTERNAL_SERVER_ERROR)]
     #[test_case(StatusCode::BAD_GATEWAY)]
-    fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(status: StatusCode) {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.crates_io_api_call_retries = 0;
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(
+        status: StatusCode,
+    ) -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(status.as_u16() as usize)
-                .create_async()
-                .await;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .crates_io_api_call_retries(0)
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let response = env
-                .web_app()
-                .await
-                .get("/releases/search?query=doesnt_matter_here")
-                .await?;
-            assert_eq!(response.status(), 500);
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(status.as_u16() as usize)
+            .create_async()
+            .await;
 
-            assert!(response.text().await?.contains(&format!("{status}")));
-            Ok(())
-        })
+        let response = env
+            .web_app()
+            .await
+            .get("/releases/search?query=doesnt_matter_here")
+            .await?;
+        assert_eq!(response.status(), 500);
+
+        assert!(response.text().await?.contains(&format!("{status}")));
+        Ok(())
     }
 
-    #[test]
-    fn search_encoded_pagination_passed_to_cratesio() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search_encoded_pagination_passed_to_cratesio() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("some".into(), "dummy".into()),
-                    Matcher::UrlEncoded("pagination".into(), "parameters".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                        ],
-                        "meta": {
-                            "next_page": null,
-                            "prev_page": null,
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
-
-            let links = get_release_links(
-                &format!(
-                    "/releases/search?paginate={}",
-                    b64.encode("?some=dummy&pagination=parameters")
-                ),
-                &web,
-            )
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .create()
             .await?;
 
-            assert_eq!(links.len(), 1);
-            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/",);
-            Ok(())
-        })
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("some".into(), "dummy".into()),
+                Matcher::UrlEncoded("pagination".into(), "parameters".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                    ],
+                    "meta": {
+                        "next_page": null,
+                        "prev_page": null,
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let links = get_release_links(
+            &format!(
+                "/releases/search?paginate={}",
+                b64.encode("?some=dummy&pagination=parameters")
+            ),
+            &web,
+        )
+        .await?;
+
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/",);
+        Ok(())
     }
 
-    #[test]
-    fn search_lucky_with_unknown_crate() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search_lucky_with_unknown_crate() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "some_random_".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                            { "name": "some_other_crate" },
-                        ],
-                        "meta": {
-                            "next_page": null,
-                            "prev_page": null,
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
-
-            // when clicking "I'm feeling lucky" and the query doesn't match any crate,
-            // just fallback to the normal search results.
-            let links = get_release_links(
-                "/releases/search?query=some_random_&i-am-feeling-lucky=1",
-                &web,
-            )
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .create()
             .await?;
 
-            assert_eq!(links.len(), 1);
-            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
-            Ok(())
-        })
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "some_random_".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                        { "name": "some_other_crate" },
+                    ],
+                    "meta": {
+                        "next_page": null,
+                        "prev_page": null,
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        // when clicking "I'm feeling lucky" and the query doesn't match any crate,
+        // just fallback to the normal search results.
+        let links = get_release_links(
+            "/releases/search?query=some_random_&i-am-feeling-lucky=1",
+            &web,
+        )
+        .await?;
+
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
+        Ok(())
     }
 
-    #[test]
-    fn search() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .version("2.0.0")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .version("1.0.0")
-                .create()
-                .await?;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            env.fake_release()
-                .await
-                .name("and_another_one")
-                .version("0.0.1")
-                .create()
-                .await?;
-
-            env.fake_release()
-                .await
-                .name("yet_another_crate")
-                .version("0.1.0")
-                .yanked(true)
-                .create()
-                .await?;
-
-            // release with only in-progress build (= in progress release) will not be shown
-            env.fake_release()
-                .await
-                .name("in_progress")
-                .version("0.1.0")
-                .builds(vec![
-                    FakeBuild::default()
-                        .build_status(BuildStatus::InProgress)
-                        .rustc_version("rustc (blabla 2022-01-01)")
-                        .docsrs_version("docs.rs 4.0.0"),
-                ])
-                .create()
-                .await?;
-
-            // release that failed in the fetch-step, will miss some details
-            let mut conn = env.async_db().await.async_conn().await;
-            fake_release_that_failed_before_build(
-                &mut conn,
-                "failed_hard",
-                "0.1.0",
-                "some random error",
-            )
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .version("2.0.0")
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .version("1.0.0")
+            .create()
             .await?;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                            { "name": "some_other_crate" },
-                            { "name": "and_another_one" },
-                            { "name": "yet_another_crate" },
-                            { "name": "in_progress" },
-                            { "name": "failed_hard" }
-                        ],
-                        "meta": {
-                            "next_page": null,
-                            "prev_page": null,
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
+        env.fake_release()
+            .await
+            .name("and_another_one")
+            .version("0.0.1")
+            .create()
+            .await?;
 
-            let links = get_release_links("/releases/search?query=some_random_crate", &web).await?;
+        env.fake_release()
+            .await
+            .name("yet_another_crate")
+            .version("0.1.0")
+            .yanked(true)
+            .create()
+            .await?;
 
-            // `some_other_crate` won't be shown since we don't have it yet
-            assert_eq!(links.len(), 4);
-            // * `max_version` from the crates.io search result will be ignored since we
-            //   might not have it yet, or the doc-build might be in progress.
-            // * ranking/order from crates.io result is preserved
-            // * version used is the highest semver following our own "latest version" logic
-            assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
-            assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
-            assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
-            assert_eq!(links[3], "/crate/failed_hard/0.1.0");
-            Ok(())
-        })
+        // release with only in-progress build (= in progress release) will not be shown
+        env.fake_release()
+            .await
+            .name("in_progress")
+            .version("0.1.0")
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(BuildStatus::InProgress)
+                    .rustc_version("rustc (blabla 2022-01-01)")
+                    .docsrs_version("docs.rs 4.0.0"),
+            ])
+            .create()
+            .await?;
+
+        // release that failed in the fetch-step, will miss some details
+        let mut conn = env.async_db().async_conn().await;
+        fake_release_that_failed_before_build(
+            &mut conn,
+            "failed_hard",
+            "0.1.0",
+            "some random error",
+        )
+        .await?;
+
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                        { "name": "some_other_crate" },
+                        { "name": "and_another_one" },
+                        { "name": "yet_another_crate" },
+                        { "name": "in_progress" },
+                        { "name": "failed_hard" }
+                    ],
+                    "meta": {
+                        "next_page": null,
+                        "prev_page": null,
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let links = get_release_links("/releases/search?query=some_random_crate", &web).await?;
+
+        // `some_other_crate` won't be shown since we don't have it yet
+        assert_eq!(links.len(), 4);
+        // * `max_version` from the crates.io search result will be ignored since we
+        //   might not have it yet, or the doc-build might be in progress.
+        // * ranking/order from crates.io result is preserved
+        // * version used is the highest semver following our own "latest version" logic
+        assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
+        assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
+        assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
+        assert_eq!(links[3], "/crate/failed_hard/0.1.0");
+        Ok(())
     }
 
     async fn get_release_links(path: &str, web: &axum::Router) -> Result<Vec<String>, Error> {
@@ -1793,39 +1811,39 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_deployment_queue() {
-        async_wrapper(|env| async move {
-            env.override_config(|config| {
-                config.cloudfront_distribution_id_web = Some("distribution_id_web".into());
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_deployment_queue() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .cloudfront_distribution_id_web(Some("distribution_id_web".into()))
+                .build()?,
+        )
+        .await?;
 
-            let web = env.web_app().await;
+        let web = env.web_app().await;
 
-            let mut conn = env.async_db().await.async_conn().await;
-            cdn::queue_crate_invalidation(&mut conn, &env.config(), "krate_2").await?;
+        let mut conn = env.async_db().async_conn().await;
+        cdn::queue_crate_invalidation(&mut conn, env.config(), "krate_2").await?;
 
-            let content =
-                kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
-            assert!(
-                content
-                    .select(".release > div > strong")
-                    .expect("missing heading")
-                    .any(|el| el.text_contents().contains("active CDN deployments"))
-            );
+        let content = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
+        assert!(
+            content
+                .select(".release > div > strong")
+                .expect("missing heading")
+                .any(|el| el.text_contents().contains("active CDN deployments"))
+        );
 
-            let items = content
-                .select(".queue-list > li")
-                .expect("missing list items")
-                .collect::<Vec<_>>();
+        let items = content
+            .select(".queue-list > li")
+            .expect("missing list items")
+            .collect::<Vec<_>>();
 
-            assert_eq!(items.len(), 1);
-            let a = items[0].as_node().select_first("a").expect("missing link");
+        assert_eq!(items.len(), 1);
+        let a = items[0].as_node().select_first("a").expect("missing link");
 
-            assert!(a.text_contents().contains("krate_2"));
+        assert!(a.text_contents().contains("krate_2"));
 
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
@@ -1849,7 +1867,7 @@ mod tests {
                     .any(|el| el.text_contents().contains("active CDN deployments"))
             );
 
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue.add_crate("foo", "1.0.0", 0, None).await?;
             queue.add_crate("bar", "0.1.0", -10, None).await?;
             queue.add_crate("baz", "0.0.1", 10, None).await?;
@@ -1889,7 +1907,7 @@ mod tests {
             let web = env.web_app().await;
 
             // we have two queued releases, where the build for one is already in progress
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue.add_crate("foo", "1.0.0", 0, None).await?;
             queue.add_crate("bar", "0.1.0", 0, None).await?;
 
@@ -1964,7 +1982,7 @@ mod tests {
     fn test_releases_rebuild_queue_with_crates() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
-            let queue = env.async_build_queue().await;
+            let queue = env.async_build_queue();
             queue
                 .add_crate("foo", "1.0.0", REBUILD_PRIORITY, None)
                 .await?;
@@ -2049,7 +2067,7 @@ mod tests {
             seen.insert("".to_owned());
 
             let resp = web.get("/").await?;
-            resp.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, &env.config());
+            resp.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
 
             assert!(resp.status().is_success());
 
@@ -2139,59 +2157,61 @@ mod tests {
         });
     }
 
-    #[test]
-    fn crates_not_on_docsrs() {
-        async_wrapper(|env| async move {
-            let mut crates_io = mockito::Server::new_async().await;
-            env.override_config(|config| {
-                config.registry_api_host = crates_io.url().parse().unwrap();
-            });
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crates_not_on_docsrs() -> Result<()> {
+        let mut crates_io = mockito::Server::new_async().await;
 
-            let web = env.web_app().await;
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .registry_api_host(crates_io.url().parse().unwrap())
+                .build()?,
+        )
+        .await?;
 
-            let _m = crates_io
-                .mock("GET", "/api/v1/crates")
-                .match_query(Matcher::AllOf(vec![
-                    Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                    Matcher::UrlEncoded("per_page".into(), "30".into()),
-                ]))
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(
-                    json!({
-                        "crates": [
-                            { "name": "some_random_crate" },
-                            { "name": "some_random_crate2" },
-                            { "name": "some_random_crate3" },
-                        ],
-                        "meta": {
-                            "next_page": "null",
-                            "prev_page": "null",
-                        }
-                    })
-                    .to_string(),
-                )
-                .create_async()
-                .await;
+        let web = env.web_app().await;
+        env.fake_release()
+            .await
+            .name("some_random_crate")
+            .create()
+            .await?;
 
-            let response = web.get("/releases/search?query=some_random_crate").await?;
-            assert!(response.status().is_success());
+        let _m = crates_io
+            .mock("GET", "/api/v1/crates")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
+                Matcher::UrlEncoded("per_page".into(), "30".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "crates": [
+                        { "name": "some_random_crate" },
+                        { "name": "some_random_crate2" },
+                        { "name": "some_random_crate3" },
+                    ],
+                    "meta": {
+                        "next_page": "null",
+                        "prev_page": "null",
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
 
-            let page = kuchikiki::parse_html().one(response.text().await?);
+        let response = web.get("/releases/search?query=some_random_crate").await?;
+        assert!(response.status().is_success());
 
-            assert_eq!(page.select("div.name.not-available").unwrap().count(), 2);
-            assert_eq!(
-                page.select("div.name:not(.not-available)").unwrap().count(),
-                1
-            );
+        let page = kuchikiki::parse_html().one(response.text().await?);
 
-            Ok(())
-        })
+        assert_eq!(page.select("div.name.not-available").unwrap().count(), 2);
+        assert_eq!(
+            page.select("div.name:not(.not-available)").unwrap().count(),
+            1
+        );
+
+        Ok(())
     }
 
     #[test]

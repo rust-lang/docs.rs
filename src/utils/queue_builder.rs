@@ -1,25 +1,22 @@
 use crate::Context;
-use crate::{BuildQueue, Config, docbuilder::RustwideBuilder, utils::report_error};
+use crate::{docbuilder::RustwideBuilder, utils::report_error};
 use anyhow::{Context as _, Error};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, io, path::Path, thread};
 use tracing::{debug, error, warn};
 
-pub fn queue_builder<C: Context>(
-    context: &C,
-    mut builder: RustwideBuilder,
-    build_queue: Arc<BuildQueue>,
-    config: Arc<Config>,
-) -> Result<(), Error> {
+pub fn queue_builder(context: &Context, mut builder: RustwideBuilder) -> Result<(), Error> {
     loop {
-        if let Err(e) = remove_tempdirs(&config.temp_dir) {
+        let temp_dir = &context.config.temp_dir;
+        if let Err(e) = remove_tempdirs(temp_dir) {
             report_error(&anyhow::anyhow!(e).context(format!(
                 "failed to clean temporary directory {:?}",
-                &config.temp_dir
+                temp_dir
             )));
         }
+
+        let build_queue = &context.build_queue;
 
         // check lock file
         match build_queue.is_locked().context("could not get queue lock") {

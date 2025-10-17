@@ -267,6 +267,7 @@ mod tests {
     use super::GitLab;
     use crate::repositories::RateLimitReached;
     use crate::repositories::updater::{RepositoryForge, repository_name};
+    use anyhow::Result;
 
     async fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
         let server = mockito::Server::new_async().await;
@@ -280,87 +281,81 @@ mod tests {
         (server, updater)
     }
 
-    #[test]
-    fn test_rate_limit() {
-        crate::test::async_wrapper(|_env| async move {
-            let (mut server, updater) = mock_server_and_gitlab().await;
+    #[tokio::test]
+    async fn test_rate_limit() -> Result<()> {
+        let (mut server, updater) = mock_server_and_gitlab().await;
 
-            let _m1 = server
-                .mock("POST", "/api/graphql")
-                .with_header("content-type", "application/json")
-                .with_header("RateLimit-Remaining", "0")
-                .with_body("{}")
-                .create();
+        let _m1 = server
+            .mock("POST", "/api/graphql")
+            .with_header("content-type", "application/json")
+            .with_header("RateLimit-Remaining", "0")
+            .with_body("{}")
+            .create();
 
-            match updater
-                .fetch_repository(
-                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
-                )
-                .await
-            {
-                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-            }
-            match updater.fetch_repositories(&[String::new()]).await {
-                Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
-                x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
-            }
-            Ok(())
-        })
+        match updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+        {
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+        }
+        match updater.fetch_repositories(&[String::new()]).await {
+            Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
+            x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
+        }
+        Ok(())
     }
 
-    #[test]
-    fn not_found() {
-        crate::test::async_wrapper(|_env| async move {
-            let (mut server, updater) = mock_server_and_gitlab().await;
+    #[tokio::test]
+    async fn not_found() -> Result<()> {
+        let (mut server, updater) = mock_server_and_gitlab().await;
 
-            let _m1 = server
-                .mock("POST", "/api/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(r#"{"data": {"projects": {"nodes": []}}}"#)
-                .create();
+        let _m1 = server
+            .mock("POST", "/api/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data": {"projects": {"nodes": []}}}"#)
+            .create();
 
-            match updater.fetch_repositories(&[String::new()]).await {
-                Ok(res) => {
-                    assert_eq!(res.missing, vec![String::new()]);
-                    assert_eq!(res.present.len(), 0);
-                }
-                x => panic!("Failed: {x:?}"),
+        match updater.fetch_repositories(&[String::new()]).await {
+            Ok(res) => {
+                assert_eq!(res.missing, vec![String::new()]);
+                assert_eq!(res.present.len(), 0);
             }
-            Ok(())
-        })
+            x => panic!("Failed: {x:?}"),
+        }
+        Ok(())
     }
 
-    #[test]
-    fn get_repository_info() {
-        crate::test::async_wrapper(|_env| async move {
-            let (mut server, updater) = mock_server_and_gitlab().await;
+    #[tokio::test]
+    async fn get_repository_info() -> Result<()> {
+        let (mut server, updater) = mock_server_and_gitlab().await;
 
-            let _m1 = server
-                .mock("POST", "/api/graphql")
-                .with_header("content-type", "application/json")
-                .with_body(
-                    r#"{"data": {"project": {"id": "hello", "fullPath": "foo/bar",
+        let _m1 = server
+            .mock("POST", "/api/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data": {"project": {"id": "hello", "fullPath": "foo/bar",
                 "description": "this is", "starCount": 10, "forksCount": 11,
                 "openIssuesCount": 12}}}"#,
-                )
-                .create();
+            )
+            .create();
 
-            let repo = updater
-                .fetch_repository(
-                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
-                )
-                .await
-                .expect("fetch_repository failed")
-                .unwrap();
+        let repo = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .expect("fetch_repository failed")
+            .unwrap();
 
-            assert_eq!(repo.id, "hello");
-            assert_eq!(repo.name_with_owner, "foo/bar");
-            assert_eq!(repo.description, Some("this is".to_owned()));
-            assert_eq!(repo.stars, 10);
-            assert_eq!(repo.forks, 11);
-            assert_eq!(repo.issues, 12);
-            Ok(())
-        })
+        assert_eq!(repo.id, "hello");
+        assert_eq!(repo.name_with_owner, "foo/bar");
+        assert_eq!(repo.description, Some("this is".to_owned()));
+        assert_eq!(repo.stars, 10);
+        assert_eq!(repo.forks, 11);
+        assert_eq!(repo.issues, 12);
+        Ok(())
     }
 }

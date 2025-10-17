@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn test_get_config_empty() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!("DELETE FROM config")
                 .execute(&mut *conn)
                 .await?;
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn test_set_and_get_config_() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().await.async_conn().await;
+            let mut conn = env.async_db().async_conn().await;
             sqlx::query!("DELETE FROM config")
                 .execute(&mut *conn)
                 .await?;

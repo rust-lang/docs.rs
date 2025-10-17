@@ -1,27 +1,103 @@
 use crate::cdn::CdnBackend;
 use crate::db::Pool;
-use crate::error::Result;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::{
     AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
 };
-use std::{future::Future, sync::Arc};
-use tokio::runtime::Runtime;
+use anyhow::Result;
+use std::sync::Arc;
+use tokio::runtime;
 
-pub trait Context {
-    fn config(&self) -> Result<Arc<Config>>;
-    fn async_build_queue(&self) -> impl Future<Output = Result<Arc<AsyncBuildQueue>>> + Send;
-    fn build_queue(&self) -> Result<Arc<BuildQueue>>;
-    fn storage(&self) -> Result<Arc<Storage>>;
-    fn async_storage(&self) -> impl Future<Output = Result<Arc<AsyncStorage>>> + Send;
-    fn cdn(&self) -> impl Future<Output = Result<Arc<CdnBackend>>> + Send;
-    fn pool(&self) -> Result<Pool>;
-    fn async_pool(&self) -> impl Future<Output = Result<Pool>> + Send;
-    fn service_metrics(&self) -> Result<Arc<ServiceMetrics>>;
-    fn instance_metrics(&self) -> Result<Arc<InstanceMetrics>>;
-    fn index(&self) -> Result<Arc<Index>>;
-    fn registry_api(&self) -> Result<Arc<RegistryApi>>;
-    fn repository_stats_updater(&self) -> Result<Arc<RepositoryStatsUpdater>>;
-    fn runtime(&self) -> Result<Arc<Runtime>>;
+pub struct Context {
+    pub config: Arc<Config>,
+    pub async_build_queue: Arc<AsyncBuildQueue>,
+    pub build_queue: Arc<BuildQueue>,
+    pub storage: Arc<Storage>,
+    pub async_storage: Arc<AsyncStorage>,
+    pub cdn: Arc<CdnBackend>,
+    pub pool: Pool,
+    pub service_metrics: Arc<ServiceMetrics>,
+    pub instance_metrics: Arc<InstanceMetrics>,
+    pub index: Arc<Index>,
+    pub registry_api: Arc<RegistryApi>,
+    pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
+    pub runtime: runtime::Handle,
+}
+
+impl Context {
+    /// Create a new context environment from the given configuration.
+    #[cfg(not(test))]
+    pub async fn from_config(config: Config) -> Result<Self> {
+        let instance_metrics = Arc::new(InstanceMetrics::new()?);
+        let pool = Pool::new(&config, instance_metrics.clone()).await?;
+        Self::from_config_with_metrics_and_pool(config, instance_metrics, pool).await
+    }
+
+    /// Create a new context environment from the given configuration, for running tests.
+    #[cfg(test)]
+    pub async fn from_config(
+        config: Config,
+        instance_metrics: Arc<InstanceMetrics>,
+        pool: Pool,
+    ) -> Result<Self> {
+        Self::from_config_with_metrics_and_pool(config, instance_metrics, pool).await
+    }
+
+    /// private function for context environment generation, allows passing in a
+    /// preconfigured instance metrics & pool from the database.
+    /// Mostly so we can support test environments with their db
+    async fn from_config_with_metrics_and_pool(
+        config: Config,
+        instance_metrics: Arc<InstanceMetrics>,
+        pool: Pool,
+    ) -> Result<Self> {
+        let config = Arc::new(config);
+
+        let async_storage = Arc::new(
+            AsyncStorage::new(pool.clone(), instance_metrics.clone(), config.clone()).await?,
+        );
+
+        let async_build_queue = Arc::new(AsyncBuildQueue::new(
+            pool.clone(),
+            instance_metrics.clone(),
+            config.clone(),
+            async_storage.clone(),
+        ));
+
+        let cdn = Arc::new(CdnBackend::new(&config).await);
+
+        let index = Arc::new({
+            let path = config.registry_index_path.clone();
+            if let Some(registry_url) = config.registry_url.clone() {
+                Index::from_url(path, registry_url)
+            } else {
+                Index::new(path)
+            }?
+        });
+
+        let runtime = runtime::Handle::current();
+        // sync wrappers around build-queue & storage async resources
+        let build_queue = Arc::new(BuildQueue::new(runtime.clone(), async_build_queue.clone()));
+        let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
+
+        Ok(Self {
+            async_build_queue,
+            build_queue,
+            storage,
+            async_storage,
+            cdn,
+            pool: pool.clone(),
+            service_metrics: Arc::new(ServiceMetrics::new()?),
+            instance_metrics,
+            index,
+            registry_api: Arc::new(RegistryApi::new(
+                config.registry_api_host.clone(),
+                config.crates_io_api_call_retries,
+            )?),
+            repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
+            runtime,
+            config,
+        })
+    }
 }
