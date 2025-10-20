@@ -106,7 +106,7 @@ constant_time_eq = "0.4.2"
 [dev-dependencies]
 criterion = "0.7.0"
 kuchikiki = "0.8"
-http02 = { version = "0.2.11", package = "http"}
+http02 = { version = "0.2.11", package = "http"} # AWS SDKs need http 0.2 for testing
 http-body-util = "0.1.0"
 rand = "0.9"
 mockito = "1.0.2"
