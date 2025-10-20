@@ -14,6 +14,7 @@ use std::{
     collections::HashSet,
     time::{Duration, Instant},
 };
+use tracing::error;
 
 load_metric_type!(IntGauge as single);
 load_metric_type!(IntCounter as single);
@@ -94,10 +95,8 @@ metrics! {
         pub(crate) failed_db_connections: IntCounter,
 
         /// The number of currently opened file descriptors
-        #[cfg(target_os = "linux")]
         open_file_descriptors: IntGauge,
         /// The number of threads being used by docs.rs
-        #[cfg(target_os = "linux")]
         running_threads: IntGauge,
 
         /// The traffic of various docs.rs routes
@@ -222,18 +221,31 @@ impl InstanceMetrics {
         Ok(self.registry.gather())
     }
 
-    #[cfg(not(target_os = "linux"))]
-    fn gather_system_performance(&self) {}
-
-    #[cfg(target_os = "linux")]
     fn gather_system_performance(&self) {
-        use procfs::process::Process;
+        use sysinfo::{ProcessesToUpdate, System, get_current_pid};
 
-        let process = Process::myself().unwrap();
-        self.open_file_descriptors
-            .set(process.fd_count().unwrap() as i64);
-        self.running_threads
-            .set(process.stat().unwrap().num_threads);
+        let current_pid = match get_current_pid() {
+            Ok(pid) => pid,
+            Err(err) => {
+                error!(err, "couldn't get our own process ID");
+                return;
+            }
+        };
+        let mut s = System::new();
+        s.refresh_processes(ProcessesToUpdate::Some(&[current_pid]), true);
+
+        let Some(proc) = s.process(current_pid) else {
+            error!("couldn't find our own process in sysinfo");
+            return;
+        };
+
+        if let Some(fd_count) = proc.open_files() {
+            self.open_file_descriptors.set(fd_count as i64);
+        }
+
+        if let Some(tasks) = proc.tasks() {
+            self.running_threads.set(tasks.len() as i64);
+        }
     }
 }
 

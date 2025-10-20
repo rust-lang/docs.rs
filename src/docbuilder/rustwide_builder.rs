@@ -468,13 +468,12 @@ impl RustwideBuilder {
         }
 
         let limits = self.get_limits(name)?;
-        #[cfg(target_os = "linux")]
         if !self.config.disable_memory_limit {
-            use anyhow::Context;
-            let mem_info = procfs::Meminfo::new().context("failed to read /proc/meminfo")?;
-            let available = mem_info
-                .mem_available
-                .expect("kernel version too old for determining memory limit");
+            let info = sysinfo::System::new_with_specifics(
+                sysinfo::RefreshKind::nothing()
+                    .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
+            );
+            let available = info.available_memory();
             if limits.memory() as u64 > available {
                 bail!(
                     "not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
