@@ -2104,4 +2104,58 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    #[ignore]
+    fn test_additional_targets() {
+        fn assert_contains(targets: &[String], target: &str) {
+            assert!(
+                targets.iter().any(|t| t == target),
+                "Not found target {target:?} in {targets:?}"
+            );
+        }
+
+        wrapper(|env| {
+            let mut builder = RustwideBuilder::init(env)?;
+            builder.update_toolchain()?;
+            assert!(
+                builder
+                    .build_local_package(Path::new("tests/crates/additional-targets"))?
+                    .successful
+            );
+
+            let row = env.runtime().block_on(async {
+                let mut conn = env.async_db().await.async_conn().await;
+                sqlx::query!(
+                    r#"SELECT
+                        r.doc_targets
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                    WHERE
+                        c.name = $1 AND
+                        r.version = $2"#,
+                    "additional-targets",
+                    "0.1.0",
+                )
+                .fetch_one(&mut *conn)
+                .await
+            })?;
+
+            let targets: Vec<String> = row
+                .doc_targets
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect();
+
+            assert_contains(&targets, "x86_64-apple-darwin");
+            // Part of the default targets.
+            assert_contains(&targets, "aarch64-apple-darwin");
+
+            Ok(())
+        })
+    }
 }
