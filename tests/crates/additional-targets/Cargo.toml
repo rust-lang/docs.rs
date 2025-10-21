@@ -1,0 +1,7 @@
+[package]
+name = "additional-targets"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.docs.rs]
+additional-targets = ["x86_64-apple-darwin"]

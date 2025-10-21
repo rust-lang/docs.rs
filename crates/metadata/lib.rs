@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+
 //! Collect information that allows you to build a crate the same way that docs.rs would.
 //!
 //! This library is intended for use in docs.rs and crater, but might be helpful to others.
@@ -93,6 +94,7 @@ pub enum MetadataError {
 /// no-default-features = true
 /// default-target = "x86_64-unknown-linux-gnu"
 /// targets = [ "aarch64-apple-darwin", "x86_64-pc-windows-msvc" ]
+/// additional-targets = [ "i686-apple-darwin" ]
 /// rustc-args = [ "--example-rustc-arg" ]
 /// rustdoc-args = [ "--example-rustdoc-arg" ]
 /// ```
@@ -138,6 +140,10 @@ pub struct Metadata {
     /// These cannot be a subcommand, they may only be options.
     #[serde(default)]
     cargo_args: Vec<String>,
+
+    /// List of additional targets to be generated. See [`BuildTargets`].
+    #[serde(default)]
+    additional_targets: Vec<String>,
 }
 
 /// The targets that should be built for a crate.
@@ -230,6 +236,9 @@ impl Metadata {
         } else {
             crate_targets.unwrap_or_default()
         };
+        for additional_target in &self.additional_targets {
+            targets.insert(additional_target);
+        }
 
         targets.remove(&default_target);
         BuildTargets {
@@ -525,8 +534,6 @@ mod test_targets {
 
     #[test]
     fn test_select_targets() {
-        use super::BuildTargets;
-
         let mut metadata = Metadata::default();
 
         // unchanged default_target, targets not specified
@@ -635,6 +642,42 @@ mod test_targets {
             .collect();
 
         assert_eq!(others, tier_one_targets_no_default);
+    }
+
+    #[test]
+    fn test_additional_targets() {
+        let mut metadata = Metadata {
+            targets: Some(
+                DEFAULT_TARGETS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+            ),
+            ..Default::default()
+        };
+
+        let additional_target = "i686-apple-darwin";
+        metadata.additional_targets = vec![additional_target.to_string()];
+        let BuildTargets {
+            other_targets: others,
+            ..
+        } = metadata.targets(true);
+
+        assert!(others.contains(additional_target), "no additional target");
+        for target in DEFAULT_TARGETS.iter().skip(1) {
+            assert!(others.contains(target), "missing {target}");
+        }
+
+        // Now we check that `additional_targets` also works if `targets` is set.
+        let target = "i686-pc-windows-msvc";
+        metadata.targets = Some(vec![target.to_string()]);
+        let BuildTargets {
+            other_targets: others,
+            default_target: default,
+        } = metadata.targets(true);
+        assert_eq!(others.len(), 1);
+        assert!(others.contains(additional_target));
+        assert_eq!(default, target);
     }
 
     #[test]
