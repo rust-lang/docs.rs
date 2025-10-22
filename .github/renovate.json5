@@ -13,4 +13,7 @@
     extends: ["schedule:weekly"],
     groupName: "lockfile maintenance",
   },
+    "ignoreDeps": [
+        "http02" // AWS SDK needs an old http version for testing
+    ]
 }
