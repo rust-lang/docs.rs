@@ -1013,7 +1013,7 @@ impl RustwideBuilder {
 
         let mut rustdoc_flags = vec![
             if create_essential_files {
-                "--emit=unversioned-shared-resources,toolchain-shared-resources"
+                "--emit=toolchain-shared-resources"
             } else {
                 "--emit=invocation-specific"
             }
