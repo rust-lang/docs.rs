@@ -2037,7 +2037,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "thiserror 2.0.17",
- "toml 0.8.23",
+ "toml 0.9.8",
 ]
 
 [[package]]
