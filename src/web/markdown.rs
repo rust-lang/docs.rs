@@ -1,8 +1,8 @@
 use crate::web::highlight;
-use comrak::{
-    ExtensionOptions, Options, Plugins, RenderPlugins, adapters::SyntaxHighlighterAdapter,
-};
-use std::{collections::HashMap, fmt};
+use comrak::{Options, adapters::SyntaxHighlighterAdapter, options};
+use std::{borrow::Cow, collections::HashMap, fmt};
+
+type Attributes<'s> = HashMap<&'static str, std::borrow::Cow<'s, str>>;
 
 #[derive(Debug)]
 struct CodeAdapter<F>(F, Option<&'static str>);
@@ -22,41 +22,42 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
         write!(output, "{}", (self.0)(lang, code, self.1))
     }
 
-    fn write_pre_tag(
+    fn write_pre_tag<'s>(
         &self,
         output: &mut dyn fmt::Write,
-        attributes: HashMap<String, String>,
-    ) -> Result<(), fmt::Error> {
+        attributes: Attributes<'s>,
+    ) -> fmt::Result {
         write_opening_tag(output, "pre", &attributes)
     }
 
-    fn write_code_tag(
+    fn write_code_tag<'s>(
         &self,
         output: &mut dyn fmt::Write,
-        attributes: HashMap<String, String>,
-    ) -> Result<(), fmt::Error> {
+        attributes: Attributes<'s>,
+    ) -> fmt::Result {
         // similarly to above, since comrak does not treat `,` as an info-string delimiter it will
         // try to apply `class="language-rust,ignore"` for the info-string `rust,ignore`, so we
         // have to detect that case and fixup the class here
         // TODO: https://github.com/kivikakk/comrak/issues/246
         let mut attributes = attributes;
         if let Some(classes) = attributes.get_mut("class") {
-            *classes = classes
+            let mut updated: String = classes
                 .split(' ')
                 .flat_map(|class| [class.split(',').next().unwrap_or(class), " "])
                 .collect();
             // remove trailing ' '
             // TODO: https://github.com/rust-lang/rust/issues/79524 or itertools
-            classes.pop();
+            updated.pop();
+            *classes = Cow::Owned(updated);
         }
         write_opening_tag(output, "code", &attributes)
     }
 }
 
-fn write_opening_tag(
+fn write_opening_tag<'s>(
     output: &mut dyn fmt::Write,
     tag: &str,
-    attributes: &HashMap<String, String>,
+    attributes: &Attributes<'s>,
 ) -> Result<(), fmt::Error> {
     write!(output, "<{tag}")?;
     for (attr, val) in attributes {
@@ -75,7 +76,7 @@ fn render_with_highlighter(
     comrak::markdown_to_html_with_plugins(
         text,
         &Options {
-            extension: ExtensionOptions {
+            extension: options::Extension {
                 superscript: true,
                 table: true,
                 autolink: true,
@@ -85,8 +86,8 @@ fn render_with_highlighter(
             },
             ..Default::default()
         },
-        &Plugins {
-            render: RenderPlugins {
+        &options::Plugins {
+            render: options::RenderPlugins {
                 codefence_syntax_highlighter: Some(&code_adapter),
                 ..Default::default()
             },
