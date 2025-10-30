@@ -325,10 +325,10 @@ impl std::str::FromStr for Metadata {
     fn from_str(manifest: &str) -> Result<Metadata, Self::Err> {
         use toml::value::Table;
 
-        let manifest = match manifest.parse::<Value>()? {
-            Value::Table(t) => Some(t),
-            _ => None,
-        };
+        // the `Cargo.toml` is a full document, and:
+        // > A TOML document is represented with the Table type which maps
+        // > String to the Value enum.
+        let manifest = manifest.parse::<Table>()?;
 
         fn table<'a>(manifest: &'a Table, table_name: &str) -> Option<&'a Table> {
             match manifest.get(table_name) {
@@ -337,17 +337,14 @@ impl std::str::FromStr for Metadata {
             }
         }
 
-        let plain_table = manifest
-            .as_ref()
-            .and_then(|t| table(t, "package"))
-            .and_then(|t| table(t, "metadata"))
+        let package_metadata = table(&manifest, "package").and_then(|t| table(t, "metadata"));
+
+        let plain_table = package_metadata
             .and_then(|t| table(t, "docs"))
             .and_then(|t| table(t, "rs"));
-        let quoted_table = manifest
-            .as_ref()
-            .and_then(|t| table(t, "package"))
-            .and_then(|t| table(t, "metadata"))
-            .and_then(|t| table(t, "docs.rs"));
+
+        let quoted_table = package_metadata.and_then(|t| table(t, "docs.rs"));
+
         let mut metadata = if let Some(table) = plain_table {
             Value::Table(table.clone()).try_into()?
         } else if let Some(table) = quoted_table {
@@ -356,9 +353,7 @@ impl std::str::FromStr for Metadata {
             Metadata::default()
         };
 
-        let proc_macro = manifest
-            .as_ref()
-            .and_then(|t| table(t, "lib"))
+        let proc_macro = table(&manifest, "lib")
             .and_then(|table| table.get("proc-macro").or_else(|| table.get("proc_macro")))
             .and_then(|val| val.as_bool());
         if let Some(proc_macro) = proc_macro {
