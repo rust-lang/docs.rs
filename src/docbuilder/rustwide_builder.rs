@@ -1802,13 +1802,11 @@ mod tests {
         //  * metadata enables the optional dependency for docs.rs
         //  * `cargo doc` fails with the version of the dependency in the lockfile
         //  * there is a newer version of the dependency available that correctly builds
-        let crate_ = "docs_rs_test_incorrect_lockfile";
-        let version = "0.1.2";
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_1"))?
                 .successful
         );
 
@@ -1831,13 +1829,11 @@ mod tests {
         // lockfile, but generating a new working lockfile requires
         // introducing a completely new dependency (not just version) which
         // would not have had its details pulled down from the sparse-index.
-        let crate_ = "docs_rs_test_incorrect_lockfile";
-        let version = "0.2.0";
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_2"))?
                 .successful
         );
 
