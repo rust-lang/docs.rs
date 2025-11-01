@@ -12,7 +12,7 @@ use crate::storage::{
     AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, compress, rustdoc_archive_path,
     rustdoc_json_path, source_archive_path,
 };
-use crate::utils::{Dependency, MetadataPackage, Target};
+use crate::utils::{Dependency, MetadataPackage, cargo_metadata::Target};
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
@@ -330,7 +330,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     /// Returns the release_id
-    pub(crate) async fn create(self) -> Result<ReleaseId> {
+    pub(crate) async fn create(mut self) -> Result<ReleaseId> {
         use std::fs;
         use std::path::Path;
 
@@ -514,37 +514,34 @@ impl<'a> FakeRelease<'a> {
         store_files_into(&self.source_files, crate_dir)?;
 
         let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
+        if !self.doc_targets.iter().any(|t| t == default_target) {
+            self.doc_targets.insert(0, default_target.to_owned());
+        }
 
-        {
-            let mut targets = self.doc_targets.clone();
-            if !targets.contains(&default_target.to_owned()) {
-                targets.push(default_target.to_owned());
-            }
-            for target in &targets {
-                let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({
-                    "format_version": 42
-                }))?;
+        for target in &self.doc_targets {
+            let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({
+                "format_version": 42
+            }))?;
 
-                for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-                    let compressed_json: Vec<u8> = compress(&*dummy_rustdoc_json_content, *alg)?;
+            for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
+                let compressed_json: Vec<u8> = compress(&*dummy_rustdoc_json_content, *alg)?;
 
-                    for format_version in [
-                        RustdocJsonFormatVersion::Version(42),
-                        RustdocJsonFormatVersion::Latest,
-                    ] {
-                        storage
-                            .store_one_uncompressed(
-                                &rustdoc_json_path(
-                                    &package.name,
-                                    &package.version,
-                                    target,
-                                    format_version,
-                                    Some(*alg),
-                                ),
-                                compressed_json.clone(),
-                            )
-                            .await?;
-                    }
+                for format_version in [
+                    RustdocJsonFormatVersion::Version(42),
+                    RustdocJsonFormatVersion::Latest,
+                ] {
+                    storage
+                        .store_one_uncompressed(
+                            &rustdoc_json_path(
+                                &package.name,
+                                &package.version,
+                                target,
+                                format_version,
+                                Some(*alg),
+                            ),
+                            compressed_json.clone(),
+                        )
+                        .await?;
                 }
             }
         }
@@ -555,6 +552,7 @@ impl<'a> FakeRelease<'a> {
         let mut async_conn = db.async_conn().await;
         let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
         let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
+
         crate::db::finish_release(
             &mut async_conn,
             crate_id,

@@ -1,16 +1,19 @@
-use super::{error::AxumResult, match_version};
 use crate::{
     AsyncStorage,
-    db::{BuildId, Pool},
+    db::BuildId,
     impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
-        error::{AxumNope, EscapedURI},
-        extractors::Path,
+        error::{AxumNope, AxumResult},
+        extractors::{
+            DbConnection,
+            rustdoc::{PageKind, RustdocParams},
+        },
         file::File as DbFile,
         headers::CanonicalUrl,
+        match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
 };
@@ -20,7 +23,6 @@ use axum::{Extension, response::IntoResponse};
 use axum_extra::headers::HeaderMapExt;
 use mime::Mime;
 use semver::Version;
-use serde::Deserialize;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
 
@@ -75,7 +77,6 @@ impl FileList {
         conn: &mut sqlx::PgConnection,
         name: &str,
         version: &Version,
-        req_version: Option<ReqVersion>,
         folder: &str,
     ) -> Result<Option<FileList>> {
         let row = match sqlx::query!(
@@ -163,6 +164,7 @@ struct SourcePage {
     canonical_url: CanonicalUrl,
     is_file_too_large: bool,
     is_latest_url: bool,
+    params: RustdocParams,
 }
 
 impl_axum_webpage! {
@@ -183,46 +185,33 @@ impl SourcePage {
     }
 }
 
-#[derive(Deserialize, Clone, Debug)]
-pub(crate) struct SourceBrowserHandlerParams {
-    name: String,
-    version: ReqVersion,
-    #[serde(default)]
-    path: String,
-}
-
-#[instrument(skip(pool, storage))]
+#[instrument(skip(conn, storage))]
 pub(crate) async fn source_browser_handler(
-    Path(params): Path<SourceBrowserHandlerParams>,
+    params: RustdocParams,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(pool): Extension<Pool>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let mut conn = pool.get_async().await?;
-
-    let version = match_version(&mut conn, &params.name, &params.version)
+    let params = params.with_page_kind(PageKind::Source);
+    let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .into_exactly_named_or_else(|corrected_name, req_version| {
             AxumNope::Redirect(
-                EscapedURI::new(
-                    &format!(
-                        "/crate/{corrected_name}/{req_version}/source/{}",
-                        params.path
-                    ),
-                    None,
-                ),
+                params
+                    .clone()
+                    .with_name(corrected_name)
+                    .with_req_version(req_version)
+                    .source_url(),
                 CachePolicy::NoCaching,
             )
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                EscapedURI::new(
-                    &format!("/crate/{}/{version}/source/{}", params.name, params.path),
-                    None,
-                ),
+                params.clone().with_req_version(version).source_url(),
                 CachePolicy::ForeverInCdn,
             )
-        })?
-        .into_version();
+        })?;
+    let params = params.apply_matched_release(&matched_release);
+    let version = matched_release.into_version();
 
     let row = sqlx::query!(
         r#"SELECT
@@ -241,21 +230,23 @@ pub(crate) async fn source_browser_handler(
          WHERE
              name = $1 AND
              version = $2"#,
-        params.name,
+        params.name(),
         version.to_string()
     )
     .fetch_one(&mut *conn)
     .await?;
 
+    let inner_path = params.inner_path();
+
     // try to get actual file first
     // skip if request is a directory
-    let (blob, is_file_too_large) = if !params.path.ends_with('/') {
+    let (blob, is_file_too_large) = if !params.path_is_folder() {
         match storage
             .fetch_source_file(
-                &params.name,
+                params.name(),
                 &version.to_string(),
                 row.latest_build_id,
-                &params.path,
+                inner_path,
                 row.archive_storage,
             )
             .await
@@ -280,10 +271,12 @@ pub(crate) async fn source_browser_handler(
         (None, false)
     };
 
-    let canonical_url = CanonicalUrl::from_path(format!(
-        "/crate/{}/latest/source/{}",
-        params.name, params.path
-    ));
+    let canonical_url = CanonicalUrl::from_uri(
+        params
+            .clone()
+            .with_req_version(ReqVersion::Latest)
+            .source_url(),
+    );
 
     let (file, file_content) = if let Some(blob) = blob {
         let is_text = blob.mime.type_() == mime::TEXT || blob.mime == mime::APPLICATION_JSON;
@@ -312,37 +305,35 @@ pub(crate) async fn source_browser_handler(
         (None, None)
     };
 
-    let current_folder = if let Some(last_slash_pos) = params.path.rfind('/') {
-        &params.path[..last_slash_pos + 1]
+    let current_folder = if let Some(last_slash_pos) = inner_path.rfind('/') {
+        &inner_path[..last_slash_pos + 1]
     } else {
         ""
     };
+    let show_parent_link = !current_folder.is_empty();
 
-    let file_list = FileList::from_path(
+    let file_list = FileList::from_path(&mut conn, params.name(), &version, current_folder)
+        .await?
+        .unwrap_or_default();
+
+    let metadata = MetaData::from_crate(
         &mut conn,
-        &params.name,
+        params.name(),
         &version,
-        Some(params.version.clone()),
-        current_folder,
+        Some(params.req_version().clone()),
     )
-    .await?
-    .unwrap_or_default();
+    .await?;
 
     Ok(SourcePage {
         file_list,
-        metadata: MetaData::from_crate(
-            &mut conn,
-            &params.name,
-            &version,
-            Some(params.version.clone()),
-        )
-        .await?,
-        show_parent_link: !current_folder.is_empty(),
+        metadata,
+        show_parent_link,
         file,
         file_content,
         canonical_url,
         is_file_too_large,
-        is_latest_url: params.version.is_latest(),
+        is_latest_url: params.req_version().is_latest(),
+        params,
     }
     .into_response())
 }

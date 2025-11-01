@@ -1,31 +1,36 @@
-use super::encode_url_path;
+use super::escaped_uri::EscapedURI;
 use anyhow::Result;
-use axum::http::uri::{PathAndQuery, Uri};
+use askama::filters::HtmlSafe;
+use axum::http::uri::Uri;
 use axum_extra::headers::{Header, HeaderName, HeaderValue};
 use serde::Serialize;
-use std::fmt;
+use std::{fmt, ops::Deref};
 
 /// simplified typed header for a `Link rel=canonical` header in the response.
-/// Only takes the path to be used, url-encodes it and attaches domain & schema to it.
+///
+/// When given only a path, it builds a full docs.rs URL.
 #[derive(Debug, Clone)]
-pub struct CanonicalUrl(PathAndQuery);
+pub struct CanonicalUrl(EscapedURI);
 
 impl CanonicalUrl {
-    pub fn from_path<P: AsRef<str>>(path: P) -> Self {
-        Self(
-            encode_url_path(path.as_ref())
-                .try_into()
-                .expect("invalid URI path characters even after encoding them"),
-        )
-    }
+    pub fn from_uri(uri: EscapedURI) -> Self {
+        if uri.scheme().is_some() && uri.authority().is_some() {
+            return Self(uri);
+        }
 
-    fn build_full_uri(&self) -> Uri {
-        Uri::builder()
-            .scheme("https")
-            .authority("docs.rs")
-            .path_and_query(self.0.clone())
-            .build()
-            .expect("this unwrap can't fail because PathAndQuery is valid")
+        let mut parts = uri.into_inner().into_parts();
+
+        if parts.scheme.is_none() {
+            parts.scheme = Some("https".try_into().unwrap());
+        }
+
+        if parts.authority.is_none() {
+            parts.authority = Some("docs.rs".try_into().unwrap());
+        }
+
+        Self(EscapedURI::from_uri(
+            Uri::from_parts(parts).expect("parts were already in Uri, or are static"),
+        ))
     }
 }
 
@@ -45,9 +50,7 @@ impl Header for CanonicalUrl {
     where
         E: Extend<HeaderValue>,
     {
-        let value: HeaderValue = format!(r#"<{}>; rel="canonical""#, self.build_full_uri())
-            .parse()
-            .unwrap();
+        let value: HeaderValue = format!(r#"<{}>; rel="canonical""#, self.0).parse().unwrap();
 
         values.extend(std::iter::once(value));
     }
@@ -55,7 +58,7 @@ impl Header for CanonicalUrl {
 
 impl fmt::Display for CanonicalUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.build_full_uri())
+        write!(f, "{}", self.0)
     }
 }
 
@@ -64,9 +67,31 @@ impl Serialize for CanonicalUrl {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.build_full_uri().to_string())
+        serializer.serialize_str(&self.0.to_string())
     }
 }
+
+impl From<Uri> for CanonicalUrl {
+    fn from(value: Uri) -> Self {
+        Self(EscapedURI::from_uri(value))
+    }
+}
+
+impl From<EscapedURI> for CanonicalUrl {
+    fn from(value: EscapedURI) -> Self {
+        Self::from_uri(value)
+    }
+}
+
+impl Deref for CanonicalUrl {
+    type Target = EscapedURI;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl HtmlSafe for CanonicalUrl {}
 
 #[cfg(test)]
 mod tests {
@@ -76,8 +101,25 @@ mod tests {
     use axum_extra::headers::HeaderMapExt;
 
     #[test]
+    fn test_serialize_canonical_from_uri() {
+        let url = CanonicalUrl::from_uri(EscapedURI::from_uri(
+            Uri::builder()
+                .scheme("https")
+                .authority("some_server.org")
+                .path_and_query("/some/path.html")
+                .build()
+                .unwrap(),
+        ));
+
+        assert_eq!(
+            serde_json::to_string(&url).unwrap(),
+            "\"https://some_server.org/some/path.html\""
+        );
+    }
+
+    #[test]
     fn test_serialize_canonical() {
-        let url = CanonicalUrl::from_path("/some/path/");
+        let url = CanonicalUrl::from_uri("/some/path/".parse::<Uri>().unwrap().into());
 
         assert_eq!(
             serde_json::to_string(&url).unwrap(),
@@ -88,7 +130,9 @@ mod tests {
     #[test]
     fn test_encode_canonical() {
         let mut map = HeaderMap::new();
-        map.typed_insert(CanonicalUrl::from_path("/some/path/"));
+        map.typed_insert(CanonicalUrl::from_uri(
+            "/some/path/".parse::<Uri>().unwrap().into(),
+        ));
         assert_eq!(
             map["link"],
             "<https://docs.rs/some/path/>; rel=\"canonical\""
@@ -97,8 +141,11 @@ mod tests {
 
     #[test]
     fn test_encode_canonical_with_encoding() {
+        // umlauts are allowed in http::Uri, but we still want to encode them.
         let mut map = HeaderMap::new();
-        map.typed_insert(CanonicalUrl::from_path("/some/äöü/"));
+        map.typed_insert(CanonicalUrl::from_uri(
+            "/some/äöü/".parse::<Uri>().unwrap().into(),
+        ));
         assert_eq!(
             map["link"],
             "<https://docs.rs/some/%C3%A4%C3%B6%C3%BC/>; rel=\"canonical\""

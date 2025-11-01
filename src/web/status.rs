@@ -1,8 +1,7 @@
-use super::{cache::CachePolicy, error::AxumNope};
 use crate::web::{
-    ReqVersion,
-    error::{AxumResult, EscapedURI},
-    extractors::{DbConnection, Path},
+    cache::CachePolicy,
+    error::{AxumNope, AxumResult},
+    extractors::{DbConnection, rustdoc::RustdocParams},
     match_version,
 };
 use axum::{
@@ -10,7 +9,7 @@ use axum::{
 };
 
 pub(crate) async fn status_handler(
-    Path((name, req_version)): Path<(String, ReqVersion)>,
+    params: RustdocParams,
     mut conn: DbConnection,
 ) -> impl IntoResponse {
     (
@@ -19,7 +18,7 @@ pub(crate) async fn status_handler(
         // We use an async block to emulate a try block so that we can apply the above CORS header
         // and cache policy to both successful and failed responses
         async move {
-            let matched_release = match_version(&mut conn, &name, &req_version)
+            let matched_release = match_version(&mut conn, params.name(), params.req_version())
                 .await?
                 .assume_exact_name()?;
 
@@ -28,7 +27,7 @@ pub(crate) async fn status_handler(
             let version = matched_release
                 .into_canonical_req_version_or_else(|version| {
                     AxumNope::Redirect(
-                        EscapedURI::new(&format!("/crate/{name}/{version}/status.json"), None),
+                        params.clone().with_req_version(version).build_status_url(),
                         CachePolicy::NoCaching,
                     )
                 })?
@@ -154,7 +153,6 @@ mod tests {
                 .await?;
             response.assert_cache_control(CachePolicy::NoStoreMustRevalidate, env.config());
             assert_eq!(response.headers()["access-control-allow-origin"], "*");
-            dbg!(&response);
             assert_eq!(response.status(), StatusCode::OK);
             let value: serde_json::Value = serde_json::from_str(&response.text().await?)?;
 

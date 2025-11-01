@@ -4,8 +4,11 @@ use crate::{
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
-        error::{AxumNope, AxumResult, EscapedURI},
-        extractors::{DbConnection, Path},
+        error::{AxumNope, AxumResult},
+        extractors::{
+            DbConnection,
+            rustdoc::{PageKind, RustdocParams},
+        },
         filters,
         headers::CanonicalUrl,
         match_version,
@@ -84,22 +87,22 @@ impl SubFeature {
 #[derive(Debug, Clone)]
 struct FeaturesPage {
     metadata: MetaData,
-    dependencies: HashMap<String, String>,
+    dependencies: HashMap<String, ReqVersion>,
     sorted_features: Option<Vec<Feature>>,
     default_features: HashSet<String>,
     canonical_url: CanonicalUrl,
     is_latest_url: bool,
+    params: RustdocParams,
 }
 
 impl FeaturesPage {
     fn is_default_feature(&self, feature: &str) -> bool {
         self.default_features.contains(feature)
     }
-    fn dependency_version(&self, dependency: &str) -> &str {
+    fn dependency_version(&self, dependency: &str) -> &ReqVersion {
         self.dependencies
             .get(dependency)
-            .map(|s| s.as_str())
-            .unwrap_or("latest")
+            .unwrap_or(&ReqVersion::Latest)
     }
 }
 
@@ -137,22 +140,28 @@ impl FeaturesPage {
 }
 
 pub(crate) async fn build_features_handler(
-    Path((name, req_version)): Path<(String, ReqVersion)>,
+    params: RustdocParams,
     mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match_version(&mut conn, &name, &req_version)
+    let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                EscapedURI::new(&format!("/crate/{}/{}/features", &name, version), None),
+                params.clone().with_req_version(version).features_url(),
                 CachePolicy::ForeverInCdn,
             )
-        })?
-        .into_version();
+        })?;
+    let params = params.apply_matched_release(&matched_release);
+    let version = matched_release.into_version();
 
-    let metadata =
-        MetaData::from_crate(&mut conn, &name, &version, Some(req_version.clone())).await?;
+    let metadata = MetaData::from_crate(
+        &mut conn,
+        params.name(),
+        &version,
+        Some(params.req_version().clone()),
+    )
+    .await?;
 
     let row = sqlx::query!(
         r#"
@@ -162,7 +171,7 @@ pub(crate) async fn build_features_handler(
         FROM releases
         INNER JOIN crates ON crates.id = releases.crate_id
         WHERE crates.name = $1 AND releases.version = $2"#,
-        name,
+        params.name(),
         version.to_string(),
     )
     .fetch_optional(&mut *conn)
@@ -182,14 +191,20 @@ pub(crate) async fn build_features_handler(
         dependencies,
         sorted_features,
         default_features,
-        is_latest_url: req_version.is_latest(),
-        canonical_url: CanonicalUrl::from_path(format!("/crate/{}/latest/features", &name)),
+        is_latest_url: params.req_version().is_latest(),
+        canonical_url: CanonicalUrl::from_uri(
+            params
+                .clone()
+                .with_req_version(ReqVersion::Latest)
+                .features_url(),
+        ),
+        params,
     }
     .into_response())
 }
 
 /// Turns the raw JSON `dependencies` into a [`HashMap`] of dependencies and their versions.
-fn get_dependency_versions(raw_dependencies: Option<Value>) -> HashMap<String, String> {
+fn get_dependency_versions(raw_dependencies: Option<Value>) -> HashMap<String, ReqVersion> {
     let mut map = HashMap::new();
 
     if let Some(deps) = raw_dependencies.as_ref().and_then(Value::as_array) {
@@ -197,7 +212,8 @@ fn get_dependency_versions(raw_dependencies: Option<Value>) -> HashMap<String, S
             let name = value.get(0).and_then(Value::as_str);
             let version = value.get(1).and_then(Value::as_str);
             if let (Some(name), Some(version)) = (name, version) {
-                map.insert(name.into(), version.into());
+                let req_version = version.parse().unwrap_or(ReqVersion::Latest);
+                map.insert(name.into(), req_version);
             }
         }
     }

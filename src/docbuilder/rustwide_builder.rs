@@ -1450,11 +1450,10 @@ mod tests {
             &format!("{default_target}/{crate_path}/index.html"),
         )?);
 
-        let default_target_url =
-            format!("/{crate_}/{version}/{default_target}/{crate_path}/index.html");
+        let default_target_url = format!("/{crate_}/{version}/{default_target}/{crate_path}/");
         runtime.block_on(web.assert_redirect(
             &default_target_url,
-            &format!("/{crate_}/{version}/{crate_path}/index.html"),
+            &format!("/{crate_}/{version}/{crate_path}/"),
         ))?;
 
         // Non-dist toolchains only have a single target, and of course
@@ -1498,7 +1497,6 @@ mod tests {
                     json_files.sort();
                     dbg!(&json_files);
                     assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
-
                     assert!(json_files[0].ends_with(&format!(".json.{ext}")));
                     assert_eq!(
                         json_files[1],

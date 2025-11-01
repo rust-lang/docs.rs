@@ -31,8 +31,9 @@
                     {%- if !in_progress_builds.is_empty() %}
                         <ol class="queue-list">
                             {% for release in in_progress_builds -%}
+                                {%- set release_params = RustdocParams::new(release.0).with_req_version(release.1) -%}
                                 <li>
-                                    <a href="/crate/{{ release.0 }}/{{ release.1 }}/builds">
+                                    <a href="{{ release_params.builds_url() }}">
                                         {{ release.0 }} {{ release.1 }}
                                     </a>
                                 </li>

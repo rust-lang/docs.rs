@@ -6,11 +6,10 @@
 {%- endblock title -%}
 
 {%- block meta -%}
-    <link rel="canonical" href="https://docs.rs/crate/{{ name }}/latest" />
+    <link rel="canonical" href="{{ canonical_url|safe }}" />
 {%- endblock meta -%}
 
 {%- block topbar -%}
-  {%- set inner_path = metadata.target_name_url() -%}
   {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
@@ -113,7 +112,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# List all dependencies that the current release has #}
-                                    {% call macros::dependencies_list(link_prefix="/crate", dependencies=dependencies, if_empty="&mdash;") %}
+                                    {% call macros::dependencies_list(dependencies=dependencies, use_crate_details = true, if_empty="&mdash;") %}
                                 </ul>
                             </div>
                         </li>
@@ -123,7 +122,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {% call macros::releases_list(name=name, releases=releases, target="", inner_path="") %}
+                                    {% call macros::releases_list(params=params, releases=releases, use_target_redirect = false, retain_fragment = false) %}
                                 </ul>
                             </div>
                         </li>
@@ -168,7 +167,7 @@
                         docs.rs failed to build {{ name }}-{{ version }}
                         <br>
                         Please check the
-                        <a href="/crate/{{ name }}/{{ version }}/builds">build logs</a> for more information.
+                        <a href="{{ params.builds_url() }}">build logs</a> for more information.
                         <br>
                         See <a href="/about/builds">Builds</a> for ideas on how to fix a failed build,
                         or <a href="/about/metadata">Metadata</a> for how to configure docs.rs builds.
@@ -186,7 +185,7 @@
                 {%- if let Some(last_successful_build) = last_successful_build -%}
                     <div class="info">
                         Visit the last successful build:
-                        <a href="/crate/{{ name }}/{{ last_successful_build }}">
+                        <a href="{{ params.clone().with_req_version(*last_successful_build).crate_details_url() }}">
                             {{ name }}-{{ last_successful_build }}
                         </a>
                     </div>
