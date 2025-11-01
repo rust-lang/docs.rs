@@ -53,18 +53,13 @@ pub struct Release {
     pub(crate) href: Option<&'static str>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub(crate) enum Order {
-    ReleaseTime, // this is default order
+    #[default]
+    ReleaseTime,
     GithubStars,
     RecentFailures,
     FailuresByGithubStars,
-}
-
-impl Default for Order {
-    fn default() -> Self {
-        Self::ReleaseTime
-    }
 }
 
 pub(crate) async fn get_releases(
