@@ -72,7 +72,7 @@ impl AxumResponseTestExt for axum::response::Response {
                 expected_directives.to_str().unwrap(),
             );
         } else {
-            assert!(cache_control.is_none());
+            assert!(cache_control.is_none(), "{:?}", cache_control);
         }
     }
 

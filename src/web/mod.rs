@@ -1,14 +1,12 @@
 //! Web interface of docs.rs
 
 pub mod page;
-// mod tmp;
 
-use crate::db::CrateId;
-use crate::db::ReleaseId;
-use crate::db::types::BuildStatus;
-use crate::utils::get_correct_docsrs_style_file;
-use crate::utils::report_error;
-use crate::web::page::templates::{RenderBrands, RenderSolid, filters};
+use crate::{
+    db::{CrateId, types::BuildStatus},
+    utils::{get_correct_docsrs_style_file, report_error},
+    web::page::templates::{RenderBrands, RenderSolid, filters},
+};
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
@@ -21,6 +19,7 @@ pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
+mod escaped_uri;
 mod extractors;
 mod features;
 mod file;
@@ -55,7 +54,7 @@ use semver::{Version, VersionReq};
 use sentry::integrations::tower as sentry_tower;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::Cow,
     fmt::{self, Display},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str::FromStr,
@@ -63,7 +62,6 @@ use std::{
 };
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
-use url::form_urlencoded;
 
 use self::crate_details::Release;
 
@@ -116,6 +114,52 @@ impl FromStr for ReqVersion {
         } else {
             VersionReq::parse(s).map(ReqVersion::Semver)
         }
+    }
+}
+
+impl From<&ReqVersion> for ReqVersion {
+    fn from(value: &ReqVersion) -> Self {
+        value.clone()
+    }
+}
+
+impl From<Version> for ReqVersion {
+    fn from(value: Version) -> Self {
+        ReqVersion::Exact(value)
+    }
+}
+
+impl From<&Version> for ReqVersion {
+    fn from(value: &Version) -> Self {
+        value.clone().into()
+    }
+}
+
+impl From<VersionReq> for ReqVersion {
+    fn from(value: VersionReq) -> Self {
+        ReqVersion::Semver(value)
+    }
+}
+
+impl From<&VersionReq> for ReqVersion {
+    fn from(value: &VersionReq) -> Self {
+        value.clone().into()
+    }
+}
+
+impl TryFrom<String> for ReqVersion {
+    type Error = semver::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<&str> for ReqVersion {
+    type Error = semver::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
@@ -215,24 +259,12 @@ impl MatchedRelease {
         self.release.version
     }
 
-    fn version(&self) -> &Version {
-        &self.release.version
-    }
-
-    fn id(&self) -> ReleaseId {
-        self.release.id
-    }
-
     fn build_status(&self) -> BuildStatus {
         self.release.build_status
     }
 
     fn rustdoc_status(&self) -> bool {
         self.release.rustdoc_status.unwrap_or(false)
-    }
-
-    fn target_name(&self) -> Option<&str> {
-        self.release.target_name.as_deref()
     }
 
     fn is_latest_url(&self) -> bool {
@@ -616,29 +648,6 @@ where
     Ok(resp)
 }
 
-/// Parse an URI into a http::Uri struct.
-/// When `queries` are given these are added to the URL,
-/// with empty `queries` the `?` will be omitted.
-pub(crate) fn axum_parse_uri_with_params<I, K, V>(uri: &str, queries: I) -> Result<http::Uri, Error>
-where
-    I: IntoIterator,
-    I::Item: Borrow<(K, V)>,
-    K: AsRef<str>,
-    V: AsRef<str>,
-{
-    let mut queries = queries.into_iter().peekable();
-    if queries.peek().is_some() {
-        let query_params: String = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(queries)
-            .finish();
-        format!("{uri}?{query_params}")
-            .parse::<http::Uri>()
-            .context("error parsing URL")
-    } else {
-        uri.parse::<http::Uri>().context("error parsing URL")
-    }
-}
-
 /// MetaData used in header
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(serde::Serialize))]
@@ -716,29 +725,9 @@ impl MetaData {
     }
 
     fn parse_doc_targets(targets: Value) -> Vec<String> {
-        let mut targets: Vec<_> = targets
-            .as_array()
-            .map(|array| {
-                array
-                    .iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_owned()))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut targets: Vec<String> = serde_json::from_value(targets).unwrap_or_default();
         targets.sort_unstable();
         targets
-    }
-
-    fn target_name_url(&self) -> String {
-        if let Some(ref target_name) = self.target_name {
-            format!("{target_name}/index.html")
-        } else {
-            String::new()
-        }
-    }
-
-    pub(crate) fn doc_targets(&self) -> Option<&[String]> {
-        self.doc_targets.as_deref()
     }
 }
 
@@ -756,6 +745,7 @@ pub(crate) struct AxumErrorPage {
 impl_axum_webpage! {
     AxumErrorPage,
     status = |err| err.status,
+
 }
 
 #[cfg(test)]
@@ -767,6 +757,7 @@ mod test {
     };
     use crate::{db::ReleaseId, docbuilder::DocCoverage};
     use kuchikiki::traits::TendrilSink;
+    use pretty_assertions::assert_eq;
     use serde_json::json;
     use test_case::test_case;
 
@@ -844,7 +835,7 @@ mod test {
             for (idx, value) in ["60%", "6", "10", "2", "1"].iter().enumerate() {
                 let mut menu_items = foo_crate.select(".pure-menu-item b").unwrap();
                 assert!(
-                    menu_items.any(|e| dbg!(e.text_contents()).contains(value)),
+                    menu_items.any(|e| e.text_contents().contains(value)),
                     "({idx}, {value:?})"
                 );
             }
@@ -1273,7 +1264,7 @@ mod test {
                     target_name: Some("foo".to_string()),
                     rustdoc_status: Some(true),
                     default_target: Some("x86_64-unknown-linux-gnu".to_string()),
-                    doc_targets: Some(vec![]),
+                    doc_targets: Some(vec!["x86_64-unknown-linux-gnu".to_string()]),
                     yanked: Some(false),
                     rustdoc_css_file: Some("rustdoc.css".to_string()),
                 },

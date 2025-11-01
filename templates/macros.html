@@ -79,7 +79,7 @@
 
 {#
     Constructs a list of a crate's releases
-    * `name` The crate's name as a string
+    * `params`: `RustdocParams` to access the functions to generate URLs.
     * `releases` A list of crate releases where each release has the following fields:
         * `version` A string of the release's version
         * `yanked` A boolean of the release's yanked status
@@ -88,22 +88,22 @@
           * "failure" for failed build
           * "in_progress" for in progress
         * `is_library` A boolean that's true if the crate is a library and false if it's a binary
-    * `target` The target platform (empty string if the default or a `/crate` page)
-    * `inner_path` The current rustdoc page (empty string if a `/crate` page)
+    * `use_target_redirect`: either link to the crate-details page, or a target-redirect
+    * `retain_fragment`: if the link should retain the fragment from the current page
 #}
-{% macro releases_list(name, releases, target, inner_path) %}
+{% macro releases_list(params, releases, use_target_redirect, retain_fragment) %}
     {%- for release in releases -%}
+        {%- set release_params = params.clone().with_req_version(release.version.clone()) -%}
+
         {# The url for the release, `/crate/:name/:version` #}
-        {# NOTE: `/` is part of target if it exists (to avoid `target-direct//path`) #}
         {% set release_url %}
-        {%- set retain_fragment = !inner_path.is_empty() -%}
-        {% if inner_path.is_empty() %} {# /crate #}
-            {%- set release_url = "/crate/{}/{}"|format(name, release.version) -%}
-        {% else %}
-            {%- set release_url = "/crate/{}/{}/target-redirect/{}{}"|format(name, release.version, target, inner_path) -%}
+        {% if use_target_redirect %}
+            {%- set release_url = release_params.target_redirect_url() -%}
+        {% else %} {# /crate #}
+            {%- set release_url = release_params.crate_details_url() -%}
         {% endif %}
         {# The release's name and version, `:name-:version` #}
-        {%- set release_name = "{}-{}"|format(name, release.version) -%}
+        {%- set release_name = "{}-{}"|format(params.name(), release.version) -%}
         {%- set warning -%}
         {%- set title -%}
         {%- set yanked = release.yanked.unwrap_or_default() -%}
@@ -156,29 +156,30 @@
     {%- endfor -%}
 {% endmacro releases_list %}
 
-{% macro dependencies_list(link_prefix, dependencies, if_empty) %}
-    {% if let Some(serde_json::Value::Array(deps)) = dependencies %}
-        {%- for dependency in deps -%}
-            {%- if let serde_json::Value::Array(dep) = dependency -%}
-                <li class="pure-menu-item">
-                    {%- set first = dep[0].as_str().expect("dep[0] not a string in dependency") -%}
-                    {%- set second = dep[1].as_str().expect("dep[1] not a string in dependency") -%}
-                    <a href="{{ link_prefix|safe }}/{{ first|safe }}/{{ second|safe }}" class="pure-menu-link">
-                        {{ first|safe }} {{ second|safe }}
-                        {% if let Some(serde_json::Value::String(third)) = dep.get(2) %}
-                            <i class="dependencies {{ third|safe }}">{{ third|safe }}</i>
-                            {% if let Some(serde_json::Value::Bool(true)) = dep.get(3) %}
-                                <i>optional</i>
-                            {% endif %}
-                        {% else %}
-                            <i class="dependencies"></i>
-                        {% endif %}
-                    </a>
-                </li>
-            {% endif %}
-        {%- endfor -%}
-        {%- if deps.is_empty() -%}
-            {{ if_empty|safe }}
-        {%- endif -%}
-    {% endif %}
+{% macro dependencies_list(dependencies, use_crate_details, if_empty) %}
+    {%- for dep in dependencies -%}
+        <li class="pure-menu-item">
+    {%- set dependency_params = RustdocParams::new(dep.name.to_owned()).with_req_version(ReqVersion::Semver(dep.req.parse::<semver::VersionReq>()?.clone())) -%}
+            {%- set href -%}
+            {%- if use_crate_details -%}
+                {%- set href = dependency_params.crate_details_url() -%}
+            {%- else -%}
+                {%- set href = dependency_params.rustdoc_url() -%}
+            {%- endif -%}
+            <a href="{{ href }}" class="pure-menu-link">
+                {{ dep.name|safe }} {{ dep.req|safe }}
+                {% if let Some(kind) = &dep.kind %}
+                    <i class="dependencies {{ kind }}">{{ kind }}</i>
+                    {% if dep.optional %}
+                        <i>optional</i>
+                    {% endif %}
+                {% else %}
+                    <i class="dependencies"></i>
+                {% endif %}
+            </a>
+        </li>
+    {%- endfor -%}
+    {%- if dependencies.is_empty() -%}
+        {{ if_empty|safe }}
+    {%- endif -%}
 {% endmacro dependencies_list %}

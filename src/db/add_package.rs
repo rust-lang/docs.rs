@@ -4,13 +4,13 @@ use crate::{
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::{MetadataPackage, rustc_version::parse_rustc_date},
+    utils::{Dependency, MetadataPackage, rustc_version::parse_rustc_date},
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
-use derive_more::Display;
+use derive_more::{Deref, Display};
 use futures_util::stream::TryStreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use slug::slugify;
 use std::{
@@ -32,6 +32,44 @@ pub struct ReleaseId(pub i32);
 #[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, Serialize, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct BuildId(pub i32);
+
+type DepOut = (String, String, String, bool);
+type DepIn = (String, String, Option<String>, Option<bool>);
+
+/// A crate dependency in our internal representation for releases.dependencies json.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Deref)]
+#[serde(from = "DepIn", into = "DepOut")]
+pub(crate) struct ReleaseDependency(Dependency);
+
+impl ReleaseDependency {
+    pub(crate) fn into_inner(self) -> Dependency {
+        self.0
+    }
+}
+
+impl From<DepIn> for ReleaseDependency {
+    fn from((name, req, kind, optional): DepIn) -> Self {
+        ReleaseDependency(Dependency {
+            name,
+            req,
+            kind,
+            optional: optional.unwrap_or(false),
+            rename: None,
+        })
+    }
+}
+
+impl From<ReleaseDependency> for DepOut {
+    fn from(rd: ReleaseDependency) -> Self {
+        let d = rd.0;
+        (
+            d.name,
+            d.req.to_string(),
+            d.kind.unwrap_or_else(|| "normal".into()),
+            d.optional,
+        )
+    }
+}
 
 /// Adds a package into database.
 ///
@@ -59,7 +97,7 @@ pub(crate) async fn finish_release(
     source_size: u64,
 ) -> Result<()> {
     debug!("updating release data");
-    let dependencies = convert_dependencies(metadata_pkg);
+    let dependencies = convert_dependencies(metadata_pkg)?;
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let features = get_features(metadata_pkg);
@@ -94,7 +132,7 @@ pub(crate) async fn finish_release(
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
-        serde_json::to_value(dependencies)?,
+        dependencies,
         metadata_pkg.package_name(),
         registry_data.yanked,
         has_docs,
@@ -393,20 +431,14 @@ pub(crate) async fn initialize_build(
     Ok(build_id)
 }
 
-/// Convert dependencies into Vec<(String, String, String, bool)>
-fn convert_dependencies(pkg: &MetadataPackage) -> Vec<(String, String, String, bool)> {
-    pkg.dependencies
+/// Convert dependencies into our own internal JSON representation
+fn convert_dependencies(pkg: &MetadataPackage) -> Result<serde_json::Value> {
+    let dependencies: Vec<_> = pkg
+        .dependencies
         .iter()
-        .map(|dependency| {
-            let name = dependency.name.clone();
-            let version = dependency.req.clone();
-            let kind = dependency
-                .kind
-                .clone()
-                .unwrap_or_else(|| "normal".to_string());
-            (name, version, kind, dependency.optional)
-        })
-        .collect()
+        .map(|dependency| ReleaseDependency(dependency.clone()))
+        .collect::<Vec<_>>();
+    Ok(serde_json::to_value(dependencies)?)
 }
 
 /// Reads features and converts them to Vec<Feature> with default being first

@@ -1,4 +1,4 @@
-//! Releases web handlers
+//! Releases web handlersrelease
 
 use crate::{
     AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
@@ -6,11 +6,12 @@ use crate::{
     cdn, impl_axum_webpage,
     utils::report_error,
     web::{
-        ReqVersion, axum_parse_uri_with_params, axum_redirect, encode_url_path,
+        ReqVersion, axum_redirect, encode_url_path,
         error::{AxumNope, AxumResult},
-        extractors::{DbConnection, Path},
+        extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+        rustdoc::OfficialCrateDescription,
     },
 };
 use anyhow::{Context as _, Result, anyhow};
@@ -23,12 +24,15 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::str;
-use std::sync::Arc;
-use tracing::warn;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    str,
+    sync::Arc,
+};
+use tracing::{trace, warn};
 use url::form_urlencoded;
 
 use super::cache::CachePolicy;
@@ -43,14 +47,21 @@ const RELEASES_IN_FEED: i64 = 150;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Release {
     pub(crate) name: String,
-    pub(crate) version: String,
+    pub(crate) version: semver::Version,
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
     pub(crate) build_time: Option<DateTime<Utc>>,
     pub(crate) stars: i32,
     pub(crate) has_unyanked_releases: Option<bool>,
-    pub(crate) href: Option<&'static str>,
+}
+
+impl Release {
+    pub fn rustdoc_params(&self) -> RustdocParams {
+        RustdocParams::new(&self.name)
+            .with_req_version(self.version.clone())
+            .with_maybe_target_name(self.target_name.clone())
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -106,29 +117,34 @@ pub(crate) async fn get_releases(
         }
     );
 
-    Ok(sqlx::query(query.as_str())
+    sqlx::query(query.as_str())
         .bind(limit)
         .bind(offset)
         .bind(filter_failed)
         .fetch(conn)
-        .map_ok(|row| Release {
-            name: row.get(0),
-            version: row.get(1),
-            description: row.get(2),
-            target_name: row.get(3),
-            rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
-            build_time: row.get(5),
-            stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
-            has_unyanked_releases: None,
-            href: None,
+        .err_into::<anyhow::Error>()
+        .and_then(|row| async move {
+            let version: semver::Version = row.get::<String, _>(1).parse()?;
+
+            Ok(Release {
+                name: row.get(0),
+                version,
+                description: row.get(2),
+                target_name: row.get(3),
+                rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
+                build_time: row.get(5),
+                stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
+                has_unyanked_releases: None,
+            })
         })
         .try_collect()
-        .await?)
+        .await
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ReleaseStatus {
     Available(Release),
+    External(&'static OfficialCrateDescription),
     /// Only contains the crate name.
     NotAvailable(String),
 }
@@ -137,20 +153,6 @@ struct SearchResult {
     pub results: Vec<ReleaseStatus>,
     pub prev_page: Option<String>,
     pub next_page: Option<String>,
-}
-
-fn rust_lib_release(name: &str, description: &str, href: &'static str) -> ReleaseStatus {
-    ReleaseStatus::Available(Release {
-        name: name.to_string(),
-        version: String::new(),
-        description: Some(description.to_string()),
-        build_time: None,
-        target_name: None,
-        rustdoc_status: false,
-        stars: 0,
-        has_unyanked_releases: None,
-        href: Some(href),
-    })
 }
 
 /// Get the search results for a crate search query
@@ -206,21 +208,22 @@ async fn get_search_results(
         &names[..],
     )
     .fetch(&mut *conn)
-    .map_ok(|row| {
-        (
+    .err_into::<anyhow::Error>()
+    .and_then(|row| async move {
+        let version: semver::Version = row.version.parse()?;
+        Ok((
             row.name.clone(),
             Release {
                 name: row.name,
-                version: row.version,
+                version,
                 description: row.description,
                 build_time: row.last_build_time,
                 target_name: row.target_name,
                 rustdoc_status: row.rustdoc_status.unwrap_or(false),
                 stars: row.stars.unwrap_or(0),
                 has_unyanked_releases: row.has_unyanked_releases,
-                href: None,
             },
-        )
+        ))
     })
     .try_collect()
     .await?;
@@ -229,13 +232,8 @@ async fn get_search_results(
     // extend with the release/build information from docs.rs
     // Crates that are not on docs.rs yet will not be returned.
     let mut results = Vec::new();
-    if let Some(super::rustdoc::OfficialCrateDescription {
-        name,
-        href,
-        description,
-    }) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(query)
-    {
-        results.push(rust_lib_release(name, description, href))
+    if let Some(desc) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(query) {
+        results.push(ReleaseStatus::External(desc));
     }
 
     let names: Vec<String> =
@@ -501,13 +499,17 @@ async fn redirect_to_random_crate(
     if let Some(row) = row {
         metrics.im_feeling_lucky_searches.inc();
 
-        Ok(axum_redirect(format!(
-            "/{}/{}/{}/",
-            row.name,
-            row.version,
-            row.target_name
-                .expect("we only look at releases with docs, so target_name will exist")
-        ))?)
+        let params = RustdocParams::new(&row.name)
+            .with_req_version(ReqVersion::Exact(
+                row.version
+                    .parse()
+                    .context("could not parse version releases table")?,
+            ))
+            .with_maybe_target_name(row.target_name.as_deref());
+
+        trace!(?row, ?params, "redirecting to random crate result");
+
+        Ok(axum_redirect(params.rustdoc_url())?)
     } else {
         report_error(&anyhow!("found no result in random crate search"));
         Err(AxumNope::NoResults)
@@ -524,19 +526,19 @@ pub(crate) async fn search_handler(
     Extension(config): Extension<Arc<Config>>,
     Extension(registry): Extension<Arc<RegistryApi>>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
-    Query(mut params): Query<HashMap<String, String>>,
+    Query(mut query_params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
-    let mut query = params
+    let mut query = query_params
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
-    let mut sort_by = params
+    let mut sort_by = query_params
         .get("sort")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "relevance".to_string());
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
-    if params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
+    if query_params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
             return Ok(redirect_to_random_crate(config, metrics, &mut conn)
@@ -561,32 +563,29 @@ pub(crate) async fn search_handler(
             .await
             .map(|matched_release| matched_release.into_exactly_named())
         {
-            params.remove("query");
-            queries.extend(params);
+            query_params.remove("query");
+            queries.extend(query_params);
 
-            let uri = if matchver.rustdoc_status() {
-                axum_parse_uri_with_params(
-                    &format!(
-                        "/{}/{}/{}/",
-                        matchver.name,
-                        matchver.version(),
-                        matchver
-                            .target_name()
-                            .expect("target name will exist when rustdoc_status is true"),
-                    ),
-                    queries,
-                )?
+            let rustdoc_status = matchver.rustdoc_status();
+            let params = RustdocParams::from_matched_release(&matchver);
+
+            trace!(
+                krate,
+                ?params,
+                "redirecting I'm feeling lucky search to crate page"
+            );
+
+            let uri = if rustdoc_status {
+                params.rustdoc_url().append_query_pairs(queries)
             } else {
-                format!("/crate/{}/{}", matchver.name, matchver.version())
-                    .parse::<http::Uri>()
-                    .context("could not parse redirect URI")?
+                params.crate_details_url()
             };
 
             return Ok(super::axum_redirect(uri)?.into_response());
         }
     }
 
-    let search_result = if let Some(paginate) = params.get("paginate") {
+    let search_result = if let Some(paginate) = query_params.get("paginate") {
         let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
             warn!("error when decoding pagination base64 string \"{paginate}\": {e:?}");
             AxumNope::NoResults
@@ -720,7 +719,7 @@ struct BuildQueuePage {
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
     active_cdn_deployments: Vec<String>,
-    in_progress_builds: Vec<(String, String)>,
+    in_progress_builds: Vec<(String, Version)>,
     expand_rebuild_queue: bool,
 }
 
@@ -749,7 +748,7 @@ pub(crate) async fn build_queue_handler(
     // reverse the list, so the oldest comes first
     active_cdn_deployments.reverse();
 
-    let in_progress_builds: Vec<(String, String)> = sqlx::query!(
+    let in_progress_builds: Vec<(String, Version)> = sqlx::query!(
         r#"SELECT
             crates.name,
             releases.version
@@ -763,7 +762,14 @@ pub(crate) async fn build_queue_handler(
     .fetch_all(&mut *conn)
     .await?
     .into_iter()
-    .map(|rec| (rec.name, rec.version))
+    .map(|rec| {
+        (
+            rec.name,
+            rec.version
+                .parse()
+                .expect("all versions in the db are valid"),
+        )
+    })
     .collect();
 
     let mut rebuild_queue = Vec::new();
@@ -773,8 +779,11 @@ pub(crate) async fn build_queue_handler(
         .into_iter()
         .filter(|krate| {
             !in_progress_builds.iter().any(|(name, version)| {
+                // temporary, until I migrated the other version occurences to semver::Version
+                // We know that in the DB we only have semver
+                let krate_version: Version = krate.version.parse().unwrap();
                 // use `.any` instead of `.contains` to avoid cloning name& version for the match
-                *name == krate.name && *version == krate.version
+                *name == krate.name && *version == krate_version
             })
         })
         .collect_vec();
@@ -940,7 +949,7 @@ mod tests {
 
             web.assert_redirect(
                 "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
-                "/crate/some_random_crate/1.0.0",
+                "/crate/some_random_crate/latest",
             )
             .await?;
             Ok(())
@@ -964,7 +973,7 @@ mod tests {
 
             web.assert_redirect(
                 "/releases/search?query=some_random_crate&i-am-feeling-lucky=1",
-                "/some_random_crate/1.0.0/some_random_crate/",
+                "/some_random_crate/latest/some_random_crate/",
             )
             .await?;
             Ok(())
@@ -1019,12 +1028,12 @@ mod tests {
 
             web.assert_redirect(
                 "/releases/search?query=some_random_crate::somepath",
-                "/some_random_crate/1.0.0/some_random_crate/?search=somepath",
+                "/some_random_crate/latest/some_random_crate/?search=somepath",
             )
             .await?;
             web.assert_redirect(
                 "/releases/search?query=some_random_crate::some::path",
-                "/some_random_crate/1.0.0/some_random_crate/?search=some%3A%3Apath",
+                "/some_random_crate/latest/some_random_crate/?search=some%3A%3Apath",
             )
             .await?;
             Ok(())
@@ -1043,7 +1052,7 @@ mod tests {
 
             web.assert_redirect(
                 "/releases/search?query=some_random_crate::somepath&go_to_first=true",
-                "/some_random_crate/1.0.0/some_random_crate/?go_to_first=true&search=somepath",
+                "/some_random_crate/latest/some_random_crate/?go_to_first=true&search=somepath",
             )
             .await?;
             Ok(())
@@ -2087,7 +2096,11 @@ mod tests {
                         web.get(&url).await?
                     };
                 let status = resp.status();
-                assert!(status.is_success(), "failed to GET {url}: {status}");
+                assert!(
+                    status.is_success(),
+                    "failed to GET {url}: {status}, {:?}",
+                    resp.headers().get("Location"),
+                );
             }
 
             Ok(())

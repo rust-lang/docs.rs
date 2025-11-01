@@ -1,4 +1,4 @@
 {% import "macros.html" as macros %}
 <ul class="pure-menu-list">
-{% call macros::releases_list(crate_name, releases, target, inner_path) %}
+{% call macros::releases_list(params, releases, use_target_redirect = true, retain_fragment = true) %}
 </ul>

@@ -1,20 +1,21 @@
 //! Various utilities for docs.rs
 
-pub(crate) use self::cargo_metadata::{CargoMetadata, Package as MetadataPackage};
-pub(crate) use self::copy::copy_dir_all;
-pub use self::daemon::{start_daemon, watch_registry};
-pub(crate) use self::html::rewrite_rustdoc_html_stream;
-pub use self::queue::{
-    get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
-    remove_crate_priority, set_crate_priority,
+pub(crate) use self::{
+    cargo_metadata::{CargoMetadata, Dependency, Package as MetadataPackage},
+    copy::copy_dir_all,
+    html::rewrite_rustdoc_html_stream,
+    rustc_version::{get_correct_docsrs_style_file, parse_rustc_version},
 };
-pub use self::queue_builder::queue_builder;
-pub(crate) use self::rustc_version::{get_correct_docsrs_style_file, parse_rustc_version};
+pub use self::{
+    daemon::{start_daemon, watch_registry},
+    queue::{
+        get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
+        remove_crate_priority, set_crate_priority,
+    },
+    queue_builder::queue_builder,
+};
 
-#[cfg(test)]
-pub(crate) use self::cargo_metadata::{Dependency, Target};
-
-mod cargo_metadata;
+pub(crate) mod cargo_metadata;
 pub mod consistency;
 mod copy;
 pub mod daemon;
@@ -22,14 +23,12 @@ mod html;
 mod queue;
 pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;
-use anyhow::{Context as _, Result};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use std::{fmt, panic};
-use tracing::{Span, error, warn};
 pub(crate) mod sized_buffer;
 
-use std::{future::Future, thread, time::Duration};
+use anyhow::{Context as _, Result};
+use serde::{Serialize, de::DeserializeOwned};
+use std::{fmt, future::Future, panic, thread, time::Duration};
+use tracing::{Span, error, warn};
 
 pub(crate) fn report_error(err: &anyhow::Error) {
     // Debug-format for anyhow errors includes context & backtrace

@@ -1,9 +1,9 @@
 use crate::{
     db::PoolError,
     storage::PathNotFoundError,
-    web::{cache::CachePolicy, encode_url_path, releases::Search},
+    web::{AxumErrorPage, cache::CachePolicy, escaped_uri::EscapedURI, releases::Search},
 };
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use axum::{
     Json,
     http::StatusCode,
@@ -11,26 +11,6 @@ use axum::{
 };
 use std::borrow::Cow;
 use tracing::error;
-
-use super::AxumErrorPage;
-
-#[derive(Debug)]
-pub struct EscapedURI(String);
-
-impl EscapedURI {
-    pub fn new(path: &str, query: Option<&str>) -> Self {
-        let mut path = encode_url_path(path);
-        if let Some(query) = query {
-            path.push('?');
-            path.push_str(query);
-        }
-        Self(path)
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AxumNope {
@@ -147,7 +127,7 @@ struct ErrorInfo {
 }
 
 fn redirect_with_policy(target: EscapedURI, cache_policy: CachePolicy) -> AxumResponse {
-    match super::axum_cached_redirect(target.0, cache_policy) {
+    match super::axum_cached_redirect(target, cache_policy) {
         Ok(response) => response.into_response(),
         Err(err) => AxumNope::InternalError(err).into_response(),
     }
@@ -251,7 +231,7 @@ mod tests {
     #[test]
     fn test_redirect_error_encodes_url_path() {
         let response = AxumNope::Redirect(
-            EscapedURI::new("/something>", None),
+            EscapedURI::from_path("/something>"),
             CachePolicy::ForeverInCdnAndBrowser,
         )
         .into_response();

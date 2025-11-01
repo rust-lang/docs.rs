@@ -1,30 +1,32 @@
-{%- if let Some(doc_targets) = metadata.doc_targets() -%}
-    {%- for target in doc_targets -%}
+{%- if let Some(doc_targets) = params.doc_targets() -%}
+    {%- for doc_target in doc_targets -%}
         {#
             The crate-detail page is the only page where we want to allow google to follow
             the target-links. On that page we also don't have to use `/target-redirect/`
             because the documentation root page is guaranteed to exist for all targets.
         #}
+
+        {%- set target_params = params.clone().with_doc_target(doc_target.clone()) -%}
+
         {%- set target_no_follow -%}
         {%- set target_url -%}
         {%- if use_direct_platform_links -%}
-            {%- set target_url = "/{}/{}/{}/{}"|format(metadata.name, metadata.req_version, target, inner_path) -%}
+            {%- set target_url = target_params.rustdoc_url() -%}
             {%- set target_no_follow = "" -%}
         {%- else -%}
-            {%- set target_url = "/crate/{}/{}/target-redirect/{}/{}"|format(metadata.name, metadata.req_version, target, inner_path) -%}
+            {%- set target_url = target_params.target_redirect_url() -%}
             {%- set target_no_follow = "nofollow" -%}
         {%- endif -%}
 
-        {%- set current -%}
-        {%- if current_target is defined && current_target == target|deref -%}
+        {%- set current = "" -%}
+        {%- if current_target is defined && current_target == *doc_target -%}
             {%- set current = " current" -%}
-        {%- else -%}
-            {%- set current = "" -%}
         {%- endif -%}
 
+
         <li class="pure-menu-item">
-            <a href="{{ target_url|safe }}" class="pure-menu-link{{ current|safe }}" data-fragment="retain" rel="{{ target_no_follow }}">
-                {{- target -}}
+            <a href="{{ target_url }}" class="pure-menu-link{{ current|safe }}" data-fragment="retain" rel="{{ target_no_follow }}">
+                {{- doc_target -}}
             </a>
         </li>
     {%- endfor -%}

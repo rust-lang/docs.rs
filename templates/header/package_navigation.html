@@ -37,7 +37,7 @@
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
                         {# The crate information tab #}
-                        <li class="pure-menu-item"><a href="/crate/{{ crate_path|safe }}"
+                        <li class="pure-menu-item"><a href="{{ params.crate_details_url() }}"
                                 class="pure-menu-link{% if active_tab == &"crate" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconCube.render_solid(false, false, "") }}
                                 <span class="title"> Crate</span>
@@ -46,7 +46,7 @@
 
                         {# The source view tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path|safe }}/source/"
+                            <a href="{{ params.source_url() }}"
                                 class="pure-menu-link{% if active_tab == &"source" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconFolderOpen.render_regular(false, false, "") }}
                                 <span class="title"> Source</span>
@@ -55,7 +55,7 @@
 
                         {# The builds tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path|safe }}/builds"
+                            <a href="{{ params.builds_url() }}"
                                 class="pure-menu-link{% if active_tab == &"builds" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconGears.render_solid(false, false, "") }}
                                 <span class="title"> Builds</span>
@@ -64,7 +64,7 @@
 
                         {# The features tab #}
                         <li class="pure-menu-item">
-                            <a href="/crate/{{ crate_path|safe }}/features"
+                            <a href="{{ params.features_url() }}"
                                class="pure-menu-link{% if active_tab == &"features" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconFlag.render_solid(false, false, "") }}
                                 <span class="title">Feature flags</span>
@@ -75,7 +75,7 @@
             </div>
 
             {%- if metadata.rustdoc_status.unwrap_or_default() -%}
-                <a href="/{{ crate_path|safe }}/{{ metadata.target_name.as_deref().unwrap_or_default() }}/" class="doc-link">
+                <a href="{{ params.rustdoc_url()}}" class="doc-link">
                     {{ crate::icons::IconBook.render_solid(false, false, "") }} Documentation
                 </a>
             {%- endif -%}

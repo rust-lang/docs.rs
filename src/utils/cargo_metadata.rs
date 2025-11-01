@@ -125,7 +125,7 @@ impl Target {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub(crate) struct Dependency {
     pub(crate) name: String,
     pub(crate) req: String,

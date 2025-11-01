@@ -1,8 +1,3 @@
-use super::{
-    cache::CachePolicy,
-    error::{AxumNope, JsonAxumNope, JsonAxumResult},
-    headers::CanonicalUrl,
-};
 use crate::{
     AsyncBuildQueue, Config,
     db::{BuildId, types::BuildStatus},
@@ -10,9 +5,12 @@ use crate::{
     impl_axum_webpage,
     web::{
         MetaData, ReqVersion,
-        error::{AxumResult, EscapedURI},
-        extractors::{DbConnection, Path},
-        filters, match_version,
+        cache::CachePolicy,
+        error::{AxumNope, AxumResult, JsonAxumNope, JsonAxumResult},
+        extractors::{DbConnection, Path, rustdoc::RustdocParams},
+        filters,
+        headers::CanonicalUrl,
+        match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
@@ -47,6 +45,7 @@ struct BuildsPage {
     builds: Vec<Build>,
     limits: Limits,
     canonical_url: CanonicalUrl,
+    params: RustdocParams,
 }
 
 impl_axum_webpage! { BuildsPage }
@@ -58,26 +57,41 @@ impl BuildsPage {
 }
 
 pub(crate) async fn build_list_handler(
-    Path((name, req_version)): Path<(String, ReqVersion)>,
+    params: RustdocParams,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match_version(&mut conn, &name, &req_version)
+    let version = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                EscapedURI::new(&format!("/crate/{name}/{version}/builds"), None),
+                params.clone().with_req_version(version).builds_url(),
                 CachePolicy::ForeverInCdn,
             )
         })?
         .into_version();
 
+    let metadata = MetaData::from_crate(
+        &mut conn,
+        params.name(),
+        &version,
+        Some(params.req_version().clone()),
+    )
+    .await?;
+    let params = params.apply_metadata(&metadata);
+
     Ok(BuildsPage {
-        metadata: MetaData::from_crate(&mut conn, &name, &version, Some(req_version)).await?,
-        builds: get_builds(&mut conn, &name, &version).await?,
-        limits: Limits::for_crate(&config, &mut conn, &name).await?,
-        canonical_url: CanonicalUrl::from_path(format!("/crate/{name}/latest/builds")),
+        metadata,
+        builds: get_builds(&mut conn, params.name(), &version).await?,
+        limits: Limits::for_crate(&config, &mut conn, params.name()).await?,
+        canonical_url: CanonicalUrl::from_uri(
+            params
+                .clone()
+                .with_req_version(&ReqVersion::Latest)
+                .builds_url(),
+        ),
+        params,
     }
     .into_response())
 }
@@ -523,7 +537,6 @@ mod tests {
                 .collect();
             let values: Vec<_> = values.iter().map(|v| &**v).collect();
 
-            dbg!(&values);
             assert!(values.contains(&"6.44 GB"));
             assert!(values.contains(&"2 hours"));
             assert!(values.contains(&"102.4 kB"));

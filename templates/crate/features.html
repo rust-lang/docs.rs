@@ -10,7 +10,6 @@
 {%- endblock -%}
 
 {%- block topbar -%}
-  {%- set inner_path = metadata.target_name_url() -%}
   {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}
 
@@ -56,9 +55,9 @@
                 <div class="info">
                     There is very little structured metadata to build this page
                     from currently. You should check the
-                    <a href="/{{ metadata.name }}/{{ metadata.req_version }}/{{ metadata.target_name.as_deref().unwrap_or_default() }}/">main library docs</a>,
-                    <a href="/crate/{{ metadata.name }}/{{ metadata.req_version }}/">readme</a>, or
-                    <a href="/crate/{{ metadata.name }}/{{ metadata.req_version }}/source/Cargo.toml.orig">Cargo.toml</a>
+                    <a href="{{ params.rustdoc_url() }}">main library docs</a>,
+                    <a href="{{ params.crate_details_url() }}">readme</a>, or
+                    <a href="{{ params.clone().with_inner_path("Cargo.toml.orig").with_page_kind(PageKind::Source).source_url() }}">Cargo.toml</a>
                     in case the author documented the features in them.
                 </div>
                 {%- if let Some(features) = sorted_features -%}
@@ -81,16 +80,17 @@
                                                     </a>
                                                 {% when SubFeature::Dependency with (dependency) %}
                                                     {%- let version = dependency_version(dependency) -%}
-                                                    dep:<a href="/crate/{{ dependency }}/{{ version }}">
+                                                        dep:<a href="{{ RustdocParams::new(dependency.to_owned()).with_req_version(version.to_owned()).rustdoc_url() }}">
                                                         {{- dependency -}}
                                                     </a>
                                                 {% when SubFeature::DependencyFeature with {dependency, feature, optional} %}
                                                     {%- let version = dependency_version(dependency) -%}
-                                                    <a href="/crate/{{ dependency }}/{{ version }}">
+                                                    {%- set dependency_params = RustdocParams::new(dependency.to_owned()).with_req_version(version.to_owned()) -%}
+                                                    <a href="{{ dependency_params.crate_details_url() }}">
                                                         {{- dependency -}}
                                                     </a>
                                                     {%- if optional -%}?{%- endif -%}
-                                                    /<a href="/crate/{{ dependency }}/{{ version }}/features#{{ feature }}">
+                                                    /<a href="{{ dependency_params.features_url().with_fragment(*feature) }}">
                                                         {{- feature -}}
                                                     </a>
                                             {%- endmatch %}

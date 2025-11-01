@@ -1,4 +1,4 @@
-use super::{
+use crate::web::{
     cache::CachePolicy, error::AxumNope, metrics::request_recorder, statics::build_static_router,
 };
 use askama::Template;
@@ -258,7 +258,7 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::source::source_browser_handler),
         )
         .route(
-            "/crate/{name}/{version}/menus/platforms/{target}",
+            "/crate/{name}/{version}/menus/platforms/{target}/",
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
@@ -266,11 +266,11 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             get_internal(super::crate_details::get_all_platforms),
         )
         .route(
-            "/crate/{name}/{version}/menus/platforms",
+            "/crate/{name}/{version}/menus/platforms/",
             get_internal(super::crate_details::get_all_platforms_root),
         )
         .route(
-            "/crate/{name}/{version}/menus/releases/{target}/{*path}",
+            "/crate/{name}/{version}/menus/releases/{*path}",
             get_internal(super::crate_details::get_all_releases),
         )
         .route(

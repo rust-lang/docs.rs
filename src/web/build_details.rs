@@ -5,7 +5,7 @@ use crate::{
     web::{
         MetaData,
         error::{AxumNope, AxumResult},
-        extractors::{DbConnection, Path},
+        extractors::{DbConnection, Path, rustdoc::RustdocParams},
         file::File,
         filters,
         page::templates::{RenderBrands, RenderRegular, RenderSolid},
@@ -33,12 +33,13 @@ pub(crate) struct BuildDetails {
 
 #[derive(Template)]
 #[template(path = "crate/build_details.html")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct BuildDetailsPage {
     metadata: MetaData,
     build_details: BuildDetails,
     all_log_filenames: Vec<String>,
     current_filename: Option<String>,
+    params: RustdocParams,
 }
 
 impl_axum_webpage! { BuildDetailsPage }
@@ -141,8 +142,11 @@ pub(crate) async fn build_details_handler(
         (file_content, all_log_filenames, current_filename)
     };
 
+    let metadata = MetaData::from_crate(&mut conn, &params.name, &params.version, None).await?;
+    let params = RustdocParams::from_metadata(&metadata);
+
     Ok(BuildDetailsPage {
-        metadata: MetaData::from_crate(&mut conn, &params.name, &params.version, None).await?,
+        metadata,
         build_details: BuildDetails {
             id,
             rustc_version: row.rustc_version,
@@ -154,6 +158,7 @@ pub(crate) async fn build_details_handler(
         },
         all_log_filenames,
         current_filename,
+        params,
     }
     .into_response())
 }
