@@ -1000,6 +1000,7 @@ dependencies = [
  "http-body-util",
  "mime",
  "pin-project-lite",
+ "rustversion",
  "tower-layer",
  "tower-service",
  "tracing",
