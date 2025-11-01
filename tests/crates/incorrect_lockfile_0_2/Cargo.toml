@@ -1,0 +1,12 @@
+[package]
+name = "docs_rs_test_incorrect_lockfile"
+version = "0.2.0"
+edition = "2021"
+description = """
+Test crate for docs.rs build tests
+"""
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+log.version = "0.4.17"
+log.features = ["kv_unstable_sval"]

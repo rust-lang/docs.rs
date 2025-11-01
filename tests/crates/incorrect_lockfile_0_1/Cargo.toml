@@ -1,0 +1,15 @@
+[package]
+name = "docs_rs_test_incorrect_lockfile"
+version = "0.1.2"
+edition = "2021"
+description = """
+Test crate for docs.rs build tests
+"""
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rand_core.version = "0.5"
+rand_core.optional = true
+
+[package.metadata.docs.rs]
+features = ["rand_core"]
