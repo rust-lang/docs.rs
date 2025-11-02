@@ -298,8 +298,7 @@ impl QueueSubcommand {
                     (Some(reference), false) => reference,
                     (None, true) => {
                         println!("Fetching changes to set reference to HEAD");
-                        let (_, oid) = ctx.index.diff()?.peek_changes()?;
-                        oid
+                        ctx.runtime.block_on(ctx.index.latest_commit_reference())?
                     }
                     (_, _) => unreachable!(),
                 };

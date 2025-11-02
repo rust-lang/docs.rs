@@ -1,4 +1,4 @@
-use crate::{Context, db::delete, utils::spawn_blocking};
+use crate::{Context, db::delete};
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
 use tracing::{info, warn};
@@ -32,12 +32,9 @@ pub async fn run_check(ctx: &Context, dry_run: bool) -> Result<()> {
         .context("Loading crate data from database for consistency check")?;
 
     tracing::info!("Loading data from index...");
-    let index_data = spawn_blocking({
-        let index = ctx.index.clone();
-        move || index::load(&index)
-    })
-    .await
-    .context("Loading crate data from index for consistency check")?;
+    let index_data = index::load(&ctx.config)
+        .await
+        .context("Loading crate data from index for consistency check")?;
 
     let diff = diff::calculate_diff(db_data.iter(), index_data.iter());
     let result = handle_diff(ctx, diff.iter(), dry_run).await?;

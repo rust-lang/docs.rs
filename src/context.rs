@@ -67,14 +67,9 @@ impl Context {
 
         let cdn = Arc::new(CdnBackend::new(&config).await);
 
-        let index = Arc::new({
-            let path = config.registry_index_path.clone();
-            if let Some(registry_url) = config.registry_url.clone() {
-                Index::from_url(path, registry_url)
-            } else {
-                Index::new(path)
-            }?
-        });
+        let index = Arc::new(
+            Index::from_url(&config.registry_index_path, config.registry_url.as_deref()).await?,
+        );
 
         let runtime = runtime::Handle::current();
         // sync wrappers around build-queue & storage async resources
