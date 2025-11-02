@@ -12,7 +12,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tokio::{runtime, task::spawn_blocking, time::Instant};
+use tokio::{runtime, time::Instant};
 use tracing::{debug, info};
 
 /// Run the registry watcher
@@ -41,11 +41,7 @@ pub async fn watch_registry(
         }
 
         if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-            spawn_blocking({
-                let index = index.clone();
-                move || index.run_git_gc()
-            })
-            .await?;
+            index.run_git_gc().await;
             last_gc = Instant::now();
         }
         tokio::time::sleep(config.delay_between_registry_fetches).await;

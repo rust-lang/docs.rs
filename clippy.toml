@@ -1,3 +1,12 @@
 [[disallowed-types]]
 path = "axum::extract::Path"
 reason = "use our own custom web::extractors::Path for a nicer error response"
+
+[[disallowed-types]]
+path = "crates_index_diff::Index"
+reason = """
+    Don't directly use crates_index_diff::Index because it might 
+    lead to issues when used in async contexts.
+    We have our own wrapper struct (`crate::index::Index`) that is 
+    async, and should be used instead.
+"""

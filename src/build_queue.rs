@@ -226,15 +226,13 @@ impl AsyncBuildQueue {
     ///
     /// Returns the number of crates added
     pub async fn get_new_crates(&self, index: &Index) -> Result<usize> {
-        let diff = index.diff()?;
-
         let last_seen_reference = self
             .last_seen_reference()
             .await?
             .context("no last_seen_reference set in database")?;
-        diff.set_last_seen_reference(last_seen_reference)?;
+        index.set_last_seen_reference(last_seen_reference).await?;
 
-        let (changes, new_reference) = diff.peek_changes_ordered()?;
+        let (changes, new_reference) = index.peek_changes_ordered().await?;
 
         let mut conn = self.db.get_async().await?;
         let mut crates_added = 0;
