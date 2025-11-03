@@ -1,4 +1,4 @@
-FROM postgres:10-alpine
+FROM postgres:18-alpine
 EXPOSE 5432
 
 COPY ./install_extensions.sql /docker-entrypoint-initdb.d/
