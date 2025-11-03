@@ -9,7 +9,7 @@
 #  Build stage  #
 #################
 
-FROM ubuntu:22.04 AS build
+FROM ubuntu:24.04 AS build
 
 # Install packaged dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -67,7 +67,7 @@ RUN cargo build --profile=$PROFILE
 #  Web server stage  #
 ######################
 
-FROM ubuntu:22.04 AS web-server
+FROM ubuntu:24.04 AS web-server
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
@@ -90,7 +90,7 @@ CMD ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "start-web-server", "0.0.0.0:8
 #  Output stage  #
 ##################
 
-FROM ubuntu:22.04 AS output
+FROM ubuntu:24.04 AS output
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     git \
