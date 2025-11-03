@@ -17,8 +17,8 @@ use itertools::Itertools as _;
 use serde::Deserialize;
 use std::borrow::Cow;
 
-static INDEX_HTML: &str = "index.html";
-static FOLDER_AND_INDEX_HTML: &str = "/index.html";
+const INDEX_HTML: &str = "index.html";
+const FOLDER_AND_INDEX_HTML: &str = "/index.html";
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum PageKind {
