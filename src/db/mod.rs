@@ -24,7 +24,7 @@ pub(crate) mod file;
 pub(crate) mod mimes;
 mod overrides;
 mod pool;
-pub(crate) mod types;
+pub mod types;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 

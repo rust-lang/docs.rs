@@ -1,5 +1,5 @@
 use super::data::{Crate, Crates, Release, Releases};
-use crate::{Config, utils::run_blocking};
+use crate::{Config, db::types::version::Version, utils::run_blocking};
 use anyhow::Result;
 use rayon::iter::ParallelIterator;
 use tracing::debug;
@@ -26,14 +26,19 @@ pub(super) async fn load(config: &Config) -> Result<Crates> {
             .crates_parallel()
             .map(|krate| {
                 krate.map(|krate| {
-                    let mut releases: Releases = krate
-                        .versions()
-                        .iter()
-                        .map(|version| Release {
-                            version: version.version().into(),
-                            yanked: Some(version.is_yanked()),
-                        })
-                        .collect();
+                    let mut releases: Releases =
+                        krate
+                            .versions()
+                            .iter()
+                            .filter_map(|version| {
+                                version.version().parse::<Version>().ok().map(|semversion| {
+                                    Release {
+                                        version: semversion,
+                                        yanked: Some(version.is_yanked()),
+                                    }
+                                })
+                            })
+                            .collect();
 
                     releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
 

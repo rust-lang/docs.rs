@@ -1,49 +1,52 @@
-use crate::RUSTDOC_STATIC_STORAGE_PREFIX;
-use crate::db::{
-    BuildId,
-    file::{add_path_into_database, file_list_to_json},
+use crate::{
+    AsyncStorage, Config, Context, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi,
+    Storage,
+    db::{
+        BuildId, CrateId, Pool, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
+        blacklist::is_blacklisted,
+        file::{add_path_into_database, file_list_to_json},
+        finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
+        types::{BuildStatus, version::Version},
+        update_build_with_error, update_crate_data_in_database,
+    },
+    docbuilder::Limits,
+    error::Result,
+    repositories::RepositoryStatsUpdater,
+    storage::{
+        CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
+        rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+    },
+    utils::{
+        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, parse_rustc_version,
+        report_error, set_config,
+    },
 };
-use crate::db::{CrateId, ReleaseId};
-use crate::db::{
-    Pool, add_doc_coverage, add_path_into_remote_archive, finish_build, finish_release,
-    initialize_build, initialize_crate, initialize_release, types::BuildStatus,
-    update_build_with_error, update_crate_data_in_database,
-};
-use crate::docbuilder::Limits;
-use crate::error::Result;
-use crate::repositories::RepositoryStatsUpdater;
-use crate::storage::{
-    CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
-};
-use crate::utils::{
-    CargoMetadata, ConfigName, copy_dir_all, get_config, parse_rustc_version, report_error,
-    set_config,
-};
-use crate::{AsyncStorage, Config, Context, InstanceMetrics, RegistryApi, Storage};
-use crate::{db::blacklist::is_blacklisted, utils::MetadataPackage};
 use anyhow::{Context as _, Error, anyhow, bail};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use regex::Regex;
-use rustwide::cmd::{Command, CommandError, SandboxBuilder, SandboxImage};
-use rustwide::logging::{self, LogStorage};
-use rustwide::toolchain::ToolchainError;
-use rustwide::{AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder};
+use rustwide::{
+    AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
+    cmd::{Command, CommandError, SandboxBuilder, SandboxImage},
+    logging::{self, LogStorage},
+    toolchain::ToolchainError,
+};
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
-use std::io::BufReader;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{self, File},
+    io::BufReader,
+    path::Path,
+    sync::Arc,
+    time::Instant,
+};
 use tokio::runtime;
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
-const DUMMY_CRATE_VERSION: &str = "1.0.0";
+const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
 
 pub const RUSTDOC_JSON_COMPRESSION_ALGORITHMS: &[CompressionAlgorithm] =
     &[CompressionAlgorithm::Zstd, CompressionAlgorithm::Gzip];
@@ -314,7 +317,7 @@ impl RustwideBuilder {
             .build_dir(&format!("essential-files-{parsed_rustc_version}"));
 
         // This is an empty library crate that is supposed to always build.
-        let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
+        let krate = Crate::crates_io(DUMMY_CRATE_NAME, &DUMMY_CRATE_VERSION.to_string());
         krate.fetch(&self.workspace)?;
 
         build_dir
@@ -325,7 +328,7 @@ impl RustwideBuilder {
                 let res = self.execute_build(
                     BuildId(0),
                     DUMMY_CRATE_NAME,
-                    DUMMY_CRATE_VERSION,
+                    &DUMMY_CRATE_VERSION,
                     HOST_TARGET,
                     true,
                     build,
@@ -393,7 +396,7 @@ impl RustwideBuilder {
     pub fn build_package(
         &mut self,
         name: &str,
-        version: &str,
+        version: &Version,
         kind: PackageKind<'_>,
         collect_metrics: bool,
     ) -> Result<BuildPackageSummary> {
@@ -439,7 +442,7 @@ impl RustwideBuilder {
     fn build_package_inner(
         &mut self,
         name: &str,
-        version: &str,
+        version: &Version,
         kind: PackageKind<'_>,
         crate_id: CrateId,
         release_id: ReleaseId,
@@ -500,11 +503,12 @@ impl RustwideBuilder {
         let krate = {
             let _span = info_span!("krate.fetch").entered();
 
+            let version = version.to_string();
             let krate = match kind {
                 PackageKind::Local(path) => Crate::local(path),
-                PackageKind::CratesIo => Crate::crates_io(name, version),
+                PackageKind::CratesIo => Crate::crates_io(name, &version),
                 PackageKind::Registry(registry) => {
-                    Crate::registry(AlternativeRegistry::new(registry), name, version)
+                    Crate::registry(AlternativeRegistry::new(registry), name, &version)
                 }
             };
             krate.fetch(&self.workspace)?;
@@ -784,7 +788,7 @@ impl RustwideBuilder {
         &self,
         build_id: BuildId,
         name: &str,
-        version: &str,
+        version: &Version,
         target: &str,
         build: &Build,
         limits: &Limits,
@@ -829,7 +833,7 @@ impl RustwideBuilder {
         &self,
         build_id: BuildId,
         name: &str,
-        version: &str,
+        version: &Version,
         target: &str,
         is_default_target: bool,
         build: &Build,
@@ -988,7 +992,7 @@ impl RustwideBuilder {
         &self,
         build_id: BuildId,
         name: &str,
-        version: &str,
+        version: &Version,
         target: &str,
         is_default_target: bool,
         build: &Build,
@@ -1293,7 +1297,7 @@ mod tests {
     fn get_features(
         env: &TestEnvironment,
         name: &str,
-        version: &str,
+        version: &Version,
     ) -> Result<Option<Vec<Feature>>, sqlx::Error> {
         env.runtime().block_on(async {
             let mut conn = env.async_db().async_conn().await;
@@ -1304,14 +1308,14 @@ mod tests {
                      INNER JOIN crates ON crates.id = releases.crate_id
                      WHERE crates.name = $1 AND releases.version = $2"#,
                 name,
-                version,
+                version as _,
             )
             .fetch_one(&mut *conn)
             .await
         })
     }
 
-    fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &str) -> Result<()> {
+    fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &Version) -> Result<()> {
         let paths = [
             format!("cache/index.crates.io-6f17d22bba15001f/{crate_}-{version}.crate"),
             format!("src/index.crates.io-6f17d22bba15001f/{crate_}-{version}"),
@@ -1361,7 +1365,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
@@ -1390,7 +1394,7 @@ mod tests {
                         c.name = $1 AND
                         r.version = $2"#,
                 crate_,
-                version,
+                version as _,
             )
             .fetch_one(&mut *conn)
             .await
@@ -1424,11 +1428,11 @@ mod tests {
         assert!(!storage.exists(&old_source_file)?);
 
         // doc archive exists
-        let doc_archive = rustdoc_archive_path(crate_, version);
+        let doc_archive = rustdoc_archive_path(crate_, &version);
         assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
 
         // source archive exists
-        let source_archive = source_archive_path(crate_, version);
+        let source_archive = source_archive_path(crate_, &version);
         assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
         // default target was built and is accessible
@@ -1477,7 +1481,7 @@ mod tests {
                     // check if rustdoc json files exist for all targets
                     let path = rustdoc_json_path(
                         crate_,
-                        version,
+                        &version,
                         target,
                         RustdocJsonFormatVersion::Latest,
                         Some(*alg),
@@ -1546,7 +1550,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, true)?
+                .build_package(crate_, &version, PackageKind::CratesIo, true)?
                 .successful
         );
 
@@ -1569,7 +1573,7 @@ mod tests {
 
         // some binary crate
         let crate_ = "heater";
-        let version = "0.2.3";
+        let version = Version::new(0, 2, 3);
 
         let storage = env.storage();
         let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
@@ -1581,7 +1585,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             !builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
@@ -1600,7 +1604,7 @@ mod tests {
                         c.name = $1 AND
                         r.version = $2",
                 crate_,
-                version
+                version as _
             )
             .fetch_one(&mut *conn)
             .await
@@ -1610,11 +1614,11 @@ mod tests {
         assert_eq!(row.is_library, Some(false));
 
         // doc archive exists
-        let doc_archive = rustdoc_archive_path(crate_, version);
+        let doc_archive = rustdoc_archive_path(crate_, &version);
         assert!(!storage.exists(&doc_archive)?);
 
         // source archive exists
-        let source_archive = source_archive_path(crate_, version);
+        let source_archive = source_archive_path(crate_, &version);
         assert!(storage.exists(&source_archive)?);
 
         // old rustdoc & source files still exist
@@ -1632,13 +1636,13 @@ mod tests {
         // rand 0.8.5 fails to build with recent nightly versions
         // https://github.com/rust-lang/docs.rs/issues/26750
         let crate_ = "rand";
-        let version = "0.8.5";
+        let version = Version::new(0, 8, 5);
 
         // create a successful release & build in the database
         let release_id = env.runtime().block_on(async {
             let mut conn = env.async_db().async_conn().await;
             let crate_id = initialize_crate(&mut conn, crate_).await?;
-            let release_id = initialize_release(&mut conn, crate_id, version).await?;
+            let release_id = initialize_release(&mut conn, crate_id, &version).await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
             finish_build(
                 &mut conn,
@@ -1654,7 +1658,21 @@ mod tests {
                 &mut conn,
                 crate_id,
                 release_id,
-                &MetadataPackage::default(),
+                &MetadataPackage {
+                    name: crate_.into(),
+                    version: version.clone(),
+                    id: "".into(),
+                    license: None,
+                    repository: None,
+                    homepage: None,
+                    description: None,
+                    documentation: None,
+                    dependencies: vec![],
+                    targets: vec![],
+                    readme: None,
+                    keywords: vec![],
+                    features: HashMap::new(),
+                },
                 Path::new("/unknown/"),
                 "x86_64-unknown-linux-gnu",
                 serde_json::Value::Array(vec![]),
@@ -1698,7 +1716,7 @@ mod tests {
         assert!(
             // not successful build
             !builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
@@ -1706,29 +1724,29 @@ mod tests {
         Ok(())
     }
 
-    #[test_case("scsys-macros", "0.2.6")]
-    #[test_case("scsys-derive", "0.2.6")]
-    #[test_case("thiserror-impl", "1.0.26")]
+    #[test_case("scsys-macros", Version::new(0, 2, 6))]
+    #[test_case("scsys-derive", Version::new(0, 2, 6))]
+    #[test_case("thiserror-impl", Version::new(1, 0, 26))]
     #[ignore]
-    fn test_proc_macro(crate_: &str, version: &str) -> Result<()> {
+    fn test_proc_macro(crate_: &str, version: Version) -> Result<()> {
         let env = TestEnvironment::new_with_runtime()?;
 
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
         let storage = env.storage();
 
         // doc archive exists
-        let doc_archive = rustdoc_archive_path(crate_, version);
+        let doc_archive = rustdoc_archive_path(crate_, &version);
         assert!(storage.exists(&doc_archive)?);
 
         // source archive exists
-        let source_archive = source_archive_path(crate_, version);
+        let source_archive = source_archive_path(crate_, &version);
         assert!(storage.exists(&source_archive)?);
 
         Ok(())
@@ -1740,7 +1758,7 @@ mod tests {
         let env = TestEnvironment::new_with_runtime()?;
 
         let crate_ = "windows-win";
-        let version = "2.4.1";
+        let version = Version::new(2, 4, 1);
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         if builder.toolchain.as_ci().is_some() {
@@ -1748,18 +1766,18 @@ mod tests {
         }
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
         let storage = env.storage();
 
         // doc archive exists
-        let doc_archive = rustdoc_archive_path(crate_, version);
+        let doc_archive = rustdoc_archive_path(crate_, &version);
         assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
 
         // source archive exists
-        let source_archive = source_archive_path(crate_, version);
+        let source_archive = source_archive_path(crate_, &version);
         assert!(storage.exists(&source_archive)?, "{}", source_archive);
 
         let target = "x86_64-unknown-linux-gnu";
@@ -1791,7 +1809,7 @@ mod tests {
         )?;
 
         // if the corrected dependency of the crate was already downloaded we need to remove it
-        remove_cache_files(&env, "rand_core", "0.5.1")?;
+        remove_cache_files(&env, "rand_core", &Version::new(0, 5, 1))?;
 
         // Specific setup required:
         //  * crate has a binary so that it is published with a lockfile
@@ -1821,7 +1839,7 @@ mod tests {
         )?;
 
         // if the corrected dependency of the crate was already downloaded we need to remove it
-        remove_cache_files(&env, "value-bag-sval2", "1.4.1")?;
+        remove_cache_files(&env, "value-bag-sval2", &Version::new(1, 4, 1))?;
 
         // Similar to above, this crate fails to build with the published
         // lockfile, but generating a new working lockfile requires
@@ -1844,12 +1862,12 @@ mod tests {
         let env = TestEnvironment::new_with_runtime()?;
 
         let crate_ = "proc-macro2";
-        let version = "1.0.95";
+        let version = Version::new(1, 0, 95);
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
         Ok(())
@@ -1865,19 +1883,19 @@ mod tests {
         // Will succeed in the crate fetch step, so sources are
         // added. Will fail when we try to build.
         let crate_ = "simconnect-sys";
-        let version = "0.23.1";
+        let version = Version::new(0, 23, 1);
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
         assert!(
             !builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
         // source archive exists
-        let source_archive = source_archive_path(crate_, version);
+        let source_archive = source_archive_path(crate_, &version);
         assert!(
             env.storage().exists(&source_archive)?,
             "archive doesnt exist: {source_archive}"
@@ -1894,12 +1912,12 @@ mod tests {
         // https://github.com/rust-lang/docs.rs/issues/2491
         // package without Cargo.toml, so fails directly in the fetch stage.
         let crate_ = "emheap";
-        let version = "0.1.0";
+        let version = Version::new(0, 1, 0);
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
-        let summary = builder.build_package(crate_, version, PackageKind::CratesIo, false)?;
+        let summary = builder.build_package(crate_, &version, PackageKind::CratesIo, false)?;
 
         assert!(!summary.successful);
         assert!(summary.should_reattempt);
@@ -1918,7 +1936,7 @@ mod tests {
                        INNER JOIN builds as b on b.rid = r.id
                        WHERE c.name = $1 and r.version = $2"#,
                 crate_,
-                version,
+                version as _,
             )
             .fetch_one(&mut *conn)
             .await
@@ -1938,17 +1956,17 @@ mod tests {
         let env = TestEnvironment::new_with_runtime()?;
 
         let crate_ = "serde";
-        let version = "1.0.152";
+        let version = Version::new(1, 0, 152);
         let mut builder = RustwideBuilder::init(&env.context).unwrap();
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo, false)?
                 .successful
         );
 
         assert!(
-            get_features(&env, crate_, version)?
+            get_features(&env, crate_, &version)?
                 .unwrap()
                 .iter()
                 .any(|f| f.name == "serde_derive")
@@ -1971,7 +1989,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_features(&env, "optional-dep", "0.0.1")?
+            get_features(&env, "optional-dep", &Version::new(0, 0, 1))?
                 .unwrap()
                 .iter()
                 .map(|f| f.name.to_owned())
@@ -2063,7 +2081,7 @@ mod tests {
             builder
                 .build_package(
                     DUMMY_CRATE_NAME,
-                    DUMMY_CRATE_VERSION,
+                    &DUMMY_CRATE_VERSION,
                     PackageKind::CratesIo,
                     false
                 )?

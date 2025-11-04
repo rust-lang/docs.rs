@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod version;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::Type)]
 #[sqlx(type_name = "feature")]
 pub struct Feature {

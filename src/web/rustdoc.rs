@@ -296,7 +296,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             match storage
                 .stream_rustdoc_file(
                     &crate_name,
-                    &krate.version.to_string(),
+                    &krate.version,
                     krate.latest_build_id,
                     inner_path,
                     krate.archive_storage,
@@ -493,7 +493,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     let blob = match storage
         .stream_rustdoc_file(
             params.name(),
-            &krate.version.to_string(),
+            &krate.version,
             krate.latest_build_id,
             &storage_path,
             krate.archive_storage,
@@ -521,7 +521,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 if storage
                     .rustdoc_file_exists(
                         params.name(),
-                        &krate.version.to_string(),
+                        &krate.version,
                         krate.latest_build_id,
                         &params.storage_path(),
                         krate.archive_storage,
@@ -559,8 +559,8 @@ pub(crate) async fn rustdoc_html_server_handler(
             {
                 error!(
                     krate = params.name(),
-                    version = krate.version.to_string(),
-                    original_path = params.inner_path(),
+                    version = %krate.version,
+                    original_path = params.original_path(),
                     storage_path,
                     "Couldn't find crate documentation root on storage.
                         Something is wrong with the build."
@@ -653,7 +653,7 @@ pub(crate) async fn target_redirect_handler(
     let redirect_uri = if storage
         .rustdoc_file_exists(
             params.name(),
-            &crate_details.version.to_string(),
+            &crate_details.version,
             crate_details.latest_build_id,
             &storage_path,
             crate_details.archive_storage,
@@ -795,7 +795,7 @@ pub(crate) async fn json_download_handler(
 
     let storage_path = rustdoc_json_path(
         &krate.name,
-        &krate.version.to_string(),
+        &krate.version,
         &target,
         wanted_format_version,
         Some(wanted_compression),
@@ -817,7 +817,7 @@ pub(crate) async fn json_download_handler(
         if wanted_compression == CompressionAlgorithm::Zstd {
             let storage_path = rustdoc_json_path(
                 &krate.name,
-                &krate.version.to_string(),
+                &krate.version,
                 &target,
                 wanted_format_version,
                 None,
@@ -846,7 +846,7 @@ pub(crate) async fn download_handler(
         .assume_exact_name()?
         .into_version();
 
-    let archive_path = rustdoc_archive_path(&name, &version.to_string());
+    let archive_path = rustdoc_archive_path(&name, &version);
 
     // not all archives are set for public access yet, so we check if
     // the access is set and fix it if needed.
@@ -893,6 +893,7 @@ mod test {
     use super::*;
     use crate::{
         Config,
+        db::types::version::Version,
         docbuilder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS,
         registry_api::{CrateOwner, OwnerKind},
         storage::compression::file_extension_for,
@@ -1493,7 +1494,7 @@ mod test {
                 ("dummy_mixed-separators", "0.2.0"),
             ];
 
-            for (name, version) in &rels {
+            for (name, version) in rels {
                 env.fake_release()
                     .await
                     .name(name)
@@ -3240,7 +3241,7 @@ mod test {
         .await?;
 
         const NAME: &str = "dummy";
-        const VERSION: &str = "0.1.0";
+        const VERSION: Version = Version::new(0, 1, 0);
         const TARGET: &str = "x86_64-unknown-linux-gnu";
         const FORMAT_VERSION: RustdocJsonFormatVersion = RustdocJsonFormatVersion::Latest;
 
@@ -3259,7 +3260,7 @@ mod test {
             .get(
                 &rustdoc_json_path(
                     NAME,
-                    VERSION,
+                    &VERSION,
                     TARGET,
                     FORMAT_VERSION,
                     Some(CompressionAlgorithm::Zstd),
@@ -3269,13 +3270,14 @@ mod test {
             .await?;
 
         for compression in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-            let path = rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, Some(*compression));
+            let path =
+                rustdoc_json_path(NAME, &VERSION, TARGET, FORMAT_VERSION, Some(*compression));
             storage.delete_prefix(&path).await?;
             assert!(!storage.exists(&path).await?);
         }
         storage
             .store_one(
-                &rustdoc_json_path(NAME, VERSION, TARGET, FORMAT_VERSION, None),
+                &rustdoc_json_path(NAME, &VERSION, TARGET, FORMAT_VERSION, None),
                 zstd_blob.content,
             )
             .await?;

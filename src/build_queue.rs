@@ -1,17 +1,19 @@
-use crate::Context;
-use crate::db::{CrateId, Pool, delete_crate, delete_version, update_latest_version_id};
-use crate::docbuilder::PackageKind;
-use crate::error::Result;
-use crate::storage::AsyncStorage;
-use crate::utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config};
-use crate::{BuildPackageSummary, cdn};
-use crate::{Config, Index, InstanceMetrics, RustwideBuilder};
+use crate::{
+    BuildPackageSummary, Config, Context, Index, InstanceMetrics, RustwideBuilder, cdn,
+    db::{
+        CrateId, Pool, delete_crate, delete_version, types::version::Version,
+        update_latest_version_id,
+    },
+    docbuilder::PackageKind,
+    error::Result,
+    storage::AsyncStorage,
+    utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config},
+};
 use anyhow::Context as _;
 use fn_error_context::context;
 use futures_util::{StreamExt, stream::TryStreamExt};
 use sqlx::Connection as _;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::runtime;
 use tracing::{debug, error, info, instrument};
 
@@ -26,7 +28,7 @@ pub(crate) struct QueuedCrate {
     #[serde(skip)]
     id: i32,
     pub(crate) name: String,
-    pub(crate) version: String,
+    pub(crate) version: Version,
     pub(crate) priority: i32,
     pub(crate) registry: Option<String>,
     pub(crate) attempt: i32,
@@ -87,7 +89,7 @@ impl AsyncBuildQueue {
     pub async fn add_crate(
         &self,
         name: &str,
-        version: &str,
+        version: &Version,
         priority: i32,
         registry: Option<&str>,
     ) -> Result<()> {
@@ -95,15 +97,15 @@ impl AsyncBuildQueue {
 
         sqlx::query!(
             "INSERT INTO queue (name, version, priority, registry)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (name, version) DO UPDATE
-                    SET priority = EXCLUDED.priority,
-                        registry = EXCLUDED.registry,
-                        attempt = 0,
-                        last_attempt = NULL
-                ;",
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (name, version) DO UPDATE
+                SET priority = EXCLUDED.priority,
+                    registry = EXCLUDED.registry,
+                    attempt = 0,
+                    last_attempt = NULL
+            ;",
             name,
-            version,
+            version as _,
             priority,
             registry,
         )
@@ -166,17 +168,23 @@ impl AsyncBuildQueue {
 
         Ok(sqlx::query_as!(
             QueuedCrate,
-            "SELECT id, name, version, priority, registry, attempt
-                 FROM queue
-                 WHERE attempt < $1
-                 ORDER BY priority ASC, attempt ASC, id ASC",
+            r#"SELECT
+                id,
+                name,
+                version as "version: Version",
+                priority,
+                registry,
+                attempt
+             FROM queue
+             WHERE attempt < $1
+             ORDER BY priority ASC, attempt ASC, id ASC"#,
             self.max_attempts
         )
         .fetch_all(&mut *conn)
         .await?)
     }
 
-    pub(crate) async fn has_build_queued(&self, name: &str, version: &str) -> Result<bool> {
+    pub(crate) async fn has_build_queued(&self, name: &str, version: &Version) -> Result<bool> {
         let mut conn = self.db.get_async().await?;
         Ok(sqlx::query_scalar!(
             "SELECT id
@@ -188,7 +196,7 @@ impl AsyncBuildQueue {
              ",
             self.max_attempts,
             name,
-            version,
+            version as _,
         )
         .fetch_optional(&mut *conn)
         .await?
@@ -265,7 +273,10 @@ impl AsyncBuildQueue {
                     &self.storage,
                     &self.config,
                     &release.name,
-                    &release.version,
+                    &release
+                        .version
+                        .parse()
+                        .context("couldn't parse release version as semver")?,
                 )
                 .await
                 .with_context(|| {
@@ -294,7 +305,10 @@ impl AsyncBuildQueue {
                 match self
                     .add_crate(
                         &release.name,
-                        &release.version,
+                        &release
+                            .version
+                            .parse()
+                            .context("couldn't parse release version as semver")?,
                         priority,
                         index.repository_url(),
                     )
@@ -322,14 +336,15 @@ impl AsyncBuildQueue {
             if let Some(release) = yanked.or(unyanked) {
                 // FIXME: delay yanks of crates that have not yet finished building
                 // https://github.com/rust-lang/docs.rs/issues/1934
-                if let Err(err) = self
-                    .set_yanked_inner(
-                        &mut conn,
-                        release.name.as_str(),
-                        release.version.as_str(),
-                        yanked.is_some(),
-                    )
-                    .await
+                if let Ok(release_version) = Version::parse(&release.version)
+                    && let Err(err) = self
+                        .set_yanked_inner(
+                            &mut conn,
+                            release.name.as_str(),
+                            &release_version,
+                            yanked.is_some(),
+                        )
+                        .await
                 {
                     report_error(&err);
                 }
@@ -350,7 +365,7 @@ impl AsyncBuildQueue {
         Ok(crates_added)
     }
 
-    pub async fn set_yanked(&self, name: &str, version: &str, yanked: bool) -> Result<()> {
+    pub async fn set_yanked(&self, name: &str, version: &Version, yanked: bool) -> Result<()> {
         let mut conn = self.db.get_async().await?;
         self.set_yanked_inner(&mut conn, name, version, yanked)
             .await
@@ -361,7 +376,7 @@ impl AsyncBuildQueue {
         &self,
         conn: &mut sqlx::PgConnection,
         name: &str,
-        version: &str,
+        version: &Version,
         yanked: bool,
     ) -> Result<()> {
         let activity = if yanked { "yanked" } else { "unyanked" };
@@ -376,7 +391,7 @@ impl AsyncBuildQueue {
             RETURNING crates.id as "id: CrateId"
             "#,
             name,
-            version,
+            version as _,
             yanked,
         )
         .fetch_optional(&mut *conn)
@@ -422,7 +437,7 @@ impl BuildQueue {
     pub fn add_crate(
         &self,
         name: &str,
-        version: &str,
+        version: &Version,
         priority: i32,
         registry: Option<&str>,
     ) -> Result<()> {
@@ -430,7 +445,7 @@ impl BuildQueue {
             .block_on(self.inner.add_crate(name, version, priority, registry))
     }
 
-    pub fn set_yanked(&self, name: &str, version: &str, yanked: bool) -> Result<()> {
+    pub fn set_yanked(&self, name: &str, version: &Version, yanked: bool) -> Result<()> {
         self.runtime
             .block_on(self.inner.set_yanked(name, version, yanked))
     }
@@ -494,14 +509,20 @@ impl BuildQueue {
         let to_process = match self.runtime.block_on(
             sqlx::query_as!(
                 QueuedCrate,
-                "SELECT id, name, version, priority, registry, attempt
+                r#"SELECT
+                    id,
+                    name,
+                    version as "version: Version",
+                    priority,
+                    registry,
+                    attempt
                  FROM queue
                  WHERE
                     attempt < $1 AND
                     (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
                  ORDER BY priority ASC, attempt ASC, id ASC
                  LIMIT 1
-                 FOR UPDATE SKIP LOCKED",
+                 FOR UPDATE SKIP LOCKED"#,
                 self.inner.max_attempts,
                 self.inner.config.delay_between_build_attempts.as_secs_f64(),
             )
@@ -688,10 +709,10 @@ pub async fn queue_rebuilds(
     }
 
     let mut results = sqlx::query!(
-        "SELECT i.* FROM (
+        r#"SELECT i.* FROM (
              SELECT
                  c.name,
-                 r.version,
+                 r.version as "version: Version",
                  (
                     SELECT MAX(COALESCE(b.build_finished, b.build_started))
                     FROM builds AS b
@@ -704,7 +725,7 @@ pub async fn queue_rebuilds(
                  r.rustdoc_status = TRUE
          ) as i
          ORDER BY i.last_build_attempt ASC
-         LIMIT $1",
+         LIMIT $1"#,
         rebuilds_to_queue,
     )
     .fetch(&mut *conn);
@@ -728,9 +749,8 @@ pub async fn queue_rebuilds(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{FakeBuild, TestEnvironment};
-
     use super::*;
+    use crate::test::{FakeBuild, TestEnvironment, V1, V2};
     use chrono::Utc;
     use std::time::Duration;
 
@@ -746,7 +766,7 @@ mod tests {
         env.fake_release()
             .await
             .name("foo")
-            .version("0.1.0")
+            .version(V1)
             .builds(vec![
                 FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
             ])
@@ -762,7 +782,7 @@ mod tests {
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].name, "foo");
-        assert_eq!(queue[0].version, "0.1.0");
+        assert_eq!(queue[0].version, V1);
         assert_eq!(queue[0].priority, REBUILD_PRIORITY);
 
         Ok(())
@@ -779,10 +799,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
             .await?;
         build_queue
-            .add_crate("foo2", "0.1.0", REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
             .await?;
 
         let mut conn = env.async_db().async_conn().await;
@@ -795,7 +815,7 @@ mod tests {
         env.fake_release()
             .await
             .name("foo")
-            .version("0.1.0")
+            .version(V1)
             .builds(vec![
                 FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
             ])
@@ -821,16 +841,16 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", "0.1.0", REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
             .await?;
         build_queue
-            .add_crate("foo2", "0.1.0", REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
             .await?;
 
         env.fake_release()
             .await
             .name("foo")
-            .version("0.1.0")
+            .version(V1)
             .builds(vec![
                 FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
             ])
@@ -854,8 +874,8 @@ mod tests {
 
         let queue = env.async_build_queue();
 
-        queue.add_crate("some_crate", "0.1.1", 0, None).await?;
-        queue.add_crate("some_crate", "0.1.1", 9, None).await?;
+        queue.add_crate("some_crate", &V1, 0, None).await?;
+        queue.add_crate("some_crate", &V1, 9, None).await?;
 
         let queued_crates = queue.queued_crates().await?;
         assert_eq!(queued_crates.len(), 1);
@@ -876,14 +896,15 @@ mod tests {
         sqlx::query!(
             "
                 INSERT INTO queue (name, version, priority, attempt, last_attempt )
-                VALUES ('failed_crate', '0.1.1', 0, 99, NOW())",
+                VALUES ('failed_crate', $1, 0, 99, NOW())",
+            V1 as _
         )
         .execute(&mut *conn)
         .await?;
 
         assert_eq!(queue.pending_count().await?, 0);
 
-        queue.add_crate("failed_crate", "0.1.1", 9, None).await?;
+        queue.add_crate("failed_crate", &V1, 9, None).await?;
 
         assert_eq!(queue.pending_count().await?, 1);
 
@@ -892,7 +913,7 @@ mod tests {
                      FROM queue
                      WHERE name = $1 AND version = $2",
             "failed_crate",
-            "0.1.1",
+            V1 as _
         )
         .fetch_one(&mut *conn)
         .await?;
@@ -909,17 +930,17 @@ mod tests {
 
         let queue = env.async_build_queue();
 
-        queue.add_crate("dummy", "0.1.1", 0, None).await?;
+        queue.add_crate("dummy", &V1, 0, None).await?;
 
         let mut conn = env.async_db().async_conn().await;
-        assert!(queue.has_build_queued("dummy", "0.1.1").await.unwrap());
+        assert!(queue.has_build_queued("dummy", &V1).await.unwrap());
 
         sqlx::query!("UPDATE queue SET attempt = 6")
             .execute(&mut *conn)
             .await
             .unwrap();
 
-        assert!(!queue.has_build_queued("dummy", "0.1.1").await.unwrap());
+        assert!(!queue.has_build_queued("dummy", &V1).await.unwrap());
 
         Ok(())
     }
@@ -937,7 +958,7 @@ mod tests {
 
         let queue = env.build_queue();
 
-        queue.add_crate("krate", "1.0.0", 0, None)?;
+        queue.add_crate("krate", &V1, 0, None)?;
 
         // first let it fail
         queue.process_next_crate(|krate| {
@@ -987,15 +1008,15 @@ mod tests {
         let queue = env.build_queue();
 
         let test_crates = [
-            ("low-priority", "1.0.0", 1000),
-            ("high-priority-foo", "1.0.0", -1000),
-            ("medium-priority", "1.0.0", -10),
-            ("high-priority-bar", "1.0.0", -1000),
-            ("standard-priority", "1.0.0", 0),
-            ("high-priority-baz", "1.0.0", -1000),
+            ("low-priority", 1000),
+            ("high-priority-foo", -1000),
+            ("medium-priority", -10),
+            ("high-priority-bar", -1000),
+            ("standard-priority", 0),
+            ("high-priority-baz", -1000),
         ];
         for krate in &test_crates {
-            queue.add_crate(krate.0, krate.1, krate.2, None)?;
+            queue.add_crate(krate.0, &V1, krate.1, None)?;
         }
 
         let assert_next = |name| -> Result<()> {
@@ -1077,8 +1098,8 @@ mod tests {
 
         let queue = env.build_queue();
 
-        queue.add_crate("will_succeed", "1.0.0", -1, None)?;
-        queue.add_crate("will_fail", "1.0.0", 0, None)?;
+        queue.add_crate("will_succeed", &V1, -1, None)?;
+        queue.add_crate("will_fail", &V1, 0, None)?;
 
         let fetch_invalidations = || {
             env.runtime()
@@ -1128,9 +1149,9 @@ mod tests {
         let queue = env.build_queue();
 
         assert_eq!(queue.pending_count()?, 0);
-        queue.add_crate("foo", "1.0.0", 0, None)?;
+        queue.add_crate("foo", &V1, 0, None)?;
         assert_eq!(queue.pending_count()?, 1);
-        queue.add_crate("bar", "1.0.0", 0, None)?;
+        queue.add_crate("bar", &V1, 0, None)?;
         assert_eq!(queue.pending_count()?, 2);
 
         queue.process_next_crate(|krate| {
@@ -1151,11 +1172,11 @@ mod tests {
         let queue = env.build_queue();
 
         assert_eq!(queue.prioritized_count()?, 0);
-        queue.add_crate("foo", "1.0.0", 0, None)?;
+        queue.add_crate("foo", &V1, 0, None)?;
         assert_eq!(queue.prioritized_count()?, 1);
-        queue.add_crate("bar", "1.0.0", -100, None)?;
+        queue.add_crate("bar", &V1, -100, None)?;
         assert_eq!(queue.prioritized_count()?, 2);
-        queue.add_crate("baz", "1.0.0", 100, None)?;
+        queue.add_crate("baz", &V1, 100, None)?;
         assert_eq!(queue.prioritized_count()?, 2);
 
         queue.process_next_crate(|krate| {
@@ -1175,9 +1196,9 @@ mod tests {
 
         assert!(queue.pending_count_by_priority()?.is_empty());
 
-        queue.add_crate("one", "1.0.0", 1, None)?;
-        queue.add_crate("two", "2.0.0", 2, None)?;
-        queue.add_crate("two_more", "2.0.0", 2, None)?;
+        queue.add_crate("one", &V1, 1, None)?;
+        queue.add_crate("two", &V2, 2, None)?;
+        queue.add_crate("two_more", &V2, 2, None)?;
 
         assert_eq!(
             queue.pending_count_by_priority()?,
@@ -1206,9 +1227,9 @@ mod tests {
         let queue = env.build_queue();
 
         assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("foo", "1.0.0", -100, None)?;
+        queue.add_crate("foo", &V1, -100, None)?;
         assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("bar", "1.0.0", 0, None)?;
+        queue.add_crate("bar", &V1, 0, None)?;
 
         for _ in 0..MAX_ATTEMPTS {
             assert_eq!(queue.failed_count()?, 0);
@@ -1245,9 +1266,9 @@ mod tests {
         let queue = env.build_queue();
 
         assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("foo", "1.0.0", -100, None)?;
+        queue.add_crate("foo", &V1, -100, None)?;
         assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("bar", "1.0.0", 0, None)?;
+        queue.add_crate("bar", &V1, 0, None)?;
 
         for _ in 0..MAX_ATTEMPTS {
             assert_eq!(queue.failed_count()?, 0);
@@ -1273,25 +1294,21 @@ mod tests {
 
         let queue = env.build_queue();
 
-        let test_crates = [
-            ("bar", "1.0.0", 0),
-            ("foo", "1.0.0", -10),
-            ("baz", "1.0.0", 10),
-        ];
+        let test_crates = [("bar", 0), ("foo", -10), ("baz", 10)];
         for krate in &test_crates {
-            queue.add_crate(krate.0, krate.1, krate.2, None)?;
+            queue.add_crate(krate.0, &V1, krate.1, None)?;
         }
 
         assert_eq!(
             vec![
-                ("foo", "1.0.0", -10),
-                ("bar", "1.0.0", 0),
-                ("baz", "1.0.0", 10),
+                ("foo".into(), V1, -10),
+                ("bar".into(), V1, 0),
+                ("baz".into(), V1, 10),
             ],
             queue
                 .queued_crates()?
-                .iter()
-                .map(|c| (c.name.as_str(), c.version.as_str(), c.priority))
+                .into_iter()
+                .map(|c| (c.name.clone(), c.version, c.priority))
                 .collect::<Vec<_>>()
         );
 
@@ -1362,7 +1379,7 @@ mod tests {
 
         let name: String = "krate".repeat(100);
 
-        queue.add_crate(&name, "0.0.1", 0, None)?;
+        queue.add_crate(&name, &V1, 0, None)?;
 
         queue.process_next_crate(|krate| {
             assert_eq!(name, krate.name);
@@ -1378,12 +1395,16 @@ mod tests {
 
         let queue = env.build_queue();
 
-        let version: String = "version".repeat(100);
+        let long_version = Version::parse(&format!(
+            "1.2.3-{}+{}",
+            "prerelease".repeat(100),
+            "build".repeat(100)
+        ))?;
 
-        queue.add_crate("krate", &version, 0, None)?;
+        queue.add_crate("krate", &long_version, 0, None)?;
 
         queue.process_next_crate(|krate| {
-            assert_eq!(version, krate.version);
+            assert_eq!(long_version, krate.version);
             Ok(BuildPackageSummary::default())
         })?;
 

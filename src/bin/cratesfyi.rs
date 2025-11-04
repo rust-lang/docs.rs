@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, PackageKind, RustwideBuilder,
-    db::{self, CrateId, Overrides, add_path_into_database},
+    db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
     start_background_metrics_webserver, start_web_server,
     utils::{
         ConfigName, get_config, get_crate_pattern_and_priority, list_crate_priorities,
@@ -237,7 +237,7 @@ enum QueueSubcommand {
         crate_name: String,
         /// Version of crate to build
         #[arg(name = "CRATE_VERSION")]
-        crate_version: String,
+        crate_version: Version,
         /// Priority of build (new crate builds get priority 0)
         #[arg(
             name = "BUILD_PRIORITY",
@@ -395,7 +395,7 @@ enum BuildSubcommand {
 
         /// Version of crate
         #[arg(name = "CRATE_VERSION")]
-        crate_version: Option<String>,
+        crate_version: Option<Version>,
 
         /// Build a crate at a specific path
         #[arg(short = 'l', long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
@@ -793,6 +793,6 @@ enum DeleteSubcommand {
 
         /// The version of the crate to delete
         #[arg(name = "VERSION")]
-        version: String,
+        version: Version,
     },
 }

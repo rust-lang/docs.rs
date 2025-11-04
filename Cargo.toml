@@ -59,7 +59,7 @@ bzip2 = "0.6.0"
 getrandom = "0.3.1"
 itertools = { version = "0.14.0" }
 hex = "0.4.3"
-derive_more = { version = "2.0.0", features = ["display", "deref"] }
+derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into"] }
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 derive_builder = "0.20.2"
 

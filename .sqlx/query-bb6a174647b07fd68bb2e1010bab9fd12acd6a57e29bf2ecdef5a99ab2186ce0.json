@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, version, priority, registry, attempt\n                 FROM queue\n                 WHERE\n                    attempt < $1 AND\n                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))\n                 ORDER BY priority ASC, attempt ASC, id ASC\n                 LIMIT 1\n                 FOR UPDATE SKIP LOCKED",
+  "query": "SELECT\n                    id,\n                    name,\n                    version as \"version: Version\",\n                    priority,\n                    registry,\n                    attempt\n                 FROM queue\n                 WHERE\n                    attempt < $1 AND\n                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))\n                 ORDER BY priority ASC, attempt ASC, id ASC\n                 LIMIT 1\n                 FOR UPDATE SKIP LOCKED",
   "describe": {
     "columns": [
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "version",
+        "name": "version: Version",
         "type_info": "Text"
       },
       {
@@ -49,5 +49,5 @@
       false
     ]
   },
-  "hash": "4242ea977833de52a1b11e1bf418750e53a36222d36ab26140a7692e200fd35b"
+  "hash": "bb6a174647b07fd68bb2e1010bab9fd12acd6a57e29bf2ecdef5a99ab2186ce0"
 }

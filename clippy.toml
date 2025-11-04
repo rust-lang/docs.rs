@@ -10,3 +10,7 @@ reason = """
     We have our own wrapper struct (`crate::index::Index`) that is 
     async, and should be used instead.
 """
+
+[[disallowed-types]]
+path = "semver::Version"
+reason = "use our own custom db::types::version::Version so you can use it with sqlx"
