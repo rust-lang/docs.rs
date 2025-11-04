@@ -1,6 +1,9 @@
 use crate::{
     AsyncStorage, Config,
-    db::{BuildId, types::BuildStatus},
+    db::{
+        BuildId,
+        types::{BuildStatus, version::Version},
+    },
     impl_axum_webpage,
     web::{
         MetaData,
@@ -16,7 +19,6 @@ use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
-use semver::Version;
 use serde::Deserialize;
 use std::sync::Arc;
 

@@ -1,5 +1,5 @@
 use super::data::{Crate, Crates, Release, Releases};
-use crate::Config;
+use crate::{Config, db::types::version::Version};
 use anyhow::Result;
 use itertools::Itertools;
 
@@ -7,7 +7,7 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Resu
     let rows = sqlx::query!(
         r#"SELECT
             name as "name!",
-            version as "version!",
+            version as "version!: Version",
             yanked
          FROM (
              SELECT
@@ -62,24 +62,24 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::async_wrapper;
+    use crate::test::{V1, V2, V3, async_wrapper};
 
     #[test]
     fn test_load() {
         async_wrapper(|env| async move {
             env.async_build_queue()
-                .add_crate("queued", "0.0.1", 0, None)
+                .add_crate("queued", &V1, 0, None)
                 .await?;
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.0.2")
+                .version(V2)
                 .create()
                 .await?;
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.0.3")
+                .version(V3)
                 .yanked(true)
                 .create()
                 .await?;
@@ -94,11 +94,11 @@ mod tests {
                         name: "krate".into(),
                         releases: vec![
                             Release {
-                                version: "0.0.2".into(),
+                                version: V2,
                                 yanked: Some(false),
                             },
                             Release {
-                                version: "0.0.3".into(),
+                                version: V3,
                                 yanked: Some(true),
                             }
                         ]
@@ -106,7 +106,7 @@ mod tests {
                     Crate {
                         name: "queued".into(),
                         releases: vec![Release {
-                            version: "0.0.1".into(),
+                            version: V1,
                             yanked: None,
                         }]
                     },

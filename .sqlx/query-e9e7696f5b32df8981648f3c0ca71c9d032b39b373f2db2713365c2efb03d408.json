@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, version, priority, registry, attempt\n                 FROM queue\n                 WHERE attempt < $1\n                 ORDER BY priority ASC, attempt ASC, id ASC",
+  "query": "SELECT\n                id,\n                name,\n                version as \"version: Version\",\n                priority,\n                registry,\n                attempt\n             FROM queue\n             WHERE attempt < $1\n             ORDER BY priority ASC, attempt ASC, id ASC",
   "describe": {
     "columns": [
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "version",
+        "name": "version: Version",
         "type_info": "Text"
       },
       {
@@ -48,5 +48,5 @@
       false
     ]
   },
-  "hash": "9633480047fdf3519d16bc5b4035b2e2d0e4403aa54c5cefbd64188ba3b41132"
+  "hash": "e9e7696f5b32df8981648f3c0ca71c9d032b39b373f2db2713365c2efb03d408"
 }

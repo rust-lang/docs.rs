@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             releases.id as \"id: ReleaseId\",\n             releases.version,\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.release_time,\n             releases.target_name,\n             releases.default_target,\n             releases.doc_targets\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             releases.crate_id = $1",
+  "query": "SELECT\n             releases.id as \"id: ReleaseId\",\n             releases.version as \"version: Version\",\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.release_time,\n             releases.target_name,\n             releases.default_target,\n             releases.doc_targets\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             releases.crate_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "version",
+        "name": "version: Version",
         "type_info": "Text"
       },
       {
@@ -83,5 +83,5 @@
       true
     ]
   },
-  "hash": "7072759134a3abceaa6d3105b1f7986fd2ec3e76ff4df7c8204f2d4eaebba8f1"
+  "hash": "4894c7d8c4e354dca1d952362b2e0cb25441e8e65b273e01ed86d2d3ecebfe84"
 }

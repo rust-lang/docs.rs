@@ -237,14 +237,14 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, V1, async_wrapper};
 
     #[test]
     fn rewriting_only_injects_css_once() {
         async_wrapper(|env| async move {
             env.fake_release().await
                 .name("testing")
-                .version("0.1.0")
+                .version(V1)
                 // A somewhat representative rustdoc html file from 2016
                 .rustdoc_file_with("2016/index.html", br#"
                     <html>
@@ -272,10 +272,18 @@ mod test {
                 .create().await?;
 
             let web = env.web_app().await;
-            let output = web.get("/testing/0.1.0/2016/").await?.text().await?;
+            let output = web
+                .get(&format!("/testing/{V1}/2016/"))
+                .await?
+                .text()
+                .await?;
             assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
 
-            let output = web.get("/testing/0.1.0/2022/").await?.text().await?;
+            let output = web
+                .get(&format!("/testing/{V1}/2022/"))
+                .await?
+                .text()
+                .await?;
             assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
 
             Ok(())

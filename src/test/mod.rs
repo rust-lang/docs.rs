@@ -1,13 +1,15 @@
 mod fakes;
 
 pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
-use crate::cdn::CdnBackend;
-use crate::config::ConfigBuilder;
-use crate::db::{self, AsyncPoolClient, Pool};
-use crate::error::Result;
-use crate::storage::{AsyncStorage, Storage, StorageKind};
-use crate::web::{build_axum_app, cache, page::TemplateData};
-use crate::{AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics};
+use crate::{
+    AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
+    cdn::CdnBackend,
+    config::ConfigBuilder,
+    db::{self, AsyncPoolClient, Pool, types::version::Version},
+    error::Result,
+    storage::{AsyncStorage, Storage, StorageKind},
+    web::{build_axum_app, cache, page::TemplateData},
+};
 use anyhow::Context as _;
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
@@ -20,6 +22,12 @@ use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
 use tokio::{runtime, task::block_in_place};
 use tower::ServiceExt;
 use tracing::error;
+
+// some versions as constants for tests
+pub(crate) const V0_1: Version = Version::new(0, 1, 0);
+pub(crate) const V1: Version = Version::new(1, 0, 0);
+pub(crate) const V2: Version = Version::new(2, 0, 0);
+pub(crate) const V3: Version = Version::new(3, 0, 0);
 
 pub(crate) fn async_wrapper<F, Fut>(f: F)
 where

@@ -156,7 +156,10 @@ where
 mod tests {
     use super::diff::Difference;
     use super::*;
-    use crate::test::{TestEnvironment, async_wrapper};
+    use crate::{
+        db::types::version::Version,
+        test::{TestEnvironment, V1, V2, async_wrapper},
+    };
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
@@ -185,8 +188,8 @@ mod tests {
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.1.1")
-                .version("0.1.2")
+                .version(V1)
+                .version(V2)
                 .create()
                 .await?;
 
@@ -218,20 +221,17 @@ mod tests {
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.1.1")
+                .version(V1)
                 .create()
                 .await?;
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.1.2")
+                .version(V2)
                 .create()
                 .await?;
 
-            let diff = [Difference::ReleaseNotInIndex(
-                "krate".into(),
-                "0.1.1".into(),
-            )];
+            let diff = [Difference::ReleaseNotInIndex("krate".into(), V1)];
 
             assert_eq!(count(&env, "SELECT count(*) FROM releases").await?, 2);
 
@@ -242,8 +242,12 @@ mod tests {
             handle_diff(&env.context, diff.iter(), false).await?;
 
             assert_eq!(
-                single_row::<String>(&env, "SELECT version FROM releases").await?,
-                vec!["0.1.2"]
+                single_row::<Version>(
+                    &env,
+                    r#"SELECT version as "version: Version" FROM releases"#
+                )
+                .await?,
+                vec![V2]
             );
 
             Ok(())
@@ -256,16 +260,12 @@ mod tests {
             env.fake_release()
                 .await
                 .name("krate")
-                .version("0.1.1")
+                .version(V1)
                 .yanked(true)
                 .create()
                 .await?;
 
-            let diff = [Difference::ReleaseYank(
-                "krate".into(),
-                "0.1.1".into(),
-                false,
-            )];
+            let diff = [Difference::ReleaseYank("krate".into(), V1, false)];
 
             handle_diff(&env.context, diff.iter(), true).await?;
 
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_missing_release_in_db() {
         async_wrapper(|env| async move {
-            let diff = [Difference::ReleaseNotInDb("krate".into(), "0.1.1".into())];
+            let diff = [Difference::ReleaseNotInDb("krate".into(), V1)];
 
             handle_diff(&env.context, diff.iter(), true).await?;
 
@@ -302,10 +302,10 @@ mod tests {
                 build_queue
                     .queued_crates()
                     .await?
-                    .iter()
-                    .map(|c| (c.name.as_str(), c.version.as_str(), c.priority))
+                    .into_iter()
+                    .map(|c| (c.name, V1, c.priority))
                     .collect::<Vec<_>>(),
-                vec![("krate", "0.1.1", 15)]
+                vec![("krate".into(), V1, 15)]
             );
             Ok(())
         })
@@ -314,10 +314,7 @@ mod tests {
     #[test]
     fn test_missing_crate_in_db() {
         async_wrapper(|env| async move {
-            let diff = [Difference::CrateNotInDb(
-                "krate".into(),
-                vec!["0.1.1".into(), "0.1.2".into()],
-            )];
+            let diff = [Difference::CrateNotInDb("krate".into(), vec![V1, V2])];
 
             handle_diff(&env.context, diff.iter(), true).await?;
 
@@ -331,10 +328,10 @@ mod tests {
                 build_queue
                     .queued_crates()
                     .await?
-                    .iter()
-                    .map(|c| (c.name.as_str(), c.version.as_str(), c.priority))
+                    .into_iter()
+                    .map(|c| (c.name, c.version, c.priority))
                     .collect::<Vec<_>>(),
-                vec![("krate", "0.1.1", 15), ("krate", "0.1.2", 15)]
+                vec![("krate".into(), V1, 15), ("krate".into(), V2, 15)]
             );
             Ok(())
         })

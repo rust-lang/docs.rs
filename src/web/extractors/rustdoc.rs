@@ -816,9 +816,11 @@ fn find_static_route_suffix<'a, 'b>(route: &'a str, path: &'b str) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{AxumResponseTestExt, AxumRouterTestExt};
+    use crate::{
+        db::types::version::Version,
+        test::{AxumResponseTestExt, AxumRouterTestExt},
+    };
     use axum::{Router, routing::get};
-    use semver::Version;
     use test_case::test_case;
 
     static KRATE: &str = "krate";

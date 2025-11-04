@@ -1,18 +1,18 @@
-use std::fmt::Display;
-
 use super::data::Crate;
+use crate::db::types::version::Version;
 use itertools::{
     EitherOrBoth::{Both, Left, Right},
     Itertools,
 };
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub(super) enum Difference {
     CrateNotInIndex(String),
-    CrateNotInDb(String, Vec<String>),
-    ReleaseNotInIndex(String, String),
-    ReleaseNotInDb(String, String),
-    ReleaseYank(String, String, bool),
+    CrateNotInDb(String, Vec<Version>),
+    ReleaseNotInIndex(String, Version),
+    ReleaseNotInDb(String, Version),
+    ReleaseYank(String, Version, bool),
 }
 
 impl Display for Difference {
@@ -103,6 +103,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::test::{V2, V3};
+
     use super::super::data::Release;
     use super::*;
     use std::iter;
@@ -131,11 +133,11 @@ mod tests {
             name: "krate".into(),
             releases: vec![
                 Release {
-                    version: "0.0.2".into(),
+                    version: V2,
                     yanked: Some(false),
                 },
                 Release {
-                    version: "0.0.3".into(),
+                    version: V3,
                     yanked: Some(true),
                 },
             ],
@@ -143,10 +145,7 @@ mod tests {
 
         assert_eq!(
             calculate_diff([].iter(), index_releases.iter()),
-            vec![Difference::CrateNotInDb(
-                "krate".into(),
-                vec!["0.0.2".into(), "0.0.3".into()]
-            )]
+            vec![Difference::CrateNotInDb("krate".into(), vec![V2, V3])]
         );
     }
 
@@ -156,11 +155,11 @@ mod tests {
             name: "krate".into(),
             releases: vec![
                 Release {
-                    version: "0.0.2".into(),
+                    version: V2,
                     yanked: Some(true),
                 },
                 Release {
-                    version: "0.0.3".into(),
+                    version: V3,
                     yanked: Some(true),
                 },
             ],
@@ -169,11 +168,11 @@ mod tests {
             name: "krate".into(),
             releases: vec![
                 Release {
-                    version: "0.0.2".into(),
+                    version: V2,
                     yanked: Some(false),
                 },
                 Release {
-                    version: "0.0.3".into(),
+                    version: V3,
                     yanked: Some(true),
                 },
             ],
@@ -181,11 +180,7 @@ mod tests {
 
         assert_eq!(
             calculate_diff(db_releases.iter(), index_releases.iter()),
-            vec![Difference::ReleaseYank(
-                "krate".into(),
-                "0.0.2".into(),
-                false,
-            )]
+            vec![Difference::ReleaseYank("krate".into(), V2, false,)]
         );
     }
 
@@ -194,14 +189,14 @@ mod tests {
         let db_releases = [Crate {
             name: "krate".into(),
             releases: vec![Release {
-                version: "0.0.2".into(),
+                version: V2,
                 yanked: None,
             }],
         }];
         let index_releases = [Crate {
             name: "krate".into(),
             releases: vec![Release {
-                version: "0.0.2".into(),
+                version: V2,
                 yanked: Some(false),
             }],
         }];
