@@ -17,8 +17,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install dependencies for chromium browser
 RUN apt-get install -y \
-  gconf-service \
-  libasound2 \
+  libasound2t64 \
   libatk1.0-0 \
   libatk-bridge2.0-0 \
   libc6 \
@@ -29,7 +28,6 @@ RUN apt-get install -y \
   libfontconfig1 \
   libgbm-dev \
   libgcc1 \
-  libgconf-2-4 \
   libgdk-pixbuf2.0-0 \
   libglib2.0-0 \
   libgtk-3-0 \
@@ -51,7 +49,6 @@ RUN apt-get install -y \
   libxss1 \
   libxtst6 \
   fonts-liberation \
-  libappindicator1 \
   libnss3 \
   lsb-release \
   xdg-utils \
