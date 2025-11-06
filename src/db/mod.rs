@@ -4,17 +4,16 @@ use sqlx::migrate::{Migrate, Migrator};
 
 pub use self::add_package::update_latest_version_id;
 pub(crate) use self::add_package::{
-    ReleaseDependency, add_doc_coverage, finish_build, finish_release, initialize_build,
-    initialize_crate, initialize_release, update_build_with_error,
+    add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
+    initialize_release, update_build_with_error,
 };
 pub use self::{
-    add_package::{
-        BuildId, CrateId, ReleaseId, update_build_status, update_crate_data_in_database,
-    },
+    add_package::{update_build_status, update_crate_data_in_database},
     delete::{delete_crate, delete_version},
     file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,
     pool::{AsyncPoolClient, Pool, PoolError},
+    types::{BuildId, CrateId, ReleaseId},
 };
 
 mod add_package;

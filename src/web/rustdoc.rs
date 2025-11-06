@@ -2674,6 +2674,7 @@ mod test {
                     .await
                     .get("/testing/0.1.0/testing/")
                     .await?
+                    .error_for_status()?
                     .text()
                     .await?
             ));
