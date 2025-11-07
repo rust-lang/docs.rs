@@ -5,49 +5,53 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_KIND: &str = "normal";
 
-/// The three possible representations of a dependency in our internal JSON format
-/// in the `releases.dependencies` column.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-enum Dep {
-    Two((String, VersionReq)),
-    Three((String, VersionReq, String)),
-    Four((String, VersionReq, String, bool)),
-}
-
 /// A crate dependency in our internal representation for releases.dependencies json.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Deref)]
-#[serde(from = "Dep", into = "Dep")]
+#[derive(Debug, Clone, PartialEq, Deref)]
 pub(crate) struct ReleaseDependency(Dependency);
 
-impl From<Dep> for ReleaseDependency {
-    fn from(src: Dep) -> Self {
+impl<'de> Deserialize<'de> for ReleaseDependency {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        /// The three possible representations of a dependency in our internal JSON format
+        /// in the `releases.dependencies` column.
+        #[derive(Serialize, Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            /// just [name, version]``
+            Basic((String, VersionReq)),
+            /// [name, version, kind]
+            WithKind((String, VersionReq, String)),
+            /// [name, version, kind, optional]
+            Full((String, VersionReq, String, bool)),
+        }
+
+        let src = Repr::deserialize(deserializer)?;
         let (name, req, kind, optional) = match src {
-            Dep::Two((name, req)) => (name, req, DEFAULT_KIND.into(), false),
-            Dep::Three((name, req, kind)) => (name, req, kind, false),
-            Dep::Four((name, req, kind, optional)) => (name, req, kind, optional),
+            Repr::Basic((name, req)) => (name, req, DEFAULT_KIND.into(), false),
+            Repr::WithKind((name, req, kind)) => (name, req, kind, false),
+            Repr::Full((name, req, kind, optional)) => (name, req, kind, optional),
         };
 
-        ReleaseDependency(Dependency {
+        Ok(ReleaseDependency(Dependency {
             name,
             req,
             kind: Some(kind),
             optional,
             rename: None,
-        })
+        }))
     }
 }
 
-impl From<ReleaseDependency> for Dep {
-    // dependency serialization for new releases.
-    fn from(rd: ReleaseDependency) -> Self {
-        let d = rd.0;
-        Dep::Four((
-            d.name,
-            d.req,
-            d.kind.unwrap_or_else(|| DEFAULT_KIND.into()),
-            d.optional,
-        ))
+impl Serialize for ReleaseDependency {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let dep = &self.0;
+        let kind = dep.kind.as_deref().unwrap_or(DEFAULT_KIND);
+        (dep.name.as_str(), &dep.req, kind, dep.optional).serialize(serializer)
     }
 }
 
