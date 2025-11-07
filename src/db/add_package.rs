@@ -48,7 +48,12 @@ pub(crate) async fn finish_release(
     source_size: u64,
 ) -> Result<()> {
     debug!("updating release data");
-    let dependencies: ReleaseDependencyList = metadata_pkg.dependencies.clone().into();
+    let dependencies: ReleaseDependencyList = metadata_pkg
+        .dependencies
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect();
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let features = get_features(metadata_pkg);

@@ -234,19 +234,18 @@ impl CrateDetails {
 
         let parsed_license = krate.license.as_deref().map(super::licenses::parse_license);
 
-        let dependencies = if let Some(value) = krate.dependencies {
-            match serde_json::from_value::<ReleaseDependencyList>(value) {
-                Ok(list) => list.into_iter_dependencies().collect(),
-                Err(_) => {
-                    // NOTE: we sometimes have invalid semver-requirement strings the database
-                    // (at the time writing, 14 releases out of 2 million).
-                    // We silently ignore those here.
-                    Vec::new()
-                }
-            }
-        } else {
-            Vec::new()
-        };
+        let dependencies: Vec<Dependency> = krate
+            .dependencies
+            .map(serde_json::from_value::<ReleaseDependencyList>)
+            .transpose()
+            // NOTE: we sometimes have invalid semver-requirement strings the database
+            // (at the time writing, 14 releases out of 2 million).
+            // We silently ignore those here.
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .into_iter()
+            .map(Into::into)
+            .collect();
 
         let mut crate_details = CrateDetails {
             name: krate.name,
