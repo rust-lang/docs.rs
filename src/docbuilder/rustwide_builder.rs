@@ -17,8 +17,9 @@ use crate::{
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
     },
     utils::{
-        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, parse_rustc_version,
-        report_error, set_config,
+        ConfigName,
+        cargo_metadata::{MetadataExt as _, PackageExt as _, load_cargo_metadata_from_rustwide},
+        copy_dir_all, get_config, parse_rustc_version, report_error, set_config,
     },
 };
 use anyhow::{Context as _, Error, anyhow, bail};
@@ -379,14 +380,14 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
+        let metadata = load_cargo_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
             .map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
         let package = metadata.root();
         self.build_package(
             &package.name,
-            &package.version,
+            &package.version(),
             PackageKind::Local(path),
             false,
         )
@@ -1001,7 +1002,7 @@ impl RustwideBuilder {
         create_essential_files: bool,
         collect_metrics: bool,
     ) -> Result<FullBuildResult> {
-        let cargo_metadata = CargoMetadata::load_from_rustwide(
+        let cargo_metadata = load_cargo_metadata_from_rustwide(
             &self.workspace,
             &self.toolchain,
             &build.host_source_dir(),
@@ -1232,7 +1233,7 @@ impl RustwideBuilder {
         copy_dir_all(source, dest).map_err(Into::into)
     }
 
-    fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
+    fn get_repo(&self, metadata: &cargo_metadata::Package) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats_updater.load_repository(metadata))
     }
@@ -1241,7 +1242,7 @@ impl RustwideBuilder {
 struct FullBuildResult {
     result: BuildResult,
     target: String,
-    cargo_metadata: CargoMetadata,
+    cargo_metadata: cargo_metadata::Metadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
 }
@@ -1286,10 +1287,12 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::Feature;
-    use crate::registry_api::ReleaseData;
-    use crate::storage::{CompressionAlgorithm, compression};
-    use crate::test::{AxumRouterTestExt, TestEnvironment};
+    use crate::{
+        db::types::Feature,
+        registry_api::ReleaseData,
+        storage::{CompressionAlgorithm, compression},
+        test::{AxumRouterTestExt, TestEnvironment, dummy_metadata_package},
+    };
     use pretty_assertions::assert_eq;
     use std::{io, iter};
     use test_case::test_case;
@@ -1658,21 +1661,7 @@ mod tests {
                 &mut conn,
                 crate_id,
                 release_id,
-                &MetadataPackage {
-                    name: crate_.into(),
-                    version: version.clone(),
-                    id: "".into(),
-                    license: None,
-                    repository: None,
-                    homepage: None,
-                    description: None,
-                    documentation: None,
-                    dependencies: vec![],
-                    targets: vec![],
-                    readme: None,
-                    keywords: vec![],
-                    features: HashMap::new(),
-                },
+                &dummy_metadata_package().build().unwrap(),
                 Path::new("/unknown/"),
                 "x86_64-unknown-linux-gnu",
                 serde_json::Value::Array(vec![]),

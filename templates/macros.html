@@ -168,13 +168,9 @@
             {%- endif -%}
             <a href="{{ href }}" class="pure-menu-link">
                 {{ dep.name|safe }} {{ dep.req|safe }}
-                {% if let Some(kind) = &dep.kind %}
-                    <i class="dependencies {{ kind }}">{{ kind }}</i>
-                    {% if dep.optional %}
-                        <i>optional</i>
-                    {% endif %}
-                {% else %}
-                    <i class="dependencies"></i>
+                <i class="dependencies {{ dep.kind }}">{{ dep.kind }}</i>
+                {% if dep.optional %}
+                    <i>optional</i>
                 {% endif %}
             </a>
         </li>

@@ -7,7 +7,7 @@ use crate::{
     impl_axum_webpage,
     registry_api::OwnerKind,
     storage::PathNotFoundError,
-    utils::{Dependency, get_correct_docsrs_style_file},
+    utils::get_correct_docsrs_style_file,
     web::{
         MatchedRelease, MetaData, ReqVersion,
         cache::CachePolicy,
@@ -40,7 +40,7 @@ pub(crate) struct CrateDetails {
     pub(crate) version: Version,
     pub(crate) description: Option<String>,
     pub(crate) owners: Vec<(String, String, OwnerKind)>,
-    pub(crate) dependencies: Vec<Dependency>,
+    pub(crate) dependencies: ReleaseDependencyList,
     readme: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
     release_time: Option<DateTime<Utc>>,
@@ -234,7 +234,7 @@ impl CrateDetails {
 
         let parsed_license = krate.license.as_deref().map(super::licenses::parse_license);
 
-        let dependencies: Vec<Dependency> = krate
+        let dependencies = krate
             .dependencies
             .map(serde_json::from_value::<ReleaseDependencyList>)
             .transpose()
@@ -242,10 +242,7 @@ impl CrateDetails {
             // (at the time writing, 14 releases out of 2 million).
             // We silently ignore those here.
             .unwrap_or_default()
-            .unwrap_or_default()
-            .into_iter()
-            .map(Into::into)
-            .collect();
+            .unwrap_or_default();
 
         let mut crate_details = CrateDetails {
             name: krate.name,
@@ -448,7 +445,7 @@ struct CrateDetailsPage {
     documentation_url: Option<String>,
     repository_url: Option<String>,
     repository_metadata: Option<RepositoryMetadata>,
-    dependencies: Vec<Dependency>,
+    dependencies: ReleaseDependencyList,
     releases: Vec<Release>,
     readme: Option<String>,
     build_status: BuildStatus,
@@ -712,7 +709,7 @@ pub(crate) async fn get_all_platforms(
 mod tests {
     use super::*;
     use crate::test::{
-        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment, V1,
         async_wrapper, fake_release_that_failed_before_build,
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
@@ -720,7 +717,7 @@ mod tests {
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     async fn release_build_status(
         conn: &mut sqlx::PgConnection,
@@ -1556,7 +1553,7 @@ mod tests {
                 .await
                 .name("library")
                 .version("0.1.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -1579,7 +1576,7 @@ mod tests {
             let features = [("_private".into(), Vec::new())]
                 .iter()
                 .cloned()
-                .collect::<HashMap<String, Vec<String>>>();
+                .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")
@@ -1607,7 +1604,7 @@ mod tests {
             let features = [("feature1".into(), Vec::new())]
                 .iter()
                 .cloned()
-                .collect::<HashMap<String, Vec<String>>>();
+                .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")
@@ -1643,7 +1640,7 @@ mod tests {
             ]
             .iter()
             .cloned()
-            .collect::<HashMap<String, Vec<String>>>();
+            .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")
@@ -1743,12 +1740,12 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error_features() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().async_conn().await;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(&mut conn, "foo", V1, "some errors").await?;
 
             let text_content = env
                 .web_app()
                 .await
-                .get("/crate/foo/0.1.0/features")
+                .get(&format!("/crate/foo/{V1}/features"))
                 .await?
                 .error_for_status()?
                 .text()
@@ -1767,12 +1764,12 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().async_conn().await;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(&mut conn, "foo", V1, "some errors").await?;
 
             let text_content = env
                 .web_app()
                 .await
-                .get("/crate/foo/0.1.0")
+                .get(&format!("/crate/foo/{V1}"))
                 .await?
                 .error_for_status()?
                 .text()

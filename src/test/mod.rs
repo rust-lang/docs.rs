@@ -1,6 +1,9 @@
 mod fakes;
 
-pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
+pub(crate) use self::fakes::{
+    FakeBuild, dummy_metadata_dependency, dummy_metadata_package,
+    fake_release_that_failed_before_build,
+};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
     cdn::CdnBackend,

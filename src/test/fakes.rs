@@ -14,12 +14,18 @@ use crate::{
         AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, compress,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
     },
-    utils::{Dependency, MetadataPackage, cargo_metadata::Target},
+    utils::cargo_metadata::PackageExt as _,
 };
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
+use cargo_metadata::{PackageId, PackageName};
 use chrono::{DateTime, Utc};
-use std::{collections::HashMap, fmt, iter, sync::Arc};
+use semver::VersionReq;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt, iter,
+    sync::Arc,
+};
 use tracing::debug;
 
 /// Create a fake release in the database that failed before the build.
@@ -61,7 +67,7 @@ where
 pub(crate) struct FakeRelease<'a> {
     db: &'a TestDatabase,
     storage: Arc<AsyncStorage>,
-    package: MetadataPackage,
+    package: cargo_metadata::Package,
     builds: Option<Vec<FakeBuild>>,
     /// name, content
     source_files: Vec<(&'a str, &'a [u8])>,
@@ -98,35 +104,7 @@ impl<'a> FakeRelease<'a> {
         FakeRelease {
             db,
             storage,
-            package: MetadataPackage {
-                id: "fake-package-id".into(),
-                name: "fake-package".into(),
-                version: Version::new(1, 0, 0),
-                license: Some("MIT".into()),
-                repository: Some("https://git.example.com".into()),
-                homepage: Some("https://www.example.com".into()),
-                description: Some("Fake package".into()),
-                documentation: Some("https://docs.example.com".into()),
-                dependencies: vec![Dependency {
-                    name: "fake-dependency".into(),
-                    req: semver::VersionReq::parse("^1.0.0").unwrap(),
-                    kind: None,
-                    rename: None,
-                    optional: false,
-                }],
-                targets: vec![Target::dummy_lib("fake_package".into(), None)],
-                readme: None,
-                keywords: vec!["fake".into(), "package".into()],
-                features: [
-                    ("default".into(), vec!["feature1".into(), "feature3".into()]),
-                    ("feature1".into(), Vec::new()),
-                    ("feature2".into(), vec!["feature1".into()]),
-                    ("feature3".into(), Vec::new()),
-                ]
-                .iter()
-                .cloned()
-                .collect::<HashMap<String, Vec<String>>>(),
-            },
+            package: dummy_metadata_package().build().unwrap(),
             builds: None,
             source_files: Vec::new(),
             rustdoc_files: Vec::new(),
@@ -153,7 +131,7 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn add_dependency(mut self, dependency: Dependency) -> Self {
+    pub(crate) fn add_dependency(mut self, dependency: cargo_metadata::Dependency) -> Self {
         self.package.dependencies.push(dependency);
         self
     }
@@ -164,8 +142,10 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub(crate) fn name(mut self, new: &str) -> Self {
-        self.package.name = new.into();
-        self.package.id = format!("{new}-id");
+        self.package.name = PackageName::new(new.into());
+        self.package.id = PackageId {
+            repr: format!("{new}-id"),
+        };
         self.package.targets[0].name = new.into();
         self
     }
@@ -175,7 +155,8 @@ impl<'a> FakeRelease<'a> {
         V: TryInto<Version>,
         V::Error: fmt::Debug,
     {
-        self.package.version = new.try_into().expect("invalid version");
+        let version: Version = new.try_into().expect("invalid version");
+        self.package.version = version.into();
         self
     }
 
@@ -244,7 +225,7 @@ impl<'a> FakeRelease<'a> {
 
     pub(crate) fn target_source(mut self, path: &'a str) -> Self {
         if let Some(target) = self.package.targets.first_mut() {
-            target.src_path = Some(path.into());
+            target.src_path = path.into();
         }
         self
     }
@@ -283,7 +264,11 @@ impl<'a> FakeRelease<'a> {
     pub(crate) fn add_platform<S: Into<String>>(mut self, platform: S) -> Self {
         let platform = platform.into();
         let name = self.package.targets[0].name.clone();
-        let target = Target::dummy_lib(name, Some(platform.clone()));
+        let target = dummy_metadata_target()
+            .name(name)
+            .src_path(platform.clone())
+            .build()
+            .unwrap();
         self.package.targets.push(target);
         self.doc_targets.push(platform);
         self
@@ -313,7 +298,7 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
-    pub(crate) fn features(mut self, features: HashMap<String, Vec<String>>) -> Self {
+    pub(crate) fn features(mut self, features: BTreeMap<String, Vec<String>>) -> Self {
         self.package.features = features;
         self
     }
@@ -402,7 +387,7 @@ impl<'a> FakeRelease<'a> {
             kind: FileKind,
             source_directory: &Path,
             archive_storage: bool,
-            package: &MetadataPackage,
+            package: &cargo_metadata::Package,
             storage: &AsyncStorage,
         ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
             debug!(
@@ -412,12 +397,14 @@ impl<'a> FakeRelease<'a> {
             );
             if archive_storage {
                 let (archive, public) = match kind {
-                    FileKind::Rustdoc => {
-                        (rustdoc_archive_path(&package.name, &package.version), true)
-                    }
-                    FileKind::Sources => {
-                        (source_archive_path(&package.name, &package.version), false)
-                    }
+                    FileKind::Rustdoc => (
+                        rustdoc_archive_path(&package.name, &package.version()),
+                        true,
+                    ),
+                    FileKind::Sources => (
+                        source_archive_path(&package.name, &package.version()),
+                        false,
+                    ),
                 };
                 debug!("store in archive: {:?}", archive);
                 let (files_list, new_alg) = crate::db::add_path_into_remote_archive(
@@ -452,7 +439,7 @@ impl<'a> FakeRelease<'a> {
                 .iter()
                 .any(|&(path, _)| path == "Cargo.toml")
         {
-            let MetadataPackage { name, version, .. } = &package;
+            let cargo_metadata::Package { name, version, .. } = &package;
             let content = format!(
                 r#"
                 [package]
@@ -490,8 +477,8 @@ impl<'a> FakeRelease<'a> {
             debug!("added rustdoc files");
 
             for target in &package.targets[1..] {
-                let platform = target.src_path.as_ref().unwrap();
-                let platform_dir = rustdoc_path.join(platform);
+                let platform = target.src_path.to_path_buf();
+                let platform_dir = rustdoc_path.join(&platform);
                 fs::create_dir(&platform_dir)?;
 
                 store_files_into(&rustdoc_files, &platform_dir)?;
@@ -544,7 +531,7 @@ impl<'a> FakeRelease<'a> {
                         .store_one_uncompressed(
                             &rustdoc_json_path(
                                 &package.name,
-                                &package.version,
+                                &package.version(),
                                 target,
                                 format_version,
                                 Some(*alg),
@@ -561,8 +548,7 @@ impl<'a> FakeRelease<'a> {
         // non-linux platforms.
         let mut async_conn = db.async_conn().await;
         let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
-        let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
-
+        let release_id = initialize_release(&mut async_conn, crate_id, &package.version()).await?;
         crate::db::finish_release(
             &mut async_conn,
             crate_id,
@@ -748,4 +734,77 @@ impl Default for FakeBuild {
             build_status: BuildStatus::Success,
         }
     }
+}
+
+pub(crate) fn dummy_metadata_dependency() -> cargo_metadata::DependencyBuilder {
+    cargo_metadata::DependencyBuilder::default()
+        .name("fake-dependency")
+        .source(None)
+        .req(VersionReq::parse("^1.0.0").unwrap())
+        .kind(cargo_metadata::DependencyKind::Normal)
+        .optional(false)
+        .uses_default_features(true)
+        .features(vec![])
+        .target(None)
+        .rename(None)
+        .registry(None)
+        .path(None)
+}
+
+pub(crate) fn dummy_metadata_target() -> cargo_metadata::TargetBuilder {
+    cargo_metadata::TargetBuilder::default()
+        .name("fake_package")
+        .kind(vec![cargo_metadata::TargetKind::Lib])
+        .crate_types(vec![cargo_metadata::CrateType::Lib])
+        .required_features(vec![])
+        .src_path("src/lib.rs")
+}
+
+pub(crate) fn dummy_metadata_package() -> cargo_metadata::PackageBuilder {
+    // use ::new()?
+    cargo_metadata::PackageBuilder::default()
+        .id(cargo_metadata::PackageId {
+            repr: "fake-package-id".into(),
+        })
+        .name(
+            "fake-package"
+                .parse::<cargo_metadata::PackageName>()
+                .unwrap(),
+        )
+        .version(Version::new(1, 0, 0))
+        .manifest_path("Cargo.toml")
+        .license(Some("MIT".to_string()))
+        .repository(Some("https://git.example.com".into()))
+        .homepage(Some("https://www.example.com".into()))
+        .description(Some("Fake package".into()))
+        .documentation(Some("https://docs.example.com".into()))
+        .dependencies(vec![dummy_metadata_dependency().build().unwrap()])
+        .targets(vec![dummy_metadata_target().build().unwrap()])
+        .keywords(vec!["fake".into(), "package".into()])
+        .features(
+            [
+                ("default".into(), vec!["feature1".into(), "feature3".into()]),
+                ("feature1".into(), Vec::new()),
+                ("feature2".into(), vec!["feature1".into()]),
+                ("feature3".into(), Vec::new()),
+            ]
+            .iter()
+            .cloned()
+            .collect::<BTreeMap<String, Vec<String>>>(),
+        )
+}
+
+#[test]
+fn test_dummy_metadata_dependency_is_complete() {
+    dummy_metadata_dependency().build().unwrap();
+}
+
+#[test]
+fn test_dummy_metadata_target_is_complete() {
+    dummy_metadata_target().build().unwrap();
+}
+
+#[test]
+fn test_dummy_metadata_package_is_complete() {
+    dummy_metadata_package().build().unwrap();
 }
