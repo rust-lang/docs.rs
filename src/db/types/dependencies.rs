@@ -55,24 +55,19 @@ impl Serialize for ReleaseDependency {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Deref)]
-#[serde(transparent)]
-pub(crate) struct ReleaseDependencyList(Vec<ReleaseDependency>);
-
-impl<I> From<I> for ReleaseDependencyList
-where
-    I: IntoIterator<Item = Dependency>,
-{
-    fn from(deps: I) -> Self {
-        Self(deps.into_iter().map(ReleaseDependency).collect())
+impl From<Dependency> for ReleaseDependency {
+    fn from(dep: Dependency) -> Self {
+        ReleaseDependency(dep)
     }
 }
 
-impl ReleaseDependencyList {
-    pub(crate) fn into_iter_dependencies(self) -> impl Iterator<Item = Dependency> {
-        self.0.into_iter().map(|rd| rd.0)
+impl From<ReleaseDependency> for Dependency {
+    fn from(dep: ReleaseDependency) -> Self {
+        dep.0
     }
 }
+
+pub(crate) type ReleaseDependencyList = Vec<ReleaseDependency>;
 
 #[cfg(test)]
 mod tests {
@@ -117,7 +112,7 @@ mod tests {
         expected_optional: bool,
     ) -> Result<()> {
         let deps: ReleaseDependencyList = serde_json::from_str(input)?;
-        let [dep] = deps.0.as_slice() else {
+        let [dep] = deps.as_slice() else {
             panic!("expected exactly one dependency");
         };
 
