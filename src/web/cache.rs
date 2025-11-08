@@ -11,7 +11,8 @@ pub static SHORT: HeaderValue = HeaderValue::from_static("max-age=60");
 pub static NO_STORE_MUST_REVALIDATE: HeaderValue =
     HeaderValue::from_static("no-cache, no-store, must-revalidate, max-age=0");
 
-pub static FOREVER_IN_CDN_AND_BROWSER: HeaderValue = HeaderValue::from_static("max-age=31104000");
+pub static FOREVER_IN_CDN_AND_BROWSER: HeaderValue =
+    HeaderValue::from_static("public, max-age=31104000, immutable");
 
 /// defines the wanted caching behaviour for a web response.
 #[derive(Debug, Clone)]
@@ -120,7 +121,10 @@ mod tests {
         CachePolicy::NoStoreMustRevalidate,
         Some("no-cache, no-store, must-revalidate, max-age=0")
     )]
-    #[test_case(CachePolicy::ForeverInCdnAndBrowser, Some("max-age=31104000"))]
+    #[test_case(
+        CachePolicy::ForeverInCdnAndBrowser,
+        Some("public, max-age=31104000, immutable")
+    )]
     #[test_case(CachePolicy::ForeverInCdn, None)]
     #[test_case(
         CachePolicy::ForeverInCdnAndStaleInBrowser,
