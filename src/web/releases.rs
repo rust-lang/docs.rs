@@ -1435,7 +1435,7 @@ mod tests {
         env.fake_release()
             .await
             .name("yet_another_crate")
-            .version("0.1.0")
+            .version(V1)
             .yanked(true)
             .create()
             .await?;
@@ -1456,13 +1456,8 @@ mod tests {
 
         // release that failed in the fetch-step, will miss some details
         let mut conn = env.async_db().async_conn().await;
-        fake_release_that_failed_before_build(
-            &mut conn,
-            "failed_hard",
-            "0.1.0",
-            "some random error",
-        )
-        .await?;
+        fake_release_that_failed_before_build(&mut conn, "failed_hard", V2, "some random error")
+            .await?;
 
         let _m = crates_io
             .mock("GET", "/api/v1/crates")
@@ -1502,8 +1497,11 @@ mod tests {
         // * version used is the highest semver following our own "latest version" logic
         assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
         assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
-        assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
-        assert_eq!(links[3], "/crate/failed_hard/0.1.0");
+        assert_eq!(
+            links[2],
+            format!("/yet_another_crate/{V1}/yet_another_crate/")
+        );
+        assert_eq!(links[3], format!("/crate/failed_hard/{V2}"));
         Ok(())
     }
 

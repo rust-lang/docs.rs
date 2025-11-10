@@ -234,12 +234,12 @@ mod tests {
     fn build_list_empty_build() {
         async_wrapper(|env| async move {
             let mut conn = env.async_db().async_conn().await;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(&mut conn, "foo", V1, "some errors").await?;
 
             let response = env
                 .web_app()
                 .await
-                .get("/crate/foo/0.1.0/builds")
+                .get(&format!("/crate/foo/{V1}/builds"))
                 .await?
                 .error_for_status()?;
             response.assert_cache_control(CachePolicy::NoCaching, env.config());

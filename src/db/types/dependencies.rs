@@ -1,13 +1,16 @@
-use crate::utils::Dependency;
-use derive_more::Deref;
+use cargo_metadata::{Dependency, DependencyKind};
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_KIND: &str = "normal";
-
-/// A crate dependency in our internal representation for releases.dependencies json.
-#[derive(Debug, Clone, PartialEq, Deref)]
-pub(crate) struct ReleaseDependency(Dependency);
+/// A subset of `cargo_metadata::Dependency`.
+/// Only the data we store in our `releases.dependencies` column.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ReleaseDependency {
+    pub(crate) name: String,
+    pub(crate) req: VersionReq,
+    pub(crate) kind: DependencyKind,
+    pub(crate) optional: bool,
+}
 
 impl<'de> Deserialize<'de> for ReleaseDependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -22,25 +25,24 @@ impl<'de> Deserialize<'de> for ReleaseDependency {
             /// just [name, version]``
             Basic((String, VersionReq)),
             /// [name, version, kind]
-            WithKind((String, VersionReq, String)),
+            WithKind((String, VersionReq, DependencyKind)),
             /// [name, version, kind, optional]
-            Full((String, VersionReq, String, bool)),
+            Full((String, VersionReq, DependencyKind, bool)),
         }
 
         let src = Repr::deserialize(deserializer)?;
         let (name, req, kind, optional) = match src {
-            Repr::Basic((name, req)) => (name, req, DEFAULT_KIND.into(), false),
+            Repr::Basic((name, req)) => (name, req, DependencyKind::default(), false),
             Repr::WithKind((name, req, kind)) => (name, req, kind, false),
             Repr::Full((name, req, kind, optional)) => (name, req, kind, optional),
         };
 
-        Ok(ReleaseDependency(Dependency {
+        Ok(ReleaseDependency {
             name,
             req,
-            kind: Some(kind),
+            kind,
             optional,
-            rename: None,
-        }))
+        })
     }
 }
 
@@ -49,21 +51,18 @@ impl Serialize for ReleaseDependency {
     where
         S: serde::Serializer,
     {
-        let dep = &self.0;
-        let kind = dep.kind.as_deref().unwrap_or(DEFAULT_KIND);
-        (dep.name.as_str(), &dep.req, kind, dep.optional).serialize(serializer)
+        (self.name.as_str(), &self.req, &self.kind, self.optional).serialize(serializer)
     }
 }
 
 impl From<Dependency> for ReleaseDependency {
     fn from(dep: Dependency) -> Self {
-        ReleaseDependency(dep)
-    }
-}
-
-impl From<ReleaseDependency> for Dependency {
-    fn from(dep: ReleaseDependency) -> Self {
-        dep.0
+        ReleaseDependency {
+            name: dep.name,
+            req: dep.req,
+            kind: dep.kind,
+            optional: dep.optional,
+        }
     }
 }
 
@@ -103,12 +102,20 @@ mod tests {
         Ok(())
     }
 
-    #[test_case(r#"[["vec_map", "^0.0.1"]]"#, "normal", false)]
-    #[test_case(r#"[["vec_map", "^0.0.1", "dev" ]]"#, "dev", false)]
-    #[test_case(r#"[["vec_map", "^0.0.1", "dev", true ]]"#, "dev", true)]
+    #[test_case(r#"[["vec_map", "^0.0.1"]]"#, DependencyKind::Normal, false)]
+    #[test_case(
+        r#"[["vec_map", "^0.0.1", "dev" ]]"#,
+        DependencyKind::Development,
+        false
+    )]
+    #[test_case(
+        r#"[["vec_map", "^0.0.1", "dev", true ]]"#,
+        DependencyKind::Development,
+        true
+    )]
     fn test_parse_dependency(
         input: &str,
-        expected_kind: &str,
+        expected_kind: DependencyKind,
         expected_optional: bool,
     ) -> Result<()> {
         let deps: ReleaseDependencyList = serde_json::from_str(input)?;
@@ -118,7 +125,7 @@ mod tests {
 
         assert_eq!(dep.name, "vec_map");
         assert_eq!(dep.req, VersionReq::parse("^0.0.1")?);
-        assert_eq!(dep.kind.as_deref(), Some(expected_kind));
+        assert_eq!(dep.kind, expected_kind);
         assert_eq!(dep.optional, expected_optional);
 
         Ok(())
