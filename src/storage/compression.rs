@@ -90,28 +90,38 @@ pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<V
     }
 }
 
-/// Wrap an AsyncWrite sink for compression using the specified algorithm.
-///
-/// Will return an AsyncWrite you can just write data to, we will compress
-/// the data, and then write the compressed data into the provided output sink.
-pub fn wrap_writer_for_compression<'a>(
-    output_sink: impl AsyncWrite + Unpin + Send + 'a,
+/// async compression, reads from an AsyncRead, writes to an AsyncWrite.
+pub async fn compress_async<'a, R, W>(
+    mut reader: R,
+    writer: W,
     algorithm: CompressionAlgorithm,
-) -> Box<dyn AsyncWrite + Unpin + 'a> {
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'a,
+    W: AsyncWrite + Unpin + Send + 'a,
+{
     use async_compression::tokio::write;
-    use tokio::io;
+    use tokio::io::{self, AsyncWriteExt as _};
 
     match algorithm {
         CompressionAlgorithm::Zstd => {
-            Box::new(io::BufWriter::new(write::ZstdEncoder::new(output_sink)))
+            let mut enc = write::ZstdEncoder::new(writer);
+            io::copy(&mut reader, &mut enc).await?;
+            enc.shutdown().await?;
         }
         CompressionAlgorithm::Bzip2 => {
-            Box::new(io::BufWriter::new(write::BzEncoder::new(output_sink)))
+            let mut enc = write::BzEncoder::new(writer);
+            io::copy(&mut reader, &mut enc).await?;
+            enc.shutdown().await?;
         }
         CompressionAlgorithm::Gzip => {
-            Box::new(io::BufWriter::new(write::GzipEncoder::new(output_sink)))
+            let mut enc = write::GzipEncoder::new(writer);
+            io::copy(&mut reader, &mut enc).await?;
+            enc.shutdown().await?;
         }
     }
+
+    Ok(())
 }
 
 /// Wrap an AsyncRead for decompression.

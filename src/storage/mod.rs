@@ -5,7 +5,7 @@ mod s3;
 
 pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
 use self::{
-    compression::{wrap_reader_for_decompression, wrap_writer_for_compression},
+    compression::{compress_async, wrap_reader_for_decompression},
     database::DatabaseBackend,
     s3::S3Backend,
 };
@@ -543,9 +543,10 @@ impl AsyncStorage {
                 .await?;
 
             let mut buf: Vec<u8> = Vec::new();
-            tokio::io::copy(
+            compress_async(
                 &mut tokio::io::BufReader::new(tokio::fs::File::open(&local_index_path).await?),
-                &mut wrap_writer_for_compression(&mut buf, alg),
+                &mut buf,
+                alg,
             )
             .await?;
             buf
@@ -1013,6 +1014,61 @@ mod test {
     use super::*;
     use std::env;
     use test_case::test_case;
+
+    #[tokio::test]
+    #[test_case(CompressionAlgorithm::Zstd)]
+    #[test_case(CompressionAlgorithm::Bzip2)]
+    #[test_case(CompressionAlgorithm::Gzip)]
+    async fn test_async_compression(alg: CompressionAlgorithm) -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
+
+        let compressed_index_content = {
+            let mut buf: Vec<u8> = Vec::new();
+            compress_async(&mut io::Cursor::new(CONTENT.to_vec()), &mut buf, alg).await?;
+            buf
+        };
+
+        {
+            // try low-level async decompression
+            let mut decompressed_buf: Vec<u8> = Vec::new();
+            let mut reader = wrap_reader_for_decompression(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+            );
+
+            tokio::io::copy(&mut reader, &mut io::Cursor::new(&mut decompressed_buf)).await?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        {
+            // try sync decompression
+            let decompressed_buf: Vec<u8> = decompress(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+                usize::MAX,
+            )?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        // try decompress via storage API
+        let stream = StreamingBlob {
+            path: "some_path.db".into(),
+            mime: mime::APPLICATION_OCTET_STREAM,
+            date_updated: Utc::now(),
+            compression: Some(alg),
+            content_length: compressed_index_content.len(),
+            content: Box::new(io::Cursor::new(compressed_index_content)),
+        };
+
+        let blob = stream.materialize(usize::MAX).await?;
+
+        assert_eq!(blob.compression, None);
+        assert_eq!(blob.content, CONTENT);
+
+        Ok(())
+    }
 
     #[test_case("latest", RustdocJsonFormatVersion::Latest)]
     #[test_case("42", RustdocJsonFormatVersion::Version(42))]
