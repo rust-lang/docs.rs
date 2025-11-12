@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                r.id,\n                c.name,\n                r.version as \"version: Version\",\n                r.release_time\n            FROM\n                crates AS c\n                INNER JOIN releases AS r ON r.crate_id = c.id\n            WHERE\n                r.archive_storage IS TRUE AND\n                r.id >= $1 AND\n                r.id <= $2\n            ORDER BY\n                r.id DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "version: Version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "release_time",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "29e5ac519965abe821ae15c21014d9943a38c16ca49ba014d8227df1b605bad9"
+}

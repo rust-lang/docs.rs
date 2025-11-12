@@ -1,4 +1,4 @@
-use derive_more::Display;
+use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
 pub mod dependencies;
@@ -8,7 +8,7 @@ pub mod version;
 #[sqlx(transparent)]
 pub struct CrateId(pub i32);
 
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, Serialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, FromStr, Serialize, sqlx::Type)]
 #[sqlx(transparent)]
 pub struct ReleaseId(pub i32);
 
