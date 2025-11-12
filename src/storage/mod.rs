@@ -12,7 +12,7 @@ use self::{
 use crate::{
     Config, InstanceMetrics,
     db::{
-        BuildId, Pool,
+        BuildId, Pool, ReleaseId,
         file::{FileEntry, detect_mime},
         mimes,
         types::version::Version,
@@ -20,10 +20,10 @@ use crate::{
     error::Result,
     utils::spawn_blocking,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use chrono::{DateTime, Utc};
 use fn_error_context::context;
-use futures_util::stream::BoxStream;
+use futures_util::{TryStreamExt as _, stream::BoxStream};
 use mime::Mime;
 use path_slash::PathExt;
 use std::{
@@ -33,15 +33,21 @@ use std::{
     num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 use std::{iter, str::FromStr};
 use tokio::{
     io::{AsyncRead, AsyncWriteExt},
     runtime,
 };
-use tracing::{error, info_span, instrument, trace};
+use tracing::{error, info, info_span, instrument, trace, warn};
+use tracing_futures::Instrument as _;
 use walkdir::WalkDir;
+
+const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
 
 type FileRange = RangeInclusive<u64>;
 
@@ -97,9 +103,8 @@ impl StreamingBlob {
         self
     }
 
+    /// consume the inner stream and materialize the full blob into memory.
     pub(crate) async fn materialize(mut self, max_size: usize) -> Result<Blob> {
-        self = self.decompress();
-
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
         content.reserve(self.content_length);
 
@@ -329,11 +334,13 @@ impl AsyncStorage {
         }
     }
 
+    /// get, decompress and materialize an object from store
     #[instrument]
     pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         self.get_stream(path).await?.materialize(max_size).await
     }
 
+    /// get a decompressing stream to an object in storage
     #[instrument]
     pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
         let blob = match &self.backend {
@@ -343,6 +350,7 @@ impl AsyncStorage {
         Ok(blob.decompress())
     }
 
+    /// get, decompress and materialize part of an object from store
     #[instrument]
     pub(super) async fn get_range(
         &self,
@@ -357,6 +365,7 @@ impl AsyncStorage {
             .await
     }
 
+    /// get a decompressing stream to a range inside an object in storage
     #[instrument]
     pub(super) async fn get_range_stream(
         &self,
@@ -746,6 +755,148 @@ impl AsyncStorage {
         }
         Ok(())
     }
+
+    /// fix the broken zstd archives in our bucket
+    /// See https://github.com/rust-lang/docs.rs/pull/2988
+    /// returns the number of files recompressed.
+    ///
+    /// Doesn't handle the local cache, when the remove files are fixed,
+    /// I'll just wipe it.
+    ///
+    /// We intentionally start with the latest releases, I'll probably first
+    /// find a release ID to check up to and then let the command run in the
+    /// background.
+    ///
+    /// so we start at release_id_max and go down to release_id_min.
+    pub async fn recompress_index_files_in_bucket(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        min_release_id: Option<ReleaseId>,
+        max_release_id: Option<ReleaseId>,
+        concurrency: Option<usize>,
+    ) -> Result<(u64, u64)> {
+        let recompressed = Arc::new(AtomicU64::new(0));
+        let checked = Arc::new(AtomicU64::new(0));
+
+        let StorageBackend::S3(raw_storage) = &self.backend else {
+            bail!("only works with S3 backend");
+        };
+
+        sqlx::query!(
+            r#"
+            SELECT
+                r.id,
+                c.name,
+                r.version as "version: Version",
+                r.release_time
+            FROM
+                crates AS c
+                INNER JOIN releases AS r ON r.crate_id = c.id
+            WHERE
+                r.archive_storage IS TRUE AND
+                r.id >= $1 AND
+                r.id <= $2
+            ORDER BY
+                r.id DESC
+            "#,
+            min_release_id.unwrap_or(ReleaseId(0)) as _,
+            max_release_id.unwrap_or(ReleaseId(i32::MAX)) as _
+        )
+        .fetch(conn)
+        .err_into::<anyhow::Error>()
+        .try_for_each_concurrent(concurrency.unwrap_or_else(num_cpus::get), |row| {
+            let recompressed = recompressed.clone();
+            let checked = checked.clone();
+
+            let release_span = tracing::info_span!(
+                "recompress_release",
+                id=row.id,
+                name=&row.name,
+                version=%row.version,
+                release_time=row.release_time.map(|rt| rt.to_rfc3339()),
+            );
+
+            async move {
+                trace!("handling release");
+
+                for path in &[
+                    rustdoc_archive_path(&row.name, &row.version),
+                    source_archive_path(&row.name, &row.version),
+                ] {
+                    let path = format!("{path}.index");
+                    trace!(path, "checking path");
+
+                    let compressed_stream = match raw_storage.get_stream(&path, None).await {
+                        Ok(stream) => stream,
+                        Err(err) => {
+                            if matches!(err.downcast_ref(), Some(PathNotFoundError)) {
+                                trace!(path, "path not found, skipping");
+                                continue;
+                            }
+                            trace!(path, ?err, "error fetching stream");
+                            return Err(err);
+                        }
+                    };
+
+                    let alg = CompressionAlgorithm::default();
+
+                    if compressed_stream.compression != Some(alg) {
+                        trace!(path, "Archive index not compressed with zstd, skipping");
+                        continue;
+                    }
+
+                    info!(path, "checking archive");
+                    checked.fetch_add(1, Ordering::Relaxed);
+
+                    // download the compressed raw blob first.
+                    // Like this we can first check if it's worth recompressing & re-uploading.
+                    let mut compressed_blob = compressed_stream.materialize(usize::MAX).await?;
+                    if compressed_blob
+                        .content
+                        .last_chunk::<{ ZSTD_EOF_BYTES.len() }>()
+                        == Some(&ZSTD_EOF_BYTES)
+                    {
+                        info!(path, "Archive already has correct zstd ending, skipping");
+                        continue;
+                    }
+
+                    warn!(path, "recompressing archive");
+                    recompressed.fetch_add(1, Ordering::Relaxed);
+
+                    let mut decompressed = Vec::new();
+                    {
+                        // old async-compression can read the broken zstd stream
+                        let mut reader = wrap_reader_for_decompression(
+                            io::Cursor::new(compressed_blob.content.clone()),
+                            alg,
+                        );
+
+                        tokio::io::copy(&mut reader, &mut decompressed).await?;
+                    }
+
+                    let mut buf = Vec::with_capacity(decompressed.len());
+                    compress_async(&mut io::Cursor::new(&decompressed), &mut buf, alg).await?;
+                    debug_assert_eq!(
+                        buf.last_chunk::<{ ZSTD_EOF_BYTES.len() }>(),
+                        Some(&ZSTD_EOF_BYTES)
+                    );
+                    compressed_blob.content = buf;
+                    compressed_blob.compression = Some(alg);
+
+                    // `.store_inner` just uploads what it gets, without any compression logic
+                    self.store_inner(vec![compressed_blob]).await?;
+                }
+                Ok(())
+            }
+            .instrument(release_span)
+        })
+        .await?;
+
+        Ok((
+            checked.load(Ordering::Relaxed),
+            recompressed.load(Ordering::Relaxed),
+        ))
+    }
 }
 
 impl std::fmt::Debug for AsyncStorage {
@@ -1011,9 +1162,81 @@ pub(crate) fn source_archive_path(name: &str, version: &Version) -> String {
 
 #[cfg(test)]
 mod test {
+    use crate::test::{TestEnvironment, V0_1};
+
     use super::*;
     use std::env;
     use test_case::test_case;
+
+    fn streaming_blob(
+        content: impl Into<Vec<u8>>,
+        alg: Option<CompressionAlgorithm>,
+    ) -> StreamingBlob {
+        let content = content.into();
+        StreamingBlob {
+            path: "some_path.db".into(),
+            mime: mime::APPLICATION_OCTET_STREAM,
+            date_updated: Utc::now(),
+            compression: alg,
+            content_length: content.len(),
+            content: Box::new(io::Cursor::new(content)),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_streaming_blob_uncompressed() -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world!";
+
+        // without decompression
+        {
+            let stream = streaming_blob(CONTENT, None);
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        // with decompression, does nothing
+        {
+            let stream = streaming_blob(CONTENT, None);
+            let blob = stream.decompress().materialize(usize::MAX).await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_blob_zstd() -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world!";
+        let mut compressed_content = Vec::new();
+        let alg = CompressionAlgorithm::Zstd;
+        compress_async(
+            &mut io::Cursor::new(CONTENT.to_vec()),
+            &mut compressed_content,
+            alg,
+        )
+        .await?;
+
+        // without decompression
+        {
+            let stream = streaming_blob(compressed_content.clone(), Some(alg));
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, compressed_content);
+            assert_eq!(blob.content.last_chunk::<3>().unwrap(), &ZSTD_EOF_BYTES);
+            assert_eq!(blob.compression, Some(alg));
+        }
+
+        // with decompression
+        {
+            let stream = streaming_blob(compressed_content.clone(), Some(alg)).decompress();
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
     #[test_case(CompressionAlgorithm::Zstd)]
@@ -1053,16 +1276,17 @@ mod test {
         }
 
         // try decompress via storage API
-        let stream = StreamingBlob {
+        let blob = StreamingBlob {
             path: "some_path.db".into(),
             mime: mime::APPLICATION_OCTET_STREAM,
             date_updated: Utc::now(),
             compression: Some(alg),
             content_length: compressed_index_content.len(),
             content: Box::new(io::Cursor::new(compressed_index_content)),
-        };
-
-        let blob = stream.materialize(usize::MAX).await?;
+        }
+        .decompress()
+        .materialize(usize::MAX)
+        .await?;
 
         assert_eq!(blob.compression, None);
         assert_eq!(blob.content, CONTENT);
@@ -1111,6 +1335,192 @@ mod test {
     fn check_mime(path: &str, expected_mime: &str) {
         let detected_mime = detect_mime(Path::new(&path));
         assert_eq!(detected_mime, expected_mime);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompress_just_check() -> Result<()> {
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .storage_backend(StorageKind::S3)
+                .build()?,
+        )
+        .await?;
+
+        let storage = env.async_storage();
+
+        const KRATE: &str = "test_crate";
+        let rid = env
+            .fake_release()
+            .await
+            .name(KRATE)
+            .version(V0_1)
+            .archive_storage(true)
+            .keywords(vec!["kw 1".into(), "kw 2".into()])
+            .create()
+            .await?;
+
+        // run the recompression logic
+        let mut conn = env.async_db().async_conn().await;
+        let (checked, recompressed) = storage
+            .recompress_index_files_in_bucket(&mut conn, None, None, None)
+            .await?;
+        assert_eq!(checked, 2);
+        assert_eq!(recompressed, 0);
+
+        assert!(
+            storage
+                .get(&rustdoc_archive_path(KRATE, &V0_1), usize::MAX)
+                .await
+                .is_ok()
+        );
+        assert!(
+            storage
+                .get(&source_archive_path(KRATE, &V0_1), usize::MAX)
+                .await
+                .is_ok()
+        );
+
+        // release-id-min = the target release id for the iterator
+        // (we start at the latest, and go down).
+        // So setting that "target" to rid.0 + 1 means we stop before we hit our only release.
+        let (checked, recompressed) = storage
+            .recompress_index_files_in_bucket(&mut conn, Some(ReleaseId(rid.0 + 1)), None, None)
+            .await?;
+        assert_eq!(checked, 0);
+        assert_eq!(recompressed, 0);
+
+        // release-id-max = where we start iterating the releases
+        // (we start at the max, and go down).
+        // So setting that "start" to rid.0 - 1 means we start behind our only release
+        let (checked, recompressed) = storage
+            .recompress_index_files_in_bucket(&mut conn, None, Some(ReleaseId(rid.0 - 1)), None)
+            .await?;
+        assert_eq!(checked, 0);
+        assert_eq!(recompressed, 0);
+
+        // setting min & max to the same value that is also our only release
+        // tests if we filter as inclusive range.
+        let (checked, recompressed) = storage
+            .recompress_index_files_in_bucket(&mut conn, Some(rid), Some(rid), None)
+            .await?;
+        assert_eq!(checked, 2);
+        assert_eq!(recompressed, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_recompress_index_files_in_bucket() -> Result<()> {
+        use std::io::Cursor;
+        use tokio::io;
+
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .storage_backend(StorageKind::S3)
+                .build()?,
+        )
+        .await?;
+
+        const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
+        let alg = Some(CompressionAlgorithm::Zstd);
+
+        use async_compression::tokio::write;
+
+        let broken_archive = {
+            // broken compression implementation, `.shutdown` missing.
+            let mut buf = Vec::new();
+            let mut enc = write::ZstdEncoder::new(&mut buf);
+            io::copy(&mut Cursor::new(CONTENT), &mut enc).await?;
+            // check if it's really broken, EOF missing
+            assert_ne!(buf.last_chunk::<3>().unwrap(), &ZSTD_EOF_BYTES);
+            buf
+        };
+
+        const KRATE: &str = "test_crate";
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V0_1)
+            .archive_storage(true)
+            .keywords(vec!["kw 1".into(), "kw 2".into()])
+            .create()
+            .await?;
+
+        let storage = env.async_storage();
+        // delete everything in storage created by the fake_release above
+        for p in &["rustdoc/", "sources/"] {
+            storage.delete_prefix(p).await?;
+        }
+
+        // use raw inner storage backend so we can fetch the compressed file without automatic
+        // decompression
+        let StorageBackend::S3(raw_storage) = &storage.backend else {
+            panic!("S3 backend set above");
+        };
+
+        let index_path = format!("{}.index", rustdoc_archive_path(KRATE, &V0_1));
+
+        // upload as-is to the storage, into the place of an archive index.
+        // `.store_inner` doesn't compress
+        storage
+            .store_inner(vec![Blob {
+                path: index_path.clone(),
+                mime: mime::APPLICATION_OCTET_STREAM,
+                date_updated: Utc::now(),
+                content: broken_archive.clone(),
+                compression: alg,
+            }])
+            .await?;
+
+        // validate how the old compressed blob looks like, even though we just uploaded it
+        let old_compressed_blob = raw_storage
+            .get_stream(&index_path, None)
+            .await?
+            .materialize(usize::MAX)
+            .await?;
+        assert_eq!(old_compressed_blob.compression, alg);
+
+        // try getting the decompressed broken blob via normal storage API.
+        // old async-compression can do this without choking.
+        assert_eq!(
+            CONTENT,
+            &storage.get(&index_path, usize::MAX).await?.content
+        );
+
+        // run the recompression logic
+        let mut conn = env.async_db().async_conn().await;
+        let (checked, recompressed) = storage
+            .recompress_index_files_in_bucket(&mut conn, None, None, None)
+            .await?;
+        assert_eq!(checked, 1);
+        assert_eq!(recompressed, 1);
+
+        let new_compressed_blob = raw_storage
+            .get_stream(&index_path, None)
+            .await?
+            .materialize(usize::MAX)
+            .await?;
+        assert_eq!(new_compressed_blob.compression, alg);
+
+        // after fixing, getting the decompressed blob via normal storage API still works
+        assert_eq!(
+            CONTENT,
+            &storage.get(&index_path, usize::MAX).await?.content
+        );
+
+        // after recompression the content length should be different, 3 bytes more for
+        // the zstd EOF
+        assert_eq!(
+            new_compressed_blob.content.len(),
+            old_compressed_blob.content.len() + ZSTD_EOF_BYTES.len()
+        );
+
+        assert_eq!(
+            [&old_compressed_blob.content[..], &ZSTD_EOF_BYTES].concat(),
+            new_compressed_blob.content
+        );
+
+        Ok(())
     }
 }
 

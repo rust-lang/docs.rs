@@ -11,8 +11,11 @@ sqlx-prepare ADDITIONAL_ARGS="":
 sqlx-check:
   just sqlx-prepare "--check"
 
-lint: 
-  cargo clippy --all-features --all-targets --workspace --locked -- -D warnings
+lint *args: 
+  cargo clippy --all-features --all-targets --workspace --locked {{ args }} -- -D warnings
+
+lint-fix:
+  just lint --fix --allow-dirty --allow-staged
 
 lint-js *args:
   deno run -A npm:eslint@9 static templates gui-tests eslint.config.js {{ args }}

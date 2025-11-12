@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, PackageKind, RustwideBuilder,
-    db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
+    db::{self, CrateId, Overrides, ReleaseId, add_path_into_database, types::version::Version},
     start_background_metrics_webserver, start_web_server,
     utils::{
         ConfigName, get_config, get_crate_pattern_and_priority, list_crate_priorities,
@@ -531,6 +531,16 @@ enum DatabaseSubcommand {
     /// Backfill GitHub/GitLab stats for crates.
     BackfillRepositoryStats,
 
+    /// Recompress broken archive index files in storage.
+    RecompressArchiveIndexes {
+        #[arg(long)]
+        min_release_id: Option<ReleaseId>,
+        #[arg(long)]
+        max_release_id: Option<ReleaseId>,
+        #[arg(long)]
+        concurrency: Option<u8>,
+    },
+
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
@@ -617,6 +627,28 @@ impl DatabaseSubcommand {
                 let mut conn = ctx.pool.get_async().await?;
                 let registry_data = ctx.registry_api.get_crate_data(&name).await?;
                 db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
+            })?,
+
+            Self::RecompressArchiveIndexes {
+                min_release_id,
+                max_release_id,
+                concurrency,
+            } => ctx.runtime.block_on(async move {
+                let mut conn = ctx.pool.get_async().await?;
+
+                let (checked, recompressed) = ctx
+                    .async_storage
+                    .recompress_index_files_in_bucket(
+                        &mut conn,
+                        min_release_id,
+                        max_release_id,
+                        concurrency.map(Into::into),
+                    )
+                    .await?;
+
+                println!("{} index files checked", checked);
+                println!("{} index files recompressed", recompressed);
+                Ok::<_, anyhow::Error>(())
             })?,
 
             Self::AddDirectory { directory } => {
