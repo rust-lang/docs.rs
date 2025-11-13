@@ -229,7 +229,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             url
         };
 
-        trace!("redirect to doc");
+        trace!(%url, ?cache_policy, path_in_crate, "redirect to doc");
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
 
@@ -3339,6 +3339,35 @@ mod test {
             .await?;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("/dummy/"; "only krate")]
+    #[test_case("/dummy/latest/"; "with version")]
+    #[test_case("/dummy/latest/dummy"; "full without trailing slash")]
+    #[test_case("/dummy/latest/dummy/"; "final target")]
+    async fn test_full_latest_url_without_trailing_slash(path: &str) -> Result<()> {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("1.0.0")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        const TARGET: &str = "/dummy/latest/dummy/";
+        if path == TARGET {
+            web.get(path).await?.status().is_success();
+        } else {
+            web.assert_redirect_unchecked(path, "/dummy/latest/dummy/")
+                .await?;
+        }
+
         Ok(())
     }
 }

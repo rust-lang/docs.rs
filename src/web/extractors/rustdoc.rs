@@ -723,10 +723,24 @@ fn generate_rustdoc_path_for_url(
         && !path.is_empty()
         && path != INDEX_HTML
     {
-        // ust juse the given inner to start, if:
-        // * it's not empty
-        // * it's not just "index.html"
-        path.to_string()
+        if let Some(target_name) = target_name
+            && path == target_name
+        {
+            // Sometimes people add a path that is just the target name.
+            // This matches our `rustdoc_redirector_handler` route,
+            // without trailing slash (`/{name}/{version}/{target}`).
+            //
+            // Even though the rustdoc html handler would also be capable
+            // handling this input, we want to redirect to the trailing
+            // slash version (`/{name}/{version}/{target}/`),
+            // so they are separate.
+            format!("{}/", target_name)
+        } else {
+            // just use the given inner to start, if:
+            // * it's not empty
+            // * it's not just "index.html"
+            path.to_string()
+        }
     } else if let Some(target_name) = target_name {
         // after having no usable given path, we generate one with the
         // target name, if we have one.
@@ -1599,5 +1613,49 @@ mod tests {
         let params = params.with_doc_target(DEFAULT_TARGET);
         assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+    }
+
+    #[test]
+    fn test_parse_something() {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+        let params = dbg!(
+            RustdocParams::new(KRATE)
+                .with_page_kind(PageKind::Rustdoc)
+                .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
+                .unwrap()
+                .with_req_version(ReqVersion::Latest)
+                .with_doc_target(KRATE)
+        );
+
+        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+
+        let params = dbg!(
+            params
+                .with_target_name(KRATE)
+                .with_default_target(DEFAULT_TARGET)
+                .with_doc_targets(TARGETS.iter().cloned())
+        );
+
+        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+    }
+
+    #[test_case(Some(PageKind::Rustdoc))]
+    #[test_case(None)]
+    fn test_only_target_name_without_slash(page_kind: Option<PageKind>) {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+        let params = RustdocParams::new(KRATE)
+            .with_maybe_page_kind(page_kind)
+            .try_with_original_uri("/dummy/latest/dummy")
+            .unwrap()
+            .with_req_version(ReqVersion::Latest)
+            .with_maybe_doc_target(None::<String>)
+            .with_inner_path(KRATE)
+            .with_default_target(DEFAULT_TARGET)
+            .with_target_name(KRATE)
+            .with_doc_targets(TARGETS.iter().cloned());
+
+        dbg!(&params);
+
+        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
     }
 }
