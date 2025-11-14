@@ -219,6 +219,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     let params = params.with_page_kind(PageKind::Rustdoc);
 
     fn redirect_to_doc(
+        original_uri: Option<&Uri>,
         url: EscapedURI,
         cache_policy: CachePolicy,
         path_in_crate: Option<&str>,
@@ -228,6 +229,17 @@ pub(crate) async fn rustdoc_redirector_handler(
         } else {
             url
         };
+
+        if let Some(original_uri) = original_uri
+            && original_uri.path() == original_uri.path()
+        {
+            return Err(anyhow!(
+                "infinite redirect detected, \noriginal_uri = {}, redirect_url = {}",
+                original_uri,
+                url
+            )
+            .into());
+        }
 
         trace!(%url, ?cache_policy, path_in_crate, "redirect to doc");
         Ok(axum_cached_redirect(url, cache_policy)?)
@@ -266,6 +278,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         let target_uri =
             EscapedURI::from_uri(description.href.clone()).append_raw_query(original_query);
         return redirect_to_doc(
+            params.original_uri(),
             target_uri,
             CachePolicy::ForeverInCdnAndStaleInBrowser,
             path_in_crate.as_deref(),
@@ -329,6 +342,7 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     if matched_release.rustdoc_status() {
         Ok(redirect_to_doc(
+            params.original_uri(),
             params.rustdoc_url().append_raw_query(original_query),
             if matched_release.is_latest_url() {
                 CachePolicy::ForeverInCdn
@@ -3345,7 +3359,9 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     #[test_case("/dummy/"; "only krate")]
     #[test_case("/dummy/latest/"; "with version")]
-    #[test_case("/dummy/latest/dummy"; "full without trailing slash")]
+    #[test_case("/dummy/latest/dummy"; "target-name as path, without trailing slash")]
+    #[test_case("/dummy/latest/other_path"; "other path, without trailing slash")]
+    #[test_case("/dummy/latest/other_path.html"; "other html path, without trailing slash")]
     #[test_case("/dummy/latest/dummy/"; "final target")]
     async fn test_full_latest_url_without_trailing_slash(path: &str) -> Result<()> {
         // test for https://github.com/rust-lang/docs.rs/issues/2989
