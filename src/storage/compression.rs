@@ -7,7 +7,7 @@ use std::{
     io::{self, Read},
 };
 use strum::{Display, EnumIter, EnumString, FromRepr};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite};
 
 pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
 
@@ -129,19 +129,19 @@ where
 /// You provide an AsyncRead that gives us the compressed data. With the
 /// wrapper we return you can then read decompressed data from the wrapper.
 pub fn wrap_reader_for_decompression<'a>(
-    input: impl AsyncRead + Unpin + Send + 'a,
+    input: impl AsyncBufRead + Unpin + Send + 'a,
     algorithm: CompressionAlgorithm,
-) -> Box<dyn AsyncRead + Unpin + Send + 'a> {
+) -> Box<dyn AsyncBufRead + Unpin + Send + 'a> {
     use async_compression::tokio::bufread;
     use tokio::io;
 
     match algorithm {
         CompressionAlgorithm::Zstd => {
-            Box::new(bufread::ZstdDecoder::new(io::BufReader::new(input)))
+            Box::new(io::BufReader::new(bufread::ZstdDecoder::new(input)))
         }
-        CompressionAlgorithm::Bzip2 => Box::new(bufread::BzDecoder::new(io::BufReader::new(input))),
+        CompressionAlgorithm::Bzip2 => Box::new(io::BufReader::new(bufread::BzDecoder::new(input))),
         CompressionAlgorithm::Gzip => {
-            Box::new(bufread::GzipDecoder::new(io::BufReader::new(input)))
+            Box::new(io::BufReader::new(bufread::GzipDecoder::new(input)))
         }
     }
 }
