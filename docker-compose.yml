@@ -22,6 +22,7 @@
 #
 # optional profile: `metrics`:
 # * `prometheus` -> configured prometheus instance
+# * `opentelemetry` -> a debug opentelemetry receiver
 #
 # optional profile: `full`: all of the above.
 #
@@ -290,6 +291,23 @@ services:
         healthcheck:
             <<: *healthcheck-interval
             test: promtool check healthy
+        profiles:
+            # we rarely need to test with actual prometheus, so always running
+            # it is a waste.
+            - metrics
+            - full
+
+    opentelemetry:
+        build:
+            context: ./dockerfiles
+            dockerfile: ./Dockerfile-opentelemetry
+            <<: *docker-cache
+        ports:
+            - "127.0.0.1:4317:4317"
+        healthcheck:
+            <<: *healthcheck-interval
+            test: curl --silent --fail http://localhost:13133/health
+
         profiles:
             # we rarely need to test with actual prometheus, so always running
             # it is a waste.

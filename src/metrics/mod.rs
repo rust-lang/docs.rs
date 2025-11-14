@@ -1,5 +1,7 @@
 #[macro_use]
 mod macros;
+pub(crate) mod otel;
+pub(crate) mod service;
 
 use self::macros::MetricFromOpts;
 use crate::{
@@ -7,7 +9,7 @@ use crate::{
     db::{CrateId, Pool, ReleaseId},
     target::TargetAtom,
 };
-use anyhow::Error;
+use anyhow::{Error, Result};
 use dashmap::DashMap;
 use prometheus::proto::MetricFamily;
 use std::{
@@ -137,13 +139,6 @@ metrics! {
     //
     // https://docs.rs/prometheus/0.9.0/prometheus/struct.Opts.html#structfield.namespace
     namespace: "docsrs",
-}
-
-/// Converts a `Duration` to seconds, used by prometheus internally
-#[inline]
-pub(crate) fn duration_to_seconds(d: Duration) -> f64 {
-    let nanos = f64::from(d.subsec_nanos()) / 1e9;
-    d.as_secs() as f64 + nanos
 }
 
 #[derive(Debug, Default)]

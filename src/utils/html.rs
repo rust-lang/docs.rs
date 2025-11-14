@@ -2,6 +2,7 @@ use crate::{
     InstanceMetrics,
     utils::report_error,
     web::{
+        metrics::WebMetrics,
         page::{
             TemplateData,
             templates::{Body, Head, Vendored},
@@ -44,6 +45,7 @@ pub(crate) fn rewrite_rustdoc_html_stream<R>(
     max_allowed_memory_usage: usize,
     data: Arc<RustdocPage>,
     metrics: Arc<InstanceMetrics>,
+    otel_metrics: Arc<WebMetrics>,
 ) -> impl Stream<Item = Result<Bytes, RustdocRewritingError>> + Send + 'static
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -225,6 +227,7 @@ where
                     Ok(e) => {
                         if matches!(e, RewritingError::MemoryLimitExceeded(_)) {
                             metrics.html_rewrite_ooms.inc();
+                            otel_metrics.html_rewrite_ooms.add(1, &[]);
                         }
                         RustdocRewritingError::RewritingError(e)
                     }

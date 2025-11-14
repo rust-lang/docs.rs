@@ -1,4 +1,5 @@
 mod fakes;
+mod test_metrics;
 
 pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
@@ -7,7 +8,9 @@ use crate::{
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
     error::Result,
+    metrics::otel::AnyMeterProvider,
     storage::{AsyncStorage, Storage, StorageKind},
+    test::test_metrics::CollectedMetrics,
     web::{build_axum_app, cache, page::TemplateData},
 };
 use anyhow::Context as _;
@@ -15,7 +18,8 @@ use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
-use http_body_util::BodyExt; // for `collect`
+use http_body_util::BodyExt;
+use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader};
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
 use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
@@ -317,6 +321,7 @@ pub(crate) struct TestEnvironment {
     db: TestDatabase,
     pub context: Context,
     owned_runtime: Option<Arc<runtime::Runtime>>,
+    collected_metrics: InMemoryMetricExporter,
 }
 
 pub(crate) fn init_logger() {
@@ -362,15 +367,29 @@ impl TestEnvironment {
         // create index directory
         fs::create_dir_all(config.registry_index_path.clone())?;
 
+        let metric_exporter = InMemoryMetricExporter::default();
+        let meter_provider: AnyMeterProvider = Arc::new(
+            opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+                .with_reader(PeriodicReader::builder(metric_exporter.clone()).build())
+                .build(),
+        );
+
         let instance_metrics = Arc::new(InstanceMetrics::new()?);
-        let test_db = TestDatabase::new(&config, instance_metrics.clone())
+        let test_db = TestDatabase::new(&config, instance_metrics.clone(), &meter_provider)
             .await
             .context("can't initialize test database")?;
 
         Ok(Self {
-            context: Context::from_config(config, instance_metrics, test_db.pool().clone()).await?,
+            context: Context::from_test_config(
+                config,
+                instance_metrics,
+                meter_provider,
+                test_db.pool().clone(),
+            )
+            .await?,
             db: test_db,
             owned_runtime: None,
+            collected_metrics: metric_exporter,
         })
     }
 
@@ -422,12 +441,21 @@ impl TestEnvironment {
         &self.context.instance_metrics
     }
 
+    pub(crate) fn meter_provider(&self) -> &AnyMeterProvider {
+        &self.context.meter_provider
+    }
+
     pub(crate) fn runtime(&self) -> &runtime::Handle {
         &self.context.runtime
     }
 
     pub(crate) fn async_db(&self) -> &TestDatabase {
         &self.db
+    }
+
+    pub(crate) fn collected_metrics(&self) -> CollectedMetrics {
+        self.context.meter_provider.force_flush().unwrap();
+        CollectedMetrics(self.collected_metrics.get_finished_metrics().unwrap())
     }
 
     pub(crate) async fn web_app(&self) -> Router {
@@ -470,12 +498,16 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    async fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Self> {
+    async fn new(
+        config: &Config,
+        metrics: Arc<InstanceMetrics>,
+        otel_meter_provider: &AnyMeterProvider,
+    ) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, metrics, &schema).await?;
+        let pool = Pool::new_with_schema(config, metrics, &schema, otel_meter_provider).await?;
 
         let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
         sqlx::query(&format!("CREATE SCHEMA {schema}"))

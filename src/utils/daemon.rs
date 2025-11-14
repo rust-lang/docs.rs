@@ -3,7 +3,9 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder, cdn, queue_rebuilds,
+    AsyncBuildQueue, Config, Context, Index, RustwideBuilder, cdn,
+    metrics::service::OtelServiceMetrics,
+    queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
 };
@@ -13,7 +15,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::{runtime, time::Instant};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
@@ -114,12 +116,44 @@ pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    let pool = context.pool.clone();
+    let config = context.config.clone();
+    let build_queue = context.async_build_queue.clone();
+    let service_metrics = Arc::new(OtelServiceMetrics::new(&context.meter_provider));
+
+    async_cron(
+        &runtime,
+        "background service metric collector",
+        // old prometheus scrape interval seems to have been ~5s, but IMO that's far too frequent
+        // for these service metrics.
+        Duration::from_secs(30),
+        move || {
+            let pool = pool.clone();
+            let build_queue = build_queue.clone();
+            let config = config.clone();
+            let service_metrics = service_metrics.clone();
+            async move {
+                trace!("collecting service metrics");
+                let mut conn = pool.get_async().await?;
+                service_metrics
+                    .gather(&mut conn, &build_queue, &config)
+                    .await
+            }
+        },
+    );
+    Ok(())
+}
+
 pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
     let metrics = context.instance_metrics.clone();
     let config = context.config.clone();
     let pool = context.pool.clone();
     let runtime = context.runtime.clone();
     let cdn = context.cdn.clone();
+
+    let otel_metrics = Arc::new(cdn::CdnMetrics::new(&context.meter_provider));
 
     if config.cloudfront_distribution_id_web.is_none()
         && config.cloudfront_distribution_id_static.is_none()
@@ -142,6 +176,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
             let config = config.clone();
             let cdn = cdn.clone();
             let metrics = metrics.clone();
+            let otel_metrics = otel_metrics.clone();
             async move {
                 let mut conn = pool.get_async().await?;
                 if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
@@ -149,6 +184,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
                         &config,
                         &cdn,
                         &metrics,
+                        &otel_metrics,
                         &mut conn,
                         distribution_id,
                     )
@@ -160,6 +196,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
                         &config,
                         &cdn,
                         &metrics,
+                        &otel_metrics,
                         &mut conn,
                         distribution_id,
                     )
@@ -202,6 +239,10 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     start_background_repository_stats_updater(&context)?;
     start_background_cdn_invalidator(&context)?;
     start_background_queue_rebuild(&context)?;
+
+    // when people run the daemon, we assume the daemon is the one single process where
+    // we can collect the service metrics.
+    start_background_service_metric_collector(&context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.

@@ -4,18 +4,38 @@ use crate::{
         CrateId, Pool, delete_crate, delete_version, types::version::Version,
         update_latest_version_id,
     },
-    docbuilder::PackageKind,
+    docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
+    metrics::otel::AnyMeterProvider,
     storage::AsyncStorage,
     utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config},
 };
 use anyhow::Context as _;
 use fn_error_context::context;
 use futures_util::{StreamExt, stream::TryStreamExt};
+use opentelemetry::metrics::Counter;
 use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::runtime;
 use tracing::{debug, error, info, instrument, warn};
+
+#[derive(Debug)]
+struct BuildQueueMetrics {
+    queued_builds: Counter<u64>,
+}
+
+impl BuildQueueMetrics {
+    fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("build_queue");
+        const PREFIX: &str = "docsrs.build_queue";
+        Self {
+            queued_builds: meter
+                .u64_counter(format!("{PREFIX}.queued_builds"))
+                .with_unit("1")
+                .build(),
+        }
+    }
+}
 
 /// The static priority for background rebuilds.
 /// Used when queueing rebuilds, and when rendering them
@@ -40,6 +60,8 @@ pub struct AsyncBuildQueue {
     storage: Arc<AsyncStorage>,
     pub(crate) db: Pool,
     metrics: Arc<InstanceMetrics>,
+    queue_metrics: BuildQueueMetrics,
+    builder_metrics: Arc<BuilderMetrics>,
     max_attempts: i32,
 }
 
@@ -49,6 +71,7 @@ impl AsyncBuildQueue {
         metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<AsyncStorage>,
+        otel_meter_provider: &AnyMeterProvider,
     ) -> Self {
         AsyncBuildQueue {
             max_attempts: config.build_attempts.into(),
@@ -56,7 +79,13 @@ impl AsyncBuildQueue {
             db,
             metrics,
             storage,
+            queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
+            builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
         }
+    }
+
+    pub fn builder_metrics(&self) -> Arc<BuilderMetrics> {
+        self.builder_metrics.clone()
     }
 
     pub async fn last_seen_reference(&self) -> Result<Option<crates_index_diff::gix::ObjectId>> {
@@ -333,6 +362,7 @@ impl AsyncBuildQueue {
                             release.name, release.version
                         );
                         self.metrics.queued_builds.inc();
+                        self.queue_metrics.queued_builds.add(1, &[]);
                         crates_added += 1;
                     }
                     Err(err) => report_error(&err),
@@ -540,13 +570,17 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = self
-            .inner
-            .metrics
-            .build_time
-            .observe_closure_duration(|| f(&to_process));
+        let res = {
+            let instant = Instant::now();
+            let res = f(&to_process);
+            let elapsed = instant.elapsed().as_secs_f64();
+            self.inner.metrics.build_time.observe(elapsed);
+            self.inner.builder_metrics.build_time.record(elapsed, &[]);
+            res
+        };
 
         self.inner.metrics.total_builds.inc();
+        self.inner.builder_metrics.total_builds.add(1, &[]);
         if let Err(err) = self.runtime.block_on(cdn::queue_crate_invalidation(
             &mut transaction,
             &self.inner.config,
@@ -571,6 +605,7 @@ impl BuildQueue {
 
             if attempt >= self.inner.max_attempts {
                 self.inner.metrics.failed_builds.inc();
+                self.inner.builder_metrics.failed_builds.add(1, &[]);
             }
             Ok(())
         };
@@ -731,6 +766,7 @@ mod tests {
     use super::*;
     use crate::test::{FakeBuild, TestEnvironment, V1, V2};
     use chrono::Utc;
+
     use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1050,6 +1086,34 @@ mod tests {
         assert_eq!(metrics.total_builds.get(), 9);
         assert_eq!(metrics.failed_builds.get(), 1);
         assert_eq!(metrics.build_time.get_sample_count(), 9);
+
+        let collected_metrics = env.collected_metrics();
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("builder", "docsrs.builder.total_builds")?
+                .get_u64_counter()
+                .value(),
+            9
+        );
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("builder", "docsrs.builder.failed_builds")?
+                .get_u64_counter()
+                .value(),
+            1
+        );
+
+        assert_eq!(
+            dbg!(
+                collected_metrics
+                    .get_metric("builder", "docsrs.builder.build_time")?
+                    .get_f64_histogram()
+                    .count()
+            ),
+            9
+        );
 
         // no invalidations were run since we don't have a distribution id configured
         assert!(

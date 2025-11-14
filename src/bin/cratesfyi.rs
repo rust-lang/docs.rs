@@ -5,8 +5,9 @@ use docs_rs::{
     db::{self, CrateId, Overrides, ReleaseId, add_path_into_database, types::version::Version},
     start_background_metrics_webserver, start_web_server,
     utils::{
-        ConfigName, get_config, get_crate_pattern_and_priority, list_crate_priorities,
-        queue_builder, remove_crate_priority, set_config, set_crate_priority,
+        ConfigName, daemon::start_background_service_metric_collector, get_config,
+        get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
+        remove_crate_priority, set_config, set_crate_priority,
     },
 };
 use futures_util::StreamExt;
@@ -198,6 +199,10 @@ impl CommandLine {
                 if queue_rebuilds == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_queue_rebuild(&ctx)?;
                 }
+
+                // When people run the services separately, we assume that we can collect service
+                // metrics from the registry watcher, which should only run once, and all the time.
+                start_background_service_metric_collector(&ctx)?;
 
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 

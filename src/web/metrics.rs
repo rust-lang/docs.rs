@@ -1,6 +1,6 @@
 use crate::{
     AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics, db::Pool,
-    metrics::duration_to_seconds, web::error::AxumResult,
+    metrics::otel::AnyMeterProvider, web::error::AxumResult,
 };
 use anyhow::{Context as _, Result};
 use axum::{
@@ -9,8 +9,46 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
+use opentelemetry::{
+    KeyValue,
+    metrics::{Counter, Histogram},
+};
 use prometheus::{Encoder, TextEncoder, proto::MetricFamily};
 use std::{borrow::Cow, future::Future, sync::Arc, time::Instant};
+
+#[derive(Debug)]
+pub(crate) struct WebMetrics {
+    pub(crate) html_rewrite_ooms: Counter<u64>,
+    pub(crate) im_feeling_lucky_searches: Counter<u64>,
+
+    routes_visited: Counter<u64>,
+    response_time: Histogram<f64>,
+}
+
+impl WebMetrics {
+    pub(crate) fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("web");
+        const PREFIX: &str = "docsrs.web";
+        Self {
+            html_rewrite_ooms: meter
+                .u64_counter(format!("{PREFIX}.html_rewrite_ooms"))
+                .with_unit("1")
+                .build(),
+            im_feeling_lucky_searches: meter
+                .u64_counter(format!("{PREFIX}.im_feeling_lucky_searches"))
+                .with_unit("1")
+                .build(),
+            routes_visited: meter
+                .u64_counter(format!("{PREFIX}.routes_visited"))
+                .with_unit("1")
+                .build(),
+            response_time: meter
+                .f64_histogram(format!("{PREFIX}.response_time"))
+                .with_unit("s")
+                .build(),
+        }
+    }
+}
 
 async fn fetch_and_render_metrics<Fut>(fetch_metrics: Fut) -> AxumResult<impl IntoResponse>
 where
@@ -92,18 +130,31 @@ pub(crate) async fn request_recorder(
         .expect("metrics missing in request extensions")
         .clone();
 
+    let otel_metrics = request
+        .extensions()
+        .get::<Arc<WebMetrics>>()
+        .expect("otel metrics missing in request extensions")
+        .clone();
+
     let start = Instant::now();
     let result = next.run(request).await;
-    let resp_time = duration_to_seconds(start.elapsed());
+    let resp_time = start.elapsed().as_secs_f64();
+
+    let attrs = [KeyValue::new("route", route_name.to_string())];
 
     metrics
         .routes_visited
         .with_label_values(&[&route_name])
         .inc();
+
+    otel_metrics.routes_visited.add(1, &attrs);
+
     metrics
         .response_time
         .with_label_values(&[&route_name])
         .observe(resp_time);
+
+    otel_metrics.response_time.record(resp_time, &attrs);
 
     result
 }
@@ -111,6 +162,8 @@ pub(crate) async fn request_recorder(
 #[cfg(test)]
 mod tests {
     use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    use pretty_assertions::assert_eq;
     use std::collections::HashMap;
 
     #[test]
@@ -184,6 +237,99 @@ mod tests {
                 let entry = expected.entry(*correct).or_insert(0);
                 *entry += 2;
             }
+
+            let collected = dbg!(env.collected_metrics());
+            let AggregatedMetrics::U64(MetricData::Sum(routes_visited)) = collected
+                .get_metric("web", "docsrs.web.routes_visited")?
+                .data()
+            else {
+                panic!("Expected Sum<U64> metric data");
+            };
+
+            dbg!(&routes_visited);
+
+            let routes_visited: HashMap<String, u64> = routes_visited
+                .data_points()
+                .map(|dp| {
+                    let route = dp
+                        .attributes()
+                        .find(|kv| kv.key.as_str() == "route")
+                        .unwrap()
+                        .clone()
+                        .value;
+
+                    (route.to_string(), dp.value())
+                })
+                .collect();
+
+            assert_eq!(
+                routes_visited,
+                HashMap::from_iter(
+                    vec![
+                        ("/", 2),
+                        ("/-/sitemap/{letter}/sitemap.xml", 2),
+                        ("/crate/{name}/{version}", 4),
+                        ("/crate/{name}/{version}/status.json", 2),
+                        ("/releases", 2),
+                        ("/releases/feed", 2),
+                        ("/releases/queue", 2),
+                        ("/releases/recent-failures", 2),
+                        ("/releases/recent-failures/{page}", 2),
+                        ("/releases/recent/{page}", 2),
+                        ("/sitemap.xml", 2),
+                        ("rustdoc page", 4),
+                        ("static resource", 16),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                )
+            );
+
+            let AggregatedMetrics::F64(MetricData::Histogram(response_time)) = collected
+                .get_metric("web", "docsrs.web.response_time")?
+                .data()
+            else {
+                panic!("Expected Histogram<F64> metric data");
+            };
+
+            dbg!(&response_time);
+
+            let response_time_sample_counts: HashMap<String, u64> = response_time
+                .data_points()
+                .map(|dp| {
+                    let route = dp
+                        .attributes()
+                        .find(|kv| kv.key.as_str() == "route")
+                        .unwrap()
+                        .clone()
+                        .value;
+
+                    (route.to_string(), dp.count())
+                })
+                .collect();
+
+            assert_eq!(
+                response_time_sample_counts,
+                HashMap::from_iter(
+                    vec![
+                        ("/", 2),
+                        ("/-/sitemap/{letter}/sitemap.xml", 2),
+                        ("/crate/{name}/{version}", 4),
+                        ("/crate/{name}/{version}/status.json", 2),
+                        ("/releases", 2),
+                        ("/releases/feed", 2),
+                        ("/releases/queue", 2),
+                        ("/releases/recent-failures", 2),
+                        ("/releases/recent-failures/{page}", 2),
+                        ("/releases/recent/{page}", 2),
+                        ("/sitemap.xml", 2),
+                        ("rustdoc page", 4),
+                        ("static resource", 16),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                )
+            );
 
             // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
             let metrics_serialized = metrics.gather(&env.context.pool)?;

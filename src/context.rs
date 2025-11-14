@@ -1,9 +1,10 @@
-use crate::cdn::CdnBackend;
-use crate::db::Pool;
-use crate::repositories::RepositoryStatsUpdater;
 use crate::{
     AsyncBuildQueue, AsyncStorage, BuildQueue, Config, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
+    cdn::CdnBackend,
+    db::Pool,
+    metrics::otel::{AnyMeterProvider, get_meter_provider},
+    repositories::RepositoryStatsUpdater,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -22,25 +23,29 @@ pub struct Context {
     pub registry_api: Arc<RegistryApi>,
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
+    pub meter_provider: AnyMeterProvider,
 }
 
 impl Context {
     /// Create a new context environment from the given configuration.
-    #[cfg(not(test))]
     pub async fn from_config(config: Config) -> Result<Self> {
         let instance_metrics = Arc::new(InstanceMetrics::new()?);
-        let pool = Pool::new(&config, instance_metrics.clone()).await?;
-        Self::from_config_with_metrics_and_pool(config, instance_metrics, pool).await
+        let meter_provider = get_meter_provider(&config)?;
+        let pool = Pool::new(&config, instance_metrics.clone(), &meter_provider).await?;
+        Self::from_config_with_metrics_and_pool(config, instance_metrics, meter_provider, pool)
+            .await
     }
 
     /// Create a new context environment from the given configuration, for running tests.
     #[cfg(test)]
-    pub async fn from_config(
+    pub async fn from_test_config(
         config: Config,
         instance_metrics: Arc<InstanceMetrics>,
+        meter_provider: AnyMeterProvider,
         pool: Pool,
     ) -> Result<Self> {
-        Self::from_config_with_metrics_and_pool(config, instance_metrics, pool).await
+        Self::from_config_with_metrics_and_pool(config, instance_metrics, meter_provider, pool)
+            .await
     }
 
     /// private function for context environment generation, allows passing in a
@@ -49,12 +54,19 @@ impl Context {
     async fn from_config_with_metrics_and_pool(
         config: Config,
         instance_metrics: Arc<InstanceMetrics>,
+        meter_provider: AnyMeterProvider,
         pool: Pool,
     ) -> Result<Self> {
         let config = Arc::new(config);
 
         let async_storage = Arc::new(
-            AsyncStorage::new(pool.clone(), instance_metrics.clone(), config.clone()).await?,
+            AsyncStorage::new(
+                pool.clone(),
+                instance_metrics.clone(),
+                config.clone(),
+                &meter_provider,
+            )
+            .await?,
         );
 
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
@@ -62,11 +74,13 @@ impl Context {
             instance_metrics.clone(),
             config.clone(),
             async_storage.clone(),
+            &meter_provider,
         ));
 
         let cdn = Arc::new(CdnBackend::new(&config).await);
 
         let runtime = runtime::Handle::current();
+
         // sync wrappers around build-queue & storage async resources
         let build_queue = Arc::new(BuildQueue::new(runtime.clone(), async_build_queue.clone()));
         let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
@@ -87,6 +101,7 @@ impl Context {
             repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
             runtime,
             config,
+            meter_provider,
         })
     }
 }

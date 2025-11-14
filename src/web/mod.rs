@@ -8,7 +8,10 @@ use crate::{
         types::{BuildStatus, version::Version},
     },
     utils::{get_correct_docsrs_style_file, report_error},
-    web::page::templates::{RenderBrands, RenderSolid, filters},
+    web::{
+        metrics::WebMetrics,
+        page::templates::{RenderBrands, RenderSolid, filters},
+    },
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
@@ -442,6 +445,8 @@ async fn apply_middleware(
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
 
+    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
+
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -464,6 +469,7 @@ async fn apply_middleware(
             .layer(Extension(context.async_build_queue.clone()))
             .layer(Extension(context.service_metrics.clone()))
             .layer(Extension(context.instance_metrics.clone()))
+            .layer(Extension(web_metrics))
             .layer(Extension(context.config.clone()))
             .layer(Extension(context.registry_api.clone()))
             .layer(Extension(context.async_storage.clone()))

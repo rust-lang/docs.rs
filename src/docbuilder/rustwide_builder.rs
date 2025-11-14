@@ -11,6 +11,7 @@ use crate::{
     },
     docbuilder::Limits,
     error::Result,
+    metrics::otel::AnyMeterProvider,
     repositories::RepositoryStatsUpdater,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
@@ -24,6 +25,7 @@ use crate::{
 use anyhow::{Context as _, Error, anyhow, bail};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
+use opentelemetry::metrics::{Counter, Histogram};
 use regex::Regex;
 use rustwide::{
     AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
@@ -113,6 +115,50 @@ pub enum PackageKind<'a> {
     Registry(&'a str),
 }
 
+#[derive(Debug)]
+pub struct BuilderMetrics {
+    pub total_builds: Counter<u64>,
+    pub build_time: Histogram<f64>,
+    pub successful_builds: Counter<u64>,
+    pub failed_builds: Counter<u64>,
+    pub non_library_builds: Counter<u64>,
+    pub documentation_size: Histogram<u64>,
+}
+
+impl BuilderMetrics {
+    pub fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("builder");
+        const PREFIX: &str = "docsrs.builder";
+        Self {
+            failed_builds: meter
+                .u64_counter(format!("{PREFIX}.failed_builds"))
+                .with_unit("1")
+                .build(),
+            build_time: meter
+                .f64_histogram(format!("{PREFIX}.build_time"))
+                .with_unit("s")
+                .build(),
+            total_builds: meter
+                .u64_counter(format!("{PREFIX}.total_builds"))
+                .with_unit("1")
+                .build(),
+            successful_builds: meter
+                .u64_counter(format!("{PREFIX}.successful_builds"))
+                .with_unit("1")
+                .build(),
+            non_library_builds: meter
+                .u64_counter(format!("{PREFIX}.non_library_builds"))
+                .with_unit("1")
+                .build(),
+            documentation_size: meter
+                .u64_histogram(format!("{PREFIX}.documentation_size"))
+                .with_unit("bytes")
+                .with_description("size of the generated documentation in bytes")
+                .build(),
+        }
+    }
+}
+
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
@@ -125,6 +171,7 @@ pub struct RustwideBuilder {
     registry_api: Arc<RegistryApi>,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     workspace_initialize_time: Instant,
+    builder_metrics: Arc<BuilderMetrics>,
 }
 
 impl RustwideBuilder {
@@ -146,6 +193,7 @@ impl RustwideBuilder {
             registry_api: context.registry_api.clone(),
             repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
+            builder_metrics: context.async_build_queue.builder_metrics(),
         })
     }
 
@@ -732,6 +780,7 @@ impl RustwideBuilder {
                     self.metrics
                         .documentation_size
                         .observe(documentation_size as f64 / 1024.0 / 1024.0);
+                    self.builder_metrics.documentation_size.record(documentation_size, &[]);
                     algs.insert(new_alg);
                     Some(documentation_size)
                 } else {
@@ -766,10 +815,13 @@ impl RustwideBuilder {
 
                 if res.result.successful {
                     self.metrics.successful_builds.inc();
+                    self.builder_metrics.successful_builds.add(1, &[]);
                 } else if res.cargo_metadata.root().is_library() {
                     self.metrics.failed_builds.inc();
+                    self.builder_metrics.failed_builds.add(1, &[]);
                 } else {
                     self.metrics.non_library_builds.inc();
+                    self.builder_metrics.non_library_builds.add(1, &[]);
                 }
 
                 let release_data = if !is_local {
