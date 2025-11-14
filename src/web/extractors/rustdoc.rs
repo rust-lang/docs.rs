@@ -1018,12 +1018,17 @@ mod tests {
     )]
     #[test_case(
         None, Some("something"), false,
-        None, "something", "something";
+        None, "something", "krate/something";
         "without trailing slash"
     )]
     #[test_case(
+        None, Some("settings.html"), false,
+        None, "settings.html", "settings.html";
+        "without trailing slash, but known root name"
+    )]
+    #[test_case(
         None, Some("/something"), false,
-        None, "something", "something";
+        None, "something", "krate/something";
         "leading slash is cut"
     )]
     #[test_case(
@@ -1045,7 +1050,7 @@ mod tests {
     )]
     #[test_case(
         None, Some(&format!("{DEFAULT_TARGET}/one")), false,
-        Some(DEFAULT_TARGET), "one", "one";
+        Some(DEFAULT_TARGET), "one", "krate/one";
         "target + one without trailing slash"
     )]
     #[test_case(
@@ -1091,7 +1096,7 @@ mod tests {
     )]
     #[test_case(
         Some(UNKNOWN_TARGET), None, false,
-        None, UNKNOWN_TARGET, UNKNOWN_TARGET;
+        None, UNKNOWN_TARGET, &format!("krate/{UNKNOWN_TARGET}");
         "unknown target without trailing slash"
     )]
     #[test_case(
