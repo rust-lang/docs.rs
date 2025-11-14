@@ -1,6 +1,6 @@
 use crate::{cdn::CdnKind, storage::StorageKind};
 use anyhow::{Context, Result, anyhow, bail};
-use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
+use std::{env::VarError, error::Error, io, path, path::PathBuf, str::FromStr, time::Duration};
 use tracing::trace;
 use url::Url;
 
@@ -209,10 +209,10 @@ impl Config {
             .cdn_max_queued_age(Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?))
             .cloudfront_distribution_id_web(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?)
             .cloudfront_distribution_id_static(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?)
-            .local_archive_cache_path(env(
+            .local_archive_cache_path(ensure_absolute_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
-            )?)
+            )?)?)
             .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
             .temp_dir(temp_dir)
             .rustwide_workspace(env(
@@ -232,6 +232,14 @@ impl Config {
                 86400,
             )?))
             .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?))
+    }
+}
+
+fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Ok(path::absolute(&path)?)
     }
 }
 

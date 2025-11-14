@@ -64,7 +64,7 @@ sysinfo = { version = "0.37.2", default-features = false, features = ["system"] 
 derive_builder = "0.20.2"
 
 # Async
-tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 futures-util = "0.3.5"
