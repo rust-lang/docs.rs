@@ -20,6 +20,13 @@ use std::borrow::Cow;
 const INDEX_HTML: &str = "index.html";
 const FOLDER_AND_INDEX_HTML: &str = "/index.html";
 
+pub(crate) const ROOT_RUSTDOC_HTML_FILES: &[&str] = &[
+    "all.html",
+    "help.html",
+    "settings.html",
+    "scrape-examples-help.html",
+];
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum PageKind {
     Rustdoc,
@@ -723,27 +730,38 @@ fn generate_rustdoc_path_for_url(
         && !path.is_empty()
         && path != INDEX_HTML
     {
-        if let Some(target_name) = target_name
-            && path == target_name
-        {
-            // Sometimes people add a path that is just the target name.
-            // This matches our `rustdoc_redirector_handler` route,
-            // without trailing slash (`/{name}/{version}/{target}`).
-            //
-            // Even though the rustdoc html handler would also be capable
-            // handling this input, we want to redirect to the trailing
-            // slash version (`/{name}/{version}/{target}/`),
-            // so they are separate.
-            format!("{}/", target_name)
-        } else {
+        // for none-elements paths we have to guarantee that we have a
+        // trailing slash, otherwise the rustdoc-url won't hit the html-handler and
+        // lead to redirect loops.
+        if path.contains('/') {
             // just use the given inner to start, if:
             // * it's not empty
             // * it's not just "index.html"
+            // * we have a slash in the path.
             path.to_string()
+        } else if ROOT_RUSTDOC_HTML_FILES.contains(&path) {
+            // special case: some files are at the root of the rustdoc output,
+            // without a trailing slash, and the routes are fine with that.
+            // e.g. `/help.html`, `/settings.html`, `/all.html`, ...
+            path.to_string()
+        } else if let Some(target_name) = target_name {
+            if target_name == path {
+                // when we have the target name as path, without a trailing slash,
+                // just add the slash.
+                format!("{}/", path)
+            } else {
+                // when someone just attaches some path to the URL, like
+                // `/{krate}/{version}/somefile.html`, we assume they meant
+                // `/{krate}/{version}/{target_name}/somefile.html`.
+                format!("{}/{}", target_name, path)
+            }
+        } else {
+            // fallback: just attach a slash and redirect.
+            format!("{}/", path)
         }
     } else if let Some(target_name) = target_name {
         // after having no usable given path, we generate one with the
-        // target name, if we have one.
+        // target name, if we have one/.
         format!("{}/", target_name)
     } else {
         // no usable given path:
@@ -1639,23 +1657,26 @@ mod tests {
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
     }
 
-    #[test_case(Some(PageKind::Rustdoc))]
-    #[test_case(None)]
-    fn test_only_target_name_without_slash(page_kind: Option<PageKind>) {
+    #[test_case("other_path.html", "/krate/latest/krate/other_path.html")]
+    #[test_case("other_path", "/krate/latest/krate/other_path"; "without .html")]
+    #[test_case("other_path.html", "/krate/latest/krate/other_path.html"; "with .html")]
+    #[test_case("settings.html", "/krate/latest/settings.html"; "static routes")]
+    #[test_case(KRATE, "/krate/latest/krate/"; "same as target name, without slash")]
+    fn test_redirect_some_odd_paths_we_saw(inner_path: &str, expected_url: &str) {
         // test for https://github.com/rust-lang/docs.rs/issues/2989
         let params = RustdocParams::new(KRATE)
-            .with_maybe_page_kind(page_kind)
-            .try_with_original_uri("/dummy/latest/dummy")
+            .with_page_kind(PageKind::Rustdoc)
+            .try_with_original_uri(format!("/{KRATE}/latest/{inner_path}"))
             .unwrap()
             .with_req_version(ReqVersion::Latest)
             .with_maybe_doc_target(None::<String>)
-            .with_inner_path(KRATE)
+            .with_inner_path(inner_path)
             .with_default_target(DEFAULT_TARGET)
             .with_target_name(KRATE)
             .with_doc_targets(TARGETS.iter().cloned());
 
         dbg!(&params);
 
-        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+        assert_eq!(params.rustdoc_url(), expected_url);
     }
 }
