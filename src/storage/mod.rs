@@ -35,11 +35,11 @@ use std::{
     num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    str::FromStr,
 };
 use tokio::{
     io::{AsyncRead, AsyncWriteExt},
@@ -51,7 +51,7 @@ use tracing_futures::Instrument as _;
 use walkdir::WalkDir;
 
 const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
-static ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
+const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 type FileRange = RangeInclusive<u64>;
 
@@ -424,7 +424,7 @@ impl AsyncStorage {
             drop(_read_guard);
             let _write_guard = rwlock.write().await;
 
-            // check existance again in case of Race Condition (TOCTOU)
+            // check existence again in case of Race Condition (TOCTOU)
             if !tokio::fs::try_exists(&local_index_path).await? {
                 // remote/folder/and/x.zip.index
                 let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
