@@ -11,5 +11,5 @@ target
 .vagrant
 .rustwide
 .rustwide-docker
-.archive_cache
+archive_cache
 .workspace

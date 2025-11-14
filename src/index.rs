@@ -1,4 +1,5 @@
 use crate::{
+    Config,
     error::Result,
     utils::{report_error, run_blocking},
 };
@@ -24,6 +25,10 @@ pub struct Index {
 }
 
 impl Index {
+    pub async fn from_config(config: &Config) -> Result<Self> {
+        Index::from_url(&config.registry_index_path, config.registry_url.as_deref()).await
+    }
+
     pub async fn from_url(
         path: impl AsRef<Path>,
         repository_url: Option<impl AsRef<str>>,

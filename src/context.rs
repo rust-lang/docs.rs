@@ -2,7 +2,7 @@ use crate::cdn::CdnBackend;
 use crate::db::Pool;
 use crate::repositories::RepositoryStatsUpdater;
 use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Index, InstanceMetrics, RegistryApi,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
 };
 use anyhow::Result;
@@ -19,7 +19,6 @@ pub struct Context {
     pub pool: Pool,
     pub service_metrics: Arc<ServiceMetrics>,
     pub instance_metrics: Arc<InstanceMetrics>,
-    pub index: Arc<Index>,
     pub registry_api: Arc<RegistryApi>,
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
@@ -67,10 +66,6 @@ impl Context {
 
         let cdn = Arc::new(CdnBackend::new(&config).await);
 
-        let index = Arc::new(
-            Index::from_url(&config.registry_index_path, config.registry_url.as_deref()).await?,
-        );
-
         let runtime = runtime::Handle::current();
         // sync wrappers around build-queue & storage async resources
         let build_queue = Arc::new(BuildQueue::new(runtime.clone(), async_build_queue.clone()));
@@ -85,7 +80,6 @@ impl Context {
             pool: pool.clone(),
             service_metrics: Arc::new(ServiceMetrics::new()?),
             instance_metrics,
-            index,
             registry_api: Arc::new(RegistryApi::new(
                 config.registry_api_host.clone(),
                 config.crates_io_api_call_retries,

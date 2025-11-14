@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
-    Config, Context, PackageKind, RustwideBuilder,
+    Config, Context, Index, PackageKind, RustwideBuilder,
     db::{self, CrateId, Overrides, ReleaseId, add_path_into_database, types::version::Version},
     start_background_metrics_webserver, start_web_server,
     utils::{
@@ -202,7 +202,8 @@ impl CommandLine {
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
                 ctx.runtime.block_on(async move {
-                    docs_rs::utils::watch_registry(&ctx.async_build_queue, &ctx.config, ctx.index)
+                    let index = Index::from_config(&ctx.config).await?;
+                    docs_rs::utils::watch_registry(&ctx.async_build_queue, &ctx.config, &index)
                         .await
                 })?;
             }
@@ -298,7 +299,10 @@ impl QueueSubcommand {
                     (Some(reference), false) => reference,
                     (None, true) => {
                         println!("Fetching changes to set reference to HEAD");
-                        ctx.runtime.block_on(ctx.index.latest_commit_reference())?
+                        ctx.runtime.block_on(async move {
+                            let index = Index::from_config(&ctx.config).await?;
+                            index.latest_commit_reference().await
+                        })?
                     }
                     (_, _) => unreachable!(),
                 };
@@ -435,6 +439,8 @@ impl BuildSubcommand {
             } => {
                 let mut builder = rustwide_builder()?;
 
+                builder.update_toolchain_and_add_essential_files()?;
+
                 if let Some(path) = local {
                     builder
                         .build_local_package(&path)
@@ -473,17 +479,7 @@ impl BuildSubcommand {
                     return Ok(());
                 }
 
-                rustwide_builder()?
-                    .update_toolchain()
-                    .context("failed to update toolchain")?;
-
-                rustwide_builder()?
-                    .purge_caches()
-                    .context("failed to purge caches")?;
-
-                rustwide_builder()?
-                    .add_essential_files()
-                    .context("failed to add essential files")?;
+                rustwide_builder()?.update_toolchain_and_add_essential_files()?;
             }
 
             Self::AddEssentialFiles => {

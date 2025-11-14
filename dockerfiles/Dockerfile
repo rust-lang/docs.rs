@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # To produce a smaller image this Dockerfile contains two separate stages: in
 # the first one all the build dependencies are installed and docs.rs is built,
 # while in the second one just the runtime dependencies are installed, with the
@@ -5,22 +7,38 @@
 #
 # As of 2019-10-29 this reduces the image from 2.8GB to 500 MB.
 
+
 #################
 #  Build stage  #
 #################
 
-FROM ubuntu:24.04 AS build
+FROM rust:1.91-slim-trixie AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install packaged dependencies
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential git curl cmake gcc g++ pkg-config libmagic-dev \
-    libssl-dev zlib1g-dev ca-certificates mold clang
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    cmake \
+    gcc \
+    g++ \
+    pkg-config \
+    libmagic-dev \
+    libssl-dev \
+    zlib1g-dev \
+    ca-certificates \
+    mold \
+    clang
 
-# Install the stable toolchain with rustup
-RUN curl https://sh.rustup.rs >/tmp/rustup-init && \
-    chmod +x /tmp/rustup-init && \
-    /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
 ENV PATH=/root/.cargo/bin:$PATH
+
+# get the git SHA from the build args, for our generated version numbers
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
 
 # Configure linking to use mold instead for speed (need to use clang because gcc
 # is too old on this image)
@@ -34,23 +52,21 @@ ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-Clink-arg=-fuse-ld=mold
 WORKDIR /build
 COPY benches benches
 COPY Cargo.lock Cargo.toml ./
-COPY crates/metadata crates/metadata/
-COPY crates/font-awesome-as-a-crate crates/font-awesome-as-a-crate
+COPY crates crates
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/bin/cratesfyi.rs && \
     echo "fn main() {}" > build.rs
 
-RUN cargo fetch
-
 ARG PROFILE=release
-RUN cargo build --profile=$PROFILE
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=cargo-target,sharing=locked \
+    cargo build --profile=$PROFILE
 
 # Dependencies are now cached, copy the actual source code and do another full
 # build. The touch on all the .rs files is needed, otherwise cargo assumes the
 # source code didn't change thanks to mtime weirdness.
 RUN rm -rf src build.rs
 
-COPY .git .git
 COPY build.rs build.rs
 RUN touch build.rs
 COPY src src/
@@ -61,96 +77,124 @@ COPY assets assets/
 COPY .sqlx .sqlx/
 COPY migrations migrations/
 
-RUN cargo build --profile=$PROFILE
+ARG PROFILE_DIR=release
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=cargo-target,sharing=locked \
+    mkdir /artifacts && \
+    cargo build --profile=$PROFILE && \
+    cp /build/target/$PROFILE_DIR/cratesfyi /artifacts/
 
 ######################
 #  Web server stage  #
 ######################
 
-FROM ubuntu:24.04 AS web-server
+FROM debian:trixie-slim AS web-server
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# hadolint ignore=DL3008
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    && apt-get install -y \
+        --no-install-recommends \
         ca-certificates \
         curl \
         tini \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/docsrs
 
-# Tini is a small init binary to properly handle signals
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-web-server", "0.0.0.0:80"]
+CMD ["start-web-server", "0.0.0.0:3000"]
 
-ARG PROFILE_DIR=release
-COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
+COPY --from=build /artifacts/cratesfyi /usr/local/bin
 COPY static /srv/docsrs/static
-COPY templates /srv/docsrs/templates
 COPY vendor /srv/docsrs/vendor
 
 ########################
 #  Build server stage  #
 ########################
+# * includes docker-cli, but expects the docker engine to be mapped into 
+#   the container from the outside, e.g. via 
+#
+#     volumes:
+#       - "/var/run/docker.sock:/var/run/docker.sock"
 
-FROM ubuntu:22.04 AS build-server
+FROM debian:trixie-slim AS build-server
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# hadolint ignore=DL3008
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    && apt-get install -y \
+        --no-install-recommends \
         ca-certificates \
         tini \
         curl \
-        docker.io \
+        docker-cli \
         build-essential \
         gcc \
         pkg-config \
         libssl-dev \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Tini is a small init binary to properly handle signals
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-build-server"]
+CMD ["start-build-server", "0.0.0.0:3000"]
 
-ARG PROFILE_DIR=release
-COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
+COPY --from=build /artifacts/cratesfyi /usr/local/bin
+
 
 ############################
 #  Registry watcher stage  #
 ############################
 
-FROM ubuntu:22.04 AS registry-watcher
+FROM debian:trixie-slim AS registry-watcher
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# hadolint ignore=DL3008
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    && apt-get install -y \
+        --no-install-recommends \
         ca-certificates \
         tini \
         curl \
         git \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Tini is a small init binary to properly handle signals
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-registry-watcher", "--repository-stats-updater=enabled", "--cdn-invalidator=enabled"]
+CMD ["start-registry-watcher", "0.0.0.0:3000", "--repository-stats-updater=enabled", "--cdn-invalidator=enabled", "--queue-rebuilds=enabled"]
 
-ARG PROFILE_DIR=release
-COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
+COPY --from=build /artifacts/cratesfyi /usr/local/bin
 
 ###############
 #  CLI stage  #
 ###############
+# This stage is used to run one-off commands like database migrations.
+# not suited for commands that need: 
+# * the crates.io index, or
+# * need to run builds.
+# for these, use the build-server stage, or registry-watcher stage instead.
 
-FROM ubuntu:22.04 AS cli
+FROM debian:trixie-slim AS cli
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# hadolint ignore=DL3008
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    && apt-get install -y \
+        --no-install-recommends \
         ca-certificates \
         tini \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv/docsrs
+# copy migrations so we can run them via CLI script
+COPY migrations migrations/
 
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
 
-ARG PROFILE_DIR=release
-COPY --from=build /build/target/$PROFILE_DIR/cratesfyi /usr/local/bin
+COPY --from=build /artifacts/cratesfyi /usr/local/bin

@@ -56,8 +56,21 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
 /// commit hash and build date
 pub const BUILD_VERSION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("GIT_SHA"),
     " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+    env!("BUILD_DATE"),
+    " )"
+);
+
+pub const APP_USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    " ",
+    " (",
+    env!("GIT_SHA"),
+    " ",
+    env!("BUILD_DATE"),
+    " )"
 );
 
 /// Where rustdoc's static files are stored in S3.

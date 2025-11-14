@@ -1,3 +1,64 @@
+# main docker-compose file for local development.
+#
+# runs & configures by default:
+# * `db` -> postgres db
+# * `s3` -> minio
+#
+# optional profile: `web`:
+# * `web` -> webserver
+#
+# optional profile: `builder`:
+# * `builder-a` -> build-server 1
+# * `builder-b` -> build-server 2
+# ( two parallel build-servers, sharing nothing apart
+# from the build queue they access)
+#
+# optional profile: `watcher`:
+# * `registry-watcher` ->
+#     - crates.io registry watcher
+#     - repo-stats updater
+#     - cdn invalidator
+#     - release-rebuild-enqueuer
+#
+# optional profile: `metrics`:
+# * `prometheus` -> configured prometheus instance
+#
+# optional profile: `full`: all of the above.
+#
+# Services purely for manual usage with `docker compose run` are:
+# * `cli`: to run simple CLI commands that only need the database & S3
+# * `builder-cli`: to run CLI commands that need the build environment.
+# * `registry-watcher-cli`: to run CLI commands that need the crates.io index.
+#
+# CAVEATS:
+# * the build-servers have to run on the `linux/amd64` platform,
+#   while it doesn't matter for the rest of the services.
+#   This means for example on a Mac, the layers will be
+#   cached separately, once for `linux/amd64` and once for
+#   `linux/arm64`, which increases build-time.
+#
+# * volumes: typically docker-native volumes are faster than mounts, but
+#   sometimes annoying to inspect for debugging.
+#   For now we choose:
+#   * docker-native for DB, S3, rustwide workspace, crates.io index
+#   * mounts for prefix
+#
+# * prometheus scrape config is set to collect from the web server, the
+#   registry watcher, and the build servers. Scraping is not dynamic, so
+#   the local prometheus server will try to fetch from all service
+#   instances (web, watcher, builder), and just error in case the specific
+#   server isn't accessible.
+
+x-docker-cache: &docker-cache
+    # shared configuration to cache docker layers across CI runs.
+    # can just always be in in the `docker-compose.yml`, and will
+    # just do nothing if we're not on GHA.
+    # So feel free to add more techniques if needed.
+    cache_from:
+        - type=gha
+    cache_to:
+        - type=gha,mode=max
+
 x-healthcheck: &healthcheck-interval
     interval: 10s
     timeout: 1s
@@ -5,33 +66,37 @@ x-healthcheck: &healthcheck-interval
     start_period: 10s
 
 x-environment: &environment
-    RUST_BACKTRACE: true
+    # needed default environment that can be overwritten in `.docker.env`
+    # Example in `.docker.env.sample`
+    RUST_BACKTRACE: ${RUST_BACKTRACE:-true}
+    DOCSRS_LOG: ${DOCSRS_LOG:-docs_rs=trace,tower_http=debug,rustwide=info,aws_smithy_http=trace,axum=debug}
 
+    # fixed environment to connect the different services in this file properly
     DOCSRS_PREFIX: /opt/docsrs/prefix
-    DOCSRS_COMPILER_METRICS_PATH: /opt/docsrs/prefix/metrics
-
     DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
     DOCSRS_MIN_POOL_IDLE: 1
     DOCSRS_MIN_POOL_SIZE: 2
     DOCSRS_MAX_POOL_SIZE: 10
-    DOCSRS_MAX_LEGACY_POOL_SIZE: 10
-
     DOCSRS_STORAGE_BACKEND: s3
-
     S3_ENDPOINT: http://s3:9000
     AWS_ACCESS_KEY_ID: cratesfyi
     AWS_SECRET_ACCESS_KEY: secret_key
 
-    DOCSRS_RENDER_THREADS: 2
+x-builder-environment: &builder-environment
+    <<: *environment
+    # default builder environment that can be overwritten in `.docker.env`
+    DOCSRS_INCLUDE_DEFAULT_TARGETS: ${DOCSRS_INCLUDE_DEFAULT_TARGETS:-false}
+    DOCSRS_DOCKER_IMAGE: ${DOCSRS_DOCKER_IMAGE:-ghcr.io/rust-lang/crates-build-env/linux-micro}
 
+    # fixed environment to connect the different services in this file properly
     DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+    DOCSRS_COMPILER_METRICS_PATH: /opt/docsrs/prefix/metrics
     DOCSRS_DOCKER: true
-    DOCSRS_DOCKER_IMAGE: ghcr.io/rust-lang/crates-build-env/linux-micro
     DOCSRS_BUILD_CPU_LIMIT: 2
-    DOCSRS_INCLUDE_DEFAULT_TARGETS: false
 
 x-build: &build
     context: .
+    <<: *docker-cache
     dockerfile: ./dockerfiles/Dockerfile
     args:
         PROFILE: dev
@@ -41,11 +106,41 @@ x-builder: &builder
     build:
         <<: *build
         target: build-server
+    # build servers only work with linux/amd64 for now.
+    # This makes them much slower when working on a mac, but
+    # it needs some work and digging into the builder to fix
+    # this.
     platform: "linux/amd64"
     depends_on:
         - db
         - s3
-    environment: *environment
+    environment:
+        <<: *builder-environment
+    env_file:
+        - .docker.env
+    healthcheck:
+        <<: *healthcheck-interval
+        test: curl --silent --fail localhost:3000/about/metrics
+
+x-registry-watcher: &registry-watcher
+    build:
+        <<: *build
+        target: registry-watcher
+    depends_on:
+        - db
+        - s3
+    volumes:
+        - "./ignored/docker-registry-watcher/prefix:/opt/docsrs/prefix"
+        - crates-io-index:/opt/docsrs/crates.io-index
+    environment:
+        <<: *environment
+        # the crates.io index can be shared between the registry watcher & its
+        # CLI service.
+        # So we configure it to be separate from the prefix.
+        # Also on a native docker volume for performance
+        REGISTRY_INDEX_PATH: /opt/docsrs/crates.io-index
+        # configure the rebuild-queuer,
+        DOCSRS_MAX_QUEUED_REBUILDS: ${DOCSRS_MAX_QUEUED_REBUILDS:-10}
     env_file:
         - .docker.env
     healthcheck:
@@ -57,82 +152,104 @@ services:
         build:
             <<: *build
             target: web-server
-        platform: "linux/amd64"
         depends_on:
             - db
             - s3
         ports:
-            - "3000:80"
-        environment: *environment
+            - "3000:3000"
+        environment:
+            <<: *environment
+            DOCSRS_RENDER_THREADS: 2
+            DOCSRS_S3_STATIC_ROOT_PATH: http://localhost:9000/rust-docs-rs
         env_file:
             - .docker.env
-        healthcheck:
-            <<: *healthcheck-interval
-            test: curl --silent --fail localhost:80/about/metrics
-
-    # Include the registry watcher with
-    # `docker compose --profile watch up --build --wait`
-    registry-watcher:
-        build:
-            <<: *build
-            target: registry-watcher
-        platform: "linux/amd64"
-        depends_on:
-            - db
-        volumes:
-            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
-            - "./static:/opt/docsrs/static:ro"
-        environment: *environment
-        env_file:
-            - .docker.env
-        profiles:
-            - watch
-            - all
         healthcheck:
             <<: *healthcheck-interval
             test: curl --silent --fail localhost:3000/about/metrics
+        profiles:
+            - web
+            - full
+
+    registry-watcher:
+        <<: *registry-watcher
+        profiles:
+            - watcher
+            - full
+
+    registry-watcher-cli:
+        <<: *registry-watcher
+        profiles:
+            # watcher-CLI should not be run as background daemon, just manually
+            - manual
 
     builder-a:
         <<: *builder
         volumes:
-            - ".rustwide-docker/builder-a:/opt/docsrs/rustwide"
-            - "./ignored/cratesfyi-prefix/metrics:/opt/docsrs/prefix/metrics"
+            - "rustwide-builder-a:/opt/docsrs/rustwide"
+            - "./ignored/docker-builder-a/prefix:/opt/docsrs/prefix"
+            # this exposes the docker engine from the host machine
+            # to the build-server inside the container.
             - "/var/run/docker.sock:/var/run/docker.sock"
+        profiles:
+            - builder
+            - full
 
     builder-b:
         <<: *builder
         volumes:
-            - ".rustwide-docker/builder-b:/opt/docsrs/rustwide"
-            - "./ignored/cratesfyi-prefix/metrics:/opt/docsrs/prefix/metrics"
+            - "rustwide-builder-b:/opt/docsrs/rustwide"
+            - "./ignored/docker-builder-b/prefix:/opt/docsrs/prefix"
+            # this exposes the docker engine from the host machine
+            # to the build-server inside the container.
             - "/var/run/docker.sock:/var/run/docker.sock"
+        profiles:
+            - builder
+            - full
+
+    builder-cli:
+        <<: *builder
+        volumes:
+            - "rustwide-builder-cli:/opt/docsrs/rustwide"
+            - "./ignored/docker-builder-cli/prefix:/opt/docsrs/prefix"
+            # this exposes the docker engine from the host machine
+            # to the build-server inside the container.
+            - "/var/run/docker.sock:/var/run/docker.sock"
+        profiles:
+            # builder-CLI should not be run as background daemon, just manually
+            - manual
 
     cli:
         build:
             <<: *build
             target: cli
-        platform: "linux/amd64"
         depends_on:
+            # only for clarification.
+            # When using "docker compose run", these dependencies are ignored,
+            # we handle this in our `just` commands.
             - db
             - s3
-        volumes:
-            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
         environment: *environment
+        volumes:
+            - "./ignored/docker-cli/prefix:/opt/docsrs/prefix"
         env_file:
             - .docker.env
         profiles:
-            - all
+            # CLI should not be run as background daemon, just manually
+            - manual
 
     db:
         build:
             context: ./dockerfiles
             dockerfile: ./Dockerfile-postgres
+            <<: *docker-cache
         volumes:
             - postgres-data:/var/lib/postgresql/data
         environment:
             POSTGRES_USER: cratesfyi
             POSTGRES_PASSWORD: password
         ports:
-            # Use a non-standard port on the host to avoid conflicting with existing postgres servers
+            # Use a non-standard port on the host to avoid conflicting
+            # with existing postgres servers
             - "127.0.0.1:15432:5432"
         healthcheck:
             <<: *healthcheck-interval
@@ -161,25 +278,44 @@ services:
         build:
             context: ./dockerfiles
             dockerfile: ./Dockerfile-prometheus
+            <<: *docker-cache
         ports:
             - "127.0.0.1:9090:9090"
+        # we intentionally don't define depends_on here.
+        # While the scrapers are configured to fetch from eventually running
+        # web or build-servers, adding these as dependency would mean we can't
+        # test metrics just with a webserver.
+        # Prometheus will just scrape from the working endpoints, and skip/error
+        # on the broken ones.
         healthcheck:
             <<: *healthcheck-interval
             test: promtool check healthy
+        profiles:
+            # we rarely need to test with actual prometheus, so always running
+            # it is a waste.
+            - metrics
+            - full
 
     gui_tests:
+        platform: "linux/amd64"
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile-gui-tests
+            <<: *docker-cache
         network_mode: "host"
         extra_hosts:
             - "host.docker.internal:host-gateway"
         volumes:
             - "${PWD}:/build/out"
         profiles:
-            - all
+            # gui_tests should not be run as background daemon.
+            # Run via `just run-gui-tests`.
+            - manual
 
 volumes:
     postgres-data: {}
     minio-data: {}
-    cratesio-index: {}
+    crates-io-index: {}
+    rustwide-builder-a: {}
+    rustwide-builder-b: {}
+    rustwide-builder-cli: {}

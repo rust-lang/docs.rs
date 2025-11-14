@@ -6,10 +6,13 @@ use std::time::Duration;
 use std::{fs, io, path::Path, thread};
 use tracing::{debug, error, warn};
 
+/// the main build-server loop
 pub fn queue_builder(context: &Context, mut builder: RustwideBuilder) -> Result<(), Error> {
     loop {
         let temp_dir = &context.config.temp_dir;
-        if let Err(e) = remove_tempdirs(temp_dir) {
+        if temp_dir.exists()
+            && let Err(e) = remove_tempdirs(temp_dir)
+        {
             report_error(&anyhow::anyhow!(e).context(format!(
                 "failed to clean temporary directory {:?}",
                 temp_dir
