@@ -34,7 +34,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
-use http::{HeaderValue, Uri, header};
+use http::{HeaderValue, Uri, header, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -231,7 +231,9 @@ pub(crate) async fn rustdoc_redirector_handler(
         };
 
         if let Some(original_uri) = original_uri
-            && original_uri.path() == original_uri.path()
+            && original_uri.path() == url.path()
+            && (url.authority().is_none()
+                || url.authority() == Some(&Authority::from_static("docs.rs")))
         {
             return Err(anyhow!(
                 "infinite redirect detected, \noriginal_uri = {}, redirect_url = {}",
