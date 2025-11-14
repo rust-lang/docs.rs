@@ -3057,7 +3057,7 @@ mod test {
 
             web.assert_redirect_cached_unchecked(
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
-                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
+                "/clap/latest/clap/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
                 CachePolicy::ForeverInCdn,
                 env.config(),
             ).await?;
@@ -3362,8 +3362,6 @@ mod test {
     #[test_case("/dummy/"; "only krate")]
     #[test_case("/dummy/latest/"; "with version")]
     #[test_case("/dummy/latest/dummy"; "target-name as path, without trailing slash")]
-    #[test_case("/dummy/latest/other_path"; "other path, without trailing slash")]
-    #[test_case("/dummy/latest/other_path.html"; "other html path, without trailing slash")]
     #[test_case("/dummy/latest/dummy/"; "final target")]
     async fn test_full_latest_url_without_trailing_slash(path: &str) -> Result<()> {
         // test for https://github.com/rust-lang/docs.rs/issues/2989
@@ -3385,6 +3383,38 @@ mod test {
             web.assert_redirect_unchecked(path, "/dummy/latest/dummy/")
                 .await?;
         }
+
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case(
+        "/dummy/latest/other_path",
+        "/dummy/latest/dummy/other_path";
+        "other path, without trailing slash"
+    )]
+    #[test_case(
+        "/dummy/latest/other_path.html",
+        "/dummy/latest/dummy/other_path.html";
+        "other html path, without trailing slash"
+    )]
+    async fn test_full_latest_url_some_path_but_trailing_slash(
+        path: &str,
+        expected_redirect: &str,
+    ) -> Result<()> {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("1.0.0")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        web.assert_redirect_unchecked(path, expected_redirect)
+            .await?;
 
         Ok(())
     }
