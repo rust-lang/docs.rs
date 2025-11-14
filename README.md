@@ -28,15 +28,6 @@ The recommended way to develop docs.rs is a combination of `cargo run` for
 the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
 This gives you reasonable incremental build times without having to add new users and packages to your host machine.
 
-### Git Hooks
-
-For ease of use, `git_hooks` directory contains useful `git hooks` to make your development easier.
-
-```bash
-# Unix
-cd .git/hooks && ln -s ../../.git_hooks/* . && cd ../..
-# Powershell
-cd .git/hooks && New-Item -Path ../../.git_hooks/* -ItemType SymbolicLink -Value . && cd ../..
 ```
 
 ### Dependencies
@@ -108,7 +99,7 @@ cargo test
 To run GUI tests:
 
 ```
-./dockerfiles/run-gui-tests.sh
+just run-gui-tests
 ```
 
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
@@ -128,53 +119,57 @@ npm install browser-ui-test
 
 ### Pure docker-compose
 
-If you have trouble with the above commands, consider using `docker compose up --build`,
+If you have trouble with the above commands, consider using `just compose-up-web`,
 which uses docker-compose for the web server as well.
 This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
 but makes sure that you're in a known environment so you should have fewer problems getting started.
 
-You'll need to `touch .docker.env` first, this file can have any environment
-variable overrides you want to use in docker containers. Then run the migrations
-before launching the main services:
+You can put environment overrides for the docker containers into `.docker.env`,
+first. The migrations will be run by our just recipes when needed.
 
 ```sh
-docker compose run --build --rm cli database migrate
-docker compose up --build -d
+just cli-db-migrate
+just compose-up-web
 ```
 
-You can also use the `builder-a` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+You can also use the `builder` compose profile to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
 
 ```sh
+just compose-up-builder
+
+# and if needed
+
 # update the toolchain
-docker compose run --rm builder-a build update-toolchain
+just cli-build-update-toolchain
+
 # run a build for a single crate
-docker compose run --rm builder-a build crate regex 1.3.1
-# rebuild containers when you changed code.
-docker compose up --wait --build
+just cli-build-crate regex 1.3.1
 ```
 
 You can also run other non-build commands like the setup steps above, or queueing crates for the background builders from within the `cli` container:
 
 ```sh
-docker compose run --rm cli database migrate
-docker compose run --rm cli queue add regex 1.3.1
+just cli-db-migrate
+just cli-queue-add regex 1.3.1
 ```
 
-If you want to run the registry watcher, you'll need to first set the "last seen
-reference" from the registry index, e.g. to set it to the current head so only
-newly published crates are built:
+If you want to run the registry watcher, you can use the `watcher` profile:
+```sh
+just compose-up-watcher
+```
+
+It it was never run, we will start watching for registry changes at the current HEAD of the index.
+
+If you want to start from another point:
 
 ```sh
-docker compose run --rm cli queue set-last-seen-reference --head
+just cli-queue-reset-last-seen-ref GIT_REF
 ```
 
-Then enable the docker-compose profile that includes the watcher:
+Note that running tests is currently not supported when using pure docker-compose.
 
-```sh
-docker compose --profile watch up --build -d
-```
-
-Note that running tests is not supported when using pure docker-compose.
+Some of the above commands are included in the `Justfile` for ease of use,
+check `just --list` for an overview.
 
 Some of the above commands are included in the `Justfile` for ease of use,
 check the `[compose]` group in `just --list`.
@@ -184,26 +179,23 @@ Please file bugs for any trouble you have running docs.rs!
 ### Docker-Compose
 
 The services started by Docker-Compose are defined in [docker-compose.yml].
-Three services are defined:
-
-| name | access                                          | credentials                | description                            |
-|------|-------------------------------------------------|----------------------------|----------------------------------------|
-| web  | http://0.0.0.0:3000                             | N/A                        | A container running the docs.rs binary |
-| db   | postgresql://cratesfyi:password@127.0.0.1:15432 | -                          | Postgres database used by web          |
-| s3   | http://127.0.0.1:9000                           | `cratesfyi` - `secret_key` | MinIO (simulates AWS S3) used by web   |
+For convenience, there are plenty of `just` recipes built around it.
 
 [docker-compose.yml]: ./docker-compose.yml
 
 #### Rebuilding Containers
 
-To rebuild the site, run `docker compose --profile all build`.
-Note that docker-compose caches the build even if you change the source code,
-so this will be necessary anytime you make changes.
+The `just` recipes for compose handle rebuilds themselves, so nothing needs to
+be done here.
 
 If you want to completely clean up the database, don't forget to remove the volumes too:
 
 ```sh
-$ docker compose down --volumes
+# just shut down containers normally
+$ just compose-down
+
+# shut down and clear all volumes.
+$ just compose-down-and-wipe
 ```
 
 #### FAQ

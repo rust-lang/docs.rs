@@ -21,7 +21,7 @@ use tracing::{debug, info};
 pub async fn watch_registry(
     build_queue: &AsyncBuildQueue,
     config: &Config,
-    index: Arc<Index>,
+    index: &Index,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
@@ -31,7 +31,7 @@ pub async fn watch_registry(
         } else {
             debug!("Checking new crates");
             match build_queue
-                .get_new_crates(&index)
+                .get_new_crates(index)
                 .await
                 .context("Failed to get new crates")
             {
@@ -51,13 +51,13 @@ pub async fn watch_registry(
 fn start_registry_watcher(context: &Context) -> Result<(), Error> {
     let build_queue = context.async_build_queue.clone();
     let config = context.config.clone();
-    let index = context.index.clone();
 
     context.runtime.spawn(async move {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(&build_queue, &config, index).await
+        let index = Index::from_config(&config).await?;
+        watch_registry(&build_queue, &config, &index).await
     });
 
     Ok(())

@@ -9,20 +9,116 @@ on:
     - cron: "0 0 * * *"
 
 env:
-  RUST_BACKTRACE: 1
   RUST_CACHE_KEY: rust-cache-20241114
-  DOCSRS_PREFIX: ignored/cratesfyi-prefix
-  DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@localhost:15432
-  DOCSRS_LOG: docs_rs=debug,rustwide=info
-  AWS_ACCESS_KEY_ID: cratesfyi
-  AWS_SECRET_ACCESS_KEY: secret_key
-  S3_ENDPOINT: http://localhost:9000
-  DOCSRS_INCLUDE_DEFAULT_TARGETS: false
-  DOCSRS_DOCKER_IMAGE: ghcr.io/rust-lang/crates-build-env/linux-micro
-  SENTRY_ENVIRONMENT: dev
 
 jobs:
   sqlx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: install SQLX CLI
+        run: cargo binstall sqlx-cli
+
+      - name: run sqlx migration up & down
+        run: |
+          just sqlx-migrate-run \
+            sqlx-check \
+            sqlx-migrate-revert
+
+      - name: shut down test environment
+        if: ${{ always() }}
+        run: just compose-down-and-wipe
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: run tests
+        run: just run-tests run-builder-tests
+
+      - name: shut down test environment
+        if: ${{ always() }}
+        run: just compose-down-and-wipe
+
+  GUI_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - name: Run GUI tests
+        run: just run-gui-tests
+
+      - name: shut down test environment
+        if: ${{ always() }}
+        run: just compose-down-and-wipe
+
+  lint-rs:
+    name: rust linters
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - run: just lint
+
+  lint-js:
+    name: js linters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: denoland/setup-deno@v2
+
+      - name: install `just`
+        run: sudo snap install --edge --classic just
+
+      - run: just lint-js
+
+  lint-actions:
+    name: gh actions linters
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -32,122 +128,4 @@ jobs:
         uses: raven-actions/actionlint@v2
         with:
           files: .github/workflow/*
-          flags: "-ignore SC2086" # ignore some shellcheck errors
-
-      - name: install `just`
-        run: sudo snap install --edge --classic just
-
-      - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.RUST_CACHE_KEY }}
-
-      - name: Launch postgres
-        run: |
-          touch .docker.env
-          docker compose up --wait --wait-timeout 30 db
-
-      - name: install SQLX CLI
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: run database migrations
-        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
-
-      - name: run sqlx prepare --check
-        run: just sqlx-prepare
-
-      - name: test reverse migrations
-        run: |
-          # --target 0 means "revert everything"
-          cargo sqlx migrate revert \
-            --database-url $DOCSRS_DATABASE_URL \
-            --target-version 0
-
-  test:
-    env:
-      SQLX_OFFLINE: 1
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.RUST_CACHE_KEY }}
-
-      - name: Build
-        run: cargo build --workspace --locked
-
-      - name: Launch postgres and min.io
-        run: |
-          touch .docker.env
-          docker compose up --wait --wait-timeout 30 db s3
-
-      - name: run workspace tests
-        run: |
-          cargo test --workspace --locked --no-fail-fast
-
-      - name: run slow tests
-        env:
-          DOCSRS_INCLUDE_DEFAULT_TARGETS: true
-        run: |
-          cargo test --locked -- --ignored --test-threads=1
-
-  GUI_test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.RUST_CACHE_KEY }}
-
-      - name: Launch postgres and min.io
-        run: |
-          touch .docker.env
-          docker compose up --wait --wait-timeout 30 db s3
-
-      - name: Run GUI tests
-        run: ./dockerfiles/run-gui-tests.sh
-
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-      - name: update rust toolchain
-        run: rustup component add rustfmt
-
-      - run: cargo fmt -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: update rust toolchain
-        run: rustup component add clippy
-
-      - name: install `just`
-        run: sudo snap install --edge --classic just
-
-      - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.RUST_CACHE_KEY }}
-
-      - run: just lint
-
-  eslint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: denoland/setup-deno@v2
-      - name: install `just`
-        run: sudo snap install --edge --classic just
-      - run: just lint-js
+          flags: "-ignore SC2086"  # ignore some shellcheck errors

@@ -15,7 +15,7 @@ use futures_util::{StreamExt, stream::TryStreamExt};
 use sqlx::Connection as _;
 use std::{collections::HashMap, sync::Arc};
 use tokio::runtime;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// The static priority for background rebuilds.
 /// Used when queueing rebuilds, and when rendering them
@@ -234,10 +234,18 @@ impl AsyncBuildQueue {
     ///
     /// Returns the number of crates added
     pub async fn get_new_crates(&self, index: &Index) -> Result<usize> {
-        let last_seen_reference = self
-            .last_seen_reference()
-            .await?
-            .context("no last_seen_reference set in database")?;
+        let last_seen_reference = self.last_seen_reference().await?;
+        let last_seen_reference = if let Some(oid) = last_seen_reference {
+            oid
+        } else {
+            warn!(
+                        "no last-seen reference found in our database. We assume a fresh install and
+                         set the latest reference (HEAD) as last. This means we will then start to queue
+                         builds for new releases only from now on, and not for all existing releases."
+                    );
+            index.latest_commit_reference().await?
+        };
+
         index.set_last_seen_reference(last_seen_reference).await?;
 
         let (changes, new_reference) = index.peek_changes_ordered().await?;
@@ -596,35 +604,6 @@ impl BuildQueue {
         Ok(())
     }
 
-    fn update_toolchain(&self, builder: &mut RustwideBuilder) -> Result<()> {
-        let updated = retry(
-            || {
-                builder
-                    .update_toolchain()
-                    .context("downloading new toolchain failed")
-            },
-            3,
-        )?;
-
-        if updated {
-            // toolchain has changed, purge caches
-            retry(
-                || {
-                    builder
-                        .purge_caches()
-                        .context("purging rustwide caches failed")
-                },
-                3,
-            )?;
-
-            builder
-                .add_essential_files()
-                .context("adding essential files failed")?;
-        }
-
-        Ok(())
-    }
-
     /// Builds the top package from the queue. Returns whether there was a package in the queue.
     ///
     /// Note that this will return `Ok(true)` even if the package failed to build.
@@ -657,8 +636,8 @@ impl BuildQueue {
                 return Err(err);
             }
 
-            if let Err(err) = self
-                .update_toolchain(&mut *builder)
+            if let Err(err) = builder
+                .update_toolchain_and_add_essential_files()
                 .context("Updating toolchain failed, locking queue")
             {
                 report_error(&err);

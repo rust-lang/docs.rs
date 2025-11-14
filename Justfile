@@ -1,48 +1,26 @@
+set shell := ["bash", "-Eeuo", "pipefail", "-c"]
+set ignore-comments
+set dotenv-load := true
+set dotenv-override := true
+
+# minimal settings to run justfile recipes that don't just run docker, like `run-tests`.
+# Typically you will want to create your own `.env` file based on `.env.sample` for 
+# easier local development.
+export DOCSRS_PREFIX := env("DOCSRS_PREFIX", "ignored/cratesfyi-prefix")
+export DOCSRS_DATABASE_URL := env("DOCSRS_DATABASE_URL", "postgresql://cratesfyi:password@localhost:15432")
+export AWS_ACCESS_KEY_ID := env("AWS_ACCESS_KEY_ID", "cratesfyi")
+export AWS_SECRET_ACCESS_KEY := env("AWS_SECRET_ACCESS_KEY", "secret_key")
+export S3_ENDPOINT := env("S3_ENDPOINT", "http://localhost:9000")
+
+
 # List available commands
 _default:
-    just --list
+    @just --list
 
-sqlx-prepare ADDITIONAL_ARGS="":
-  cargo sqlx prepare \
-    --database-url $DOCSRS_DATABASE_URL \
-    --workspace {{ ADDITIONAL_ARGS }} \
-    -- --all-targets --all-features
+import 'justfiles/cli.just'
+import 'justfiles/utils.just'
+import 'justfiles/services.just'
+import 'justfiles/testing.just'
 
-sqlx-check:
-  just sqlx-prepare "--check"
-
-lint *args: 
-  cargo clippy --all-features --all-targets --workspace --locked {{ args }} -- -D warnings
-
-lint-fix:
-  just lint --fix --allow-dirty --allow-staged
-
-lint-js *args:
-  deno run -A npm:eslint@9 static templates gui-tests eslint.config.js {{ args }}
-
-# Initialize the docker compose database
-[group('compose')]
-compose-migrate:
-  docker compose run --build --rm cli database migrate
-
-# Update last seen reference to the current index head, to only build newly published crates
-[group('compose')]
-compose-queue-head:
-  docker compose run --build --rm cli queue set-last-seen-reference --head
-
-# Launch base docker services, ensuring the database is migrated
-[group('compose')]
-compose-up:
-  just compose-migrate
-  docker compose up --build -d
-
-# Launch base docker services and registry watcher, ensuring the database is migrated
-[group('compose')]
-compose-up-watch:
-  just compose-migrate
-  docker compose --profile watch up --build -d
-
-# Shutdown docker services and cleanup all temporary volumes
-[group('compose')]
-compose-down:
-  docker compose --profile all down --volumes --remove-orphans
+psql:
+  psql $DOCSRS_DATABASE_URL

@@ -71,7 +71,7 @@ mod tracked {
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
-    write_git_version(out_dir)?;
+    read_git_version()?;
     compile_sass(out_dir)?;
     write_known_targets(out_dir)?;
     compile_syntax(out_dir).context("could not compile syntax files")?;
@@ -81,16 +81,21 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn write_git_version(out_dir: &Path) -> Result<()> {
-    let maybe_hash = get_git_hash()?;
-    let git_hash = maybe_hash.as_deref().unwrap_or("???????");
+fn read_git_version() -> Result<()> {
+    if let Ok(v) = env::var("GIT_SHA") {
+        // first try to read an externally provided git SAH, e.g., from CI
+        println!("cargo:rustc-env=GIT_SHA={v}");
+    } else {
+        // then try to read the git repo.
+        let maybe_hash = get_git_hash()?;
+        let git_hash = maybe_hash.as_deref().unwrap_or("???????");
+        println!("cargo:rustc-env=GIT_SHA={git_hash}");
+    }
 
-    let build_date = time::OffsetDateTime::now_utc().date();
-
-    std::fs::write(
-        out_dir.join("git_version"),
-        format!("({git_hash} {build_date})"),
-    )?;
+    println!(
+        "cargo:rustc-env=BUILD_DATE={}",
+        time::OffsetDateTime::now_utc().date(),
+    );
 
     Ok(())
 }
