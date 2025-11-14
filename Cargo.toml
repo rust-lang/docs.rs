@@ -41,6 +41,10 @@ comrak = { version = "0.48.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 toml = "0.9.2"
 prometheus = { version = "0.14.0", default-features = false }
+opentelemetry = "0.31.0"
+opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
+opentelemetry-resource-detectors = "0.10.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
@@ -123,6 +127,7 @@ rand = "0.9"
 mockito = "1.0.2"
 test-case = "3.0.0"
 tower = { version = "0.5.1", features = ["util"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
 aws-smithy-http = "0.62.0"

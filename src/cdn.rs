@@ -1,4 +1,4 @@
-use crate::{Config, InstanceMetrics, metrics::duration_to_seconds, utils::report_error};
+use crate::{Config, InstanceMetrics, metrics::otel::AnyMeterProvider, utils::report_error};
 use anyhow::{Context, Error, Result, anyhow, bail};
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
@@ -9,6 +9,7 @@ use aws_sdk_cloudfront::{
 };
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
+use opentelemetry::{KeyValue, metrics::Histogram};
 use serde::Serialize;
 use sqlx::Connection as _;
 use std::{
@@ -23,6 +24,29 @@ use uuid::Uuid;
 /// The actual limit is 15, but we want to keep some room for manually
 /// triggered invalidations
 const MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS: i32 = 13;
+
+#[derive(Debug)]
+pub struct CdnMetrics {
+    invalidation_time: Histogram<f64>,
+    queue_time: Histogram<f64>,
+}
+
+impl CdnMetrics {
+    pub fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("cdn");
+        const PREFIX: &str = "docsrs.cdn";
+        Self {
+            invalidation_time: meter
+                .f64_histogram(format!("{PREFIX}.invalidation_time"))
+                .with_unit("s")
+                .build(),
+            queue_time: meter
+                .f64_histogram(format!("{PREFIX}.queue_time"))
+                .with_unit("s")
+                .build(),
+        }
+    }
+}
 
 #[derive(Debug, EnumString)]
 pub enum CdnKind {
@@ -302,6 +326,7 @@ impl CdnBackend {
 pub(crate) async fn full_invalidation(
     cdn: &CdnBackend,
     metrics: &InstanceMetrics,
+    otel_metrics: &CdnMetrics,
     conn: &mut sqlx::PgConnection,
     distribution_id: &str,
 ) -> Result<()> {
@@ -319,11 +344,15 @@ pub(crate) async fn full_invalidation(
     .await?
     {
         if let Ok(duration) = (now - row.queued).to_std() {
-            // This can only fail when the duration is negative, which can't happen anyways
+            let duration = duration.as_secs_f64();
             metrics
                 .cdn_queue_time
                 .with_label_values(&[distribution_id])
-                .observe(duration_to_seconds(duration));
+                .observe(duration);
+            otel_metrics.queue_time.record(
+                duration,
+                &[KeyValue::new("distribution", distribution_id.to_string())],
+            );
         }
     }
 
@@ -359,6 +388,7 @@ pub(crate) async fn handle_queued_invalidation_requests(
     config: &Config,
     cdn: &CdnBackend,
     metrics: &InstanceMetrics,
+    otel_metrics: &CdnMetrics,
     conn: &mut sqlx::PgConnection,
     distribution_id: &str,
 ) -> Result<()> {
@@ -422,11 +452,15 @@ pub(crate) async fn handle_queued_invalidation_requests(
     .await?
     {
         if let Ok(duration) = (now - row.created_in_cdn.expect("this is always Some")).to_std() {
-            // This can only fail when the duration is negative, which can't happen anyways
+            let duration = duration.as_secs_f64();
             metrics
                 .cdn_invalidation_time
                 .with_label_values(&[distribution_id])
-                .observe(duration_to_seconds(duration));
+                .observe(duration);
+            otel_metrics.invalidation_time.record(
+                duration,
+                &[KeyValue::new("distribution", distribution_id.to_string())],
+            );
         }
     }
     let possible_path_invalidations: i32 =
@@ -454,7 +488,7 @@ pub(crate) async fn handle_queued_invalidation_requests(
     .await?
         && (now - min_queued).to_std().unwrap_or_default() >= config.cdn_max_queued_age
     {
-        full_invalidation(cdn, metrics, conn, distribution_id).await?;
+        full_invalidation(cdn, metrics, otel_metrics, conn, distribution_id).await?;
         return Ok(());
     }
 
@@ -480,11 +514,15 @@ pub(crate) async fn handle_queued_invalidation_requests(
         path_patterns.push(row.path_pattern);
 
         if let Ok(duration) = (now - row.queued).to_std() {
-            // This can only fail when the duration is negative, which can't happen anyways
+            let duration = duration.as_secs_f64();
             metrics
                 .cdn_queue_time
                 .with_label_values(&[distribution_id])
-                .observe(duration_to_seconds(duration));
+                .observe(duration);
+            otel_metrics.queue_time.record(
+                duration,
+                &[KeyValue::new("distribution", distribution_id.to_string())],
+            );
         }
     }
 
@@ -701,6 +739,10 @@ mod tests {
         Ok(())
     }
 
+    fn otel_metrics(env: &TestEnvironment) -> CdnMetrics {
+        CdnMetrics::new(env.meter_provider())
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn create_cloudfront() -> Result<()> {
         let env = TestEnvironment::with_config(
@@ -817,12 +859,14 @@ mod tests {
 
         let cdn = env.cdn();
         let config = env.config();
+        let metrics = otel_metrics(&env);
 
         // now handle the queued invalidations
         handle_queued_invalidation_requests(
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -831,6 +875,7 @@ mod tests {
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
         )
@@ -919,12 +964,14 @@ mod tests {
 
         let cdn = env.cdn();
         let config = env.config();
+        let metrics = otel_metrics(&env);
 
         // now handle the queued invalidations
         handle_queued_invalidation_requests(
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -933,6 +980,7 @@ mod tests {
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
         )
@@ -966,6 +1014,7 @@ mod tests {
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -974,6 +1023,7 @@ mod tests {
             config,
             cdn,
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
         )
@@ -1034,11 +1084,14 @@ mod tests {
         // queue an invalidation
         queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
 
+        let metrics = otel_metrics(&env);
+
         // handle the queued invalidations
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -1093,11 +1146,14 @@ mod tests {
         // queue an invalidation
         queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
 
+        let metrics = otel_metrics(&env);
+
         // handle the queued invalidations
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -1130,6 +1186,7 @@ mod tests {
             env.config(),
             env.cdn(),
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )
@@ -1157,6 +1214,7 @@ mod tests {
         let env = TestEnvironment::with_config(config_with_cdn().build()?).await?;
 
         let cdn = env.cdn();
+        let metrics = otel_metrics(&env);
 
         let mut conn = env.async_db().async_conn().await;
         // no invalidation is queued
@@ -1171,6 +1229,7 @@ mod tests {
             env.config(),
             env.cdn(),
             env.instance_metrics(),
+            &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
         )

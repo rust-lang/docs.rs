@@ -20,6 +20,7 @@ use crate::{
         },
         file::StreamingFile,
         match_version,
+        metrics::WebMetrics,
         page::{
             TemplateData,
             templates::{RenderBrands, RenderRegular, RenderSolid, filters},
@@ -385,6 +386,7 @@ impl RustdocPage {
         self: &Arc<Self>,
         template_data: Arc<TemplateData>,
         metrics: Arc<InstanceMetrics>,
+        otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
     ) -> AxumResult<AxumResponse> {
@@ -408,6 +410,7 @@ impl RustdocPage {
                 max_parse_memory,
                 self.clone(),
                 metrics,
+                otel_metrics,
             )),
         )
             .into_response())
@@ -427,6 +430,7 @@ impl RustdocPage {
 pub(crate) async fn rustdoc_html_server_handler(
     params: RustdocParams,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
+    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
     Extension(templates): Extension<Arc<TemplateData>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
@@ -642,8 +646,14 @@ pub(crate) async fn rustdoc_html_server_handler(
         krate,
         params,
     });
-    page.into_response(templates, metrics, blob, config.max_parse_memory)
-        .await
+    page.into_response(
+        templates,
+        metrics,
+        otel_metrics,
+        blob,
+        config.max_parse_memory,
+    )
+    .await
 }
 
 #[instrument(skip_all)]

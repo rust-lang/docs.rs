@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  debug:
+    # the debug exporter will just print everything to the console
+    verbosity: detailed
+
+extensions:
+  # https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/09d7cdeb075f51bf90a604c95b106521bba9962e/extension/healthcheckextension
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug]

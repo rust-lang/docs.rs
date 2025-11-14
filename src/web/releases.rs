@@ -12,6 +12,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
+        metrics::WebMetrics,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
         rustdoc::OfficialCrateDescription,
     },
@@ -455,6 +456,7 @@ impl Default for Search {
 async fn redirect_to_random_crate(
     config: Arc<Config>,
     metrics: Arc<InstanceMetrics>,
+    otel_metrics: Arc<WebMetrics>,
     conn: &mut sqlx::PgConnection,
 ) -> AxumResult<impl IntoResponse + use<>> {
     // We try to find a random crate and redirect to it.
@@ -492,6 +494,7 @@ async fn redirect_to_random_crate(
 
     if let Some(row) = row {
         metrics.im_feeling_lucky_searches.inc();
+        otel_metrics.im_feeling_lucky_searches.add(1, &[]);
 
         let params = RustdocParams::new(&row.name)
             .with_req_version(ReqVersion::Exact(
@@ -520,6 +523,7 @@ pub(crate) async fn search_handler(
     Extension(config): Extension<Arc<Config>>,
     Extension(registry): Extension<Arc<RegistryApi>>,
     Extension(metrics): Extension<Arc<InstanceMetrics>>,
+    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
     Query(mut query_params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
     let mut query = query_params
@@ -535,9 +539,11 @@ pub(crate) async fn search_handler(
     if query_params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
-            return Ok(redirect_to_random_crate(config, metrics, &mut conn)
-                .await?
-                .into_response());
+            return Ok(
+                redirect_to_random_crate(config, metrics, otel_metrics, &mut conn)
+                    .await?
+                    .into_response(),
+            );
         }
 
         let mut queries = BTreeMap::new();
