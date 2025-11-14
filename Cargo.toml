@@ -64,6 +64,7 @@ sysinfo = { version = "0.37.2", default-features = false, features = ["system"] 
 derive_builder = "0.20.2"
 
 # Async
+async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
@@ -76,16 +77,6 @@ aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 http = "1.0.0"
 uuid = { version = "1.1.2", features = ["v4"]}
 
-# freeze async-compression and it's dependencies. 
-# Currently a part of the archive indexes on S3 are broken, and this old version 
-# can read the broken indexes. 
-# Will unfreeze when we recompressed the indexes.
-# see: 
-# * https://github.com/rust-lang/docs.rs/pull/2988
-# * https://github.com/Nullus157/async-compression/issues/420
-async-compression = { version = "=0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
-compression-codecs = "=0.4.31"
-compression-core = "=0.4.29"
 
 # Data serialization and deserialization
 serde = { version = "1.0", features = ["derive"] }
