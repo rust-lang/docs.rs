@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\nSELECT c.name,\n       r.version AS \"version: Version\"\nFROM crates AS c\n         JOIN releases AS r\n              ON c.latest_version_id = r.id\n                  AND r.rustdoc_status = TRUE\n         JOIN LATERAL (\n    SELECT b.id,\n           b.build_status,\n           b.rustc_nightly_date,\n           COALESCE(b.build_finished, b.build_started) AS last_build_attempt\n    FROM builds AS b\n    WHERE b.rid = r.id\n    ORDER BY last_build_attempt DESC\n    LIMIT 1\n    ) AS b ON b.build_status = 'failure' AND b.rustc_nightly_date >= $1 AND b.rustc_nightly_date < $2\n\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "64031f2e97958452a6d6da840fd067c225de3d323f74d36512c579a6896c68b6"
+}
