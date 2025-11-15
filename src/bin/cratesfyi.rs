@@ -1,9 +1,10 @@
 use anyhow::{Context as _, Result, anyhow};
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, Index, PackageKind, RustwideBuilder,
     db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
-    start_background_metrics_webserver, start_web_server,
+    queue_rebuilds_faulty_rustdoc, start_background_metrics_webserver, start_web_server,
     utils::{
         ConfigName, daemon::start_background_service_metric_collector, get_config,
         get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
@@ -274,6 +275,17 @@ enum QueueSubcommand {
         #[arg(long, conflicts_with("reference"))]
         head: bool,
     },
+
+    /// Queue rebuilds for broken nightly versions of rustdoc
+    RebuildBrokenNightly {
+        /// Start date of nightly builds to rebuild (inclusive)
+        #[arg(name = "START", short = 's', long = "start")]
+        start_nightly_date: NaiveDate,
+
+        /// End date of nightly builds to rebuild (exclusive, optional)
+        #[arg(name = "END", short = 'e', long = "end")]
+        end_nightly_date: Option<NaiveDate>,
+    },
 }
 
 impl QueueSubcommand {
@@ -316,6 +328,15 @@ impl QueueSubcommand {
             }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
+
+            Self::RebuildBrokenNightly { start_nightly_date, end_nightly_date } => {
+                ctx.runtime.block_on(async move {
+                    let mut conn = ctx.pool.get_async().await?;
+                    let queued_rebuilds_amount = queue_rebuilds_faulty_rustdoc(&mut conn, &ctx.async_build_queue, &start_nightly_date, &end_nightly_date).await?;
+                    println!("Queued {queued_rebuilds_amount} rebuilds for broken nightly versions of rustdoc");
+                    Ok::<(), anyhow::Error>(())
+                })?
+            }
         }
         Ok(())
     }
