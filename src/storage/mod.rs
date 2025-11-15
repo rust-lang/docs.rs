@@ -41,11 +41,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-use tokio::{
-    io::{AsyncRead, AsyncWriteExt},
-    runtime,
-    sync::RwLock,
-};
+use tokio::{io::AsyncRead, runtime, sync::RwLock};
 use tracing::{error, info, info_span, instrument, trace, warn};
 use tracing_futures::Instrument as _;
 use walkdir::WalkDir;
@@ -428,21 +424,35 @@ impl AsyncStorage {
                 // remote/folder/and/x.zip.index
                 let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
 
-                tokio::fs::create_dir_all(
-                    local_index_path
-                        .parent()
-                        .ok_or_else(|| anyhow!("index path without parent"))?,
-                )
+                let parent = local_index_path
+                    .parent()
+                    .ok_or_else(|| anyhow!("index path without parent"))?
+                    .to_path_buf();
+                tokio::fs::create_dir_all(&parent).await?;
+
+                let mut temp_path = spawn_blocking({
+                    // this creates the tempfile and directly drops it again,
+                    // just to return a valid temp-path.
+                    // This could be optimized.
+                    let folder = self.config.local_archive_cache_path.clone();
+                    move || Ok(tempfile::NamedTempFile::new_in(&folder)?.into_temp_path())
+                })
                 .await?;
 
-                {
-                    let mut file = tokio::fs::File::create(&local_index_path).await?;
-                    let mut stream = self.get_stream(&remote_index_path).await?.content;
+                let mut file = tokio::fs::File::create(&temp_path).await?;
+                let mut stream = self.get_stream(&remote_index_path).await?.content;
+                tokio::io::copy(&mut stream, &mut file).await?;
+                file.sync_all().await?;
 
-                    tokio::io::copy(&mut stream, &mut file).await?;
+                temp_path.disable_cleanup(true);
+                tokio::fs::rename(&temp_path, &local_index_path).await?;
 
-                    file.flush().await?;
-                }
+                // fsync parent dir to make rename durable (blocking)
+                spawn_blocking(move || {
+                    let dir = std::fs::File::open(parent)?;
+                    dir.sync_all().map_err(Into::into)
+                })
+                .await?;
             }
 
             _read_guard = _write_guard.downgrade();
