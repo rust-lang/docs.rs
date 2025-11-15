@@ -1035,7 +1035,7 @@ mod tests {
             &mut conn,
             build_queue,
             &NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(),
-            &Some(NaiveDate::from_ymd_opt(2020, 10, 5)).unwrap(),
+            &NaiveDate::from_ymd_opt(2020, 10, 5),
         )
         .await?;
 
