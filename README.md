@@ -198,6 +198,22 @@ $ just compose-down
 $ just compose-down-and-wipe
 ```
 
+#### testing opentelemetry metrics
+
+When you add or update any metrics you might want to test them. While there is
+a way to check metric in unit-tests (see `TestEnvironment::collected_metrics`),
+you might also want to test manually.
+
+We have set up a small docker-compose service (`opentelemetry`) you can start up
+via `docker compose up opentelemetry`. This start up a local instance of
+the [opentelemetry collector
+contrib](https://hub.docker.com/r/otel/opentelemetry-collector-contrib) image,
+configured for debug-logging.
+
+After configuring your local environment for `OTEL_EXPORTER_OTLP_ENDPOINT` => `http://localhost:4317`
+(either in `.env` or `.docker.env`, depending on how you run the webserver), you
+can see any metrics you report and how they are exported to your collector.
+
 #### FAQ
 
 ##### I see the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
