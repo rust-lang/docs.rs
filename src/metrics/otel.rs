@@ -36,6 +36,7 @@ pub(crate) fn get_meter_provider(config: &Config) -> Result<AnyMeterProvider> {
             .with_endpoint(endpoint.to_string())
             .with_protocol(Protocol::Grpc)
             .with_timeout(Duration::from_secs(3))
+            .with_temporality(opentelemetry_sdk::metrics::Temporality::Delta)
             .build()?;
 
         let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
