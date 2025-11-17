@@ -83,7 +83,7 @@ uuid = { version = "1.1.2", features = ["v4"]}
 # see: 
 # * https://github.com/rust-lang/docs.rs/pull/2988
 # * https://github.com/Nullus157/async-compression/issues/420
-async-compression = { version = "=0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
+async-compression = { version = "=0.4.33", features = ["tokio", "bzip2", "zstd", "gzip"] }
 compression-codecs = "=0.4.31"
 compression-core = "=0.4.29"
 
