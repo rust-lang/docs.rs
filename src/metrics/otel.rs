@@ -6,7 +6,7 @@ use opentelemetry::{
 };
 use opentelemetry_otlp::{Protocol, WithExportConfig as _};
 use opentelemetry_resource_detectors::{OsResourceDetector, ProcessResourceDetector};
-use opentelemetry_sdk::{Resource, error::OTelSdkResult};
+use opentelemetry_sdk::{Resource, error::OTelSdkResult, metrics::PeriodicReader};
 use std::{sync::Arc, time::Duration};
 use tracing::info;
 
@@ -40,7 +40,11 @@ pub(crate) fn get_meter_provider(config: &Config) -> Result<AnyMeterProvider> {
             .build()?;
 
         let provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
-            .with_periodic_exporter(exporter)
+            .with_reader(
+                PeriodicReader::builder(exporter)
+                    .with_interval(Duration::from_secs(10))
+                    .build(),
+            )
             .with_resource(
                 Resource::builder()
                     .with_detector(Box::new(OsResourceDetector))
