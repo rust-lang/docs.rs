@@ -1,4 +1,8 @@
-use crate::{Config, InstanceMetrics, metrics::otel::AnyMeterProvider, utils::report_error};
+use crate::{
+    Config, InstanceMetrics,
+    metrics::{CDN_INVALIDATION_HISTOGRAM_BUCKETS, otel::AnyMeterProvider},
+    utils::report_error,
+};
 use anyhow::{Context, Error, Result, anyhow, bail};
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
@@ -38,10 +42,12 @@ impl CdnMetrics {
         Self {
             invalidation_time: meter
                 .f64_histogram(format!("{PREFIX}.invalidation_time"))
+                .with_boundaries(CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
                 .with_unit("s")
                 .build(),
             queue_time: meter
                 .f64_histogram(format!("{PREFIX}.queue_time"))
+                .with_boundaries(CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
                 .with_unit("s")
                 .build(),
         }
