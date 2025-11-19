@@ -59,31 +59,41 @@ pub const DOCUMENTATION_SIZE_BUCKETS: &[f64; 16] = &[
 ];
 
 /// the measured times of building crates will be put into these buckets
-pub fn build_time_histogram_buckets() -> Vec<f64> {
-    vec![
-        30.0,   // 0.5
-        60.0,   // 1
-        120.0,  // 2
-        180.0,  // 3
-        240.0,  // 4
-        300.0,  // 5
-        360.0,  // 6
-        420.0,  // 7
-        480.0,  // 8
-        540.0,  // 9
-        600.0,  // 10
-        660.0,  // 11
-        720.0,  // 12
-        780.0,  // 13
-        840.0,  // 14
-        900.0,  // 15
-        1200.0, // 20
-        1800.0, // 30
-        2400.0, // 40
-        3000.0, // 50
-        3600.0, // 60
-    ]
-}
+pub const BUILD_TIME_HISTOGRAM_BUCKETS: &[f64] = &[
+    30.0,   // 0.5
+    60.0,   // 1
+    120.0,  // 2
+    180.0,  // 3
+    240.0,  // 4
+    300.0,  // 5
+    360.0,  // 6
+    420.0,  // 7
+    480.0,  // 8
+    540.0,  // 9
+    600.0,  // 10
+    660.0,  // 11
+    720.0,  // 12
+    780.0,  // 13
+    840.0,  // 14
+    900.0,  // 15
+    1200.0, // 20
+    1800.0, // 30
+    2400.0, // 40
+    3000.0, // 50
+    3600.0, // 60
+];
+
+/// response time histogram buckets from the opentelemetry semantiv conventions
+/// https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration
+///
+/// These are the default prometheus bucket sizes,
+/// https://docs.rs/prometheus/0.14.0/src/prometheus/histogram.rs.html#25-27
+/// tailored to broadly measure the response time (in seconds) of a network service.
+///
+/// Otel default buckets are not suited for that.
+pub const RESPONSE_TIME_HISTOGRAM_BUCKETS: &[f64] = &[
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+];
 
 metrics! {
     pub struct InstanceMetrics {
@@ -103,8 +113,6 @@ metrics! {
 
         /// The traffic of various docs.rs routes
         pub(crate) routes_visited: IntCounterVec["route"],
-        /// The response times of various docs.rs routes
-        pub(crate) response_time: HistogramVec["route"],
 
         /// Count of recently accessed crates
         pub(crate) recent_crates: IntGaugeVec["duration"],

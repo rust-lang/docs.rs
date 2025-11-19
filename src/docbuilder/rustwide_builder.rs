@@ -11,7 +11,7 @@ use crate::{
     },
     docbuilder::Limits,
     error::Result,
-    metrics::otel::AnyMeterProvider,
+    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS, otel::AnyMeterProvider},
     repositories::RepositoryStatsUpdater,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
@@ -136,6 +136,7 @@ impl BuilderMetrics {
                 .build(),
             build_time: meter
                 .f64_histogram(format!("{PREFIX}.build_time"))
+                .with_boundaries(BUILD_TIME_HISTOGRAM_BUCKETS.to_vec())
                 .with_unit("s")
                 .build(),
             total_builds: meter
@@ -152,6 +153,7 @@ impl BuilderMetrics {
                 .build(),
             documentation_size: meter
                 .u64_histogram(format!("{PREFIX}.documentation_size"))
+                .with_boundaries(DOCUMENTATION_SIZE_BUCKETS.to_vec())
                 .with_unit("bytes")
                 .with_description("size of the generated documentation in bytes")
                 .build(),

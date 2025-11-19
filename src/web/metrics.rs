@@ -1,6 +1,8 @@
 use crate::{
-    AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics, db::Pool,
-    metrics::otel::AnyMeterProvider, web::error::AxumResult,
+    AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics,
+    db::Pool,
+    metrics::{RESPONSE_TIME_HISTOGRAM_BUCKETS, otel::AnyMeterProvider},
+    web::error::AxumResult,
 };
 use anyhow::{Context as _, Result};
 use axum::{
@@ -44,6 +46,7 @@ impl WebMetrics {
                 .build(),
             response_time: meter
                 .f64_histogram(format!("{PREFIX}.response_time"))
+                .with_boundaries(RESPONSE_TIME_HISTOGRAM_BUCKETS.to_vec())
                 .with_unit("s")
                 .build(),
         }

@@ -24,6 +24,7 @@ macro_rules! metrics {
             pub(crate) cdn_queue_time: prometheus::HistogramVec,
             pub(crate) build_time: prometheus::Histogram,
             pub(crate) documentation_size: prometheus::Histogram,
+            pub(crate) response_time: prometheus::HistogramVec,
         }
         impl $name {
             $vis fn new() -> Result<Self, prometheus::Error> {
@@ -69,7 +70,7 @@ macro_rules! metrics {
                         "time spent building crates",
                     )
                     .namespace($namespace)
-                    .buckets($crate::metrics::build_time_histogram_buckets()),
+                    .buckets($crate::metrics::BUILD_TIME_HISTOGRAM_BUCKETS.to_vec()),
                 )?;
                 registry.register(Box::new(build_time.clone()))?;
 
@@ -83,6 +84,18 @@ macro_rules! metrics {
                 )?;
                 registry.register(Box::new(documentation_size.clone()))?;
 
+                let response_time = prometheus::HistogramVec::new(
+                    prometheus::HistogramOpts::new(
+                        "response_time",
+                        "The response times of various docs.rs routes",
+                    )
+                    .namespace($namespace)
+                    .buckets($crate::metrics::RESPONSE_TIME_HISTOGRAM_BUCKETS.to_vec())
+                    .variable_label("route"),
+                    &["route"],
+                )?;
+                registry.register(Box::new(response_time.clone()))?;
+
                 Ok(Self {
                     registry,
                     recently_accessed_releases: RecentlyAccessedReleases::new(),
@@ -90,6 +103,7 @@ macro_rules! metrics {
                     cdn_queue_time,
                     build_time,
                     documentation_size,
+                    response_time,
                     $(
                         $(#[$meta])*
                         $metric,
