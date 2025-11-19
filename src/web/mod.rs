@@ -29,7 +29,7 @@ mod escaped_uri;
 mod extractors;
 mod features;
 mod file;
-mod headers;
+pub(crate) mod headers;
 mod highlight;
 mod licenses;
 mod markdown;

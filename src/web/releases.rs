@@ -735,11 +735,12 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let mut active_cdn_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
-        .await?
-        .into_iter()
-        .map(|i| i.krate)
-        .collect();
+    let mut active_cdn_deployments: Vec<_> =
+        cdn::cloudfront::queued_or_active_crate_invalidations(&mut conn)
+            .await?
+            .into_iter()
+            .map(|i| i.krate)
+            .collect();
 
     // deduplicate the list of crates while keeping their order
     let mut set = HashSet::new();
@@ -1822,7 +1823,13 @@ mod tests {
         let web = env.web_app().await;
 
         let mut conn = env.async_db().async_conn().await;
-        cdn::queue_crate_invalidation(&mut conn, env.config(), "krate_2").await?;
+        cdn::queue_crate_invalidation(
+            &mut conn,
+            env.config(),
+            env.cdn_metrics(),
+            &"krate_2".parse().unwrap(),
+        )
+        .await?;
 
         let content = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
         assert!(

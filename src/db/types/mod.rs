@@ -2,6 +2,7 @@ use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
 pub mod dependencies;
+pub mod krate_name;
 pub mod version;
 
 #[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, Serialize, sqlx::Type)]

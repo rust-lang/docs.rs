@@ -131,7 +131,7 @@ mod tests {
             let web = env.web_app().await;
 
             let resp = web.get("/-/static/vendored.css").await?;
-            assert!(resp.status().is_success());
+            assert!(resp.status().is_success(), "{}", resp.text().await?);
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
                 resp.headers().get("Content-Type"),

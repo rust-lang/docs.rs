@@ -2051,6 +2051,7 @@ dependencies = [
  "derive_builder",
  "derive_more 2.0.1",
  "docsrs-metadata",
+ "fastly-api",
  "flate2",
  "fn-error-context",
  "font-awesome-as-a-crate",
@@ -2262,6 +2263,19 @@ checksum = "7223ae2d2f179b803433d9c830478527e92b8117eab39460edae7f1614d9fb73"
 dependencies = [
  "heapless",
  "serde",
+]
+
+[[package]]
+name = "fastly-api"
+version = "12.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6aa65a56cdc77f4d8a1c6e8ff46e752823b7bbc7ed2b708e2fb488e892e8f9f"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -6739,6 +6753,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
