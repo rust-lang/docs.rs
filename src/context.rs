@@ -1,7 +1,7 @@
 use crate::{
     AsyncBuildQueue, AsyncStorage, BuildQueue, Config, InstanceMetrics, RegistryApi,
     ServiceMetrics, Storage,
-    cdn::CdnBackend,
+    cdn::{CdnMetrics, cloudfront::CdnBackend},
     db::Pool,
     metrics::otel::{AnyMeterProvider, get_meter_provider},
     repositories::RepositoryStatsUpdater,
@@ -17,6 +17,7 @@ pub struct Context {
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
     pub cdn: Arc<CdnBackend>,
+    pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
     pub service_metrics: Arc<ServiceMetrics>,
     pub instance_metrics: Arc<InstanceMetrics>,
@@ -69,15 +70,16 @@ impl Context {
             .await?,
         );
 
+        let cdn_metrics = Arc::new(CdnMetrics::new(&meter_provider));
+        let cdn = Arc::new(CdnBackend::new(&config).await);
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
             instance_metrics.clone(),
             config.clone(),
             async_storage.clone(),
+            cdn_metrics.clone(),
             &meter_provider,
         ));
-
-        let cdn = Arc::new(CdnBackend::new(&config).await);
 
         let runtime = runtime::Handle::current();
 
@@ -91,6 +93,7 @@ impl Context {
             storage,
             async_storage,
             cdn,
+            cdn_metrics,
             pool: pool.clone(),
             service_metrics: Arc::new(ServiceMetrics::new()?),
             instance_metrics,

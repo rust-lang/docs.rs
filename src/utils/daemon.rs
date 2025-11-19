@@ -153,7 +153,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
     let runtime = context.runtime.clone();
     let cdn = context.cdn.clone();
 
-    let otel_metrics = Arc::new(cdn::CdnMetrics::new(&context.meter_provider));
+    let otel_metrics = context.cdn_metrics.clone();
 
     if config.cloudfront_distribution_id_web.is_none()
         && config.cloudfront_distribution_id_static.is_none()
@@ -180,7 +180,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
             async move {
                 let mut conn = pool.get_async().await?;
                 if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-                    cdn::handle_queued_invalidation_requests(
+                    cdn::cloudfront::handle_queued_invalidation_requests(
                         &config,
                         &cdn,
                         &metrics,
@@ -192,7 +192,7 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
                     .context("error handling queued invalidations for web CDN invalidation")?;
                 }
                 if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-                    cdn::handle_queued_invalidation_requests(
+                    cdn::cloudfront::handle_queued_invalidation_requests(
                         &config,
                         &cdn,
                         &metrics,

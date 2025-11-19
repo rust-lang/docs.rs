@@ -1,7 +1,9 @@
 use crate::{
-    BuildPackageSummary, Config, Context, Index, InstanceMetrics, RustwideBuilder, cdn,
+    BuildPackageSummary, Config, Context, Index, InstanceMetrics, RustwideBuilder,
+    cdn::{self, CdnMetrics},
     db::{
-        CrateId, Pool, delete_crate, delete_version, types::version::Version,
+        CrateId, Pool, delete_crate, delete_version,
+        types::{krate_name::KrateName, version::Version},
         update_latest_version_id,
     },
     docbuilder::{BuilderMetrics, PackageKind},
@@ -62,6 +64,7 @@ pub struct AsyncBuildQueue {
     metrics: Arc<InstanceMetrics>,
     queue_metrics: BuildQueueMetrics,
     builder_metrics: Arc<BuilderMetrics>,
+    cdn_metrics: Arc<CdnMetrics>,
     max_attempts: i32,
 }
 
@@ -71,6 +74,7 @@ impl AsyncBuildQueue {
         metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<AsyncStorage>,
+        cdn_metrics: Arc<CdnMetrics>,
         otel_meter_provider: &AnyMeterProvider,
     ) -> Self {
         AsyncBuildQueue {
@@ -81,6 +85,7 @@ impl AsyncBuildQueue {
             storage,
             queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
             builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
+            cdn_metrics,
         }
     }
 
@@ -259,6 +264,25 @@ impl AsyncBuildQueue {
 
 /// Index methods.
 impl AsyncBuildQueue {
+    async fn queue_crate_invalidation(&self, conn: &mut sqlx::PgConnection, krate: &str) {
+        let krate = match krate
+            .parse::<KrateName>()
+            .with_context(|| format!("can't parse crate name '{}'", krate))
+        {
+            Ok(krate) => krate,
+            Err(err) => {
+                report_error(&err);
+                return;
+            }
+        };
+
+        if let Err(err) =
+            cdn::queue_crate_invalidation(conn, &self.config, &self.cdn_metrics, &krate).await
+        {
+            report_error(&err);
+        }
+    }
+
     /// Updates registry index repository and adds new crates into build queue.
     ///
     /// Returns the number of crates added
@@ -296,11 +320,8 @@ impl AsyncBuildQueue {
                     ),
                     Err(err) => report_error(&err),
                 }
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, krate).await
-                {
-                    report_error(&err);
-                }
+
+                self.queue_crate_invalidation(&mut conn, krate).await;
                 continue;
             }
 
@@ -328,11 +349,9 @@ impl AsyncBuildQueue {
                     ),
                     Err(err) => report_error(&err),
                 }
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, &release.name).await
-                {
-                    report_error(&err);
-                }
+
+                self.queue_crate_invalidation(&mut conn, &release.name)
+                    .await;
                 continue;
             }
 
@@ -387,11 +406,8 @@ impl AsyncBuildQueue {
                     report_error(&err);
                 }
 
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, &release.name).await
-                {
-                    report_error(&err);
-                }
+                self.queue_crate_invalidation(&mut conn, &release.name)
+                    .await;
             }
         }
 
@@ -581,13 +597,11 @@ impl BuildQueue {
 
         self.inner.metrics.total_builds.inc();
         self.inner.builder_metrics.total_builds.add(1, &[]);
-        if let Err(err) = self.runtime.block_on(cdn::queue_crate_invalidation(
-            &mut transaction,
-            &self.inner.config,
-            &to_process.name,
-        )) {
-            report_error(&err);
-        }
+
+        self.runtime.block_on(
+            self.inner
+                .queue_crate_invalidation(&mut transaction, &to_process.name),
+        );
 
         let mut increase_attempt_count = || -> Result<()> {
             let attempt: i32 = self.runtime.block_on(
@@ -1119,7 +1133,7 @@ mod tests {
         assert!(
             env.runtime()
                 .block_on(async {
-                    cdn::queued_or_active_crate_invalidations(
+                    cdn::cloudfront::queued_or_active_crate_invalidations(
                         &mut *env.async_db().async_conn().await,
                     )
                     .await
@@ -1148,7 +1162,7 @@ mod tests {
             env.runtime()
                 .block_on(async {
                     let mut conn = env.async_db().async_conn().await;
-                    cdn::queued_or_active_crate_invalidations(&mut conn).await
+                    cdn::cloudfront::queued_or_active_crate_invalidations(&mut conn).await
                 })
                 .unwrap()
         };

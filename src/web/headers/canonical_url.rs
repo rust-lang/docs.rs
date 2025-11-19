@@ -1,4 +1,4 @@
-use super::escaped_uri::EscapedURI;
+use crate::web::escaped_uri::EscapedURI;
 use anyhow::Result;
 use askama::filters::HtmlSafe;
 use axum::http::uri::Uri;

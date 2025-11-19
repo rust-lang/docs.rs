@@ -1,8 +1,5 @@
-use crate::{
-    Config, InstanceMetrics,
-    metrics::{CDN_INVALIDATION_HISTOGRAM_BUCKETS, otel::AnyMeterProvider},
-    utils::report_error,
-};
+use super::CdnMetrics;
+use crate::{Config, InstanceMetrics, utils::report_error};
 use anyhow::{Context, Error, Result, anyhow, bail};
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
@@ -13,7 +10,7 @@ use aws_sdk_cloudfront::{
 };
 use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
-use opentelemetry::{KeyValue, metrics::Histogram};
+use opentelemetry::KeyValue;
 use serde::Serialize;
 use sqlx::Connection as _;
 use std::{
@@ -28,31 +25,6 @@ use uuid::Uuid;
 /// The actual limit is 15, but we want to keep some room for manually
 /// triggered invalidations
 const MAX_CLOUDFRONT_WILDCARD_INVALIDATIONS: i32 = 13;
-
-#[derive(Debug)]
-pub struct CdnMetrics {
-    invalidation_time: Histogram<f64>,
-    queue_time: Histogram<f64>,
-}
-
-impl CdnMetrics {
-    pub fn new(meter_provider: &AnyMeterProvider) -> Self {
-        let meter = meter_provider.meter("cdn");
-        const PREFIX: &str = "docsrs.cdn";
-        Self {
-            invalidation_time: meter
-                .f64_histogram(format!("{PREFIX}.invalidation_time"))
-                .with_boundaries(CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
-                .with_unit("s")
-                .build(),
-            queue_time: meter
-                .f64_histogram(format!("{PREFIX}.queue_time"))
-                .with_boundaries(CDN_INVALIDATION_HISTOGRAM_BUCKETS.to_vec())
-                .with_unit("s")
-                .build(),
-        }
-    }
-}
 
 #[derive(Debug, EnumString)]
 pub enum CdnKind {
@@ -567,57 +539,6 @@ pub(crate) async fn handle_queued_invalidation_requests(
     Ok(())
 }
 
-#[instrument(skip(conn, config))]
-pub(crate) async fn queue_crate_invalidation(
-    conn: &mut sqlx::PgConnection,
-    config: &Config,
-    name: &str,
-) -> Result<()> {
-    if !config.cache_invalidatable_responses {
-        info!("full page cache disabled, skipping queueing invalidation");
-        return Ok(());
-    }
-
-    async fn add(
-        conn: &mut sqlx::PgConnection,
-        name: &str,
-        distribution_id: &str,
-        path_patterns: &[&str],
-    ) -> Result<()> {
-        for pattern in path_patterns {
-            debug!(distribution_id, pattern, "enqueueing web CDN invalidation");
-            sqlx::query!(
-                "INSERT INTO cdn_invalidation_queue (crate, cdn_distribution_id, path_pattern)
-                 VALUES ($1, $2, $3)",
-                name,
-                distribution_id,
-                pattern
-            )
-            .execute(&mut *conn)
-            .await?;
-        }
-        Ok(())
-    }
-
-    if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-        add(
-            conn,
-            name,
-            distribution_id,
-            &[&format!("/{name}*"), &format!("/crate/{name}*")],
-        )
-        .await
-        .context("error enqueueing web CDN invalidation")?;
-    }
-    if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-        add(conn, name, distribution_id, &[&format!("/rustdoc/{name}*")])
-            .await
-            .context("error enqueueing static CDN invalidation")?;
-    }
-
-    Ok(())
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 pub(crate) struct QueuedInvalidation {
     pub krate: String,
@@ -683,14 +604,12 @@ pub(crate) async fn queued_or_active_crate_invalidation_count_by_distribution(
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
-    use crate::test::TestEnvironment;
-
+    use crate::{cdn::queue_crate_invalidation, test::TestEnvironment};
     use aws_sdk_cloudfront::{Config, config::Credentials};
     use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
     use aws_smithy_types::body::SdkBody;
+    use std::time::Duration;
 
     const DISTRIBUTION_ID_WEB: &str = "distribution_id_web";
     const DISTRIBUTION_ID_STATIC: &str = "distribution_id_static";
@@ -817,7 +736,9 @@ mod tests {
                 .is_empty()
         );
 
-        queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
+        let metrics = otel_metrics(&env);
+        queue_crate_invalidation(&mut conn, env.config(), &metrics, &"krate".parse().unwrap())
+            .await?;
 
         // invalidation paths are queued.
         assert_eq!(
@@ -922,7 +843,9 @@ mod tests {
                 .is_empty()
         );
 
-        queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
+        let metrics = otel_metrics(&env);
+        queue_crate_invalidation(&mut conn, env.config(), &metrics, &"krate".parse().unwrap())
+            .await?;
 
         // invalidation paths are queued.
         assert_eq!(
@@ -1088,7 +1011,9 @@ mod tests {
         .await?;
 
         // queue an invalidation
-        queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
+        let metrics = otel_metrics(&env);
+        queue_crate_invalidation(&mut conn, env.config(), &metrics, &"krate".parse().unwrap())
+            .await?;
 
         let metrics = otel_metrics(&env);
 
@@ -1150,7 +1075,9 @@ mod tests {
         .await?;
 
         // queue an invalidation
-        queue_crate_invalidation(&mut conn, env.config(), "krate").await?;
+        let metrics = otel_metrics(&env);
+        queue_crate_invalidation(&mut conn, env.config(), &metrics, &"krate".parse().unwrap())
+            .await?;
 
         let metrics = otel_metrics(&env);
 

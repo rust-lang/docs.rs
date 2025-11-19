@@ -84,8 +84,10 @@ impl OtelServiceMetrics {
         }
 
         for (distribution_id, count) in
-            cdn::queued_or_active_crate_invalidation_count_by_distribution(&mut *conn, config)
-                .await?
+            cdn::cloudfront::queued_or_active_crate_invalidation_count_by_distribution(
+                &mut *conn, config,
+            )
+            .await?
         {
             self.queued_cdn_invalidations_by_distribution.record(
                 count as u64,

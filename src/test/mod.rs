@@ -1,23 +1,30 @@
 mod fakes;
+pub(crate) mod headers;
 mod test_metrics;
 
 pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
-    cdn::CdnBackend,
+    cdn::{CdnMetrics, cloudfront::CdnBackend},
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
     error::Result,
     metrics::otel::AnyMeterProvider,
     storage::{AsyncStorage, Storage, StorageKind},
     test::test_metrics::CollectedMetrics,
-    web::{build_axum_app, cache, page::TemplateData},
+    web::{
+        build_axum_app,
+        cache::{self, TargetCdn},
+        headers::SURROGATE_CONTROL,
+        page::TemplateData,
+    },
 };
 use anyhow::Context as _;
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
+use http::header::CACHE_CONTROL;
 use http_body_util::BodyExt;
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader};
 use serde::de::DeserializeOwned;
@@ -44,6 +51,22 @@ where
     );
 
     env.runtime().block_on(f(env.clone())).expect("test failed");
+}
+
+pub(crate) fn assert_cache_headers_eq(
+    response: &axum::response::Response,
+    expected_headers: &cache::ResponseCacheHeaders,
+) {
+    assert_eq!(
+        expected_headers.cache_control.as_ref(),
+        response.headers().get(CACHE_CONTROL),
+        "cache control header mismatch"
+    );
+    assert_eq!(
+        expected_headers.surrogate_control.as_ref(),
+        response.headers().get(&SURROGATE_CONTROL),
+        "surrogate control header mismatch"
+    );
 }
 
 pub(crate) trait AxumResponseTestExt {
@@ -73,19 +96,15 @@ impl AxumResponseTestExt for axum::response::Response {
     }
     fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config) {
         assert!(config.cache_control_stale_while_revalidate.is_some());
-        let cache_control = self.headers().get("Cache-Control");
 
-        if let Some(expected_directives) = cache_policy.render(config) {
-            assert_eq!(
-                cache_control
-                    .expect("missing cache-control header")
-                    .to_str()
-                    .unwrap(),
-                expected_directives.to_str().unwrap(),
-            );
-        } else {
-            assert!(cache_control.is_none(), "{:?}", cache_control);
-        }
+        // This method is only about asserting if the handler did set the right _policy_.
+        //
+        // But we only test for CloudFront here.
+        // The different policies are unique enough so we would have a test failure when
+        // we emit the wrong cache policy in a handler.
+        //
+        // The fastly specifics are tested in web::cache unittests.
+        assert_cache_headers_eq(self, &cache_policy.render(config, TargetCdn::CloudFront));
     }
 
     fn error_for_status(self) -> Result<Self>
@@ -160,16 +179,7 @@ impl AxumRouterTestExt for axum::Router {
         let response = self.get(path).await?;
 
         // for now, 404s should always have `no-cache`
-        // assert_no_cache(&response);
-        assert_eq!(
-            response
-                .headers()
-                .get("Cache-Control")
-                .expect("missing cache-control header")
-                .to_str()
-                .unwrap(),
-            cache::NO_CACHING.to_str().unwrap(),
-        );
+        assert_cache_headers_eq(&response, &cache::NO_CACHING);
 
         assert_eq!(response.status(), 404, "GET {path} should have been a 404");
         Ok(())
@@ -427,6 +437,10 @@ impl TestEnvironment {
 
     pub(crate) fn config(&self) -> &Config {
         &self.context.config
+    }
+
+    pub(crate) fn cdn_metrics(&self) -> &CdnMetrics {
+        &self.context.cdn_metrics
     }
 
     pub(crate) fn async_storage(&self) -> &AsyncStorage {
