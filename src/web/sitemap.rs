@@ -1,8 +1,9 @@
 use crate::{
     Config,
+    db::mimes,
     docbuilder::Limits,
     impl_axum_webpage,
-    utils::{ConfigName, get_config},
+    utils::{ConfigName, get_config, report_error},
     web::{
         AxumErrorPage,
         error::{AxumNope, AxumResult},
@@ -10,15 +11,25 @@ use crate::{
         page::templates::{RenderBrands, RenderSolid, filters},
     },
 };
+use anyhow::Context as _;
 use askama::Template;
-use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
+use async_stream::stream;
+use axum::{
+    body::{Body, Bytes},
+    extract::Extension,
+    http::StatusCode,
+    response::IntoResponse,
+};
+use axum_extra::{TypedHeader, headers::ContentType};
 use chrono::{TimeZone, Utc};
-use futures_util::stream::TryStreamExt;
+use futures_util::{StreamExt as _, pin_mut};
 use std::sync::Arc;
+use tracing::{Span, error};
+use tracing_futures::Instrument as _;
 
 /// sitemap index
 #[derive(Template)]
-#[template(path = "core/sitemapindex.xml")]
+#[template(path = "core/sitemap/index.xml")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SitemapIndexXml {
     sitemaps: Vec<char>,
@@ -35,25 +46,17 @@ pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     SitemapIndexXml { sitemaps }
 }
 
+#[derive(Template)]
+#[template(path = "core/sitemap/_item.xml")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SitemapRow {
+struct SitemapItemXml {
     crate_name: String,
     last_modified: String,
     target_name: String,
 }
 
-/// The sitemap
-#[derive(Template)]
-#[template(path = "core/sitemap.xml")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SitemapXml {
-    releases: Vec<SitemapRow>,
-}
-
-impl_axum_webpage! {
-    SitemapXml,
-    content_type = "application/xml",
-}
+const SITEMAP_HEADER: &[u8] = include_bytes!("./../../templates/core/sitemap/_header.xml");
+const SITEMAP_FOOTER: &[u8] = include_bytes!("./../../templates/core/sitemap/_footer.xml");
 
 pub(crate) async fn sitemap_handler(
     Path(letter): Path<String>,
@@ -67,37 +70,86 @@ pub(crate) async fn sitemap_handler(
         return Err(AxumNope::ResourceNotFound);
     }
 
-    let releases: Vec<_> = sqlx::query!(
-        r#"SELECT crates.name,
-                releases.target_name,
-                MAX(releases.release_time) as "release_time!"
-         FROM crates
-         INNER JOIN releases ON releases.crate_id = crates.id
-         WHERE
-            rustdoc_status = true AND
-            crates.name ILIKE $1
-         GROUP BY crates.name, releases.target_name
-         "#,
-        format!("{letter}%"),
-    )
-    .fetch(&mut *conn)
-    .map_ok(|row| SitemapRow {
-        crate_name: row.name,
-        target_name: row
-            .target_name
-            .expect("when we have rustdoc_status=true, this field is filled"),
-        last_modified: row
-            .release_time
-            // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
-            // so they should all get recrawled if they haven't been since then.
-            .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
-            .format("%+")
-            .to_string(),
-    })
-    .try_collect()
-    .await?;
+    let stream_span = Span::current();
 
-    Ok(SitemapXml { releases })
+    let stream = stream!({
+        let mut items: usize = 0;
+        let mut streamed_bytes: usize = SITEMAP_HEADER.len();
+
+        yield Ok(Bytes::from_static(SITEMAP_HEADER));
+
+        let result = sqlx::query!(
+            r#"SELECT crates.name,
+                    releases.target_name,
+                    MAX(releases.release_time) as "release_time!"
+             FROM crates
+             INNER JOIN releases ON releases.crate_id = crates.id
+             WHERE
+                rustdoc_status = true AND
+                crates.name ILIKE $1
+             GROUP BY crates.name, releases.target_name
+             "#,
+            format!("{letter}%"),
+        )
+        .fetch(&mut *conn);
+
+        pin_mut!(result);
+        while let Some(row) = result.next().await {
+            let row = match row.context("error fetching row from database") {
+                Ok(row) => row,
+                Err(err) => {
+                    report_error(&err);
+                    yield Err(AxumNope::InternalError(err));
+                    break;
+                }
+            };
+
+            match (SitemapItemXml {
+                crate_name: row.name,
+                target_name: row
+                    .target_name
+                    .expect("when we have rustdoc_status=true, this field is filled"),
+                last_modified: row
+                    .release_time
+                    // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+                    // so they should all get recrawled if they haven't been since then.
+                    .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
+                    .format("%+")
+                    .to_string(),
+            }
+            .render()
+            .context("error when rendering sitemap item xml"))
+            {
+                Ok(item) => {
+                    let bytes = Bytes::from(item);
+                    items += 1;
+                    streamed_bytes += bytes.len();
+                    yield Ok(bytes);
+                }
+                Err(err) => {
+                    report_error(&err);
+                    yield Err(AxumNope::InternalError(err));
+                    break;
+                }
+            };
+        }
+
+        streamed_bytes += SITEMAP_FOOTER.len();
+        yield Ok(Bytes::from_static(SITEMAP_FOOTER));
+
+        if items > 50_000 || streamed_bytes > 50 * 1024 * 1024 {
+            // alert when sitemap limits are reached
+            // https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#general-guidelines
+            error!(items, streamed_bytes, letter, "sitemap limits exceeded")
+        }
+    })
+    .instrument(stream_span);
+
+    Ok((
+        StatusCode::OK,
+        TypedHeader(ContentType::from(mimes::APPLICATION_XML.clone())),
+        Body::from_stream(stream),
+    ))
 }
 
 #[derive(Template)]

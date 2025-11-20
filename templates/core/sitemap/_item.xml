@@ -1,0 +1,10 @@
+        <url>
+            <loc>https://docs.rs/{{ crate_name }}/latest/{{ target_name }}/</loc>
+            <lastmod>{{ last_modified|escape_xml }}</lastmod>
+            <priority>1.0</priority>
+        </url>
+        <url>
+            <loc>https://docs.rs/{{ crate_name }}/latest/{{ target_name }}/all.html</loc>
+            <lastmod>{{ last_modified|escape_xml }}</lastmod>
+            <priority>0.8</priority>
+        </url>
