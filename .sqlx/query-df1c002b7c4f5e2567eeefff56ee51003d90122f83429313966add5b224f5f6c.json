@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT crates.name,\n                releases.target_name,\n                MAX(releases.release_time) as \"release_time!\"\n         FROM crates\n         INNER JOIN releases ON releases.crate_id = crates.id\n         WHERE\n            rustdoc_status = true AND\n            crates.name ILIKE $1\n         GROUP BY crates.name, releases.target_name\n         ",
+  "query": "SELECT crates.name,\n                    releases.target_name,\n                    MAX(releases.release_time) as \"release_time!\"\n             FROM crates\n             INNER JOIN releases ON releases.crate_id = crates.id\n             WHERE\n                rustdoc_status = true AND\n                crates.name ILIKE $1\n             GROUP BY crates.name, releases.target_name\n             ",
   "describe": {
     "columns": [
       {
@@ -30,5 +30,5 @@
       null
     ]
   },
-  "hash": "65b0ead56880b369931c3a5ec324910dde51096de4ee2ad868cc5025161ab466"
+  "hash": "df1c002b7c4f5e2567eeefff56ee51003d90122f83429313966add5b224f5f6c"
 }
