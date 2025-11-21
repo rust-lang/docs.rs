@@ -63,7 +63,7 @@ where
                 &mut cfg,
                 BulkPurgeTagParams {
                     service_id: sid.to_owned(),
-                    // TODO: investiate how they could help & test
+                    // TODO: investigate how they could help & test
                     // soft purge. But later, after the initial migration.
                     fastly_soft_purge: None,
                     surrogate_key: Some(encoded_surrogate_keys.to_string()),
