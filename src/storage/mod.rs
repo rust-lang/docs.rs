@@ -89,12 +89,6 @@ pub(crate) struct Blob {
     pub(crate) compression: Option<CompressionAlgorithm>,
 }
 
-impl Blob {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.mime == "application/x-empty"
-    }
-}
-
 pub(crate) struct StreamingBlob {
     pub(crate) path: String,
     pub(crate) mime: Mime,
@@ -299,14 +293,6 @@ impl AsyncStorage {
         }
     }
 
-    fn max_file_size_for(&self, path: &str) -> usize {
-        if path.ends_with(".html") {
-            self.config.max_file_size_html
-        } else {
-            self.config.max_file_size
-        }
-    }
-
     /// Fetch a rustdoc file from our blob storage.
     /// * `name` - the crate name
     /// * `version` - the crate version
@@ -345,17 +331,28 @@ impl AsyncStorage {
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
-        Ok(if archive_storage {
-            self.get_from_archive(
-                &source_archive_path(name, version),
-                latest_build_id,
-                path,
-                self.max_file_size_for(path),
-            )
+        self.stream_source_file(name, version, latest_build_id, path, archive_storage)
             .await?
+            .materialize(self.config.max_file_size_for(path))
+            .await
+    }
+
+    #[instrument]
+    pub(crate) async fn stream_source_file(
+        &self,
+        name: &str,
+        version: &Version,
+        latest_build_id: Option<BuildId>,
+        path: &str,
+        archive_storage: bool,
+    ) -> Result<StreamingBlob> {
+        trace!("fetch source file");
+        Ok(if archive_storage {
+            self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
+                .await?
         } else {
             let remote_path = format!("sources/{name}/{version}/{path}");
-            self.get(&remote_path, self.max_file_size_for(path)).await?
+            self.get_stream(&remote_path).await?
         })
     }
 
