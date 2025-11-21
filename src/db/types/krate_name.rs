@@ -14,6 +14,9 @@ use std::{io::Write, str::FromStr};
 ///
 /// Right now only used in web::cache, but we'll probably also use it
 /// to match our routes later.
+///
+/// FIXME: this should actually come from some shared crate between the rust projects,
+/// so the amount of duplication is less.
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Deref, Into, Display, DeserializeFromStr, SerializeDisplay,
 )]
