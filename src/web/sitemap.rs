@@ -55,8 +55,10 @@ struct SitemapItemXml {
     target_name: String,
 }
 
-const SITEMAP_HEADER: &[u8] = include_bytes!("./../../templates/core/sitemap/_header.xml");
-const SITEMAP_FOOTER: &[u8] = include_bytes!("./../../templates/core/sitemap/_footer.xml");
+const SITEMAP_HEADER: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n"#;
+
+const SITEMAP_FOOTER: &[u8] = b"</urlset>\n";
 
 pub(crate) async fn sitemap_handler(
     Path(letter): Path<String>,
