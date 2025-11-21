@@ -1,6 +1,13 @@
 use crate::{cdn::cloudfront::CdnKind, storage::StorageKind};
 use anyhow::{Context, Result, anyhow, bail};
-use std::{env::VarError, error::Error, io, path, path::PathBuf, str::FromStr, time::Duration};
+use std::{
+    env::VarError,
+    error::Error,
+    io,
+    path::{self, Path, PathBuf},
+    str::FromStr,
+    time::Duration,
+};
 use tracing::trace;
 use url::Url;
 
@@ -252,6 +259,18 @@ impl Config {
                 86400,
             )?))
             .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?))
+    }
+
+    pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
+        static HTML: &str = "html";
+
+        if let Some(ext) = path.as_ref().extension()
+            && ext == HTML
+        {
+            self.max_file_size_html
+        } else {
+            self.max_file_size
+        }
     }
 }
 
