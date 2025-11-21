@@ -8,7 +8,7 @@ use crate::{
 };
 use axum::{
     Extension,
-    extract::{FromRequestParts, Request as AxumHttpRequest},
+    extract::{FromRequestParts, MatchedPath, Request as AxumHttpRequest},
     middleware::Next,
     response::Response as AxumResponse,
 };
@@ -218,8 +218,7 @@ pub(crate) struct CrateParam {
 
 pub(crate) async fn cache_middleware(
     Path(param): Path<CrateParam>,
-    // matched_route only needed for our debug-asserts, might be empty in nested routers
-    #[cfg(debug_assertions)] matched_route: Option<axum::extract::MatchedPath>,
+    matched_route: Option<MatchedPath>,
     Extension(config): Extension<Arc<Config>>,
     target_cdn: TargetCdn,
     req: AxumHttpRequest,
