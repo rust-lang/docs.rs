@@ -1,4 +1,4 @@
-use super::{Blob, FileRange, StorageMetrics, StreamingBlob};
+use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
 use crate::{InstanceMetrics, db::Pool, error::Result};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
@@ -136,7 +136,7 @@ impl DatabaseBackend {
         })
     }
 
-    pub(super) async fn store_batch(&self, batch: Vec<Blob>) -> Result<()> {
+    pub(super) async fn store_batch(&self, batch: Vec<BlobUpload>) -> Result<()> {
         let mut conn = self.pool.get_async().await?;
         let mut trans = conn.begin().await?;
         for blob in batch {
