@@ -73,6 +73,7 @@ COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
 COPY templates templates/
 COPY vendor vendor/
+COPY static static/
 COPY assets assets/
 COPY .sqlx .sqlx/
 COPY migrations migrations/
