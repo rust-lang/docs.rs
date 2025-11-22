@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Error, Result};
-use std::{env, path::Path};
+use std::{env, fs::File, io::Write as _, path::Path};
 
 mod tracked {
     use std::{
@@ -68,13 +68,27 @@ mod tracked {
     }
 }
 
+type ETagMap<'a> = phf_codegen::Map<'a, String>;
+
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
     read_git_version()?;
-    compile_sass(out_dir)?;
+
+    let mut etag_map: ETagMap = ETagMap::new();
+
+    compile_sass(out_dir, &mut etag_map)?;
     write_known_targets(out_dir)?;
     compile_syntax(out_dir).context("could not compile syntax files")?;
+    calculate_static_etags(&mut etag_map)?;
+
+    let mut etag_file = File::create(out_dir.join("static_etag_map.rs"))?;
+    writeln!(
+        &mut etag_file,
+        "pub static STATIC_ETAG_MAP: ::phf::Map<&'static str, &'static str> = {};",
+        etag_map.build()
+    )?;
+    etag_file.sync_all()?;
 
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
@@ -118,6 +132,16 @@ fn get_git_hash() -> Result<Option<String>> {
     }
 }
 
+fn etag_from_path(path: impl AsRef<Path>) -> Result<String> {
+    Ok(etag_from_content(std::fs::read(&path)?))
+}
+
+fn etag_from_content(content: impl AsRef<[u8]>) -> String {
+    let digest = md5::compute(content);
+    let md5_hex = format!("{:x}", digest);
+    format!(r#""\"{md5_hex}\"""#)
+}
+
 fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
     let css = grass::from_path(
         src.to_str()
@@ -133,7 +157,7 @@ fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn compile_sass(out_dir: &Path) -> Result<()> {
+fn compile_sass(out_dir: &Path, etag_map: &mut ETagMap) -> Result<()> {
     const STYLE_DIR: &str = "templates/style";
 
     for entry in walkdir::WalkDir::new(STYLE_DIR) {
@@ -146,12 +170,13 @@ fn compile_sass(out_dir: &Path) -> Result<()> {
                 .to_str()
                 .context("file name must be a utf-8 string")?;
             if !file_name.starts_with('_') {
-                let dest = out_dir
-                    .join(entry.path().strip_prefix(STYLE_DIR)?)
-                    .with_extension("css");
+                let dest = out_dir.join(file_name).with_extension("css");
                 compile_sass_file(entry.path(), &dest).with_context(|| {
                     format!("compiling {} to {}", entry.path().display(), dest.display())
                 })?;
+
+                let dest_str = dest.file_name().unwrap().to_str().unwrap().to_owned();
+                etag_map.entry(dest_str, etag_from_path(&dest)?);
             }
         }
     }
@@ -160,7 +185,32 @@ fn compile_sass(out_dir: &Path) -> Result<()> {
     let pure = tracked::read_to_string("vendor/pure-css/css/pure-min.css")?;
     let grids = tracked::read_to_string("vendor/pure-css/css/grids-responsive-min.css")?;
     let vendored = pure + &grids;
-    std::fs::write(out_dir.join("vendored").with_extension("css"), vendored)?;
+    std::fs::write(out_dir.join("vendored").with_extension("css"), &vendored)?;
+
+    etag_map.entry(
+        "vendored.css".to_owned(),
+        etag_from_content(vendored.as_bytes()),
+    );
+
+    Ok(())
+}
+
+fn calculate_static_etags(etag_map: &mut ETagMap) -> Result<()> {
+    const STATIC_DIRS: &[&str] = &["static", "vendor"];
+
+    for static_dir in STATIC_DIRS {
+        for entry in walkdir::WalkDir::new(static_dir) {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let partial_path = path.strip_prefix(static_dir).unwrap();
+            let partial_path_str = partial_path.to_string_lossy().to_string();
+            etag_map.entry(partial_path_str, etag_from_path(path)?);
+        }
+    }
 
     Ok(())
 }
