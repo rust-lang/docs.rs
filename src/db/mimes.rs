@@ -10,6 +10,10 @@ macro_rules! mime {
 mime!(APPLICATION_ZIP, "application/zip");
 mime!(APPLICATION_ZSTD, "application/zstd");
 mime!(APPLICATION_GZIP, "application/gzip");
+mime!(
+    APPLICATION_OPENSEARCH_XML,
+    "application/opensearchdescription+xml"
+);
 mime!(APPLICATION_XML, "application/xml");
 mime!(TEXT_MARKDOWN, "text/markdown");
 mime!(TEXT_RUST, "text/rust");
