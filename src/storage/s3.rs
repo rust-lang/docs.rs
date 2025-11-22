@@ -1,4 +1,4 @@
-use super::{Blob, FileRange, StorageMetrics, StreamingBlob};
+use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
 use crate::{Config, InstanceMetrics};
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
@@ -222,7 +222,7 @@ impl S3Backend {
         })
     }
 
-    pub(super) async fn store_batch(&self, mut batch: Vec<Blob>) -> Result<(), Error> {
+    pub(super) async fn store_batch(&self, mut batch: Vec<BlobUpload>) -> Result<(), Error> {
         // Attempt to upload the batch 3 times
         for _ in 0..3 {
             let mut futures = FuturesUnordered::new();
