@@ -1,7 +1,7 @@
 //! Utilities for interacting with the build queue
+use crate::build_queue::PRIORITY_DEFAULT;
 use crate::error::Result;
 use futures_util::stream::TryStreamExt;
-use crate::build_queue::PRIORITY_DEFAULT;
 
 /// Get the build queue priority for a crate, returns the matching pattern too
 pub async fn list_crate_priorities(conn: &mut sqlx::PgConnection) -> Result<Vec<(String, i32)>> {
