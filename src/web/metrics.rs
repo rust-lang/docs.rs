@@ -143,7 +143,23 @@ pub(crate) async fn request_recorder(
     let result = next.run(request).await;
     let resp_time = start.elapsed().as_secs_f64();
 
-    let attrs = [KeyValue::new("route", route_name.to_string())];
+    // to be able to differentiate between kinds of responses (e.g., 2xx vs 4xx vs 5xx)
+    // in response times, or RPM.
+    // Special case for 304 Not Modified since it's about caching and not just redirecting.
+    let status_kind = match result.status() {
+        StatusCode::NOT_MODIFIED => "not_modified",
+        s if s.is_informational() => "informational",
+        s if s.is_success() => "success",
+        s if s.is_redirection() => "redirection",
+        s if s.is_client_error() => "client_error",
+        s if s.is_server_error() => "server_error",
+        _ => "other",
+    };
+
+    let attrs = [
+        KeyValue::new("route", route_name.to_string()),
+        KeyValue::new("status_kind", status_kind),
+    ];
 
     metrics
         .routes_visited

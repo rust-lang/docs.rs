@@ -1,5 +1,5 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{Config, InstanceMetrics};
+use crate::{Config, InstanceMetrics, web::headers::compute_etag};
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
@@ -10,6 +10,7 @@ use aws_sdk_s3::{
     types::{Delete, ObjectIdentifier, Tag, Tagging},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
+use axum_extra::headers;
 use chrono::Utc;
 use futures_util::{
     future::TryFutureExt,
@@ -17,7 +18,7 @@ use futures_util::{
     stream::{FuturesUnordered, Stream, StreamExt},
 };
 use std::sync::Arc;
-use tracing::{error, warn};
+use tracing::{error, instrument, warn};
 
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
 const PUBLIC_ACCESS_VALUE: &str = "allow";
@@ -180,6 +181,7 @@ impl S3Backend {
             .map(|_| ())
     }
 
+    #[instrument(skip(self))]
     pub(super) async fn get_stream(
         &self,
         path: &str,
@@ -190,7 +192,11 @@ impl S3Backend {
             .get_object()
             .bucket(&self.bucket)
             .key(path)
-            .set_range(range.map(|r| format!("bytes={}-{}", r.start(), r.end())))
+            .set_range(
+                range
+                    .as_ref()
+                    .map(|r| format!("bytes={}-{}", r.start(), r.end())),
+            )
             .send()
             .await
             .convert_errors()?;
@@ -204,6 +210,41 @@ impl S3Backend {
 
         let compression = res.content_encoding.as_ref().and_then(|s| s.parse().ok());
 
+        let etag = if let Some(s3_etag) = res.e_tag
+            && !s3_etag.is_empty()
+        {
+            if let Some(range) = range {
+                // we can generate a unique etag for a range of the remote object too,
+                // by just concatenating the original etag with the range start and end.
+                //
+                // About edge cases:
+                // When the etag of the full archive changes after a rebuild,
+                // all derived etags for files inside the archive will also change.
+                //
+                // This could lead to _changed_ ETags, where the single file inside the archive
+                // is actually the same.
+                //
+                // AWS implementation (an minio) is to just use an MD5 hash of the file as
+                // ETag
+                Some(compute_etag(format!(
+                    "{}-{}-{}",
+                    s3_etag,
+                    range.start(),
+                    range.end()
+                )))
+            } else {
+                match s3_etag.parse::<headers::ETag>() {
+                    Ok(etag) => Some(etag),
+                    Err(err) => {
+                        error!(?err, s3_etag, "Failed to parse ETag from S3");
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(StreamingBlob {
             path: path.into(),
             mime: res
@@ -213,6 +254,7 @@ impl S3Backend {
                 .parse()
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated,
+            etag,
             content_length: res
                 .content_length
                 .and_then(|length| length.try_into().ok())

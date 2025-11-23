@@ -15,16 +15,17 @@ use crate::{
     web::{
         build_axum_app,
         cache::{self, TargetCdn},
-        headers::SURROGATE_CONTROL,
+        headers::{IfNoneMatch, SURROGATE_CONTROL},
         page::TemplateData,
     },
 };
 use anyhow::Context as _;
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
+use axum_extra::headers::{ETag, HeaderMapExt as _};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
-use http::header::CACHE_CONTROL;
+use http::{HeaderMap, StatusCode, header::CACHE_CONTROL};
 use http_body_util::BodyExt;
 use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader};
 use serde::de::DeserializeOwned;
@@ -121,6 +122,9 @@ impl AxumResponseTestExt for axum::response::Response {
 }
 
 pub(crate) trait AxumRouterTestExt {
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap);
     async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse>;
     async fn assert_redirect_cached_unchecked(
         &self,
@@ -130,6 +134,11 @@ pub(crate) trait AxumRouterTestExt {
         config: &Config,
     ) -> Result<AxumResponse>;
     async fn assert_not_found(&self, path: &str) -> Result<()>;
+    async fn assert_success_and_conditional_get(
+        &self,
+        path: &str,
+        expected_body: &str,
+    ) -> Result<()>;
     async fn assert_success_cached(
         &self,
         path: &str,
@@ -175,6 +184,37 @@ impl AxumRouterTestExt for axum::Router {
         Ok(response)
     }
 
+    async fn assert_success_and_conditional_get(
+        &self,
+        path: &str,
+        expected_body: &str,
+    ) -> Result<()> {
+        let etag: ETag = {
+            // uncached response
+            let response = self.assert_success(path).await?;
+            let etag: ETag = response.headers().typed_get().unwrap();
+
+            assert_eq!(response.text().await?, expected_body);
+
+            etag
+        };
+
+        let if_none_match = IfNoneMatch::from(etag.clone());
+
+        {
+            // cached response
+            let response = self
+                .get_with_headers(path, |headers| {
+                    headers.typed_insert(if_none_match);
+                })
+                .await?;
+            assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+            // etag is repeated
+            assert_eq!(response.headers().typed_get::<ETag>().unwrap(), etag);
+        }
+        Ok(())
+    }
+
     async fn assert_not_found(&self, path: &str) -> Result<()> {
         let response = self.get(path).await?;
 
@@ -206,6 +246,19 @@ impl AxumRouterTestExt for axum::Router {
         Ok(self
             .clone()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap),
+    {
+        let mut builder = Request::builder().uri(path);
+        f(builder.headers_mut().unwrap());
+
+        Ok(self
+            .clone()
+            .oneshot(builder.body(Body::empty()).unwrap())
             .await?)
     }
 
