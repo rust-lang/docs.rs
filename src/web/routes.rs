@@ -193,8 +193,12 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/releases/failures/{page}",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
-        .route_with_tsr(
+        .route(
             "/crate/{name}",
+            get_internal(super::crate_details::crate_details_handler),
+        )
+        .route(
+            "/crate/{name}/",
             get_internal(super::crate_details::crate_details_handler),
         )
         .route_with_tsr(

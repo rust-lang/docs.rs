@@ -220,7 +220,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     let params = params.with_page_kind(PageKind::Rustdoc);
 
     fn redirect_to_doc(
-        original_uri: Option<&Uri>,
+        original_uri: Option<&EscapedURI>,
         url: EscapedURI,
         cache_policy: CachePolicy,
         path_in_crate: Option<&str>,

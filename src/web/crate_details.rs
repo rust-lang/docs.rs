@@ -719,8 +719,8 @@ mod tests {
     use anyhow::Error;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
-    use reqwest::StatusCode;
     use std::collections::HashMap;
+    use test_case::test_case;
 
     async fn release_build_status(
         conn: &mut sqlx::PgConnection,
@@ -2062,6 +2062,26 @@ mod tests {
         });
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("/crate/rayon/^1.11.0", "/crate/rayon/1.11.0")]
+    #[test_case("/crate/rayon/%5E1.11.0", "/crate/rayon/1.11.0")]
+    #[test_case("/crate/rayon", "/crate/rayon/latest"; "without trailing slash")]
+    #[test_case("/crate/rayon/", "/crate/rayon/latest")]
+    async fn test_version_redirects(path: &str, expected_target: &str) -> anyhow::Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name("rayon")
+            .version("1.11.0")
+            .create()
+            .await?;
+        let web = env.web_app().await;
+
+        web.assert_redirect(path, expected_target).await?;
+
+        Ok(())
+    }
+
     #[test]
     fn readme() {
         async_wrapper(|env| async move {
@@ -2199,10 +2219,10 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            assert_eq!(
-                env.web_app().await.get("/crate/dummy%3E").await?.status(),
-                StatusCode::FOUND
-            );
+            env.web_app()
+                .await
+                .assert_redirect_unchecked("/crate/dummy%3E", "/crate/dummy%3E/latest")
+                .await?;
 
             Ok(())
         })
