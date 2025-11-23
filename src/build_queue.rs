@@ -40,13 +40,21 @@ impl BuildQueueMetrics {
     }
 }
 
-/// The static priority for background rebuilds.
-/// Used when queueing rebuilds, and when rendering them
-/// collapsed in the UI.
-/// For normal build priorities we use smaller values.
-pub(crate) const REBUILD_PRIORITY: i32 = 20;
-// TODO what value should we use here?
-pub(crate) const BROKEN_RUSTDOC_REBUILD_PRIORITY: i32 = 30;
+
+
+pub(crate) const PRIORITY_DEFAULT: i32 = 0;
+/// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
+#[allow(dead_code)]
+pub(crate) const PRIORITY_DEPRIORITIZED: i32 = 1;
+/// Rebuilds triggered from crates.io, see issue #2442
+pub(crate) const PRIORITY_MANUAL_FROM_CRATES_IO: i32 = 5;
+/// Used for rebuilds queued through cratesfyi for crate versions failed due to a broken Rustdoc nightly version.
+/// Note: a broken rustdoc version does not necessarily imply a failed build.
+pub(crate) const PRIORITY_BROKEN_RUSTDOC: i32 = 10;
+/// Used by the synchronize cratesfyi command when queueing builds that are in the crates.io index but not in the database.
+pub(crate) const PRIORITY_CONSISTENCY_CHECK: i32 = 15;
+/// The static priority for background rebuilds, used when queueing rebuilds, and when rendering them collapsed in the UI.
+pub(crate) const PRIORITY_CONTINUOUS: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -726,7 +734,7 @@ pub async fn queue_rebuilds(
         .pending_count_by_priority()
         .await?
         .iter()
-        .filter_map(|(priority, count)| (*priority >= REBUILD_PRIORITY).then_some(count))
+        .filter_map(|(priority, count)| (*priority >= PRIORITY_CONTINUOUS).then_some(count))
         .sum();
 
     let rebuilds_to_queue = config
@@ -770,7 +778,7 @@ pub async fn queue_rebuilds(
         {
             info!("queueing rebuild for {} {}...", &row.name, &row.version);
             build_queue
-                .add_crate(&row.name, &row.version, REBUILD_PRIORITY, None)
+                .add_crate(&row.name, &row.version, PRIORITY_CONTINUOUS, None)
                 .await?;
         }
     }
@@ -799,18 +807,16 @@ SELECT c.name,
        r.version AS "version: Version"
 FROM crates AS c
          JOIN releases AS r
-              ON c.latest_version_id = r.id
-                  AND r.rustdoc_status = TRUE
-         JOIN LATERAL (
-    SELECT b.id,
-           b.build_status,
-           b.rustc_nightly_date,
-           COALESCE(b.build_finished, b.build_started) AS last_build_attempt
-    FROM builds AS b
-    WHERE b.rid = r.id
-    ORDER BY last_build_attempt DESC
-    LIMIT 1
-    ) AS b ON b.build_status = 'failure' AND b.rustc_nightly_date >= $1 AND b.rustc_nightly_date < $2
+              ON c.id = r.crate_id
+         JOIN release_build_status AS rbs
+            ON rbs.rid = r.id
+            AND rbs.build_status != 'in_progress'
+         JOIN builds AS b
+             ON b.rid = r.id
+             AND b.build_finished = rbs.last_build_time
+             AND b.rustc_nightly_date >= $1
+             AND b.rustc_nightly_date < $2
+
 
 "#, start_nightly_date, end_nightly_date
     )
@@ -826,16 +832,13 @@ FROM crates AS c
         {
             results_count += 1;
             info!(
-                "queueing rebuild for {} {} (priority {})...",
-                &row.name, &row.version, BROKEN_RUSTDOC_REBUILD_PRIORITY
+                name=%row.name,
+                version=%row.version,
+                priority=PRIORITY_BROKEN_RUSTDOC,
+               "queueing rebuild"
             );
             build_queue
-                .add_crate(
-                    &row.name,
-                    &row.version,
-                    BROKEN_RUSTDOC_REBUILD_PRIORITY,
-                    None,
-                )
+                .add_crate(&row.name, &row.version, PRIORITY_BROKEN_RUSTDOC, None)
                 .await?;
         }
     }
@@ -881,35 +884,103 @@ mod tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].name, "foo");
         assert_eq!(queue[0].version, V1);
-        assert_eq!(queue[0].priority, REBUILD_PRIORITY);
+        assert_eq!(queue[0].priority, PRIORITY_CONTINUOUS);
 
         Ok(())
     }
 
-    /// Verifies whether a rebuild is queued for a crate that previously failed with a nightly version of rustdoc.
+    /// Verifies whether a rebuild is queued for all releases with the latest build performed with a specific nightly version of rustdoc
     #[tokio::test(flavor = "multi_thread")]
     async fn test_rebuild_broken_rustdoc_specific_date_simple() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .max_queued_rebuilds(Some(100))
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
-        for i in 1..5 {
-            let nightly_date = NaiveDate::from_ymd_opt(2020, 10, i).unwrap();
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            // All those should match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V2),
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
             env.fake_release()
                 .await
-                .name(&format!("foo{}", i))
-                .version(V1)
+                .name(crate_name)
+                .version(version)
                 .builds(vec![
                     FakeBuild::default()
                         .rustc_version(
                             format!(
                                 "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly_date.format("%Y-%m-%d")
+                                nightly.format("%Y-%m-%d")
                             )
-                            .as_str(),
+                                .as_str(),
+                        )
+                        .build_status(BuildStatus::Failure),
+                ])
+                .create()
+                .await?;
+        }
+
+        let build_queue = env.async_build_queue();
+        assert!(build_queue.queued_crates().await?.is_empty());
+
+        let mut conn = env.async_db().async_conn().await;
+        queue_rebuilds_faulty_rustdoc(
+            &mut conn,
+            build_queue,
+            &NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(),
+            &None,
+        )
+        .await?;
+
+        let queue = build_queue.queued_crates().await?;
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue[0].name, "foo1");
+        assert_eq!(queue[0].version, V1);
+        assert_eq!(queue[0].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[1].name, "foo1");
+        assert_eq!(queue[1].version, V2);
+        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[2].name, "foo2");
+        assert_eq!(queue[2].version, V1);
+        assert_eq!(queue[2].priority, PRIORITY_BROKEN_RUSTDOC);
+
+        Ok(())
+    }
+
+    /// Verifies whether a rebuild is NOT queued for any crate if the nightly specified doesn't match any latest build of any release
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rebuild_broken_rustdoc_specific_date_skipped() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release even if the nightly matches
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
+            env.fake_release()
+                .await
+                .name(crate_name)
+                .version(version)
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version(
+                            format!(
+                                "rustc 1.84.0-nightly (e7c0d2750 {})",
+                                nightly.format("%Y-%m-%d")
+                            )
+                                .as_str(),
                         )
                         .build_status(BuildStatus::Failure),
                 ])
@@ -925,68 +996,6 @@ mod tests {
             &mut conn,
             build_queue,
             &NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(),
-            &None,
-        )
-        .await?;
-
-        let queue = build_queue.queued_crates().await?;
-        assert_eq!(queue.len(), 1);
-        assert_eq!(queue[0].name, "foo3");
-        assert_eq!(queue[0].version, V1);
-        assert_eq!(queue[0].priority, BROKEN_RUSTDOC_REBUILD_PRIORITY);
-
-        Ok(())
-    }
-
-    /// Verified whether a rebuild is NOT queued since the latest build for the specific crate is marked as successful.
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_rebuild_broken_rustdoc_specific_date_skipped() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .max_queued_rebuilds(Some(100))
-                .build()?,
-        )
-        .await?;
-
-        env.fake_release()
-            .await
-            .name("foo")
-            .version(V1)
-            .builds(vec![
-                FakeBuild::default()
-                    .rustc_version(
-                        format!(
-                            "rustc 1.84.0-nightly (e7c0d2750 {})",
-                            NaiveDate::from_ymd_opt(2020, 10, 1)
-                                .unwrap()
-                                .format("%Y-%m-%d")
-                        )
-                        .as_str(),
-                    )
-                    .build_status(BuildStatus::Failure),
-                FakeBuild::default()
-                    .rustc_version(
-                        format!(
-                            "rustc 1.84.0-nightly (e7c0d2750 {})",
-                            NaiveDate::from_ymd_opt(2020, 10, 1)
-                                .unwrap()
-                                .format("%Y-%m-%d")
-                        )
-                        .as_str(),
-                    )
-                    .build_status(BuildStatus::Success),
-            ])
-            .create()
-            .await?;
-
-        let build_queue = env.async_build_queue();
-        assert!(build_queue.queued_crates().await?.is_empty());
-
-        let mut conn = env.async_db().async_conn().await;
-        queue_rebuilds_faulty_rustdoc(
-            &mut conn,
-            build_queue,
-            &NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(),
             &None,
         )
         .await?;
@@ -997,29 +1006,36 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies whether a rebuild is queued for all releases with the latest build performed with a nightly version between two dates
     #[tokio::test(flavor = "multi_thread")]
     async fn test_rebuild_broken_rustdoc_date_range() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .max_queued_rebuilds(Some(100))
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
-        for i in 1..6 {
-            let nightly_date = NaiveDate::from_ymd_opt(2020, 10, i).unwrap();
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            // All those should match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match (end date is exclusive)
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 5).unwrap(), V2),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
             env.fake_release()
                 .await
-                .name(&format!("foo{}", i))
-                .version(V1)
+                .name(crate_name)
+                .version(version)
                 .builds(vec![
                     FakeBuild::default()
                         .rustc_version(
                             format!(
                                 "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly_date.format("%Y-%m-%d")
+                                nightly.format("%Y-%m-%d")
                             )
-                            .as_str(),
+                                .as_str(),
                         )
                         .build_status(BuildStatus::Failure),
                 ])
@@ -1034,19 +1050,22 @@ mod tests {
         queue_rebuilds_faulty_rustdoc(
             &mut conn,
             build_queue,
-            &NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(),
+            &NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(),
             &NaiveDate::from_ymd_opt(2020, 10, 5),
         )
         .await?;
 
         let queue = build_queue.queued_crates().await?;
-        assert_eq!(queue.len(), 2);
-        assert_eq!(queue[0].name, "foo3");
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue[0].name, "foo1");
         assert_eq!(queue[0].version, V1);
-        assert_eq!(queue[0].priority, BROKEN_RUSTDOC_REBUILD_PRIORITY);
-        assert_eq!(queue[1].name, "foo4");
+        assert_eq!(queue[0].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[1].name, "foo1");
+        assert_eq!(queue[1].version, V2);
+        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[1].name, "foo2");
         assert_eq!(queue[1].version, V1);
-        assert_eq!(queue[1].priority, BROKEN_RUSTDOC_REBUILD_PRIORITY);
+        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
 
         Ok(())
     }
@@ -1062,10 +1081,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         let mut conn = env.async_db().async_conn().await;
@@ -1104,10 +1123,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         env.fake_release()

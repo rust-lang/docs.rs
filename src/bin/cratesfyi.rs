@@ -276,7 +276,7 @@ enum QueueSubcommand {
         head: bool,
     },
 
-    /// Queue rebuilds for broken nightly versions of rustdoc
+    /// Queue rebuilds for broken nightly versions of rustdoc, either for a single date (start) or a range (start inclusive, end exclusive)
     RebuildBrokenNightly {
         /// Start date of nightly builds to rebuild (inclusive)
         #[arg(name = "START", short = 's', long = "start")]
