@@ -1,3 +1,4 @@
+use crate::build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use crate::{
     AsyncBuildQueue, Config,
     db::{
@@ -139,10 +140,6 @@ async fn build_trigger_check(
     Ok(())
 }
 
-// Priority according to issue #2442; positive here as it's inverted.
-// FUTURE: move to a crate-global enum with all special priorities?
-const TRIGGERED_REBUILD_PRIORITY: i32 = 5;
-
 pub(crate) async fn build_trigger_rebuild_handler(
     Path((name, version)): Path<(String, Version)>,
     mut conn: DbConnection,
@@ -176,7 +173,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
         .add_crate(
             &name,
             &version,
-            TRIGGERED_REBUILD_PRIORITY,
+            PRIORITY_MANUAL_FROM_CRATES_IO,
             None, /* because crates.io is the only service that calls this endpoint */
         )
         .await

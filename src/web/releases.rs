@@ -1,8 +1,10 @@
 //! Releases web handlersrelease
 
+use super::cache::CachePolicy;
+use crate::build_queue::PRIORITY_CONTINUOUS;
 use crate::{
     AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
-    build_queue::{QueuedCrate, REBUILD_PRIORITY},
+    build_queue::QueuedCrate,
     cdn,
     db::types::version::Version,
     impl_axum_webpage,
@@ -36,8 +38,6 @@ use std::{
 };
 use tracing::{trace, warn};
 use url::form_urlencoded;
-
-use super::cache::CachePolicy;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -780,7 +780,7 @@ pub(crate) async fn build_queue_handler(
         .collect_vec();
 
     queue.retain_mut(|krate| {
-        if krate.priority >= REBUILD_PRIORITY {
+        if krate.priority >= PRIORITY_CONTINUOUS {
             rebuild_queue.push(krate.clone());
             false
         } else {
@@ -1989,12 +1989,14 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
             let queue = env.async_build_queue();
-            queue.add_crate("foo", &V1, REBUILD_PRIORITY, None).await?;
             queue
-                .add_crate("bar", &V2, REBUILD_PRIORITY + 1, None)
+                .add_crate("foo", &V1, PRIORITY_CONTINUOUS, None)
                 .await?;
             queue
-                .add_crate("baz", &V3, REBUILD_PRIORITY - 1, None)
+                .add_crate("bar", &V2, PRIORITY_CONTINUOUS + 1, None)
+                .await?;
+            queue
+                .add_crate("baz", &V3, PRIORITY_CONTINUOUS - 1, None)
                 .await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
