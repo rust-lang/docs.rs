@@ -2,6 +2,7 @@ mod canonical_url;
 mod if_none_match;
 mod surrogate_key;
 
+use axum_extra::headers::ETag;
 pub use canonical_url::CanonicalUrl;
 use http::HeaderName;
 pub(crate) use if_none_match::IfNoneMatch;
@@ -14,8 +15,7 @@ pub static SURROGATE_CONTROL: HeaderName = HeaderName::from_static("surrogate-co
 /// compute our etag header value from some content
 ///
 /// Has to match the implementation in our build-script.
-#[cfg(test)]
-pub fn compute_etag<T: AsRef<[u8]>>(content: T) -> axum_extra::headers::ETag {
+pub fn compute_etag<T: AsRef<[u8]>>(content: T) -> ETag {
     let digest = md5::compute(&content);
     format!("\"{:x}\"", digest).parse().unwrap()
 }

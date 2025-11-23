@@ -22,6 +22,7 @@ use crate::{
     utils::spawn_blocking,
 };
 use anyhow::anyhow;
+use axum_extra::headers;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use fn_error_context::context;
@@ -57,7 +58,7 @@ type FileRange = RangeInclusive<u64>;
 pub(crate) struct PathNotFoundError;
 
 /// represents a blob to be uploaded to storage.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BlobUpload {
     pub(crate) path: String,
     pub(crate) mime: Mime,
@@ -76,11 +77,12 @@ impl From<Blob> for BlobUpload {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Blob {
     pub(crate) path: String,
     pub(crate) mime: Mime,
     pub(crate) date_updated: DateTime<Utc>,
+    pub(crate) etag: Option<headers::ETag>,
     pub(crate) content: Vec<u8>,
     pub(crate) compression: Option<CompressionAlgorithm>,
 }
@@ -89,6 +91,7 @@ pub(crate) struct StreamingBlob {
     pub(crate) path: String,
     pub(crate) mime: Mime,
     pub(crate) date_updated: DateTime<Utc>,
+    pub(crate) etag: Option<headers::ETag>,
     pub(crate) compression: Option<CompressionAlgorithm>,
     pub(crate) content_length: usize,
     pub(crate) content: Box<dyn AsyncBufRead + Unpin + Send>,
@@ -100,6 +103,7 @@ impl std::fmt::Debug for StreamingBlob {
             .field("path", &self.path)
             .field("mime", &self.mime)
             .field("date_updated", &self.date_updated)
+            .field("etag", &self.etag)
             .field("compression", &self.compression)
             .finish()
     }
@@ -134,6 +138,7 @@ impl StreamingBlob {
         );
 
         self.compression = None;
+        // not touching the etag, it should represent the original content
         Ok(self)
     }
 
@@ -148,9 +153,24 @@ impl StreamingBlob {
             path: self.path,
             mime: self.mime,
             date_updated: self.date_updated,
+            etag: self.etag, // downloading doesn't change the etag
             content: content.into_inner(),
             compression: self.compression,
         })
+    }
+}
+
+impl From<Blob> for StreamingBlob {
+    fn from(value: Blob) -> Self {
+        Self {
+            path: value.path,
+            mime: value.mime,
+            date_updated: value.date_updated,
+            etag: value.etag,
+            compression: value.compression,
+            content_length: value.content.len(),
+            content: Box::new(io::Cursor::new(value.content)),
+        }
     }
 }
 
@@ -583,6 +603,7 @@ impl AsyncStorage {
                         path: format!("{archive_path}/{path}"),
                         mime: detect_mime(path),
                         date_updated: stream.date_updated,
+                        etag: stream.etag,
                         content: stream.content,
                         content_length: stream.content_length,
                         compression: None,
@@ -756,7 +777,6 @@ impl AsyncStorage {
                         mime,
                         content,
                         compression: Some(alg),
-                        // this field is ignored by the backend
                     });
                 }
                 Ok((blobs, file_paths))
@@ -1135,7 +1155,7 @@ pub(crate) fn source_archive_path(name: &str, version: &Version) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::TestEnvironment;
+    use crate::{test::TestEnvironment, web::headers::compute_etag};
     use std::env;
     use test_case::test_case;
 
@@ -1151,6 +1171,7 @@ mod test {
             mime: mime::APPLICATION_OCTET_STREAM,
             date_updated: Utc::now(),
             compression: alg,
+            etag: Some(compute_etag(&content)),
             content_length: content.len(),
             content: Box::new(io::Cursor::new(content)),
         }
@@ -1292,6 +1313,7 @@ mod test {
             path: "some_path.db".into(),
             mime: mime::APPLICATION_OCTET_STREAM,
             date_updated: Utc::now(),
+            etag: None,
             compression: Some(alg),
             content_length: compressed_index_content.len(),
             content: Box::new(io::Cursor::new(compressed_index_content)),
@@ -1494,9 +1516,8 @@ mod test {
 /// This is the preferred way to test whether backends work.
 #[cfg(test)]
 mod backend_tests {
-    use crate::test::TestEnvironment;
-
     use super::*;
+    use crate::{test::TestEnvironment, web::headers::compute_etag};
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
@@ -1560,6 +1581,9 @@ mod backend_tests {
         let found = storage.get(path, usize::MAX)?;
         assert_eq!(blob.mime, found.mime);
         assert_eq!(blob.content, found.content);
+        // while our db backend just does MD5,
+        // it seems like minio does it too :)
+        assert_eq!(found.etag, Some(compute_etag(&blob.content)));
 
         // default visibility is private
         assert!(!storage.get_public_access(path)?);
@@ -1593,20 +1617,26 @@ mod backend_tests {
             content: b"test content\n".to_vec(),
         };
 
+        let full_etag = compute_etag(&blob.content);
+
         storage.store_blobs(vec![blob.clone()])?;
 
-        assert_eq!(
-            blob.content[0..=4],
-            storage
-                .get_range("foo/bar.txt", usize::MAX, 0..=4, None)?
-                .content
-        );
-        assert_eq!(
-            blob.content[5..=12],
-            storage
-                .get_range("foo/bar.txt", usize::MAX, 5..=12, None)?
-                .content
-        );
+        let mut etags = Vec::new();
+
+        for range in [0..=4, 5..=12] {
+            let partial_blob = storage.get_range("foo/bar.txt", usize::MAX, range.clone(), None)?;
+            let range = (*range.start() as usize)..=(*range.end() as usize);
+            assert_eq!(blob.content[range], partial_blob.content);
+
+            etags.push(partial_blob.etag.unwrap());
+        }
+        if let [etag1, etag2] = &etags[..] {
+            assert_ne!(etag1, etag2);
+            assert_ne!(etag1, &full_etag);
+            assert_ne!(etag2, &full_etag);
+        } else {
+            panic!("expected two etags");
+        }
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(

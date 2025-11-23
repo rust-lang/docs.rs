@@ -13,6 +13,7 @@ use crate::{
         },
         file::StreamingFile,
         headers::CanonicalUrl,
+        headers::IfNoneMatch,
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -20,7 +21,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{Extension, response::IntoResponse};
-use axum_extra::headers::HeaderMapExt;
+use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -190,6 +191,7 @@ pub(crate) async fn source_browser_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     mut conn: DbConnection,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let params = params.with_page_kind(PageKind::Source);
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
@@ -275,7 +277,7 @@ pub(crate) async fn source_browser_handler(
         let is_text = stream.mime.type_() == mime::TEXT || stream.mime == mime::APPLICATION_JSON;
         if !is_text {
             // if the file isn't text, serve it directly to the client
-            let mut response = StreamingFile(stream).into_response();
+            let mut response = StreamingFile(stream).into_response(if_none_match.as_deref());
             response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
@@ -352,10 +354,12 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
-        web::{cache::CachePolicy, encode_url_path},
+        web::{cache::CachePolicy, encode_url_path, headers::IfNoneMatch},
     };
     use anyhow::Result;
+    use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
     use kuchikiki::traits::TendrilSink;
+    use mime::APPLICATION_PDF;
     use reqwest::StatusCode;
     use test_case::test_case;
 
@@ -447,24 +451,34 @@ mod tests {
                 .create()
                 .await?;
             let web = env.web_app().await;
-            let response = web.get("/crate/fake/0.1.0/source/some_file.pdf").await?;
+
+            const URL: &str = "/crate/fake/0.1.0/source/some_file.pdf";
+
+            // first request, uncached
+            let response = web.get(URL).await?;
             assert!(response.status().is_success());
+            let headers = response.headers();
             assert_eq!(
-                response.headers().get("link").unwrap(),
+                headers.get("link").unwrap(),
                 "<https://docs.rs/crate/fake/latest/source/some_file.pdf>; rel=\"canonical\""
             );
             assert_eq!(
-                response
-                    .headers()
-                    .get("content-type")
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-                "application/pdf"
+                headers.typed_get::<ContentType>().unwrap(),
+                APPLICATION_PDF.into(),
             );
-
             response.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+
+            let etag: ETag = headers.typed_get().unwrap();
+
             assert!(response.text().await?.contains("some_random_content"));
+
+            let response = web
+                .get_with_headers(URL, |headers| {
+                    headers.typed_insert(IfNoneMatch::from(etag));
+                })
+                .await?;
+            assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+
             Ok(())
         });
     }

@@ -19,6 +19,7 @@ use crate::{
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
+        headers::IfNoneMatch,
         match_version,
         metrics::WebMetrics,
         page::{
@@ -35,7 +36,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
-use http::{HeaderValue, Uri, header, uri::Authority};
+use axum_extra::{headers::ContentType, typed_header::TypedHeader};
+use http::{Uri, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -193,6 +195,7 @@ pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: LazyLock<HashMap<&str, OfficialCr
 async fn try_serve_legacy_toolchain_asset(
     storage: Arc<AsyncStorage>,
     path: impl AsRef<str>,
+    if_none_match: Option<&IfNoneMatch>,
 ) -> AxumResult<AxumResponse> {
     let path = path.as_ref().to_owned();
     // FIXME: this could be optimized: when a path doesn't exist
@@ -204,8 +207,8 @@ async fn try_serve_legacy_toolchain_asset(
     // toolchain specific resources into the new folder,
     // which is reached via the new handler.
     Ok(StreamingFile::from_path(&storage, &path)
-        .await
-        .map(IntoResponse::into_response)?)
+        .await?
+        .into_response(if_none_match))
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
@@ -215,6 +218,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     params: RustdocParams,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
@@ -255,7 +259,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             .binary_search(&extension)
             .is_ok()
     {
-        return try_serve_legacy_toolchain_asset(storage, params.name())
+        return try_serve_legacy_toolchain_asset(storage, params.name(), if_none_match.as_deref())
             .instrument(info_span!("serve static asset"))
             .await;
     }
@@ -319,7 +323,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                 )
                 .await
             {
-                Ok(blob) => Ok(StreamingFile(blob).into_response()),
+                Ok(blob) => Ok(StreamingFile(blob).into_response(if_none_match.as_deref())),
                 Err(err) => {
                     if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
                         && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
@@ -332,7 +336,12 @@ pub(crate) async fn rustdoc_redirector_handler(
                     // docs that were affected by this bug.
                     // https://github.com/rust-lang/docs.rs/issues/1979
                     if inner_path.starts_with("search-") || inner_path.starts_with("settings-") {
-                        try_serve_legacy_toolchain_asset(storage, inner_path).await
+                        try_serve_legacy_toolchain_asset(
+                            storage,
+                            inner_path,
+                            if_none_match.as_deref(),
+                        )
+                        .await
                     } else {
                         Err(err.into())
                     }
@@ -400,10 +409,7 @@ impl RustdocPage {
             } else {
                 CachePolicy::ForeverInCdnAndStaleInBrowser
             }),
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
-            )],
+            TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),
             Body::from_stream(utils::rewrite_rustdoc_html_stream(
                 template_data,
                 rustdoc_html.content,
@@ -436,6 +442,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
     RawQuery(original_query): RawQuery,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
@@ -598,7 +605,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
-        return Ok(StreamingFile(blob).into_response());
+        return Ok(StreamingFile(blob).into_response(if_none_match.as_deref()));
     }
 
     let latest_release = krate.latest_release()?;
@@ -910,10 +917,13 @@ pub(crate) async fn download_handler(
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");
 
-    Ok(StreamingFile::from_path(&storage, &storage_path).await?)
+    Ok(StreamingFile::from_path(&storage, &storage_path)
+        .await?
+        .into_response(if_none_match.as_deref()))
 }
 
 #[cfg(test)]
@@ -2986,12 +2996,37 @@ mod test {
                 .await?;
 
             let web = env.web_app().await;
-            let response = web.get(&format!("/dummy/0.1.0/{name}")).await?;
-            assert!(response.status().is_success());
-            assert_eq!(response.text().await?, "content");
+
+            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{name}"), "content")
+                .await?;
 
             Ok(())
         })
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("folder/file.js")]
+    #[test_case("root.css")]
+    async fn test_static_asset_handler(path: &str) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let storage = env.async_storage();
+        storage
+            .store_one(
+                format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}"),
+                b"static content",
+            )
+            .await?;
+
+        let web = env.web_app().await;
+
+        web.assert_success_and_conditional_get(
+            &format!("/-/rustdoc.static/{path}"),
+            "static content",
+        )
+        .await?;
+
+        Ok(())
     }
 
     #[test_case("search-1234.js")]
@@ -3020,12 +3055,11 @@ mod test {
                 "{:?}",
                 response.headers().get("Location"),
             );
-            assert!(web.get("/asset.js").await?.status().is_success());
 
-            assert!(web.get(&format!("/{path}")).await?.status().is_success());
-            let response = web.get(&format!("/dummy/0.1.0/{path}")).await?;
-            assert!(response.status().is_success());
-            assert_eq!(response.text().await?, "more_content");
+            web.assert_success_and_conditional_get("/asset.js", "content")
+                .await?;
+            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{path}"), "more_content")
+                .await?;
 
             Ok(())
         })
