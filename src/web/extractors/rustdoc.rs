@@ -4,7 +4,7 @@ use crate::{
     db::BuildId,
     web::{
         MatchedRelease, MetaData, ReqVersion, error::AxumNope, escaped_uri::EscapedURI,
-        extractors::Path,
+        extractors::Path, url_decode,
     },
 };
 use anyhow::Result;
@@ -15,7 +15,6 @@ use axum::{
 };
 use itertools::Itertools as _;
 use serde::Deserialize;
-use std::borrow::Cow;
 
 const INDEX_HTML: &str = "index.html";
 const FOLDER_AND_INDEX_HTML: &str = "/index.html";
@@ -48,7 +47,7 @@ pub(crate) struct RustdocParams {
     // optional behaviour marker
     page_kind: Option<PageKind>,
 
-    original_uri: Option<Uri>,
+    original_uri: Option<EscapedURI>,
     name: String,
     req_version: ReqVersion,
     doc_target: Option<String>,
@@ -277,13 +276,16 @@ impl RustdocParams {
         })
     }
 
-    pub(crate) fn original_uri(&self) -> Option<&Uri> {
+    pub(crate) fn original_uri(&self) -> Option<&EscapedURI> {
         self.original_uri.as_ref()
     }
-    pub(crate) fn with_original_uri(self, original_uri: impl Into<Uri>) -> Self {
+    pub(crate) fn with_original_uri(self, original_uri: impl Into<EscapedURI>) -> Self {
         self.with_maybe_original_uri(Some(original_uri))
     }
-    pub(crate) fn with_maybe_original_uri(self, original_uri: Option<impl Into<Uri>>) -> Self {
+    pub(crate) fn with_maybe_original_uri(
+        self,
+        original_uri: Option<impl Into<EscapedURI>>,
+    ) -> Self {
         self.update(|mut params| {
             params.original_uri = original_uri.map(Into::into);
             params
@@ -292,7 +294,7 @@ impl RustdocParams {
     #[cfg(test)]
     pub(crate) fn try_with_original_uri<V>(self, original_uri: V) -> Result<Self>
     where
-        V: TryInto<Uri>,
+        V: TryInto<EscapedURI>,
         V::Error: std::error::Error + Send + Sync + 'static,
     {
         use anyhow::Context as _;
@@ -709,10 +711,6 @@ fn get_file_extension(path: &str) -> Option<&str> {
             Some(ext)
         }
     })
-}
-
-fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
-    Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
 }
 
 fn generate_rustdoc_url(name: &str, version: &ReqVersion, path: &str) -> EscapedURI {
@@ -1148,7 +1146,7 @@ mod tests {
             .with_req_version(ReqVersion::Latest)
             .with_maybe_doc_target(target)
             .with_maybe_inner_path(path)
-            .try_with_original_uri(&dummy_path)
+            .try_with_original_uri(&dummy_path[..])
             .unwrap()
             .with_default_target(DEFAULT_TARGET)
             .with_target_name(KRATE)
