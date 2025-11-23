@@ -808,7 +808,6 @@ FROM crates AS c
               ON c.id = r.crate_id
          JOIN release_build_status AS rbs
             ON rbs.rid = r.id
-            AND rbs.build_status != 'in_progress'
          JOIN builds AS b
              ON b.rid = r.id
              AND b.build_finished = rbs.last_build_time
