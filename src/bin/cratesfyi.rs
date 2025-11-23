@@ -206,11 +206,10 @@ impl CommandLine {
 
                 start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
 
-                ctx.runtime.block_on(async move {
-                    let index = Index::from_config(&ctx.config).await?;
-                    docs_rs::utils::watch_registry(&ctx.async_build_queue, &ctx.config, &index)
-                        .await
-                })?;
+                ctx.runtime.block_on(docs_rs::utils::watch_registry(
+                    &ctx.async_build_queue,
+                    &ctx.config,
+                ))?;
             }
             Self::StartBuildServer {
                 metric_server_socket_addr,

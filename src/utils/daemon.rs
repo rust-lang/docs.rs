@@ -20,11 +20,7 @@ use tracing::{debug, info, trace};
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub async fn watch_registry(
-    build_queue: &AsyncBuildQueue,
-    config: &Config,
-    index: &Index,
-) -> Result<(), Error> {
+pub async fn watch_registry(build_queue: &AsyncBuildQueue, config: &Config) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
     loop {
@@ -32,19 +28,20 @@ pub async fn watch_registry(
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
+            let index = Index::from_config(config).await?;
             match build_queue
-                .get_new_crates(index)
+                .get_new_crates(&index)
                 .await
                 .context("Failed to get new crates")
             {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => report_error(&e),
             }
-        }
 
-        if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-            index.run_git_gc().await;
-            last_gc = Instant::now();
+            if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+                index.run_git_gc().await;
+                last_gc = Instant::now();
+            }
         }
         tokio::time::sleep(config.delay_between_registry_fetches).await;
     }
@@ -58,8 +55,7 @@ fn start_registry_watcher(context: &Context) -> Result<(), Error> {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        let index = Index::from_config(&config).await?;
-        watch_registry(&build_queue, &config, &index).await
+        watch_registry(&build_queue, &config).await
     });
 
     Ok(())
