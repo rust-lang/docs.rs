@@ -40,8 +40,6 @@ impl BuildQueueMetrics {
     }
 }
 
-
-
 pub(crate) const PRIORITY_DEFAULT: i32 = 0;
 /// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
 #[allow(dead_code)]
@@ -818,9 +816,11 @@ FROM crates AS c
              AND b.rustc_nightly_date < $2
 
 
-"#, start_nightly_date, end_nightly_date
+"#,
+        start_nightly_date,
+        end_nightly_date
     )
-        .fetch(&mut *conn);
+    .fetch(&mut *conn);
 
     let mut results_count = 0;
     while let Some(row) = results.next().await {
@@ -918,7 +918,7 @@ mod tests {
                                 "rustc 1.84.0-nightly (e7c0d2750 {})",
                                 nightly.format("%Y-%m-%d")
                             )
-                                .as_str(),
+                            .as_str(),
                         )
                         .build_status(BuildStatus::Failure),
                 ])
@@ -980,7 +980,7 @@ mod tests {
                                 "rustc 1.84.0-nightly (e7c0d2750 {})",
                                 nightly.format("%Y-%m-%d")
                             )
-                                .as_str(),
+                            .as_str(),
                         )
                         .build_status(BuildStatus::Failure),
                 ])
@@ -1035,7 +1035,7 @@ mod tests {
                                 "rustc 1.84.0-nightly (e7c0d2750 {})",
                                 nightly.format("%Y-%m-%d")
                             )
-                                .as_str(),
+                            .as_str(),
                         )
                         .build_status(BuildStatus::Failure),
                 ])
