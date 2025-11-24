@@ -18,7 +18,7 @@ use serde::Deserialize;
 use std::{convert::Infallible, sync::Arc};
 use tracing::error;
 
-const FASTLY_FF: HeaderName = HeaderName::from_static("fastly-ff");
+const X_RLNG_SOURCE_CDN: HeaderName = HeaderName::from_static("x-rlng-source-cdn");
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResponseCacheHeaders {
@@ -127,7 +127,7 @@ where
     type Rejection = Infallible;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        if parts.headers.contains_key(FASTLY_FF) {
+        if parts.headers.contains_key(X_RLNG_SOURCE_CDN) {
             Ok(TargetCdn::Fastly)
         } else {
             Ok(TargetCdn::CloudFront)
@@ -636,7 +636,7 @@ mod tests {
         let mut builder = Request::builder().uri("/krate");
 
         if let TargetCdn::Fastly = expected_target_cdn {
-            builder = builder.header(FASTLY_FF, "some_value");
+            builder = builder.header(X_RLNG_SOURCE_CDN, "some_value");
         }
 
         let response = app
@@ -684,7 +684,7 @@ mod tests {
         let mut builder = Request::builder().uri("/");
 
         if let TargetCdn::Fastly = expected_target_cdn {
-            builder = builder.header(FASTLY_FF, "some_value");
+            builder = builder.header(X_RLNG_SOURCE_CDN, "some_value");
         }
 
         let response = app
