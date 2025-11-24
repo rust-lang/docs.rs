@@ -26,7 +26,7 @@ pub(crate) const ROOT_RUSTDOC_HTML_FILES: &[&str] = &[
     "scrape-examples-help.html",
 ];
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, bincode::Encode)]
 pub(crate) enum PageKind {
     Rustdoc,
     Source,
@@ -42,7 +42,7 @@ pub(crate) enum PageKind {
 /// All of these have more or less detail depending on how much metadata we have here.
 /// Maintains some additional fields containing "fixed" things, whos quality
 /// gets better the more metadata we provide.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, bincode::Encode)]
 pub(crate) struct RustdocParams {
     // optional behaviour marker
     page_kind: Option<PageKind>,

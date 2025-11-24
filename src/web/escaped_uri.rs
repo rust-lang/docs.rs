@@ -19,6 +19,23 @@ pub struct EscapedURI {
     fragment: Option<String>,
 }
 
+impl bincode::Encode for EscapedURI {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        // encode as separate parts so we don't have to clone
+        self.uri.scheme_str().encode(encoder)?;
+        self.uri.authority().map(|a| a.as_str()).encode(encoder)?;
+        self.uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .encode(encoder)?;
+        self.fragment.encode(encoder)?;
+        Ok(())
+    }
+}
+
 impl EscapedURI {
     pub fn from_uri(uri: Uri) -> Self {
         if uri.path_and_query().is_some() {

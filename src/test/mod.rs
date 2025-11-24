@@ -22,18 +22,21 @@ use crate::{
         page::TemplateData,
     },
 };
-use anyhow::Context as _;
+use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
-use http::{HeaderMap, StatusCode, header::CACHE_CONTROL};
+use http::{
+    HeaderMap, HeaderName, HeaderValue, StatusCode,
+    header::{CACHE_CONTROL, CONTENT_TYPE},
+};
 use http_body_util::BodyExt;
 use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
-use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
 use tokio::{runtime, task::block_in_place};
 use tower::ServiceExt;
 use tracing::error;
@@ -137,11 +140,13 @@ pub(crate) trait AxumRouterTestExt {
         config: &Config,
     ) -> Result<AxumResponse>;
     async fn assert_not_found(&self, path: &str) -> Result<()>;
-    async fn assert_success_and_conditional_get(
+    async fn assert_conditional_get(
         &self,
-        path: &str,
-        expected_body: &str,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
     ) -> Result<()>;
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()>;
+
     async fn assert_success_cached(
         &self,
         path: &str,
@@ -187,35 +192,64 @@ impl AxumRouterTestExt for axum::Router {
         Ok(response)
     }
 
-    async fn assert_success_and_conditional_get(
+    async fn assert_conditional_get(
         &self,
-        path: &str,
-        expected_body: &str,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
     ) -> Result<()> {
-        let etag: ETag = {
-            // uncached response
-            let response = self.assert_success(path).await?;
-            let etag: ETag = response.headers().typed_get().unwrap();
-
-            assert_eq!(response.text().await?, expected_body);
-
-            etag
-        };
+        let etag: ETag = uncached_response
+            .headers()
+            .typed_get()
+            .ok_or_else(|| anyhow!("missing ETag header"))?;
 
         let if_none_match = IfNoneMatch::from(etag.clone());
 
+        // general rule:
+        //
+        // if a header influences how any client or intermediate proxy should treat the response,
+        // it should be repeated on the 304 response.
+        //
+        // This logic assumes _all_ headers have to be repeated, except for a few known ones.
+        const NON_CACHE_HEADERS: &[&HeaderName] = &[&CONTENT_TYPE];
+
+        // store original headers, to assert that they are repeated on the 304 response.
+        let original_headers: HashMap<HeaderName, HeaderValue> = uncached_response
+            .headers()
+            .iter()
+            .filter(|(k, _)| !NON_CACHE_HEADERS.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
         {
-            // cached response
-            let response = self
-                .get_with_headers(path, |headers| {
+            let cached_response = self
+                .get_with_headers(initial_path, |headers| {
+                    headers.insert(X_RLNG_SOURCE_CDN, HeaderValue::from_static("fastly"));
                     headers.typed_insert(if_none_match);
                 })
                 .await?;
-            assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-            // etag is repeated
-            assert_eq!(response.headers().typed_get::<ETag>().unwrap(), etag);
+            assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+
+            // most headers are repeated on the 304 response.
+            let cached_response_headers: HashMap<HeaderName, HeaderValue> = cached_response
+                .headers()
+                .iter()
+                .filter_map(|(k, v)| {
+                    if original_headers.contains_key(k) {
+                        Some((k.clone(), v.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            assert_eq!(original_headers, cached_response_headers);
         }
         Ok(())
+    }
+
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()> {
+        self.assert_conditional_get(path, &self.assert_success(path).await?)
+            .await
     }
 
     async fn assert_not_found(&self, path: &str) -> Result<()> {

@@ -1,12 +1,13 @@
 //! rustdoc handler
 
 use crate::{
-    AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
+    AsyncStorage, BUILD_VERSION, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
+    registry_api::OwnerKind,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob,
         compression::compression_from_file_extension, rustdoc_archive_path, rustdoc_json_path,
     },
-    utils,
+    utils::{self, Dependency},
     web::{
         MetaData, ReqVersion, axum_cached_redirect,
         cache::CachePolicy,
@@ -19,8 +20,8 @@ use crate::{
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        headers::IfNoneMatch,
-        match_version,
+        headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG},
+        licenses, match_version,
         metrics::WebMetrics,
         page::{
             TemplateData,
@@ -36,8 +37,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
-use axum_extra::{headers::ContentType, typed_header::TypedHeader};
-use http::{Uri, uri::Authority};
+use axum_extra::{
+    headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
+    typed_header::TypedHeader,
+};
+use http::{HeaderMap, Uri, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -373,7 +377,69 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-#[derive(Template)]
+/// small wrapper around CrateDetails to limit serialized fields we hand
+/// to the template.
+/// Mostly to know what we have to serialize into the etag.
+pub struct LimitedCrateDetails(CrateDetails);
+
+impl From<CrateDetails> for LimitedCrateDetails {
+    fn from(value: CrateDetails) -> Self {
+        Self(value)
+    }
+}
+
+impl LimitedCrateDetails {
+    pub fn parsed_license(&self) -> Option<&[licenses::LicenseSegment]> {
+        self.0.parsed_license.as_deref()
+    }
+
+    pub fn homepage_url(&self) -> Option<&str> {
+        self.0.homepage_url.as_deref()
+    }
+
+    pub fn documentation_url(&self) -> Option<&str> {
+        self.0.documentation_url.as_deref()
+    }
+
+    pub fn repository_url(&self) -> Option<&str> {
+        self.0.repository_url.as_deref()
+    }
+
+    pub fn owners(&self) -> &[(String, String, OwnerKind)] {
+        self.0.owners.as_ref()
+    }
+
+    pub fn dependencies(&self) -> &[Dependency] {
+        self.0.dependencies.as_ref()
+    }
+
+    pub fn total_items(&self) -> Option<i32> {
+        self.0.total_items
+    }
+
+    pub fn documented_items(&self) -> Option<i32> {
+        self.0.documented_items
+    }
+}
+
+impl bincode::Encode for LimitedCrateDetails {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.parsed_license().encode(encoder)?;
+        self.homepage_url().encode(encoder)?;
+        self.documentation_url().encode(encoder)?;
+        self.repository_url().encode(encoder)?;
+        self.owners().encode(encoder)?;
+        self.dependencies().encode(encoder)?;
+        self.total_items().encode(encoder)?;
+        self.documented_items().encode(encoder)?;
+        Ok(())
+    }
+}
+
+#[derive(Template, bincode::Encode)]
 #[template(path = "rustdoc/topbar.html")]
 pub struct RustdocPage {
     pub latest_path: EscapedURI,
@@ -384,13 +450,56 @@ pub struct RustdocPage {
     // true if the URL specifies a version using the string "latest."
     pub is_latest_url: bool,
     pub is_prerelease: bool,
-    pub krate: CrateDetails,
+    pub krate: LimitedCrateDetails,
     pub metadata: MetaData,
     pub current_target: String,
     params: RustdocParams,
 }
 
 impl RustdocPage {
+    /// generate an ETag for this rustdoc page, currently based on
+    /// * the ETag of the original rustdoc HTML file
+    /// * the BUILD_VERION
+    /// * the serialized RustdocPage struct
+    ///
+    /// we might not use all of the details in html rewriting, so we might
+    /// change the etag more often than we could, but this is for now the
+    /// safe and easy way.
+    ///
+    /// Can be optimized by removing data from the struct or its children
+    /// that we don't need in the HTML rewriting.
+    #[instrument(skip_all)]
+    fn generate_etag(&self, original_rustdoc_html_etag: &ETag) -> ETag {
+        let mut etag = ETagComputer::new();
+
+        // a new release might change the HTML we generate
+        etag.consume(BUILD_VERSION);
+
+        {
+            // add the etag of the original rustdoc file from storage.
+            //
+            // This is a little annoying, there is no other way to get the inner
+            // entity-tag value out of an `headers::ETag`.
+            let mut map = HeaderMap::with_capacity(1);
+            map.typed_insert(original_rustdoc_html_etag.clone());
+            etag.consume(map.get(ETag::name()).expect("we just inserted this header"));
+        }
+
+        // we assume that all the info we put into the `RustdocPage` struct might change the
+        // page content. So we have to pipe all of it into the ETag.
+        // I chose to add the additional bincode dependency because I was worried about the
+        // added processing time when handling these responses, since this is our
+        // most accessed handler on the origin.
+        let config = bincode::config::standard()
+            .with_big_endian()
+            .with_variable_int_encoding();
+        bincode::encode_into_std_write(self, &mut etag, config)
+            .expect("bincode::Encode impl in RustdocPage can't fail");
+
+        etag.finalize()
+    }
+
+    #[instrument(skip_all)]
     async fn into_response(
         self: &Arc<Self>,
         template_data: Arc<TemplateData>,
@@ -398,28 +507,49 @@ impl RustdocPage {
         otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
-    ) -> AxumResult<AxumResponse> {
-        let is_latest_url = self.is_latest_url;
+        if_none_match: Option<&IfNoneMatch>,
+    ) -> AxumResponse {
+        let cache_policy = if self.is_latest_url {
+            CachePolicy::ForeverInCdn
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        };
+        let robots_tag = (!self.is_latest_url).then_some([(&X_ROBOTS_TAG, "noindex")]);
 
-        Ok((
-            StatusCode::OK,
-            (!is_latest_url).then_some([("X-Robots-Tag", "noindex")]),
-            Extension(if is_latest_url {
-                CachePolicy::ForeverInCdn
-            } else {
-                CachePolicy::ForeverInCdnAndStaleInBrowser
-            }),
-            TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),
-            Body::from_stream(utils::rewrite_rustdoc_html_stream(
-                template_data,
-                rustdoc_html.content,
-                max_parse_memory,
-                self.clone(),
-                metrics,
-                otel_metrics,
-            )),
-        )
-            .into_response())
+        let etag = rustdoc_html
+            .etag
+            .as_ref()
+            .map(|etag| self.generate_etag(etag));
+
+        if let Some(if_none_match) = if_none_match
+            && let Some(ref etag) = etag
+            && !if_none_match.precondition_passes(etag)
+        {
+            (
+                StatusCode::NOT_MODIFIED,
+                robots_tag,
+                TypedHeader(etag.clone()),
+                Extension(cache_policy),
+            )
+                .into_response()
+        } else {
+            (
+                StatusCode::OK,
+                robots_tag,
+                etag.map(TypedHeader),
+                Extension(cache_policy),
+                TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),
+                Body::from_stream(utils::rewrite_rustdoc_html_stream(
+                    template_data,
+                    rustdoc_html.content,
+                    max_parse_memory,
+                    self.clone(),
+                    metrics,
+                    otel_metrics,
+                )),
+            )
+                .into_response()
+        }
     }
 
     pub(crate) fn use_direct_platform_links(&self) -> bool {
@@ -650,17 +780,19 @@ pub(crate) async fn rustdoc_html_server_handler(
         is_prerelease,
         metadata: krate.metadata.clone(),
         current_target: current_target.to_owned(),
-        krate,
+        krate: krate.into(),
         params,
     });
-    page.into_response(
-        templates,
-        metrics,
-        otel_metrics,
-        blob,
-        config.max_parse_memory,
-    )
-    .await
+    Ok(page
+        .into_response(
+            templates,
+            metrics,
+            otel_metrics,
+            blob,
+            config.max_parse_memory,
+            if_none_match.as_deref(),
+        )
+        .await)
 }
 
 #[instrument(skip_all)]
@@ -1008,6 +1140,9 @@ mod test {
                 env.config(),
             )
             .await?;
+
+            web.assert_success_and_conditional_get("/krate/0.1.0/help.html")
+                .await?;
             Ok(())
         });
     }
@@ -1125,7 +1260,8 @@ mod test {
             )
             .await?;
 
-            web.assert_success("/dummy/latest/dummy/").await?;
+            web.assert_success_and_conditional_get("/dummy/latest/dummy/")
+                .await?;
 
             // set an explicit target that requires cross-compile
             let target = "x86_64-pc-windows-msvc";
@@ -1139,7 +1275,7 @@ mod test {
                 .create()
                 .await?;
             let base = "/dummy/0.2.0/dummy/";
-            web.assert_success(base).await?;
+            web.assert_success_and_conditional_get(base).await?;
             web.assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base)
                 .await?;
 
@@ -1226,11 +1362,15 @@ mod test {
         {
             let resp = web.get("/dummy/latest/dummy/").await?;
             resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+            web.assert_conditional_get("/dummy/latest/dummy/", &resp)
+                .await?;
         }
 
         {
             let resp = web.get("/dummy/0.1.0/dummy/").await?;
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+            web.assert_conditional_get("/dummy/0.1.0/dummy/", &resp)
+                .await?;
         }
         Ok(())
     }
@@ -2999,7 +3139,15 @@ mod test {
 
             let web = env.web_app().await;
 
-            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{name}"), "content")
+            assert_eq!(
+                web.assert_success(&format!("/dummy/0.1.0/{name}"))
+                    .await?
+                    .text()
+                    .await?,
+                "content"
+            );
+
+            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{name}"))
                 .await?;
 
             Ok(())
@@ -3022,11 +3170,16 @@ mod test {
 
         let web = env.web_app().await;
 
-        web.assert_success_and_conditional_get(
-            &format!("/-/rustdoc.static/{path}"),
-            "static content",
-        )
-        .await?;
+        assert_eq!(
+            web.assert_success(&format!("/-/rustdoc.static/{path}"),)
+                .await?
+                .text()
+                .await?,
+            "static content"
+        );
+
+        web.assert_success_and_conditional_get(&format!("/-/rustdoc.static/{path}"))
+            .await?;
 
         Ok(())
     }
@@ -3068,10 +3221,14 @@ mod test {
                 response.headers().get("Location"),
             );
 
-            web.assert_success_and_conditional_get(&format!("/{ROOT_ASSET}"), "content")
-                .await?;
-            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{path}"), "more_content")
-                .await?;
+            for (path, expected_content) in [
+                (format!("/{ROOT_ASSET}"), "content"),
+                (format!("/dummy/0.1.0/{path}"), "more_content"),
+            ] {
+                let resp = web.assert_success(&path).await?;
+                web.assert_conditional_get(&path, &resp).await?;
+                assert_eq!(resp.text().await?, expected_content);
+            }
 
             Ok(())
         })

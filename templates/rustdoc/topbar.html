@@ -13,9 +13,9 @@
     </script>
     {%- if krate is defined -%}
         <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link crate-name" title="{{ krate.description.as_deref().unwrap_or_default() }}">
+            <a href="#" class="pure-menu-link crate-name" title="{{ metadata.description.as_deref().unwrap_or_default() }}">
                 {{ crate::icons::IconCube.render_solid(false, false, "") }}
-                <span class="title">{{ krate.name }}-{{ krate.version }}</span>
+                <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>
 
             {#- Crate details -#}
@@ -23,7 +23,7 @@
                 {# Crate name, description and license #}
                 <ul class="pure-menu-list menu-item-divided">
                     <li class="pure-menu-heading" id="crate-title">
-                        {{ krate.name }} {{ krate.version }}
+                        {{ metadata.name }} {{ metadata.version }}
                         <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
                     </li>
 
@@ -36,12 +36,12 @@
                     {%- endif -%}
 
                     <li class="pure-menu-item">
-                        <a href="{{ params.crate_details_url() }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
+                        <a href="{{ params.crate_details_url() }}" class="pure-menu-link description" title="See {{ metadata.name }} in docs.rs">
                             {{ crate::icons::IconCube.render_solid(false, false, "") }} Docs.rs crate page
                         </a>
                     </li>
 
-                    {%- if let Some(parsed_licenses) = krate.parsed_license -%}
+                    {%- if let Some(parsed_licenses) = krate.parsed_license() -%}
                         <li class="pure-menu-item">
                             <span class="pure-menu-link description">
                             {{- crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
@@ -66,7 +66,7 @@
                             <li class="pure-menu-heading">Links</li>
 
                             {# If the crate has a homepage, show a link to it #}
-                            {%- if let Some(homepage_url) = krate.homepage_url -%}
+                            {%- if let Some(homepage_url) = krate.homepage_url() -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ homepage_url }}" class="pure-menu-link">
                                         {{ crate::icons::IconHouse.render_solid(false, false, "") }} Homepage
@@ -75,7 +75,7 @@
                             {%- endif -%}
 
                             {# If the crate has external docs, show a link #}
-                            {%- if let Some(documentation_url) = krate.documentation_url -%}
+                            {%- if let Some(documentation_url) = krate.documentation_url() -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
                                         {{ crate::icons::IconFileLines.render_regular(false, false, "") }} Documentation
@@ -84,7 +84,7 @@
                             {%- endif -%}
 
                             {# If the crate has a repo url, show it #}
-                            {%- if let Some(repository_url) = krate.repository_url -%}
+                            {%- if let Some(repository_url) = krate.repository_url() -%}
                                 <li class="pure-menu-item">
                                     <a href="{{ repository_url }}" class="pure-menu-link">
                                         {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }} Repository
@@ -93,7 +93,7 @@
                             {%- endif -%}
 
                             <li class="pure-menu-item">
-                                <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
+                                <a href="https://crates.io/crates/{{ metadata.name }}" class="pure-menu-link" title="See {{ metadata.name }} in crates.io">
                                     {{ crate::icons::IconCube.render_solid(false, false, "") }} crates.io
                                 </a>
                             </li>
@@ -112,7 +112,7 @@
                         <ul class="pure-menu-list" id="topbar-owners">
                             <li class="pure-menu-heading">Owners</li>
 
-                            {%- for owner in krate.owners -%}
+                            {%- for owner in krate.owners() -%}
                                 <li class="pure-menu-item">
                                     <a href="https://crates.io/{{ owner.2 }}s/{{ owner.0 }}" class="pure-menu-link">
                                         {{ crate::icons::IconUser.render_solid(false, false, "") }} {{ owner.0 }}
@@ -132,7 +132,7 @@
                             <li class="pure-menu-item">
                                 <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
                                     <ul class="pure-menu-list">
-                                        {% call macros::dependencies_list(dependencies=krate.dependencies, use_crate_details = false, if_empty="") %}
+                                        {% call macros::dependencies_list(dependencies=krate.dependencies(), use_crate_details = false, if_empty="") %}
                                     </ul>
                                 </div>
                             </li>
@@ -151,7 +151,7 @@
                         </ul>
                     </div>
                 </div>
-                {%- if let (Some(documented), Some(total)) = (krate.documented_items, krate.total_items) -%}
+                {%- if let (Some(documented), Some(total)) = (krate.documented_items(), krate.total_items()) -%}
                     {% set documented = documented as f32 %}
                     {% set total = total as f32 %}
                     {% set percent = documented * 100f32 / total %}
