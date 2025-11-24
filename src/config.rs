@@ -125,6 +125,9 @@ pub struct Config {
     /// same for the `static.docs.rs` distribution
     pub cloudfront_distribution_id_static: Option<String>,
 
+    /// Fastly API host, typically only overwritten for testing
+    pub fastly_api_host: Url,
+
     /// Fastly API token for purging the services below.
     pub fastly_api_token: Option<String>,
 
@@ -233,6 +236,10 @@ impl Config {
             .cdn_max_queued_age(Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?))
             .cloudfront_distribution_id_web(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?)
             .cloudfront_distribution_id_static(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?)
+            .fastly_api_host(env(
+                "DOCSRS_FASTLY_API_HOST",
+                "https://api.fastly.com".parse().unwrap(),
+            )?)
             .fastly_api_token(maybe_env("DOCSRS_FASTLY_API_TOKEN")?)
             .fastly_service_sid_web(maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?)
             .fastly_service_sid_static(maybe_env("DOCSRS_FASTLY_SERVICE_SID_STATIC")?)
