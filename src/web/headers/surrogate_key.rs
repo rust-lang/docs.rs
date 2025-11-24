@@ -164,6 +164,19 @@ impl SurrogateKeys {
 }
 
 #[cfg(test)]
+impl FromStr for SurrogateKeys {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let keys = s
+            .split(' ')
+            .map(SurrogateKey::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(SurrogateKeys(keys))
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::headers::test_typed_encode;

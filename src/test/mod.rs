@@ -2,7 +2,10 @@ mod fakes;
 pub(crate) mod headers;
 mod test_metrics;
 
-pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
+pub(crate) use self::{
+    fakes::{FakeBuild, fake_release_that_failed_before_build},
+    test_metrics::setup_test_meter_provider,
+};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
     cdn::{CdnMetrics, cloudfront::CdnBackend},
@@ -26,7 +29,7 @@ use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
 use http::header::CACHE_CONTROL;
 use http_body_util::BodyExt;
-use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader};
+use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
 use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
@@ -377,12 +380,7 @@ impl TestEnvironment {
         // create index directory
         fs::create_dir_all(config.registry_index_path.clone())?;
 
-        let metric_exporter = InMemoryMetricExporter::default();
-        let meter_provider: AnyMeterProvider = Arc::new(
-            opentelemetry_sdk::metrics::SdkMeterProvider::builder()
-                .with_reader(PeriodicReader::builder(metric_exporter.clone()).build())
-                .build(),
-        );
+        let (metric_exporter, meter_provider) = setup_test_meter_provider();
 
         let instance_metrics = Arc::new(InstanceMetrics::new()?);
         let test_db = TestDatabase::new(&config, instance_metrics.clone(), &meter_provider)
