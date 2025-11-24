@@ -86,6 +86,7 @@ uuid = { version = "1.1.2", features = ["v4"]}
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.4.0"
+bincode = "2.0.1"
 
 # axum dependencies
 async-trait = "0.1.83"

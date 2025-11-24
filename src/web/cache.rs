@@ -13,7 +13,11 @@ use axum::{
     response::Response as AxumResponse,
 };
 use axum_extra::headers::HeaderMapExt as _;
-use http::{HeaderMap, HeaderName, HeaderValue, header::CACHE_CONTROL, request::Parts};
+use http::{
+    HeaderMap, HeaderName, HeaderValue, StatusCode,
+    header::{CACHE_CONTROL, ETAG},
+    request::Parts,
+};
 use serde::Deserialize;
 use std::{convert::Infallible, sync::Arc};
 use tracing::error;
@@ -232,6 +236,15 @@ pub(crate) async fn cache_middleware(
             .keys()
             .any(|h| { h == CACHE_CONTROL || h == SURROGATE_CONTROL || h == SURROGATE_KEY })),
         "handlers should never set their own caching headers and only use CachePolicy to control caching. \n{:?}",
+        response.headers(),
+    );
+
+    debug_assert!(
+        response.status() == StatusCode::NOT_MODIFIED
+            || response.status().is_success()
+            || !response.headers().contains_key(ETAG),
+        "only successful or not-modified responses should have etags. \n{:?}\n{:?}",
+        response.status(),
         response.headers(),
     );
 

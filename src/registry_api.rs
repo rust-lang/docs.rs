@@ -44,7 +44,17 @@ pub struct CrateOwner {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, sqlx::Type,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    sqlx::Type,
+    bincode::Encode,
 )]
 #[sqlx(type_name = "owner_kind", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]

@@ -40,6 +40,20 @@ mod version_impl {
         }
     }
 
+    impl bincode::Encode for Version {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.0.major.encode(encoder)?;
+            self.0.minor.encode(encoder)?;
+            self.0.patch.encode(encoder)?;
+            bincode::Encode::encode(self.0.pre.as_str(), encoder)?;
+            bincode::Encode::encode(self.0.build.as_str(), encoder)?;
+            Ok(())
+        }
+    }
+
     impl Type<Postgres> for Version {
         fn type_info() -> PgTypeInfo {
             <String as Type<Postgres>>::type_info()

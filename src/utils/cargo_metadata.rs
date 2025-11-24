@@ -135,6 +135,22 @@ pub(crate) struct Dependency {
     pub(crate) optional: bool,
 }
 
+impl bincode::Encode for Dependency {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.name.encode(encoder)?;
+        // FIXME: VersionReq does not implement Encode, so we serialize it to string
+        // Could be fixable by wrapping VersionReq in a newtype
+        self.req.to_string().encode(encoder)?;
+        self.kind.encode(encoder)?;
+        self.rename.encode(encoder)?;
+        self.optional.encode(encoder)?;
+        Ok(())
+    }
+}
+
 impl Dependency {
     #[cfg(test)]
     pub fn new(name: String, req: VersionReq) -> Dependency {

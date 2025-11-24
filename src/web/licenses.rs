@@ -8,7 +8,7 @@ static LICENSE_ID_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("[A-Za-z0-9.-]+").expect("Known regex must compile"));
 
 /// A segment of an SPDX license string
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, bincode::Encode)]
 pub enum LicenseSegment {
     /// This is a set of glue tokens like OR, AND, `/`, `(`, `)`, etc.
     ///

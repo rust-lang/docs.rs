@@ -16,6 +16,7 @@ use crate::{
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
+use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -99,6 +100,30 @@ pub(crate) enum ReqVersion {
 impl ReqVersion {
     pub(crate) fn is_latest(&self) -> bool {
         matches!(self, ReqVersion::Latest)
+    }
+}
+
+impl bincode::Encode for ReqVersion {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        // manual implementation since VersionReq doesn't implement Encode,
+        // and I don't want to NewType it right now.
+        match self {
+            ReqVersion::Exact(v) => {
+                0u8.encode(encoder)?;
+                v.encode(encoder)
+            }
+            ReqVersion::Semver(req) => {
+                1u8.encode(encoder)?;
+                req.to_string().encode(encoder)
+            }
+            ReqVersion::Latest => {
+                2u8.encode(encoder)?;
+                Ok(())
+            }
+        }
     }
 }
 
@@ -662,8 +687,7 @@ where
 }
 
 /// MetaData used in header
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, bincode::Encode)]
 pub(crate) struct MetaData {
     pub(crate) name: String,
     /// The exact version of the release being shown.
