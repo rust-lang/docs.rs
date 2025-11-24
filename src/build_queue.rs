@@ -1062,9 +1062,9 @@ mod tests {
         assert_eq!(queue[1].name, "foo1");
         assert_eq!(queue[1].version, V2);
         assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
-        assert_eq!(queue[1].name, "foo2");
-        assert_eq!(queue[1].version, V1);
-        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[2].name, "foo2");
+        assert_eq!(queue[2].version, V1);
+        assert_eq!(queue[2].priority, PRIORITY_BROKEN_RUSTDOC);
 
         Ok(())
     }
