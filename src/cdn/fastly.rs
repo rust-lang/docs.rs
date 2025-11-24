@@ -46,9 +46,13 @@ where
         // SurrogateKeys::from_iter::until_full only consumes as many elements as will fit into
         // the header.
         // The rest is up to the next `batching` iteration.
-        Some(SurrogateKeys::from_iter_until_full(
-            it.take(MAX_SURROGATE_KEYS_IN_BATCH_PURGE),
-        ))
+        let keys = SurrogateKeys::from_iter_until_full(it.take(MAX_SURROGATE_KEYS_IN_BATCH_PURGE));
+
+        if keys.key_count() > 0 {
+            Some(keys)
+        } else {
+            None
+        }
     }) {
         for sid in config
             .fastly_service_sid_web
