@@ -474,7 +474,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                params.clone().with_req_version(version).rustdoc_url(),
+                dbg!(params.clone().with_req_version(version)).rustdoc_url(),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -3461,6 +3461,30 @@ mod test {
         let web = env.web_app().await;
         web.assert_redirect_unchecked(path, expected_redirect)
             .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fetch_item_with_semver_url() -> Result<()> {
+        // https://github.com/rust-lang/docs.rs/issues/3036
+
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("itertools")
+            .version("0.14.0")
+            .rustdoc_file("itertools/trait.Itertools.html")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        web.assert_redirect(
+            "/itertools/^0.14/itertools/trait.Itertools.html",
+            "/itertools/0.14.0/itertools/trait.Itertools.html",
+        )
+        .await?;
 
         Ok(())
     }

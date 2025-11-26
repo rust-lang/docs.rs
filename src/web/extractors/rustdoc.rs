@@ -720,9 +720,24 @@ fn generate_rustdoc_url(name: &str, version: &ReqVersion, path: &str) -> Escaped
 fn generate_rustdoc_path_for_url(
     target_name: Option<&str>,
     default_target: Option<&str>,
-    doc_target: Option<&str>,
-    inner_path: Option<&str>,
+    mut doc_target: Option<&str>,
+    mut inner_path: Option<&str>,
 ) -> String {
+    // if we have an "unparsed" set of params, we might have a part of
+    // the inner path in `doc_target`. Thing is:
+    // We don't know if that's a real target, or a part of the path,
+    // But the "saner" default for this method is to treat it as part
+    // of the path, not a potential doc target.
+    let inner_path = if target_name.is_none()
+        && default_target.is_none()
+        && let (Some(doc_target), Some(inner_path)) = (doc_target.take(), inner_path.as_mut())
+        && !doc_target.is_empty()
+    {
+        Some(format!("{doc_target}/{inner_path}"))
+    } else {
+        inner_path.map(|s| s.to_string())
+    };
+
     // first validate & fix the inner path to use.
     let result = if let Some(path) = inner_path
         && !path.is_empty()
@@ -737,7 +752,7 @@ fn generate_rustdoc_path_for_url(
             // * it's not just "index.html"
             // * we have a slash in the path.
             path.to_string()
-        } else if ROOT_RUSTDOC_HTML_FILES.contains(&path) {
+        } else if ROOT_RUSTDOC_HTML_FILES.contains(&path.as_str()) {
             // special case: some files are at the root of the rustdoc output,
             // without a trailing slash, and the routes are fine with that.
             // e.g. `/help.html`, `/settings.html`, `/all.html`, ...
@@ -1681,5 +1696,24 @@ mod tests {
         dbg!(&params);
 
         assert_eq!(params.rustdoc_url(), expected_url);
+    }
+
+    #[test]
+    fn test_item_with_semver_url() {
+        // https://github.com/rust-lang/docs.rs/iss
+
+        let ver: Version = "0.14.0".parse().unwrap();
+        let params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(ver))
+            .with_doc_target(KRATE)
+            .with_inner_path("trait.Itertools.html");
+
+        dbg!(&params);
+
+        assert_eq!(
+            params.rustdoc_url(),
+            format!("/{KRATE}/0.14.0/{KRATE}/trait.Itertools.html")
+        )
     }
 }
