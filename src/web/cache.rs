@@ -18,7 +18,7 @@ use serde::Deserialize;
 use std::{convert::Infallible, sync::Arc};
 use tracing::error;
 
-const X_RLNG_SOURCE_CDN: HeaderName = HeaderName::from_static("x-rlng-source-cdn");
+pub const X_RLNG_SOURCE_CDN: HeaderName = HeaderName::from_static("x-rlng-source-cdn");
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResponseCacheHeaders {
@@ -305,7 +305,7 @@ pub(crate) async fn cache_middleware(
             // It's totally possible that this policy here then states NO_CACHING,
             // or FOREVER_IN_CDN_AND_BROWSER, where we wouln't need the surrogate key.
             &cache_headers
-        } else {
+        } else if cache_headers.needs_cdn_invalidation {
             // This theoretically shouldn't happen, all current crate names would be valid
             // for surrogate keys, and the `KrateName` validation matches the crates.io crate
             // publish validation.
@@ -314,14 +314,13 @@ pub(crate) async fn cache_middleware(
             if resp_status.is_success() || resp_status.is_redirection() {
                 error!(
                     name = param.name,
-                    "failed to create surrogate key for crate"
+                    ?cache_headers,
+                    "failed to create surrogate key for crate, falling back to NO_CACHING"
                 );
             }
-            if cache_headers.needs_cdn_invalidation {
-                &NO_CACHING
-            } else {
-                &cache_headers
-            }
+            &NO_CACHING
+        } else {
+            &cache_headers
         }
     } else {
         debug_assert!(

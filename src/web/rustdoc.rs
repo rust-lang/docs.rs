@@ -2098,11 +2098,13 @@ mod test {
                 .create()
                 .await?;
             let web = env.web_app().await;
-            let resp = web
-                .assert_redirect("/dummy", "/dummy/latest/dummy/")
-                .await?;
-            assert_eq!(resp.status(), StatusCode::FOUND);
-            assert!(resp.headers().get("Cache-Control").is_none());
+            web.assert_redirect_cached(
+                "/dummy",
+                "/dummy/latest/dummy/",
+                CachePolicy::ForeverInCdn,
+                env.config(),
+            )
+            .await?;
             Ok(())
         })
     }
@@ -3032,7 +3034,15 @@ mod test {
     #[test_case("search-1234.js")]
     #[test_case("settings-1234.js")]
     fn fallback_to_root_storage_for_some_js_assets(path: &str) {
-        // test workaround for https://github.com/rust-lang/docs.rs/issues/1979
+        // tests for two separate things needed to serve old rustdoc content
+        // 1. `/{crate}/{version}/asset.js`, where we try to find the assets in the rustdoc archive
+        // 2. `/asset.js` where we try to find it in RUSTDOC_STATIC_STORAGE_PREFIX
+        //
+        // For 2), new builds use the assets from RUSTDOC_STATIC_STORAGE_PREFIX via
+        // `/-/rustdoc.static/asset.js`.
+        //
+        // For 1) I'm actually not sure, new builds don't seem to have these assets.
+        // ( the logic is special-cased to `search-` and `settings-` prefixes.)
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
@@ -3042,13 +3052,15 @@ mod test {
                 .create()
                 .await?;
 
+            const ROOT_ASSET: &str = "normalize-20200403-1.44.0-nightly-74bd074ee.css";
+
             let storage = env.async_storage();
-            storage.store_one("asset.js", *b"content").await?;
+            storage.store_one(ROOT_ASSET, *b"content").await?;
             storage.store_one(path, *b"more_content").await?;
 
             let web = env.web_app().await;
 
-            let response = web.get("/dummy/0.1.0/asset.js").await?;
+            let response = web.get(&format!("/dummy/0.1.0/{ROOT_ASSET}")).await?;
             assert_eq!(
                 response.status(),
                 StatusCode::NOT_FOUND,
@@ -3056,7 +3068,7 @@ mod test {
                 response.headers().get("Location"),
             );
 
-            web.assert_success_and_conditional_get("/asset.js", "content")
+            web.assert_success_and_conditional_get(&format!("/{ROOT_ASSET}"), "content")
                 .await?;
             web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{path}"), "more_content")
                 .await?;
