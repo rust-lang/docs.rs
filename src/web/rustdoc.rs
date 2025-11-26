@@ -474,7 +474,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         })?
         .into_canonical_req_version_or_else(|version| {
             AxumNope::Redirect(
-                dbg!(params.clone().with_req_version(version)).rustdoc_url(),
+                params.clone().with_req_version(version).rustdoc_url(),
                 CachePolicy::ForeverInCdn,
             )
         })?;
@@ -3468,7 +3468,9 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_item_with_semver_url() -> Result<()> {
         // https://github.com/rust-lang/docs.rs/issues/3036
-
+        // This fixes an issue where we mistakenly attached a
+        // trailing `/` to a rustdoc URL when redirecting
+        // to the exact version, coming from a semver version.
         let env = TestEnvironment::new().await?;
 
         env.fake_release()

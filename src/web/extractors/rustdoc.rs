@@ -1700,7 +1700,10 @@ mod tests {
 
     #[test]
     fn test_item_with_semver_url() {
-        // https://github.com/rust-lang/docs.rs/iss
+        // https://github.com/rust-lang/docs.rs/issues/3036
+        // This fixes an issue where we mistakenly attached a
+        // trailing `/` to a rustdoc URL when redirecting
+        // to the exact version, coming from a semver version.
 
         let ver: Version = "0.14.0".parse().unwrap();
         let params = RustdocParams::new(KRATE)
