@@ -17,7 +17,7 @@ use crate::{
     test::test_metrics::CollectedMetrics,
     web::{
         build_axum_app,
-        cache::{self, TargetCdn},
+        cache::{self, TargetCdn, X_RLNG_SOURCE_CDN},
         headers::{IfNoneMatch, SURROGATE_CONTROL},
         page::TemplateData,
     },
@@ -108,7 +108,7 @@ impl AxumResponseTestExt for axum::response::Response {
         // we emit the wrong cache policy in a handler.
         //
         // The fastly specifics are tested in web::cache unittests.
-        assert_cache_headers_eq(self, &cache_policy.render(config, TargetCdn::CloudFront));
+        assert_cache_headers_eq(self, &cache_policy.render(config, TargetCdn::Fastly));
     }
 
     fn error_for_status(self) -> Result<Self>
@@ -248,7 +248,13 @@ impl AxumRouterTestExt for axum::Router {
     async fn get(&self, path: &str) -> Result<AxumResponse> {
         Ok(self
             .clone()
-            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(X_RLNG_SOURCE_CDN, "fastly")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await?)
     }
 
