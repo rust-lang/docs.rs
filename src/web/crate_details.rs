@@ -480,13 +480,6 @@ pub(crate) async fn crate_details_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
-    if params.original_path() != params.crate_details_url().path() {
-        return Err(AxumNope::Redirect(
-            params.crate_details_url(),
-            CachePolicy::ForeverInCdn,
-        ));
-    }
-
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
@@ -497,6 +490,13 @@ pub(crate) async fn crate_details_handler(
             )
         })?;
     let params = params.apply_matched_release(&matched_release);
+
+    if params.original_path() != params.crate_details_url().path() {
+        return Err(AxumNope::Redirect(
+            params.crate_details_url(),
+            CachePolicy::ForeverInCdn,
+        ));
+    }
 
     let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
@@ -717,6 +717,7 @@ mod tests {
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
@@ -2219,10 +2220,19 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            env.web_app()
-                .await
-                .assert_redirect_unchecked("/crate/dummy%3E", "/crate/dummy%3E/latest")
-                .await?;
+            let resp = env.web_app().await.get("/crate/dummy%3E").await?;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+            Ok(())
+        })
+    }
+
+    #[test_case("/crate/dummy"; "without")]
+    #[test_case("/crate/dummy/"; "slash")]
+    fn test_unknown_crate_not_found_doesnt_redirect(path: &str) {
+        async_wrapper(|env| async move {
+            let resp = env.web_app().await.get(path).await?;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
             Ok(())
         })
