@@ -380,45 +380,41 @@ pub(crate) async fn rustdoc_redirector_handler(
 /// small wrapper around CrateDetails to limit serialized fields we hand
 /// to the template.
 /// Mostly to know what we have to serialize into the etag.
-pub struct LimitedCrateDetails(CrateDetails);
+pub struct LimitedCrateDetails {
+    parsed_license: Option<Vec<licenses::LicenseSegment>>,
+    homepage_url: Option<String>,
+    documentation_url: Option<String>,
+    repository_url: Option<String>,
+    owners: Vec<(String, String, OwnerKind)>,
+    dependencies: Vec<Dependency>,
+    total_items: Option<i32>,
+    documented_items: Option<i32>,
+}
 
 impl From<CrateDetails> for LimitedCrateDetails {
     fn from(value: CrateDetails) -> Self {
-        Self(value)
-    }
-}
+        let CrateDetails {
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+            total_items,
+            documented_items,
+            ..
+        } = value;
 
-impl LimitedCrateDetails {
-    pub fn parsed_license(&self) -> Option<&[licenses::LicenseSegment]> {
-        self.0.parsed_license.as_deref()
-    }
-
-    pub fn homepage_url(&self) -> Option<&str> {
-        self.0.homepage_url.as_deref()
-    }
-
-    pub fn documentation_url(&self) -> Option<&str> {
-        self.0.documentation_url.as_deref()
-    }
-
-    pub fn repository_url(&self) -> Option<&str> {
-        self.0.repository_url.as_deref()
-    }
-
-    pub fn owners(&self) -> &[(String, String, OwnerKind)] {
-        self.0.owners.as_ref()
-    }
-
-    pub fn dependencies(&self) -> &[Dependency] {
-        self.0.dependencies.as_ref()
-    }
-
-    pub fn total_items(&self) -> Option<i32> {
-        self.0.total_items
-    }
-
-    pub fn documented_items(&self) -> Option<i32> {
-        self.0.documented_items
+        Self {
+            total_items,
+            documented_items,
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+        }
     }
 }
 
@@ -427,14 +423,14 @@ impl bincode::Encode for LimitedCrateDetails {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        self.parsed_license().encode(encoder)?;
-        self.homepage_url().encode(encoder)?;
-        self.documentation_url().encode(encoder)?;
-        self.repository_url().encode(encoder)?;
-        self.owners().encode(encoder)?;
-        self.dependencies().encode(encoder)?;
-        self.total_items().encode(encoder)?;
-        self.documented_items().encode(encoder)?;
+        self.parsed_license.encode(encoder)?;
+        self.homepage_url.encode(encoder)?;
+        self.documentation_url.encode(encoder)?;
+        self.repository_url.encode(encoder)?;
+        self.owners.encode(encoder)?;
+        self.dependencies.encode(encoder)?;
+        self.total_items.encode(encoder)?;
+        self.documented_items.encode(encoder)?;
         Ok(())
     }
 }
