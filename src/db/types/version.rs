@@ -45,9 +45,16 @@ mod version_impl {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.0.major.encode(encoder)?;
-            self.0.minor.encode(encoder)?;
-            self.0.patch.encode(encoder)?;
+            let Self(semver::Version {
+                major,
+                minor,
+                patch,
+                pre: _,
+                build: _,
+            }) = self;
+            major.encode(encoder)?;
+            minor.encode(encoder)?;
+            patch.encode(encoder)?;
             bincode::Encode::encode(self.0.pre.as_str(), encoder)?;
             bincode::Encode::encode(self.0.build.as_str(), encoder)?;
             Ok(())

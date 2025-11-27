@@ -140,13 +140,20 @@ impl bincode::Encode for Dependency {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        self.name.encode(encoder)?;
+        let Self {
+            name,
+            req,
+            kind,
+            rename,
+            optional,
+        } = self;
+        name.encode(encoder)?;
         // FIXME: VersionReq does not implement Encode, so we serialize it to string
         // Could be fixable by wrapping VersionReq in a newtype
-        self.req.to_string().encode(encoder)?;
-        self.kind.encode(encoder)?;
-        self.rename.encode(encoder)?;
-        self.optional.encode(encoder)?;
+        req.to_string().encode(encoder)?;
+        kind.encode(encoder)?;
+        rename.encode(encoder)?;
+        optional.encode(encoder)?;
         Ok(())
     }
 }
