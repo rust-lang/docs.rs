@@ -423,14 +423,25 @@ impl bincode::Encode for LimitedCrateDetails {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        self.parsed_license.encode(encoder)?;
-        self.homepage_url.encode(encoder)?;
-        self.documentation_url.encode(encoder)?;
-        self.repository_url.encode(encoder)?;
-        self.owners.encode(encoder)?;
-        self.dependencies.encode(encoder)?;
-        self.total_items.encode(encoder)?;
-        self.documented_items.encode(encoder)?;
+        let LimitedCrateDetails {
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+            total_items,
+            documented_items,
+        } = self;
+
+        parsed_license.encode(encoder)?;
+        homepage_url.encode(encoder)?;
+        documentation_url.encode(encoder)?;
+        repository_url.encode(encoder)?;
+        owners.encode(encoder)?;
+        dependencies.encode(encoder)?;
+        total_items.encode(encoder)?;
+        documented_items.encode(encoder)?;
         Ok(())
     }
 }
