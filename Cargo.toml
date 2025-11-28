@@ -135,7 +135,6 @@ debug = "line-tables-only"
 [build-dependencies]
 time = "0.3"
 md5 = "0.8.0"
-gix = { version = "0.75.0", default-features = false }
 string_cache_codegen = "0.6.1"
 phf_codegen = "0.13"
 walkdir = "2"
