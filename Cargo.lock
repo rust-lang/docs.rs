@@ -2010,13 +2010,11 @@ dependencies = [
  "aws-config",
  "aws-sdk-cloudfront",
  "aws-sdk-s3",
- "aws-smithy-http",
  "aws-smithy-runtime",
  "aws-smithy-types",
  "aws-smithy-types-convert",
  "axum",
  "axum-extra",
- "backtrace",
  "base64 0.22.1",
  "bincode 2.0.1",
  "bzip2",
@@ -2052,7 +2050,6 @@ dependencies = [
  "mime_guess",
  "mockito",
  "num_cpus",
- "once_cell",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-resource-detectors",
@@ -2083,7 +2080,6 @@ dependencies = [
  "tempfile",
  "test-case",
  "thiserror 2.0.17",
- "thread_local",
  "time",
  "tokio",
  "tokio-util",
@@ -5849,9 +5845,6 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
-dependencies = [
- "parking_lot_core",
-]
 
 [[package]]
 name = "once_cell_polyfill"
