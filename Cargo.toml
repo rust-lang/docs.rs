@@ -35,7 +35,6 @@ sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "c
 url = { version = "2.1.1", features = ["serde"] }
 docsrs-metadata = { path = "crates/metadata" }
 anyhow = { version = "1.0.42", features = ["backtrace"]}
-backtrace = "0.3.61"
 thiserror = "2.0.3"
 comrak = { version = "0.48.0", default-features = false }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
@@ -51,7 +50,6 @@ zstd = "0.13.0"
 flate2 = "1.1.1"
 hostname = "0.4.0"
 path-slash = "0.2.0"
-once_cell = { version = "1.4.0", features = ["parking_lot"] }
 base64 = "0.22"
 strum = { version = "0.27.0", features = ["derive"] }
 lol_html = "2.0.0"
@@ -109,7 +107,6 @@ phf = "0.13.1"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 
 # Transitive dependencies we don't use directly but need to have specific versions of
-thread_local = "1.1.3"
 constant_time_eq = "0.4.2"
 md5 = "0.8.0"
 
@@ -124,7 +121,6 @@ tower = { version = "0.5.1", features = ["util"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
 aws-smithy-types = "1.0.1"
 aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
-aws-smithy-http = "0.62.0"
 indoc = "2.0.0"
 pretty_assertions = "1.4.0"
 
@@ -141,7 +137,6 @@ phf_codegen = "0.13"
 walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
-once_cell = { version = "1.4.0", features = ["parking_lot"] }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
 
 [[bench]]
