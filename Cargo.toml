@@ -128,10 +128,6 @@ aws-smithy-http = "0.62.0"
 indoc = "2.0.0"
 pretty_assertions = "1.4.0"
 
-[profile.dev.package."*"]
-opt-level = 2
-debug = "line-tables-only"
-
 [build-dependencies]
 time = "0.3"
 md5 = "0.8.0"

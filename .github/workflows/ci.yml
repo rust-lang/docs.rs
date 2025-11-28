@@ -10,6 +10,9 @@ on:
 
 env:
   RUST_CACHE_KEY: rust-cache-20241114
+  # disable incremental builds in CI, it's not needed
+  CARGO_INCREMENTAL: 0
+
 
 jobs:
   sqlx:
