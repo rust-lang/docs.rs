@@ -245,6 +245,39 @@ impl AsyncBuildQueue {
         .await?
         .is_some())
     }
+
+    async fn remove_crate_from_queue(&self, name: &str) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+        sqlx::query!(
+            "DELETE
+             FROM queue
+             WHERE name = $1
+             ",
+            name
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn remove_version_from_queue(&self, name: &str, version: &Version) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+        sqlx::query!(
+            "DELETE
+             FROM queue
+             WHERE
+                name = $1 AND
+                version = $2
+             ",
+            name,
+            version as _,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
 }
 
 /// Locking functions.
@@ -331,19 +364,22 @@ impl AsyncBuildQueue {
                 }
 
                 self.queue_crate_invalidation(&mut conn, krate).await;
+                self.remove_crate_from_queue(krate).await?;
                 continue;
             }
 
             if let Some(release) = change.version_deleted() {
+                let version: Version = release
+                    .version
+                    .parse()
+                    .context("couldn't parse release version as semver")?;
+
                 match delete_version(
                     &mut conn,
                     &self.storage,
                     &self.config,
                     &release.name,
-                    &release
-                        .version
-                        .parse()
-                        .context("couldn't parse release version as semver")?,
+                    &version,
                 )
                 .await
                 .with_context(|| {
@@ -361,6 +397,8 @@ impl AsyncBuildQueue {
 
                 self.queue_crate_invalidation(&mut conn, &release.name)
                     .await;
+                self.remove_version_from_queue(&release.name, &version)
+                    .await?;
                 continue;
             }
 
@@ -849,9 +887,8 @@ FROM crates AS c
 mod tests {
     use super::*;
     use crate::db::types::BuildStatus;
-    use crate::test::{FakeBuild, TestEnvironment, V1, V2};
+    use crate::test::{FakeBuild, KRATE, TestEnvironment, V1, V2};
     use chrono::Utc;
-
     use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1716,6 +1753,50 @@ mod tests {
             assert_eq!(long_version, krate.version);
             Ok(BuildPackageSummary::default())
         })?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_version_from_queue() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let queue = env.async_build_queue();
+        assert_eq!(queue.pending_count().await?, 0);
+
+        queue.add_crate(KRATE, &V1, 0, None).await?;
+        queue.add_crate(KRATE, &V2, 0, None).await?;
+
+        assert_eq!(queue.pending_count().await?, 2);
+        queue.remove_version_from_queue(KRATE, &V1).await?;
+
+        assert_eq!(queue.pending_count().await?, 1);
+
+        // only v2 remains
+        if let [k] = queue.queued_crates().await?.as_slice() {
+            assert_eq!(k.name, KRATE);
+            assert_eq!(k.version, V2);
+        } else {
+            panic!("expected only one queued crate");
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_crate_from_queue() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let queue = env.async_build_queue();
+        assert_eq!(queue.pending_count().await?, 0);
+
+        queue.add_crate(KRATE, &V1, 0, None).await?;
+        queue.add_crate(KRATE, &V2, 0, None).await?;
+
+        assert_eq!(queue.pending_count().await?, 2);
+        queue.remove_crate_from_queue(KRATE).await?;
+
+        assert_eq!(queue.pending_count().await?, 0);
 
         Ok(())
     }

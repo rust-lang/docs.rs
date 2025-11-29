@@ -15,12 +15,6 @@ use super::{CrateId, update_latest_version_id};
 static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "rustdoc-json", "sources"];
 static OTHER_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
 
-#[derive(Debug, thiserror::Error)]
-enum CrateDeletionError {
-    #[error("crate is missing: {0}")]
-    MissingCrate(String),
-}
-
 #[context("error trying to delete crate {name} from database")]
 pub async fn delete_crate(
     conn: &mut sqlx::PgConnection,
@@ -28,7 +22,10 @@ pub async fn delete_crate(
     config: &Config,
     name: &str,
 ) -> Result<()> {
-    let crate_id = get_id(conn, name).await?;
+    let Some(crate_id) = get_id(conn, name).await? else {
+        return Ok(());
+    };
+
     let is_library = delete_crate_from_database(conn, name, crate_id).await?;
     // #899
     let paths = if is_library {
@@ -68,7 +65,11 @@ pub async fn delete_version(
     name: &str,
     version: &Version,
 ) -> Result<()> {
-    let is_library = delete_version_from_database(conn, name, version).await?;
+    let Some(crate_id) = get_id(conn, name).await? else {
+        return Ok(());
+    };
+
+    let is_library = delete_version_from_database(conn, crate_id, version).await?;
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
@@ -105,7 +106,7 @@ pub async fn delete_version(
     Ok(())
 }
 
-async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<CrateId> {
+async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<Option<CrateId>> {
     Ok(sqlx::query_scalar!(
         r#"
         SELECT id as "id: CrateId"
@@ -115,8 +116,7 @@ async fn get_id(conn: &mut sqlx::PgConnection, name: &str) -> Result<CrateId> {
         name
     )
     .fetch_optional(&mut *conn)
-    .await?
-    .ok_or_else(|| CrateDeletionError::MissingCrate(name.into()))?)
+    .await?)
 }
 
 // metaprogramming!
@@ -131,10 +131,9 @@ const METADATA: &[(&str, &str)] = &[
 /// Returns whether this release was a library
 async fn delete_version_from_database(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    crate_id: CrateId,
     version: &Version,
 ) -> Result<bool> {
-    let crate_id = get_id(conn, name).await?;
     let mut transaction = conn.begin().await?;
     for &(table, column) in METADATA {
         sqlx::query(
@@ -151,20 +150,6 @@ async fn delete_version_from_database(
     .unwrap_or(false);
 
     update_latest_version_id(&mut transaction, crate_id).await?;
-
-    let paths = if is_library {
-        LIBRARY_STORAGE_PATHS_TO_DELETE
-    } else {
-        OTHER_STORAGE_PATHS_TO_DELETE
-    };
-    for prefix in paths {
-        sqlx::query!(
-            "DELETE FROM files WHERE path LIKE $1;",
-            format!("{prefix}/{name}/{version}/%"),
-        )
-        .execute(&mut *transaction)
-        .await?;
-    }
 
     transaction.commit().await?;
     Ok(is_library)
@@ -224,7 +209,7 @@ mod tests {
     use crate::db::ReleaseId;
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::storage::{CompressionAlgorithm, rustdoc_json_path};
-    use crate::test::{V1, V2, async_wrapper, fake_release_that_failed_before_build};
+    use crate::test::{KRATE, V1, V2, async_wrapper, fake_release_that_failed_before_build};
     use test_case::test_case;
 
     async fn crate_exists(conn: &mut sqlx::PgConnection, name: &str) -> Result<bool> {
@@ -541,5 +526,36 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_missing_crate_doesnt_error() -> Result<()> {
+        let env = crate::test::TestEnvironment::new().await?;
+
+        let db = env.async_db();
+        let mut conn = db.async_conn().await;
+
+        assert!(!crate_exists(&mut conn, KRATE).await?);
+        delete_crate(&mut conn, env.async_storage(), env.config(), KRATE).await?;
+
+        assert!(!crate_exists(&mut conn, KRATE).await?);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_missing_version_doesnt_error() -> Result<()> {
+        let env = crate::test::TestEnvironment::new().await?;
+
+        let db = env.async_db();
+        let mut conn = db.async_conn().await;
+
+        assert!(!crate_exists(&mut conn, KRATE).await?);
+
+        delete_version(&mut conn, env.async_storage(), env.config(), KRATE, &V1).await?;
+
+        assert!(!crate_exists(&mut conn, KRATE).await?);
+
+        Ok(())
     }
 }
