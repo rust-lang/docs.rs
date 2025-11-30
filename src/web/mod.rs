@@ -5,7 +5,7 @@ pub mod page;
 use crate::{
     db::{
         CrateId,
-        types::{BuildStatus, version::Version},
+        types::{BuildStatus, krate_name::KrateName, version::Version},
     },
     utils::{get_correct_docsrs_style_file, report_error},
     web::{
@@ -201,12 +201,12 @@ impl TryFrom<&str> for ReqVersion {
 #[derive(Debug)]
 pub(crate) struct MatchedRelease {
     /// crate name
-    pub name: String,
+    pub name: KrateName,
 
     /// The crate name that was found when attempting to load a crate release.
     /// `match_version` will attempt to match a provided crate name against similar crate names with
     /// dashes (`-`) replaced with underscores (`_`) and vice versa.
-    pub corrected_name: Option<String>,
+    pub corrected_name: Option<KrateName>,
 
     /// what kind of version did we get in the request? ("latest", semver, exact)
     pub req_version: ReqVersion,
@@ -344,12 +344,12 @@ async fn match_version(
     name: &str,
     input_version: &ReqVersion,
 ) -> Result<MatchedRelease, AxumNope> {
-    let (crate_id, corrected_name) = {
+    let (crate_id, name, corrected_name) = {
         let row = sqlx::query!(
             r#"
              SELECT
                 id as "id: CrateId",
-                name
+                name as "name: KrateName"
              FROM crates
              WHERE normalize_crate_name(name) = normalize_crate_name($1)"#,
             name,
@@ -359,10 +359,14 @@ async fn match_version(
         .context("error fetching crate")?
         .ok_or(AxumNope::CrateNotFound)?;
 
+        let name: KrateName = name
+            .parse()
+            .expect("here we know it's valid, because we found it after normalizing");
+
         if row.name != name {
-            (row.id, Some(row.name))
+            (row.id, name, Some(row.name))
         } else {
-            (row.id, None)
+            (row.id, name, None)
         }
     };
 
@@ -383,7 +387,7 @@ async fn match_version(
                 .find(|release| &release.version == parsed_req_version)
             {
                 return Ok(MatchedRelease {
-                    name: name.to_owned(),
+                    name,
                     corrected_name,
                     req_version: input_version.clone(),
                     release: release.clone(),
@@ -689,7 +693,7 @@ where
 /// MetaData used in header
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, bincode::Encode)]
 pub(crate) struct MetaData {
-    pub(crate) name: String,
+    pub(crate) name: KrateName,
     /// The exact version of the release being shown.
     pub(crate) version: Version,
     /// The version identifier in the request that was used to request this page.
@@ -718,7 +722,7 @@ impl MetaData {
     ) -> Result<MetaData> {
         let row = sqlx::query!(
             r#"SELECT
-                crates.name,
+                crates.name as "name: KrateName",
                 releases.version,
                 releases.description,
                 releases.target_name,
@@ -1208,7 +1212,7 @@ mod test {
     #[test]
     fn serialize_metadata() {
         let mut metadata = MetaData {
-            name: "serde".to_string(),
+            name: "serde".parse().unwrap(),
             version: "1.0.0".parse().unwrap(),
             req_version: ReqVersion::Latest,
             description: Some("serde does stuff".to_string()),
@@ -1295,7 +1299,7 @@ mod test {
             assert_eq!(
                 metadata.unwrap(),
                 MetaData {
-                    name: "foo".to_string(),
+                    name: "foo".parse().unwrap(),
                     version: "0.1.0".parse().unwrap(),
                     req_version: ReqVersion::Latest,
                     description: Some("Fake package".to_string()),

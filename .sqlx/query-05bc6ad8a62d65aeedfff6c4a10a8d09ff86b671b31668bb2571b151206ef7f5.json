@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                crates.name,\n                releases.version,\n                releases.description,\n                releases.target_name,\n                releases.rustdoc_status,\n                releases.default_target,\n                releases.doc_targets,\n                releases.yanked,\n                builds.rustc_version as \"rustc_version?\"\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            LEFT JOIN LATERAL (\n                SELECT * FROM builds\n                WHERE builds.rid = releases.id\n                ORDER BY builds.build_finished\n                DESC LIMIT 1\n            ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2",
+  "query": "SELECT\n                crates.name as \"name: KrateName\",\n                releases.version,\n                releases.description,\n                releases.target_name,\n                releases.rustdoc_status,\n                releases.default_target,\n                releases.doc_targets,\n                releases.yanked,\n                builds.rustc_version as \"rustc_version?\"\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            LEFT JOIN LATERAL (\n                SELECT * FROM builds\n                WHERE builds.rid = releases.id\n                ORDER BY builds.build_finished\n                DESC LIMIT 1\n            ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "name",
+        "name": "name: KrateName",
         "type_info": "Text"
       },
       {
@@ -67,5 +67,5 @@
       true
     ]
   },
-  "hash": "f93135119437ea6896864d413e0c6321ba93e043002509290acf736e7210caf2"
+  "hash": "05bc6ad8a62d65aeedfff6c4a10a8d09ff86b671b31668bb2571b151206ef7f5"
 }

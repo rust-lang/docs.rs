@@ -2,7 +2,10 @@ use crate::{
     AsyncStorage,
     db::{
         BuildId, CrateId, ReleaseId,
-        types::{BuildStatus, dependencies::ReleaseDependencyList, version::Version},
+        types::{
+            BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName,
+            version::Version,
+        },
     },
     impl_axum_webpage,
     registry_api::OwnerKind,
@@ -36,7 +39,7 @@ use std::sync::Arc;
 // TODO: Add target name and versions
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrateDetails {
-    pub(crate) name: String,
+    pub(crate) name: KrateName,
     pub(crate) version: Version,
     pub(crate) description: Option<String>,
     pub(crate) owners: Vec<(String, String, OwnerKind)>,
@@ -136,7 +139,7 @@ impl CrateDetails {
             r#"SELECT
                 crates.id AS "crate_id: CrateId",
                 releases.id AS "release_id: ReleaseId",
-                crates.name,
+                crates.name as "name: KrateName",
                 releases.version,
                 releases.description,
                 releases.dependencies,
@@ -437,7 +440,7 @@ pub(crate) async fn releases_for_crate(
 #[template(path = "crate/details.html")]
 struct CrateDetailsPage {
     version: Version,
-    name: String,
+    name: KrateName,
     owners: Vec<(String, String, OwnerKind)>,
     metadata: MetaData,
     documented_items: Option<i32>,
