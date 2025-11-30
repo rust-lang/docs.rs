@@ -2,6 +2,7 @@
 
 use crate::{
     db::BuildId,
+    storage::CompressionAlgorithm,
     web::{
         MatchedRelease, MetaData, ReqVersion, error::AxumNope, escaped_uri::EscapedURI,
         extractors::Path, url_decode,
@@ -573,6 +574,30 @@ impl RustdocParams {
         EscapedURI::from_path(path)
     }
 
+    pub(crate) fn json_download_url(
+        &self,
+        wanted_compression: Option<CompressionAlgorithm>,
+        format_version: Option<&str>,
+    ) -> EscapedURI {
+        let mut path = format!("/crate/{}/{}", self.name, self.req_version);
+
+        if let Some(doc_target) = self.doc_target() {
+            path.push_str(&format!("/{doc_target}"));
+        }
+
+        if let Some(format_version) = format_version {
+            path.push_str(&format!("/json/{format_version}"));
+        } else {
+            path.push_str("/json");
+        }
+
+        if let Some(wanted_compression) = wanted_compression {
+            path.push_str(&format!(".{}", wanted_compression.file_extension()));
+        }
+
+        EscapedURI::from_path(path)
+    }
+
     pub(crate) fn features_url(&self) -> EscapedURI {
         EscapedURI::from_path(format!(
             "/crate/{}/{}/features",
@@ -863,7 +888,7 @@ mod tests {
     use super::*;
     use crate::{
         db::types::version::Version,
-        test::{AxumResponseTestExt, AxumRouterTestExt},
+        test::{AxumResponseTestExt, AxumRouterTestExt, V1},
     };
     use axum::{Router, routing::get};
     use test_case::test_case;
@@ -1718,5 +1743,67 @@ mod tests {
             params.rustdoc_url(),
             format!("/{KRATE}/0.14.0/{KRATE}/trait.Itertools.html")
         )
+    }
+
+    #[test_case(None)]
+    #[test_case(Some(CompressionAlgorithm::Gzip))]
+    #[test_case(Some(CompressionAlgorithm::Zstd))]
+    fn test_plain_json_url(wanted_compression: Option<CompressionAlgorithm>) {
+        let mut params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(V1));
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, None),
+            format!(
+                "/crate/{KRATE}/{V1}/json{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+
+        params = params.with_doc_target("some-target");
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, None),
+            format!(
+                "/crate/{KRATE}/{V1}/some-target/json{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+    }
+
+    #[test_case(None)]
+    #[test_case(Some(CompressionAlgorithm::Gzip))]
+    #[test_case(Some(CompressionAlgorithm::Zstd))]
+    fn test_plain_json_url_with_format(wanted_compression: Option<CompressionAlgorithm>) {
+        let mut params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(V1));
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, Some("42")),
+            format!(
+                "/crate/{KRATE}/{V1}/json/42{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+
+        params = params.with_doc_target("some-target");
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, Some("42")),
+            format!(
+                "/crate/{KRATE}/{V1}/some-target/json/42{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
     }
 }

@@ -154,7 +154,7 @@ pub(crate) trait AxumRouterTestExt {
         path: &str,
         cache_policy: cache::CachePolicy,
         config: &Config,
-    ) -> Result<()>;
+    ) -> Result<AxumResponse>;
     async fn assert_success(&self, path: &str) -> Result<AxumResponse>;
     async fn get(&self, path: &str) -> Result<AxumResponse>;
     async fn post(&self, path: &str) -> Result<AxumResponse>;
@@ -269,7 +269,7 @@ impl AxumRouterTestExt for axum::Router {
         path: &str,
         cache_policy: cache::CachePolicy,
         config: &Config,
-    ) -> Result<()> {
+    ) -> Result<AxumResponse> {
         let response = self.get(path).await?;
         let status = response.status();
         assert!(
@@ -278,7 +278,7 @@ impl AxumRouterTestExt for axum::Router {
             response.redirect_target().unwrap_or_default()
         );
         response.assert_cache_control(cache_policy, config);
-        Ok(())
+        Ok(response)
     }
 
     async fn get(&self, path: &str) -> Result<AxumResponse> {
