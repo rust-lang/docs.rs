@@ -18,7 +18,17 @@ use std::{io::Write, str::FromStr};
 /// FIXME: this should actually come from some shared crate between the rust projects,
 /// so the amount of duplication is less.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Deref, Into, Display, DeserializeFromStr, SerializeDisplay,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Deref,
+    Into,
+    Display,
+    DeserializeFromStr,
+    SerializeDisplay,
+    bincode::Encode,
 )]
 pub struct KrateName(String);
 
