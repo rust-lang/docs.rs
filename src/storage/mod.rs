@@ -419,14 +419,22 @@ impl AsyncStorage {
         self.get_stream(path).await?.materialize(max_size).await
     }
 
-    /// get a decompressing stream to an object in storage
+    /// get a raw stream to an object in storage
+    ///
+    /// We don't decompress ourselves, S3 only decompresses with a correct
+    /// `Content-Encoding` header set, which we don't.
     #[instrument]
-    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
-        let blob = match &self.backend {
+    pub(crate) async fn get_raw_stream(&self, path: &str) -> Result<StreamingBlob> {
+        match &self.backend {
             StorageBackend::Database(db) => db.get_stream(path, None).await,
             StorageBackend::S3(s3) => s3.get_stream(path, None).await,
-        }?;
-        Ok(blob.decompress().await?)
+        }
+    }
+
+    /// get a decompressing stream to an object in storage.
+    #[instrument]
+    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
+        Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
     /// get, decompress and materialize part of an object from store

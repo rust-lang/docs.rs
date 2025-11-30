@@ -54,7 +54,7 @@ pub const RUSTDOC_JSON_COMPRESSION_ALGORITHMS: &[CompressionAlgorithm] =
     &[CompressionAlgorithm::Zstd, CompressionAlgorithm::Gzip];
 
 /// read the format version from a rustdoc JSON file.
-fn read_format_version_from_rustdoc_json(
+pub fn read_format_version_from_rustdoc_json(
     reader: impl std::io::Read,
 ) -> Result<RustdocJsonFormatVersion> {
     let reader = BufReader::new(reader);
