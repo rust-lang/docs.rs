@@ -491,9 +491,9 @@ async fn apply_middleware(
                     .report_request_timeouts
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
-            .layer(option_layer(
-                context.config.request_timeout.map(TimeoutLayer::new),
-            ))
+            .layer(option_layer(context.config.request_timeout.map(|to| {
+                TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to)
+            })))
             .layer(Extension(context.pool.clone()))
             .layer(Extension(context.async_build_queue.clone()))
             .layer(Extension(context.service_metrics.clone()))
