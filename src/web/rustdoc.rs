@@ -3317,9 +3317,9 @@ mod test {
         });
     }
 
-    #[test_case("/crate/dummy/0.1/json", "/crate/dummy/0.1.0/json"; "semver")]
+    #[test_case("/crate/dummy/0.1/json", "/crate/dummy/0.1.0/json")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn json_download_redirect(path: &str, expected_redirect: &str) -> Result<()> {
+    async fn json_download_semver_redirect(path: &str, expected_redirect: &str) -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         env.fake_release()
