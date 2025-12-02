@@ -7,7 +7,7 @@ use aws_sdk_s3::{
     Client,
     config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
-    types::{Delete, ObjectIdentifier, Tag, Tagging},
+    types::{Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use axum_extra::headers;
@@ -19,9 +19,6 @@ use futures_util::{
 };
 use std::sync::Arc;
 use tracing::{error, instrument, warn};
-
-const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
-const PUBLIC_ACCESS_VALUE: &str = "allow";
 
 // error codes to check for when trying to determine if an error is
 // a "NOT FOUND" error.
@@ -136,49 +133,6 @@ impl S3Backend {
             Err(err) if err.is::<super::PathNotFoundError>() => Ok(false),
             Err(other) => Err(other),
         }
-    }
-
-    pub(super) async fn get_public_access(&self, path: &str) -> Result<bool, Error> {
-        Ok(self
-            .client
-            .get_object_tagging()
-            .bucket(&self.bucket)
-            .key(path)
-            .send()
-            .await
-            .convert_errors()?
-            .tag_set()
-            .iter()
-            .filter(|tag| tag.key() == PUBLIC_ACCESS_TAG)
-            .any(|tag| tag.value() == PUBLIC_ACCESS_VALUE))
-    }
-
-    pub(super) async fn set_public_access(&self, path: &str, public: bool) -> Result<(), Error> {
-        self.client
-            .put_object_tagging()
-            .bucket(&self.bucket)
-            .key(path)
-            .tagging(if public {
-                Tagging::builder()
-                    .tag_set(
-                        Tag::builder()
-                            .key(PUBLIC_ACCESS_TAG)
-                            .value(PUBLIC_ACCESS_VALUE)
-                            .build()
-                            .context("could not build tag")?,
-                    )
-                    .build()
-                    .context("could not build tags")?
-            } else {
-                Tagging::builder()
-                    .set_tag_set(Some(vec![]))
-                    .build()
-                    .context("could not build tags")?
-            })
-            .send()
-            .await
-            .convert_errors()
-            .map(|_| ())
     }
 
     #[instrument(skip(self))]

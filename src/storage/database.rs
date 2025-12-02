@@ -33,40 +33,6 @@ impl DatabaseBackend {
         .await?)
     }
 
-    pub(super) async fn get_public_access(&self, path: &str) -> Result<bool> {
-        match sqlx::query_scalar!(
-            "SELECT public
-             FROM files
-             WHERE path = $1",
-            path
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        {
-            Some(public) => Ok(public),
-            None => Err(super::PathNotFoundError.into()),
-        }
-    }
-
-    pub(super) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        if sqlx::query!(
-            "UPDATE files
-             SET public = $2
-             WHERE path = $1",
-            path,
-            public,
-        )
-        .execute(&self.pool)
-        .await?
-        .rows_affected()
-            == 1
-        {
-            Ok(())
-        } else {
-            Err(super::PathNotFoundError.into())
-        }
-    }
-
     pub(super) async fn get_stream(
         &self,
         path: &str,
