@@ -78,7 +78,6 @@ fn main() -> Result<()> {
     let mut etag_map: ETagMap = ETagMap::new();
 
     compile_sass(out_dir, &mut etag_map)?;
-    write_known_targets(out_dir)?;
     compile_syntax(out_dir).context("could not compile syntax files")?;
     calculate_static_etags(&mut etag_map)?;
 
@@ -222,24 +221,6 @@ fn calculate_static_etags(etag_map: &mut ETagMap) -> Result<()> {
             etag_map.entry(partial_path_str, etag_from_path(path)?);
         }
     }
-
-    Ok(())
-}
-
-fn write_known_targets(out_dir: &Path) -> Result<()> {
-    use std::io::BufRead;
-
-    let targets: Vec<String> = std::process::Command::new("rustc")
-        .args(["--print", "target-list"])
-        .output()?
-        .stdout
-        .lines()
-        .filter(|s| s.as_ref().map_or(true, |s| !s.is_empty()))
-        .collect::<std::io::Result<_>>()?;
-
-    string_cache_codegen::AtomType::new("target::TargetAtom", "target_atom!")
-        .atoms(&targets)
-        .write_to_file(&out_dir.join("target_atom.rs"))?;
 
     Ok(())
 }
