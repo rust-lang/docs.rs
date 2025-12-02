@@ -21,7 +21,6 @@
 #     - release-rebuild-enqueuer
 #
 # optional profile: `metrics`:
-# * `prometheus` -> configured prometheus instance
 # * `opentelemetry` -> a debug opentelemetry receiver
 #
 # optional profile: `full`: all of the above.
@@ -44,12 +43,6 @@
 #   * docker-native for DB, S3, rustwide workspace, crates.io index
 #   * mounts for prefix
 #
-# * prometheus scrape config is set to collect from the web server, the
-#   registry watcher, and the build servers. Scraping is not dynamic, so
-#   the local prometheus server will try to fetch from all service
-#   instances (web, watcher, builder), and just error in case the specific
-#   server isn't accessible.
-
 x-docker-cache: &docker-cache
     # shared configuration to cache docker layers across CI runs.
     # can just always be in in the `docker-compose.yml`, and will
@@ -275,28 +268,6 @@ services:
             <<: *healthcheck-interval
             test: mc ready local
 
-    prometheus:
-        build:
-            context: ./dockerfiles
-            dockerfile: ./Dockerfile-prometheus
-            <<: *docker-cache
-        ports:
-            - "127.0.0.1:9090:9090"
-        # we intentionally don't define depends_on here.
-        # While the scrapers are configured to fetch from eventually running
-        # web or build-servers, adding these as dependency would mean we can't
-        # test metrics just with a webserver.
-        # Prometheus will just scrape from the working endpoints, and skip/error
-        # on the broken ones.
-        healthcheck:
-            <<: *healthcheck-interval
-            test: promtool check healthy
-        profiles:
-            # we rarely need to test with actual prometheus, so always running
-            # it is a waste.
-            - metrics
-            - full
-
     opentelemetry:
         build:
             context: ./dockerfiles
@@ -309,8 +280,8 @@ services:
             test: curl --silent --fail http://localhost:13133/health
 
         profiles:
-            # we rarely need to test with actual prometheus, so always running
-            # it is a waste.
+            # we rarely need to test with actual opentelemetry, so always
+            # running it is a waste.
             - metrics
             - full
 

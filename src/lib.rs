@@ -10,10 +10,9 @@ pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
 pub use self::index::Index;
-pub use self::metrics::{InstanceMetrics, ServiceMetrics};
 pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
-pub use self::web::{start_background_metrics_webserver, start_web_server};
+pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
 

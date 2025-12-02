@@ -20,7 +20,7 @@ compose-up-builder:
 compose-up-watcher: 
   just compose-up watcher
 
-# Launch prometheus server in the background 
+# Launch metrics collector in the background 
 [group('compose')]
 compose-up-metrics: 
   just compose-up metrics

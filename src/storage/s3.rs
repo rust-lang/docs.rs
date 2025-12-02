@@ -1,5 +1,5 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{Config, InstanceMetrics, web::headers::compute_etag};
+use crate::{Config, web::headers::compute_etag};
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
@@ -17,7 +17,6 @@ use futures_util::{
     pin_mut,
     stream::{FuturesUnordered, Stream, StreamExt},
 };
-use std::sync::Arc;
 use tracing::{error, instrument, warn};
 
 const PUBLIC_ACCESS_TAG: &str = "static-cloudfront-access";
@@ -73,18 +72,13 @@ where
 pub(super) struct S3Backend {
     client: Client,
     bucket: String,
-    metrics: Arc<InstanceMetrics>,
     otel_metrics: StorageMetrics,
     #[cfg(test)]
     temporary: bool,
 }
 
 impl S3Backend {
-    pub(super) async fn new(
-        metrics: Arc<InstanceMetrics>,
-        config: &Config,
-        otel_metrics: StorageMetrics,
-    ) -> Result<Self, Error> {
+    pub(super) async fn new(config: &Config, otel_metrics: StorageMetrics) -> Result<Self, Error> {
         let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
             .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
@@ -114,7 +108,6 @@ impl S3Backend {
 
         Ok(Self {
             client,
-            metrics,
             otel_metrics,
             bucket: config.s3_bucket.clone(),
             #[cfg(test)]
@@ -279,7 +272,6 @@ impl S3Backend {
                         .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
                         .send()
                         .map_ok(|_| {
-                            self.metrics.uploaded_files_total.inc();
                             self.otel_metrics.uploaded_files.add(1, &[]);
                         })
                         .map_err(|err| {

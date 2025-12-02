@@ -7,7 +7,7 @@ use crate::{
         CrateId,
         types::{BuildStatus, version::Version},
     },
-    utils::{get_correct_docsrs_style_file, report_error},
+    utils::get_correct_docsrs_style_file,
     web::{
         metrics::WebMetrics,
         page::templates::{RenderBrands, RenderSolid, filters},
@@ -496,8 +496,6 @@ async fn apply_middleware(
             })))
             .layer(Extension(context.pool.clone()))
             .layer(Extension(context.async_build_queue.clone()))
-            .layer(Extension(context.service_metrics.clone()))
-            .layer(Extension(context.instance_metrics.clone()))
             .layer(Extension(web_metrics))
             .layer(Extension(context.config.clone()))
             .layer(Extension(context.registry_api.clone()))
@@ -518,49 +516,6 @@ pub(crate) async fn build_axum_app(
     apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
 }
 
-pub(crate) async fn build_metrics_axum_app(context: &Context) -> Result<AxumRouter, Error> {
-    apply_middleware(routes::build_metric_routes(), context, None).await
-}
-
-pub fn start_background_metrics_webserver(
-    addr: Option<SocketAddr>,
-    context: &Context,
-) -> Result<(), Error> {
-    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND);
-
-    tracing::info!(
-        "Starting metrics web server on `{}:{}`",
-        axum_addr.ip(),
-        axum_addr.port()
-    );
-
-    let metrics_axum_app = context
-        .runtime
-        .block_on(build_metrics_axum_app(context))?
-        .into_make_service();
-
-    context.runtime.spawn(async move {
-        match tokio::net::TcpListener::bind(axum_addr)
-            .await
-            .context("error binding socket for metrics web server")
-        {
-            Ok(listener) => {
-                if let Err(err) = axum::serve(listener, metrics_axum_app)
-                    .await
-                    .context("error running metrics web server")
-                {
-                    report_error(&err);
-                }
-            }
-            Err(err) => {
-                report_error(&err);
-            }
-        };
-    });
-
-    Ok(())
-}
-
 #[instrument(skip_all)]
 pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(), Error> {
     let template_data = Arc::new(TemplateData::new(context.config.render_threads)?);
@@ -579,7 +534,7 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(
             .into_make_service();
         let listener = tokio::net::TcpListener::bind(axum_addr)
             .await
-            .context("error binding socket for metrics web server")?;
+            .context("error binding socket for web server")?;
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())

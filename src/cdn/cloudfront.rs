@@ -1,5 +1,5 @@
 use super::CdnMetrics;
-use crate::{Config, InstanceMetrics, utils::report_error};
+use crate::{Config, utils::report_error};
 use anyhow::{Context, Error, Result, anyhow, bail};
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudfront::{
@@ -303,7 +303,6 @@ impl CdnBackend {
 #[instrument(skip_all, fields(distribution_id))]
 pub(crate) async fn full_invalidation(
     cdn: &CdnBackend,
-    metrics: &InstanceMetrics,
     otel_metrics: &CdnMetrics,
     conn: &mut sqlx::PgConnection,
     distribution_id: &str,
@@ -323,10 +322,6 @@ pub(crate) async fn full_invalidation(
     {
         if let Ok(duration) = (now - row.queued).to_std() {
             let duration = duration.as_secs_f64();
-            metrics
-                .cdn_queue_time
-                .with_label_values(&[distribution_id])
-                .observe(duration);
             otel_metrics.queue_time.record(
                 duration,
                 &[KeyValue::new("distribution", distribution_id.to_string())],
@@ -365,7 +360,6 @@ pub(crate) async fn full_invalidation(
 pub(crate) async fn handle_queued_invalidation_requests(
     config: &Config,
     cdn: &CdnBackend,
-    metrics: &InstanceMetrics,
     otel_metrics: &CdnMetrics,
     conn: &mut sqlx::PgConnection,
     distribution_id: &str,
@@ -431,10 +425,6 @@ pub(crate) async fn handle_queued_invalidation_requests(
     {
         if let Ok(duration) = (now - row.created_in_cdn.expect("this is always Some")).to_std() {
             let duration = duration.as_secs_f64();
-            metrics
-                .cdn_invalidation_time
-                .with_label_values(&[distribution_id])
-                .observe(duration);
             otel_metrics.invalidation_time.record(
                 duration,
                 &[KeyValue::new("distribution", distribution_id.to_string())],
@@ -466,7 +456,7 @@ pub(crate) async fn handle_queued_invalidation_requests(
     .await?
         && (now - min_queued).to_std().unwrap_or_default() >= config.cdn_max_queued_age
     {
-        full_invalidation(cdn, metrics, otel_metrics, conn, distribution_id).await?;
+        full_invalidation(cdn, otel_metrics, conn, distribution_id).await?;
         return Ok(());
     }
 
@@ -493,10 +483,6 @@ pub(crate) async fn handle_queued_invalidation_requests(
 
         if let Ok(duration) = (now - row.queued).to_std() {
             let duration = duration.as_secs_f64();
-            metrics
-                .cdn_queue_time
-                .with_label_values(&[distribution_id])
-                .observe(duration);
             otel_metrics.queue_time.record(
                 duration,
                 &[KeyValue::new("distribution", distribution_id.to_string())],
@@ -789,19 +775,11 @@ mod tests {
         let metrics = otel_metrics(&env);
 
         // now handle the queued invalidations
+        handle_queued_invalidation_requests(config, cdn, &metrics, &mut conn, DISTRIBUTION_ID_WEB)
+            .await?;
         handle_queued_invalidation_requests(
             config,
             cdn,
-            env.instance_metrics(),
-            &metrics,
-            &mut conn,
-            DISTRIBUTION_ID_WEB,
-        )
-        .await?;
-        handle_queued_invalidation_requests(
-            config,
-            cdn,
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
@@ -896,19 +874,11 @@ mod tests {
         let metrics = otel_metrics(&env);
 
         // now handle the queued invalidations
+        handle_queued_invalidation_requests(config, cdn, &metrics, &mut conn, DISTRIBUTION_ID_WEB)
+            .await?;
         handle_queued_invalidation_requests(
             config,
             cdn,
-            env.instance_metrics(),
-            &metrics,
-            &mut conn,
-            DISTRIBUTION_ID_WEB,
-        )
-        .await?;
-        handle_queued_invalidation_requests(
-            config,
-            cdn,
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
@@ -939,19 +909,11 @@ mod tests {
         cdn.clear_active_invalidations();
 
         // now handle again
+        handle_queued_invalidation_requests(config, cdn, &metrics, &mut conn, DISTRIBUTION_ID_WEB)
+            .await?;
         handle_queued_invalidation_requests(
             config,
             cdn,
-            env.instance_metrics(),
-            &metrics,
-            &mut conn,
-            DISTRIBUTION_ID_WEB,
-        )
-        .await?;
-        handle_queued_invalidation_requests(
-            config,
-            cdn,
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_STATIC,
@@ -1021,7 +983,6 @@ mod tests {
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
@@ -1085,7 +1046,6 @@ mod tests {
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
@@ -1118,7 +1078,6 @@ mod tests {
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,
@@ -1161,7 +1120,6 @@ mod tests {
         handle_queued_invalidation_requests(
             env.config(),
             env.cdn(),
-            env.instance_metrics(),
             &metrics,
             &mut conn,
             DISTRIBUTION_ID_WEB,

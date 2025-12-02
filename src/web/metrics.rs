@@ -1,13 +1,7 @@
-use crate::{
-    AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics,
-    db::Pool,
-    metrics::{RESPONSE_TIME_HISTOGRAM_BUCKETS, otel::AnyMeterProvider},
-    web::error::AxumResult,
-};
-use anyhow::{Context as _, Result};
+use crate::metrics::{RESPONSE_TIME_HISTOGRAM_BUCKETS, otel::AnyMeterProvider};
 use axum::{
-    extract::{Extension, MatchedPath, Request as AxumRequest},
-    http::{StatusCode, header::CONTENT_TYPE},
+    extract::{MatchedPath, Request as AxumRequest},
+    http::StatusCode,
     middleware::Next,
     response::IntoResponse,
 };
@@ -15,8 +9,7 @@ use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},
 };
-use prometheus::{Encoder, TextEncoder, proto::MetricFamily};
-use std::{borrow::Cow, future::Future, sync::Arc, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub(crate) struct WebMetrics {
@@ -53,56 +46,6 @@ impl WebMetrics {
     }
 }
 
-async fn fetch_and_render_metrics<Fut>(fetch_metrics: Fut) -> AxumResult<impl IntoResponse>
-where
-    Fut: Future<Output = Result<Vec<MetricFamily>>> + Send + 'static,
-{
-    let metrics_families = fetch_metrics.await?;
-
-    let mut buffer = Vec::new();
-    TextEncoder::new()
-        .encode(&metrics_families, &mut buffer)
-        .context("error encoding metrics")?;
-
-    Ok((
-        StatusCode::OK,
-        [(CONTENT_TYPE, mime::TEXT_PLAIN.as_ref())],
-        buffer,
-    ))
-}
-
-pub(super) async fn metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(config): Extension<Arc<Config>>,
-    Extension(instance_metrics): Extension<Arc<InstanceMetrics>>,
-    Extension(service_metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move {
-        let mut families = Vec::new();
-        families.extend_from_slice(&instance_metrics.gather(&pool)?);
-        families.extend_from_slice(&service_metrics.gather(&pool, &queue, &config).await?);
-        Ok(families)
-    })
-    .await
-}
-
-pub(super) async fn service_metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(config): Extension<Arc<Config>>,
-    Extension(metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move { metrics.gather(&pool, &queue, &config).await }).await
-}
-
-pub(super) async fn instance_metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move { metrics.gather(&pool) }).await
-}
-
 /// Request recorder middleware
 ///
 /// Looks similar, but *is not* a usable middleware / layer
@@ -126,12 +69,6 @@ pub(crate) async fn request_recorder(
     } else {
         Cow::Owned(request.uri().path().to_string())
     };
-
-    let metrics = request
-        .extensions()
-        .get::<Arc<InstanceMetrics>>()
-        .expect("metrics missing in request extensions")
-        .clone();
 
     let otel_metrics = request
         .extensions()
@@ -161,18 +98,7 @@ pub(crate) async fn request_recorder(
         KeyValue::new("status_kind", status_kind),
     ];
 
-    metrics
-        .routes_visited
-        .with_label_values(&[&route_name])
-        .inc();
-
     otel_metrics.routes_visited.add(1, &attrs);
-
-    metrics
-        .response_time
-        .with_label_values(&[&route_name])
-        .observe(resp_time);
-
     otel_metrics.response_time.record(resp_time, &attrs);
 
     result
@@ -180,7 +106,7 @@ pub(crate) async fn request_recorder(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::test::{AxumRouterTestExt, async_wrapper};
     use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
@@ -244,7 +170,6 @@ mod tests {
                 .await?;
 
             let frontend = env.web_app().await;
-            let metrics = env.instance_metrics();
 
             for (route, _) in ROUTES.iter() {
                 frontend.get(route).await?;
@@ -350,80 +275,6 @@ mod tests {
                 )
             );
 
-            // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.context.pool)?;
-            let all_routes_visited = metrics_serialized
-                .iter()
-                .find(|x| x.name() == "docsrs_routes_visited")
-                .unwrap();
-            let routes_visited_pretty: Vec<_> = all_routes_visited
-                .get_metric()
-                .iter()
-                .map(|metric| {
-                    let labels = metric.get_label();
-                    assert_eq!(labels.len(), 1); // not sure when this would be false
-                    let route = labels[0].value();
-                    let count = metric.get_counter().get_value();
-                    format!("{route}: {count}")
-                })
-                .collect();
-            println!("routes: {routes_visited_pretty:?}");
-
-            for (label, count) in expected.iter() {
-                assert_eq!(
-                    metrics.routes_visited.with_label_values(&[*label]).get(),
-                    *count,
-                    "routes_visited metrics for {label} are incorrect",
-                );
-                assert_eq!(
-                    metrics
-                        .response_time
-                        .with_label_values(&[*label])
-                        .get_sample_count(),
-                    *count,
-                    "response_time metrics for {label} are incorrect",
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics").await?;
-            assert!(response.status().is_success());
-
-            let body = response.text().await?;
-            assert!(body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(body.contains("queued_crates_count"), "{}", body);
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_service_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics/service").await?;
-            assert!(response.status().is_success());
-
-            let body = response.text().await?;
-            assert!(!body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(body.contains("queued_crates_count"), "{}", body);
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_instance_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics/instance").await?;
-            assert!(response.status().is_success());
-
-            let body = response.text().await?;
-            assert!(body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(!body.contains("queued_crates_count"), "{}", body);
             Ok(())
         })
     }

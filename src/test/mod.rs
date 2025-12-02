@@ -7,7 +7,7 @@ pub(crate) use self::{
     test_metrics::setup_test_meter_provider,
 };
 use crate::{
-    AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
+    AsyncBuildQueue, BuildQueue, Config, Context,
     cdn::{CdnMetrics, cloudfront::CdnBackend},
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
@@ -477,19 +477,13 @@ impl TestEnvironment {
 
         let (metric_exporter, meter_provider) = setup_test_meter_provider();
 
-        let instance_metrics = Arc::new(InstanceMetrics::new()?);
-        let test_db = TestDatabase::new(&config, instance_metrics.clone(), &meter_provider)
+        let test_db = TestDatabase::new(&config, &meter_provider)
             .await
             .context("can't initialize test database")?;
 
         Ok(Self {
-            context: Context::from_test_config(
-                config,
-                instance_metrics,
-                meter_provider,
-                test_db.pool().clone(),
-            )
-            .await?,
+            context: Context::from_test_config(config, meter_provider, test_db.pool().clone())
+                .await?,
             db: test_db,
             owned_runtime: None,
             collected_metrics: metric_exporter,
@@ -542,10 +536,6 @@ impl TestEnvironment {
 
     pub(crate) fn storage(&self) -> &Storage {
         &self.context.storage
-    }
-
-    pub(crate) fn instance_metrics(&self) -> &InstanceMetrics {
-        &self.context.instance_metrics
     }
 
     pub(crate) fn meter_provider(&self) -> &AnyMeterProvider {
@@ -605,16 +595,12 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    async fn new(
-        config: &Config,
-        metrics: Arc<InstanceMetrics>,
-        otel_meter_provider: &AnyMeterProvider,
-    ) -> Result<Self> {
+    async fn new(config: &Config, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, metrics, &schema, otel_meter_provider).await?;
+        let pool = Pool::new_with_schema(config, &schema, otel_meter_provider).await?;
 
         let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
         sqlx::query(&format!("CREATE SCHEMA {schema}"))

@@ -1,6 +1,5 @@
 use crate::{
-    AsyncStorage, Config, Context, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi,
-    Storage,
+    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
     db::{
         BuildId, CrateId, Pool, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
@@ -169,7 +168,6 @@ pub struct RustwideBuilder {
     db: Pool,
     storage: Arc<Storage>,
     async_storage: Arc<AsyncStorage>,
-    metrics: Arc<InstanceMetrics>,
     registry_api: Arc<RegistryApi>,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     workspace_initialize_time: Instant,
@@ -191,7 +189,6 @@ impl RustwideBuilder {
             runtime: context.runtime.clone(),
             storage: context.storage.clone(),
             async_storage: context.async_storage.clone(),
-            metrics: context.instance_metrics.clone(),
             registry_api: context.registry_api.clone(),
             repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
@@ -779,9 +776,6 @@ impl RustwideBuilder {
                             true,
                         ))?;
                     let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
-                    self.metrics
-                        .documentation_size
-                        .observe(documentation_size as f64 / 1024.0 / 1024.0);
                     self.builder_metrics.documentation_size.record(documentation_size, &[]);
                     algs.insert(new_alg);
                     Some(documentation_size)
@@ -816,13 +810,10 @@ impl RustwideBuilder {
                 }
 
                 if res.result.successful {
-                    self.metrics.successful_builds.inc();
                     self.builder_metrics.successful_builds.add(1, &[]);
                 } else if res.cargo_metadata.root().is_library() {
-                    self.metrics.failed_builds.inc();
                     self.builder_metrics.failed_builds.add(1, &[]);
                 } else {
-                    self.metrics.non_library_builds.inc();
                     self.builder_metrics.non_library_builds.add(1, &[]);
                 }
 

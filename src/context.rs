@@ -1,6 +1,5 @@
 use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, InstanceMetrics, RegistryApi,
-    ServiceMetrics, Storage,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, RegistryApi, Storage,
     cdn::{CdnMetrics, cloudfront::CdnBackend},
     db::Pool,
     metrics::otel::{AnyMeterProvider, get_meter_provider},
@@ -19,8 +18,6 @@ pub struct Context {
     pub cdn: Arc<CdnBackend>,
     pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
-    pub service_metrics: Arc<ServiceMetrics>,
-    pub instance_metrics: Arc<InstanceMetrics>,
     pub registry_api: Arc<RegistryApi>,
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
@@ -30,23 +27,19 @@ pub struct Context {
 impl Context {
     /// Create a new context environment from the given configuration.
     pub async fn from_config(config: Config) -> Result<Self> {
-        let instance_metrics = Arc::new(InstanceMetrics::new()?);
         let meter_provider = get_meter_provider(&config)?;
-        let pool = Pool::new(&config, instance_metrics.clone(), &meter_provider).await?;
-        Self::from_config_with_metrics_and_pool(config, instance_metrics, meter_provider, pool)
-            .await
+        let pool = Pool::new(&config, &meter_provider).await?;
+        Self::from_config_with_metrics_and_pool(config, meter_provider, pool).await
     }
 
     /// Create a new context environment from the given configuration, for running tests.
     #[cfg(test)]
     pub async fn from_test_config(
         config: Config,
-        instance_metrics: Arc<InstanceMetrics>,
         meter_provider: AnyMeterProvider,
         pool: Pool,
     ) -> Result<Self> {
-        Self::from_config_with_metrics_and_pool(config, instance_metrics, meter_provider, pool)
-            .await
+        Self::from_config_with_metrics_and_pool(config, meter_provider, pool).await
     }
 
     /// private function for context environment generation, allows passing in a
@@ -54,27 +47,18 @@ impl Context {
     /// Mostly so we can support test environments with their db
     async fn from_config_with_metrics_and_pool(
         config: Config,
-        instance_metrics: Arc<InstanceMetrics>,
         meter_provider: AnyMeterProvider,
         pool: Pool,
     ) -> Result<Self> {
         let config = Arc::new(config);
 
-        let async_storage = Arc::new(
-            AsyncStorage::new(
-                pool.clone(),
-                instance_metrics.clone(),
-                config.clone(),
-                &meter_provider,
-            )
-            .await?,
-        );
+        let async_storage =
+            Arc::new(AsyncStorage::new(pool.clone(), config.clone(), &meter_provider).await?);
 
         let cdn_metrics = Arc::new(CdnMetrics::new(&meter_provider));
         let cdn = Arc::new(CdnBackend::new(&config).await);
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
-            instance_metrics.clone(),
             config.clone(),
             async_storage.clone(),
             cdn_metrics.clone(),
@@ -95,8 +79,6 @@ impl Context {
             cdn,
             cdn_metrics,
             pool: pool.clone(),
-            service_metrics: Arc::new(ServiceMetrics::new()?),
-            instance_metrics,
             registry_api: Arc::new(RegistryApi::new(
                 config.registry_api_host.clone(),
                 config.crates_io_api_call_retries,

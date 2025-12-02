@@ -1,7 +1,7 @@
 //! rustdoc handlerr
 
 use crate::{
-    AsyncStorage, BUILD_VERSION, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
+    AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
     registry_api::OwnerKind,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
@@ -510,7 +510,6 @@ impl RustdocPage {
     async fn into_response(
         self: &Arc<Self>,
         template_data: Arc<TemplateData>,
-        metrics: Arc<InstanceMetrics>,
         otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
@@ -551,7 +550,6 @@ impl RustdocPage {
                     rustdoc_html.content,
                     max_parse_memory,
                     self.clone(),
-                    metrics,
                     otel_metrics,
                 )),
             )
@@ -572,7 +570,6 @@ impl RustdocPage {
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_html_server_handler(
     params: RustdocParams,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
     Extension(otel_metrics): Extension<Arc<WebMetrics>>,
     Extension(templates): Extension<Arc<TemplateData>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
@@ -774,10 +771,6 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     let current_target = params.doc_target_or_default().unwrap_or_default();
 
-    metrics
-        .recently_accessed_releases
-        .record(krate.crate_id, krate.release_id, current_target);
-
     // Build the page of documentation,
     let page = Arc::new(RustdocPage {
         latest_path,
@@ -793,7 +786,6 @@ pub(crate) async fn rustdoc_html_server_handler(
     Ok(page
         .into_response(
             templates,
-            metrics,
             otel_metrics,
             blob,
             config.max_parse_memory,

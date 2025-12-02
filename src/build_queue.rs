@@ -1,5 +1,5 @@
 use crate::{
-    BuildPackageSummary, Config, Context, Index, InstanceMetrics, RustwideBuilder,
+    BuildPackageSummary, Config, Context, Index, RustwideBuilder,
     cdn::{self, CdnMetrics},
     db::{
         CrateId, Pool, delete_crate, delete_version,
@@ -70,7 +70,6 @@ pub struct AsyncBuildQueue {
     config: Arc<Config>,
     storage: Arc<AsyncStorage>,
     pub(crate) db: Pool,
-    metrics: Arc<InstanceMetrics>,
     queue_metrics: BuildQueueMetrics,
     builder_metrics: Arc<BuilderMetrics>,
     cdn_metrics: Arc<CdnMetrics>,
@@ -80,7 +79,6 @@ pub struct AsyncBuildQueue {
 impl AsyncBuildQueue {
     pub fn new(
         db: Pool,
-        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<AsyncStorage>,
         cdn_metrics: Arc<CdnMetrics>,
@@ -90,7 +88,6 @@ impl AsyncBuildQueue {
             max_attempts: config.build_attempts.into(),
             config,
             db,
-            metrics,
             storage,
             queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
             builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
@@ -427,7 +424,6 @@ impl AsyncBuildQueue {
                             "{}-{} added into build queue",
                             release.name, release.version
                         );
-                        self.metrics.queued_builds.inc();
                         self.queue_metrics.queued_builds.add(1, &[]);
                         crates_added += 1;
                     }
@@ -637,12 +633,10 @@ impl BuildQueue {
             let instant = Instant::now();
             let res = f(&to_process);
             let elapsed = instant.elapsed().as_secs_f64();
-            self.inner.metrics.build_time.observe(elapsed);
             self.inner.builder_metrics.build_time.record(elapsed, &[]);
             res
         };
 
-        self.inner.metrics.total_builds.inc();
         self.inner.builder_metrics.total_builds.add(1, &[]);
 
         self.runtime.block_on(
@@ -665,7 +659,6 @@ impl BuildQueue {
             )?;
 
             if attempt >= self.inner.max_attempts {
-                self.inner.metrics.failed_builds.inc();
                 self.inner.builder_metrics.failed_builds.add(1, &[]);
             }
             Ok(())
@@ -1383,12 +1376,6 @@ mod tests {
             Ok(BuildPackageSummary::default())
         })?;
         assert!(!called, "there were still items in the queue");
-
-        // Ensure metrics were recorded correctly
-        let metrics = env.instance_metrics();
-        assert_eq!(metrics.total_builds.get(), 9);
-        assert_eq!(metrics.failed_builds.get(), 1);
-        assert_eq!(metrics.build_time.get_sample_count(), 9);
 
         let collected_metrics = env.collected_metrics();
 
