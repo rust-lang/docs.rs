@@ -112,9 +112,6 @@ x-builder: &builder
         <<: *builder-environment
     env_file:
         - .docker.env
-    healthcheck:
-        <<: *healthcheck-interval
-        test: curl --silent --fail localhost:3000/about/metrics
 
 x-registry-watcher: &registry-watcher
     build:
@@ -137,9 +134,6 @@ x-registry-watcher: &registry-watcher
         DOCSRS_MAX_QUEUED_REBUILDS: ${DOCSRS_MAX_QUEUED_REBUILDS:-10}
     env_file:
         - .docker.env
-    healthcheck:
-        <<: *healthcheck-interval
-        test: curl --silent --fail localhost:3000/about/metrics
 
 services:
     web:
@@ -159,7 +153,7 @@ services:
             - .docker.env
         healthcheck:
             <<: *healthcheck-interval
-            test: curl --silent --fail localhost:3000/about/metrics
+            test: curl --silent --fail localhost:3000/
         profiles:
             - web
             - full
