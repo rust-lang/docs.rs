@@ -20,10 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
-
-      - uses: cargo-bins/cargo-binstall@main
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,sqlx-cli
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -32,9 +31,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: install SQLX CLI
-        run: cargo binstall sqlx-cli
 
       - name: run sqlx migration up & down
         run: |
@@ -51,8 +47,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -77,8 +74,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Run GUI tests
         run: just run-gui-tests
@@ -94,18 +92,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,fd-find,cargo-machete
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - run: just lint
+      - run: just lint lint-dependencies
 
   lint-js:
     name: js linters
@@ -115,8 +111,9 @@ jobs:
 
       - uses: denoland/setup-deno@v2
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - run: just lint-js
 

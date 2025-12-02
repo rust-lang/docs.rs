@@ -54,7 +54,7 @@ clippy-fix:
 
 # run all linters, for local development & CI
 [group('testing')]
-lint: format 
+lint: format lint-dependencies
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -64,6 +64,18 @@ lint: format
     just clippy-fix
   fi
 
+[group('testing')]
+lint-dependencies:
+  # check unused deps with cargo machete is fast, 
+  # but has many false positives. 
+  # While it can also recurse into subdirs, it would 
+  # also stumble onto our broken crates in `/tests/crates/*`, 
+  # where I also don't want to add machete-metadata.
+  @fd \
+    --glob 'Cargo.toml' \
+    --type file \
+    --exclude tests \
+    -X cargo machete {}
 
 [group('testing')]
 lint-js *args:

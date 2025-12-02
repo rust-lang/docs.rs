@@ -33,13 +33,6 @@ mod test;
 pub mod utils;
 mod web;
 
-#[allow(dead_code)]
-mod target {
-    //! [`crate::target::TargetAtom`] is an interned string type for rustc targets, such as
-    //! `x86_64-unknown-linux-gnu`. See the [`string_cache`] docs for usage examples.
-    include!(concat!(env!("OUT_DIR"), "/target_atom.rs"));
-}
-
 use web::page::GlobalAlert;
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
