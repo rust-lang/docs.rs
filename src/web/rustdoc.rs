@@ -41,13 +41,28 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
-use http::{HeaderMap, Uri, uri::Authority};
+use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
 };
 use tracing::{Instrument, error, info_span, instrument, trace};
+
+/// generate a "attachment" content disposition header for downloads.
+///
+/// Used in archive-download & json-download endpoints.
+///
+/// Typically I like typed-headers more, but the `headers::ContentDisposition` impl is lacking,
+/// and I don't want to rebuild it now.
+fn generate_content_disposition_header(storage_path: &str) -> anyhow::Result<HeaderValue> {
+    format!(
+        "attachment; filename=\"{}\"",
+        storage_path.replace("/", "-")
+    )
+    .parse()
+    .map_err(Into::into)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfficialCrateDescription {
@@ -961,8 +976,11 @@ pub(crate) async fn json_download_handler(
         Some(wanted_compression),
     );
 
-    let mut response = match storage.get_raw_stream(&storage_path).await {
-        Ok(file) => StreamingFile(file).into_response(if_none_match.as_deref()),
+    let (mut response, updated_storage_path) = match storage.get_raw_stream(&storage_path).await {
+        Ok(file) => (
+            StreamingFile(file).into_response(if_none_match.as_deref()),
+            None,
+        ),
         Err(err) if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) => {
             // we have old files on the bucket where we stored zstd compressed files,
             // with content-encoding=zstd & just a `.json` file extension.
@@ -977,8 +995,11 @@ pub(crate) async fn json_download_handler(
                 );
                 // we have an old file with a `.json` extension,
                 // redirect to that as fallback
-                StreamingFile(storage.get_raw_stream(&storage_path).await?)
-                    .into_response(if_none_match.as_deref())
+                (
+                    StreamingFile(storage.get_raw_stream(&storage_path).await?)
+                        .into_response(if_none_match.as_deref()),
+                    Some(storage_path),
+                )
             } else {
                 return Err(AxumNope::ResourceNotFound);
             }
@@ -990,6 +1011,17 @@ pub(crate) async fn json_download_handler(
     // static assets (ForeverInCdnAndBrowser).
     // Here we override it with the standard policy for build output.
     response.extensions_mut().insert(CachePolicy::ForeverInCdn);
+
+    // set content-disposition to attachment to trigger download in browsers
+    // For the attachment filename we can use just the filename without the path,
+    // since that already contains all the info.
+    let storage_path = updated_storage_path.unwrap_or(storage_path);
+    let (_, filename) = storage_path.rsplit_once('/').unwrap_or(("", &storage_path));
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        generate_content_disposition_header(filename)
+            .context("could not generate content-disposition header")?,
+    );
 
     Ok(response)
 }
@@ -3354,21 +3386,90 @@ mod test {
         Ok(())
     }
 
-    #[test_case("latest/json", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/json.gz", CompressionAlgorithm::Gzip)]
-    #[test_case("0.1.0/json", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/json/latest", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/json/latest.gz", CompressionAlgorithm::Gzip)]
-    #[test_case("latest/json/42", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/i686-pc-windows-msvc/json", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/i686-pc-windows-msvc/json.gz", CompressionAlgorithm::Gzip)]
-    #[test_case("latest/i686-pc-windows-msvc/json/42", CompressionAlgorithm::Zstd)]
-    #[test_case("latest/i686-pc-windows-msvc/json/42.gz", CompressionAlgorithm::Gzip)]
-    #[test_case("latest/i686-pc-windows-msvc/json/42.zst", CompressionAlgorithm::Zstd)]
+    #[test_case(
+        "latest/json",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json.gz",
+        CompressionAlgorithm::Gzip,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "0.1.0/json",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.1.0"
+    )]
+    #[test_case(
+        "latest/json/latest",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json/latest.gz",
+        CompressionAlgorithm::Gzip,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json/42",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json.gz",
+        CompressionAlgorithm::Gzip,
+        "i686-pc-windows-msvc",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.gz",
+        CompressionAlgorithm::Gzip,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.zst",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn json_download(
         request_path_suffix: &str,
         expected_compression: CompressionAlgorithm,
+        expected_target: &str,
+        expected_format_version: &str,
+        expected_version: &str,
     ) -> Result<()> {
         let env = TestEnvironment::new().await?;
 
@@ -3398,6 +3499,13 @@ mod test {
         let resp = web
             .assert_success_cached(&path, CachePolicy::ForeverInCdn, env.config())
             .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            &format!(
+                "attachment; filename=\"dummy_{expected_version}_{expected_target}_{expected_format_version}.json.{}\"",
+                expected_compression.file_extension()
+            )
+        );
         web.assert_conditional_get(&path, &resp).await?;
 
         {
@@ -3470,6 +3578,10 @@ mod test {
         let resp = web
             .assert_success_cached(&path, CachePolicy::ForeverInCdn, env.config())
             .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            &format!("attachment; filename=\"{NAME}_{VERSION}_{TARGET}_latest.json\""),
+        );
         web.assert_conditional_get(&path, &resp).await?;
         Ok(())
     }
@@ -3508,7 +3620,7 @@ mod test {
         let response = web
             .get(&format!("/crate/dummy/{request_path_suffix}"))
             .await?;
-
+        assert!(response.headers().get(CONTENT_DISPOSITION).is_none());
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         Ok(())
     }
