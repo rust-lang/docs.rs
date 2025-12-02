@@ -8,21 +8,18 @@ use crate::{
 };
 use axum::{
     Extension,
-    extract::{FromRequestParts, MatchedPath, Request as AxumHttpRequest},
+    extract::{MatchedPath, Request as AxumHttpRequest},
     middleware::Next,
     response::Response as AxumResponse,
 };
 use axum_extra::headers::HeaderMapExt as _;
 use http::{
-    HeaderMap, HeaderName, HeaderValue, StatusCode,
+    HeaderMap, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, ETAG},
-    request::Parts,
 };
 use serde::Deserialize;
-use std::{convert::Infallible, sync::Arc};
+use std::sync::Arc;
 use tracing::error;
-
-pub const X_RLNG_SOURCE_CDN: HeaderName = HeaderName::from_static("x-rlng-source-cdn");
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResponseCacheHeaders {
@@ -86,24 +83,6 @@ pub static FOREVER_IN_FASTLY_CDN: ResponseCacheHeaders = ResponseCacheHeaders {
     needs_cdn_invalidation: true,
 };
 
-pub static FOREVER_IN_CLOUDFRONT_CDN: ResponseCacheHeaders = ResponseCacheHeaders {
-    // A missing `max-age` or `s-maxage` in the Cache-Control header will lead to
-    // CloudFront using the default TTL, while the browser not seeing any caching header.
-    //
-    // Default TTL is set here:
-    // https://github.com/rust-lang/simpleinfra/blob/becf4532a10a7a218aedb34d4648ecb73e61f5fd/terraform/docs-rs/cloudfront.tf#L24
-    //
-    // This means we can have the CDN caching the documentation while just
-    // issuing a purge after a build.
-    // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html#ExpirationDownloadDist
-    //
-    // There might be edge cases where browsers add caching based on arbitraty heuristics
-    // when `Cache-Control` is missing.
-    cache_control: None,
-    surrogate_control: None,
-    needs_cdn_invalidation: true,
-};
-
 /// cache forever in browser & CDN.
 /// Only usable for content with unique filenames.
 ///
@@ -116,28 +95,6 @@ pub static FOREVER_IN_CDN_AND_BROWSER: ResponseCacheHeaders = ResponseCacheHeade
     surrogate_control: None,
     needs_cdn_invalidation: false,
 };
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(test, derive(strum::EnumIter))]
-pub enum TargetCdn {
-    Fastly,
-    CloudFront,
-}
-
-impl<S> FromRequestParts<S> for TargetCdn
-where
-    S: Send + Sync,
-{
-    type Rejection = Infallible;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        if parts.headers.contains_key(X_RLNG_SOURCE_CDN) {
-            Ok(TargetCdn::Fastly)
-        } else {
-            Ok(TargetCdn::CloudFront)
-        }
-    }
-}
 
 /// defines the wanted caching behaviour for a web response.
 #[derive(Debug, Clone)]
@@ -175,7 +132,7 @@ pub enum CachePolicy {
 }
 
 impl CachePolicy {
-    pub fn render(&self, config: &Config, target_cdn: TargetCdn) -> ResponseCacheHeaders {
+    pub fn render(&self, config: &Config) -> ResponseCacheHeaders {
         match *self {
             CachePolicy::NoCaching => NO_CACHING.clone(),
             CachePolicy::NoStoreMustRevalidate => NO_STORE_MUST_REVALIDATE.clone(),
@@ -183,17 +140,14 @@ impl CachePolicy {
             CachePolicy::ForeverInCdnAndBrowser => FOREVER_IN_CDN_AND_BROWSER.clone(),
             CachePolicy::ForeverInCdn => {
                 if config.cache_invalidatable_responses {
-                    match target_cdn {
-                        TargetCdn::Fastly => FOREVER_IN_FASTLY_CDN.clone(),
-                        TargetCdn::CloudFront => FOREVER_IN_CLOUDFRONT_CDN.clone(),
-                    }
+                    FOREVER_IN_FASTLY_CDN.clone()
                 } else {
                     NO_CACHING.clone()
                 }
             }
             CachePolicy::ForeverInCdnAndStaleInBrowser => {
                 // when caching invalidatable responses is disabled, this results in NO_CACHING
-                let mut forever_in_cdn = CachePolicy::ForeverInCdn.render(config, target_cdn);
+                let mut forever_in_cdn = CachePolicy::ForeverInCdn.render(config);
 
                 if config.cache_invalidatable_responses
                     && let Some(cache_control) =
@@ -224,7 +178,6 @@ pub(crate) async fn cache_middleware(
     Path(param): Path<CrateParam>,
     matched_route: Option<MatchedPath>,
     Extension(config): Extension<Arc<Config>>,
-    target_cdn: TargetCdn,
     req: AxumHttpRequest,
     next: Next,
 ) -> AxumResponse {
@@ -255,19 +208,9 @@ pub(crate) async fn cache_middleware(
         .extensions()
         .get::<CachePolicy>()
         .unwrap_or(&CachePolicy::NoCaching);
-    let cache_headers = cache_policy.render(&config, target_cdn);
+    let cache_headers = cache_policy.render(&config);
     let resp_status = response.status();
     let resp_headers = response.headers_mut();
-
-    // early return for CloudFront, as it doesn't support the `Surrogate-Control` header,
-    // but also doesn't need surrogate keys.
-    // While that sounds nice, CloudFront invalidations with path prefixes are suuper slow,
-    // and have a concurrency limit.
-    if let TargetCdn::CloudFront = target_cdn {
-        debug_assert!(cache_headers.surrogate_control.is_none());
-        cache_headers.set_on_response(resp_headers);
-        return response;
-    }
 
     // simple implementation first:
     // This is for content we need to invalidate in the CDN level.
@@ -372,7 +315,6 @@ mod tests {
     use anyhow::{Context as _, Result};
     use axum::{Router, body::Body, http::Request, routing::get};
     use axum_extra::headers::CacheControl;
-    use itertools::Itertools as _;
     use strum::IntoEnumIterator as _;
     use test_case::{test_case, test_matrix};
     use tower::{ServiceBuilder, ServiceExt as _};
@@ -399,7 +341,6 @@ mod tests {
             FOREVER_IN_FASTLY_CDN.cache_control,
             NO_CACHING.cache_control
         );
-        assert!(FOREVER_IN_CLOUDFRONT_CDN.cache_control.is_none());
     }
 
     #[test_matrix(
@@ -415,14 +356,14 @@ mod tests {
             .cache_control_stale_while_revalidate(stale_while_revalidate)
             .build()?;
 
-        for (policy, target_cdn) in CachePolicy::iter().cartesian_product(TargetCdn::iter()) {
-            let headers = policy.render(&config, target_cdn);
+        for policy in CachePolicy::iter() {
+            let headers = policy.render(&config);
 
             if let Some(cache_control) = headers.cache_control {
                 validate_cache_control(&cache_control).with_context(|| {
                     format!(
-                        "couldn't validate Cache-Control header syntax for policy {:?}, CDN: {:?}",
-                        policy, target_cdn,
+                        "couldn't validate Cache-Control header syntax for policy {:?}",
+                        policy
                     )
                 })?;
             }
@@ -430,96 +371,12 @@ mod tests {
             if let Some(surrogate_control) = headers.surrogate_control {
                 validate_cache_control(&surrogate_control).with_context(|| {
                     format!(
-                        "couldn't validate Surrogate-Control header syntax for policy {:?}, CDN: {:?}",
-                        policy,
-                        target_cdn,
+                        "couldn't validate Surrogate-Control header syntax for policy {:?}",
+                        policy
                     )
                 })?;
             }
         }
-        Ok(())
-    }
-
-    #[test_case(CachePolicy::NoCaching, Some("max-age=0"))]
-    #[test_case(
-        CachePolicy::NoStoreMustRevalidate,
-        Some("no-cache, no-store, must-revalidate, max-age=0")
-    )]
-    #[test_case(
-        CachePolicy::ForeverInCdnAndBrowser,
-        Some("public, max-age=31104000, immutable")
-    )]
-    #[test_case(CachePolicy::ForeverInCdn, None)]
-    #[test_case(
-        CachePolicy::ForeverInCdnAndStaleInBrowser,
-        Some("stale-while-revalidate=86400")
-    )]
-    fn render(cache: CachePolicy, cache_control: Option<&str>) -> Result<()> {
-        let config = TestEnvironment::base_config().build()?;
-        let headers = cache.render(&config, TargetCdn::CloudFront);
-
-        assert_eq!(
-            headers.cache_control,
-            cache_control.map(|s| HeaderValue::from_str(s).unwrap())
-        );
-
-        assert!(headers.surrogate_control.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn render_stale_without_config() -> Result<()> {
-        let config = TestEnvironment::base_config()
-            .cache_control_stale_while_revalidate(None)
-            .build()?;
-
-        let headers =
-            CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::CloudFront);
-        assert!(headers.cache_control.is_none());
-        assert!(headers.surrogate_control.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn render_stale_with_config() -> Result<()> {
-        let config = TestEnvironment::base_config()
-            .cache_control_stale_while_revalidate(Some(666))
-            .build()?;
-
-        let headers =
-            CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::CloudFront);
-        assert_eq!(headers.cache_control.unwrap(), "stale-while-revalidate=666");
-        assert!(headers.surrogate_control.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn render_forever_in_cdn_disabled() -> Result<()> {
-        let config = TestEnvironment::base_config()
-            .cache_invalidatable_responses(false)
-            .build()?;
-
-        let headers = CachePolicy::ForeverInCdn.render(&config, TargetCdn::CloudFront);
-        assert_eq!(headers.cache_control.unwrap(), "max-age=0");
-        assert!(headers.surrogate_control.is_none());
-
-        Ok(())
-    }
-
-    #[test]
-    fn render_forever_in_cdn_or_stale_disabled() -> Result<()> {
-        let config = TestEnvironment::base_config()
-            .cache_invalidatable_responses(false)
-            .build()?;
-
-        let headers =
-            CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::CloudFront);
-        assert_eq!(headers.cache_control.unwrap(), "max-age=0");
-        assert!(headers.surrogate_control.is_none());
-
         Ok(())
     }
 
@@ -546,7 +403,7 @@ mod tests {
         surrogate_control: Option<&str>,
     ) -> Result<()> {
         let config = TestEnvironment::base_config().build()?;
-        let headers = cache.render(&config, TargetCdn::Fastly);
+        let headers = cache.render(&config);
 
         assert_eq!(
             headers.cache_control,
@@ -567,7 +424,7 @@ mod tests {
             .cache_control_stale_while_revalidate(None)
             .build()?;
 
-        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::Fastly);
+        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config);
         assert_eq!(headers, FOREVER_IN_FASTLY_CDN);
 
         Ok(())
@@ -579,7 +436,7 @@ mod tests {
             .cache_control_stale_while_revalidate(Some(666))
             .build()?;
 
-        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::Fastly);
+        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config);
         assert_eq!(headers.cache_control.unwrap(), "stale-while-revalidate=666");
         assert_eq!(
             headers.surrogate_control,
@@ -595,7 +452,7 @@ mod tests {
             .cache_invalidatable_responses(false)
             .build()?;
 
-        let headers = CachePolicy::ForeverInCdn.render(&config, TargetCdn::Fastly);
+        let headers = CachePolicy::ForeverInCdn.render(&config);
         assert_eq!(headers.cache_control.unwrap(), "max-age=0");
         assert!(headers.surrogate_control.is_none());
 
@@ -608,20 +465,15 @@ mod tests {
             .cache_invalidatable_responses(false)
             .build()?;
 
-        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config, TargetCdn::Fastly);
+        let headers = CachePolicy::ForeverInCdnAndStaleInBrowser.render(&config);
         assert_eq!(headers.cache_control.unwrap(), "max-age=0");
         assert!(headers.surrogate_control.is_none());
 
         Ok(())
     }
 
-    #[test_case(TargetCdn::Fastly, &FOREVER_IN_FASTLY_CDN)]
-    #[test_case(TargetCdn::CloudFront, &FOREVER_IN_CLOUDFRONT_CDN)]
     #[tokio::test]
-    async fn test_middleware_reacts_to_fastly_header_in_crate_route(
-        expected_target_cdn: TargetCdn,
-        expected_headers: &ResponseCacheHeaders,
-    ) -> Result<()> {
+    async fn test_middleware_reacts_to_fastly_header_in_crate_route() -> Result<()> {
         let config = TestEnvironment::base_config()
             .cache_invalidatable_responses(true)
             .build()?;
@@ -629,15 +481,7 @@ mod tests {
         let app = Router::new()
             .route(
                 "/{name}",
-                get(move |target_cdn: TargetCdn| async move {
-                    assert_eq!(target_cdn, expected_target_cdn);
-
-                    (
-                        // this cache policy leads to the same result in both CDNs
-                        Extension(CachePolicy::ForeverInCdn),
-                        "Hello, World!",
-                    )
-                }),
+                get(move || async move { (Extension(CachePolicy::ForeverInCdn), "Hello, World!") }),
             )
             .layer(
                 ServiceBuilder::new()
@@ -645,11 +489,7 @@ mod tests {
                     .layer(axum::middleware::from_fn(cache_middleware)),
             );
 
-        let mut builder = Request::builder().uri("/krate");
-
-        if let TargetCdn::Fastly = expected_target_cdn {
-            builder = builder.header(X_RLNG_SOURCE_CDN, "some_value");
-        }
+        let builder = Request::builder().uri("/krate");
 
         let response = app
             .clone()
@@ -661,27 +501,20 @@ mod tests {
             "{}",
             response.text().await.unwrap(),
         );
-        assert_cache_headers_eq(&response, expected_headers);
+        assert_cache_headers_eq(&response, &FOREVER_IN_FASTLY_CDN);
 
         Ok(())
     }
 
-    #[test_case(TargetCdn::Fastly)]
-    #[test_case(TargetCdn::CloudFront)]
     #[tokio::test]
-    async fn test_middleware_reacts_to_fastly_header_in_other_route(
-        expected_target_cdn: TargetCdn,
-    ) -> Result<()> {
+    async fn test_middleware_reacts_to_fastly_header_in_other_route() -> Result<()> {
         let config = TestEnvironment::base_config().build()?;
 
         let app = Router::new()
             .route(
                 "/",
-                get(move |target_cdn: TargetCdn| async move {
-                    assert_eq!(target_cdn, expected_target_cdn);
-
+                get(move || async move {
                     (
-                        // this cache policy leads to the same result in both CDNs
                         Extension(CachePolicy::ForeverInCdnAndBrowser),
                         "Hello, World!",
                     )
@@ -693,11 +526,7 @@ mod tests {
                     .layer(axum::middleware::from_fn(cache_middleware)),
             );
 
-        let mut builder = Request::builder().uri("/");
-
-        if let TargetCdn::Fastly = expected_target_cdn {
-            builder = builder.header(X_RLNG_SOURCE_CDN, "some_value");
-        }
+        let builder = Request::builder().uri("/");
 
         let response = app
             .clone()

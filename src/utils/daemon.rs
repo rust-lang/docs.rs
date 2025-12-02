@@ -3,7 +3,7 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder, cdn,
+    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
     metrics::service::OtelServiceMetrics,
     queue_rebuilds,
     utils::{queue_builder, report_error},
@@ -114,8 +114,6 @@ pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
 
 pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
     let runtime = context.runtime.clone();
-    let pool = context.pool.clone();
-    let config = context.config.clone();
     let build_queue = context.async_build_queue.clone();
     let service_metrics = Arc::new(OtelServiceMetrics::new(&context.meter_provider));
 
@@ -126,76 +124,11 @@ pub fn start_background_service_metric_collector(context: &Context) -> Result<()
         // for these service metrics.
         Duration::from_secs(30),
         move || {
-            let pool = pool.clone();
             let build_queue = build_queue.clone();
-            let config = config.clone();
             let service_metrics = service_metrics.clone();
             async move {
                 trace!("collecting service metrics");
-                let mut conn = pool.get_async().await?;
-                service_metrics
-                    .gather(&mut conn, &build_queue, &config)
-                    .await
-            }
-        },
-    );
-    Ok(())
-}
-
-pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
-    let config = context.config.clone();
-    let pool = context.pool.clone();
-    let runtime = context.runtime.clone();
-    let cdn = context.cdn.clone();
-
-    let otel_metrics = context.cdn_metrics.clone();
-
-    if config.cloudfront_distribution_id_web.is_none()
-        && config.cloudfront_distribution_id_static.is_none()
-    {
-        info!("no cloudfront distribution IDs found, skipping background cdn invalidation");
-        return Ok(());
-    }
-
-    if !config.cache_invalidatable_responses {
-        info!("full page cache disabled, skipping background cdn invalidation");
-        return Ok(());
-    }
-
-    async_cron(
-        &runtime,
-        "cdn invalidator",
-        Duration::from_secs(60),
-        move || {
-            let pool = pool.clone();
-            let config = config.clone();
-            let cdn = cdn.clone();
-            let otel_metrics = otel_metrics.clone();
-            async move {
-                let mut conn = pool.get_async().await?;
-                if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-                    cdn::cloudfront::handle_queued_invalidation_requests(
-                        &config,
-                        &cdn,
-                        &otel_metrics,
-                        &mut conn,
-                        distribution_id,
-                    )
-                    .await
-                    .context("error handling queued invalidations for web CDN invalidation")?;
-                }
-                if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-                    cdn::cloudfront::handle_queued_invalidation_requests(
-                        &config,
-                        &cdn,
-                        &otel_metrics,
-                        &mut conn,
-                        distribution_id,
-                    )
-                    .await
-                    .context("error handling queued invalidations for static CDN invalidation")?;
-                }
-                Ok(())
+                service_metrics.gather(&build_queue).await
             }
         },
     );
@@ -229,7 +162,6 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
         .unwrap();
 
     start_background_repository_stats_updater(&context)?;
-    start_background_cdn_invalidator(&context)?;
     start_background_queue_rebuild(&context)?;
 
     // when people run the daemon, we assume the daemon is the one single process where

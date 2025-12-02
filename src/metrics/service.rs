@@ -1,4 +1,4 @@
-use crate::{AsyncBuildQueue, Config, cdn, metrics::otel::AnyMeterProvider};
+use crate::{AsyncBuildQueue, metrics::otel::AnyMeterProvider};
 use anyhow::{Error, Result};
 use opentelemetry::{KeyValue, metrics::Gauge};
 use std::collections::HashSet;
@@ -10,7 +10,6 @@ pub struct OtelServiceMetrics {
     pub failed_crates_count: Gauge<u64>,
     pub queue_is_locked: Gauge<u64>,
     pub queued_crates_count_by_priority: Gauge<u64>,
-    pub queued_cdn_invalidations_by_distribution: Gauge<u64>,
 }
 
 impl OtelServiceMetrics {
@@ -38,19 +37,10 @@ impl OtelServiceMetrics {
                 .u64_gauge(format!("{PREFIX}.queued_crates_count_by_priority"))
                 .with_unit("1")
                 .build(),
-            queued_cdn_invalidations_by_distribution: meter
-                .u64_gauge(format!("{PREFIX}.queued_cdn_invalidations_by_distribution"))
-                .with_unit("1")
-                .build(),
         }
     }
 
-    pub(crate) async fn gather(
-        &self,
-        conn: &mut sqlx::PgConnection,
-        queue: &AsyncBuildQueue,
-        config: &Config,
-    ) -> Result<(), Error> {
+    pub(crate) async fn gather(&self, queue: &AsyncBuildQueue) -> Result<(), Error> {
         self.queue_is_locked
             .record(queue.is_locked().await? as u64, &[]);
         self.queued_crates_count
@@ -80,18 +70,6 @@ impl OtelServiceMetrics {
             self.queued_crates_count_by_priority.record(
                 *count as u64,
                 &[KeyValue::new("priority", priority.to_string())],
-            );
-        }
-
-        for (distribution_id, count) in
-            cdn::cloudfront::queued_or_active_crate_invalidation_count_by_distribution(
-                &mut *conn, config,
-            )
-            .await?
-        {
-            self.queued_cdn_invalidations_by_distribution.record(
-                count as u64,
-                &[KeyValue::new("distribution", distribution_id)],
             );
         }
 

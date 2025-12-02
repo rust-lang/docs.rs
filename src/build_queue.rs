@@ -303,7 +303,7 @@ impl AsyncBuildQueue {
 
 /// Index methods.
 impl AsyncBuildQueue {
-    async fn queue_crate_invalidation(&self, conn: &mut sqlx::PgConnection, krate: &str) {
+    async fn queue_crate_invalidation(&self, krate: &str) {
         let krate = match krate
             .parse::<KrateName>()
             .with_context(|| format!("can't parse crate name '{}'", krate))
@@ -316,7 +316,7 @@ impl AsyncBuildQueue {
         };
 
         if let Err(err) =
-            cdn::queue_crate_invalidation(conn, &self.config, &self.cdn_metrics, &krate).await
+            cdn::queue_crate_invalidation(&self.config, &self.cdn_metrics, &krate).await
         {
             report_error(&err);
         }
@@ -360,7 +360,7 @@ impl AsyncBuildQueue {
                     Err(err) => report_error(&err),
                 }
 
-                self.queue_crate_invalidation(&mut conn, krate).await;
+                self.queue_crate_invalidation(krate).await;
                 self.remove_crate_from_queue(krate).await?;
                 continue;
             }
@@ -392,8 +392,7 @@ impl AsyncBuildQueue {
                     Err(err) => report_error(&err),
                 }
 
-                self.queue_crate_invalidation(&mut conn, &release.name)
-                    .await;
+                self.queue_crate_invalidation(&release.name).await;
                 self.remove_version_from_queue(&release.name, &version)
                     .await?;
                 continue;
@@ -449,8 +448,7 @@ impl AsyncBuildQueue {
                     report_error(&err);
                 }
 
-                self.queue_crate_invalidation(&mut conn, &release.name)
-                    .await;
+                self.queue_crate_invalidation(&release.name).await;
             }
         }
 
@@ -639,10 +637,8 @@ impl BuildQueue {
 
         self.inner.builder_metrics.total_builds.add(1, &[]);
 
-        self.runtime.block_on(
-            self.inner
-                .queue_crate_invalidation(&mut transaction, &to_process.name),
-        );
+        self.runtime
+            .block_on(self.inner.queue_crate_invalidation(&to_process.name));
 
         let mut increase_attempt_count = || -> Result<()> {
             let attempt: i32 = self.runtime.block_on(
@@ -1405,72 +1401,66 @@ mod tests {
             9
         );
 
-        // no invalidations were run since we don't have a distribution id configured
-        assert!(
-            env.runtime()
-                .block_on(async {
-                    cdn::cloudfront::queued_or_active_crate_invalidations(
-                        &mut *env.async_db().async_conn().await,
-                    )
-                    .await
-                })?
-                .is_empty()
-        );
-
         Ok(())
     }
 
     #[test]
-    fn test_invalidate_cdn_after_build_and_error() -> Result<()> {
+    fn test_invalidate_cdn_after_error() -> Result<()> {
+        let mut fastly_api = mockito::Server::new();
+
         let env = TestEnvironment::with_config_and_runtime(
             TestEnvironment::base_config()
-                .cloudfront_distribution_id_web(Some("distribution_id_web".into()))
-                .cloudfront_distribution_id_static(Some("distribution_id_static".into()))
+                .fastly_api_host(fastly_api.url().parse().unwrap())
+                .fastly_api_token(Some("test-token".into()))
+                .fastly_service_sid(Some("test-sid-1".into()))
                 .build()?,
         )?;
 
         let queue = env.build_queue();
 
-        queue.add_crate("will_succeed", &V1, -1, None)?;
+        let m = fastly_api
+            .mock("POST", "/service/test-sid-1/purge")
+            .with_status(200)
+            .create();
+
         queue.add_crate("will_fail", &V1, 0, None)?;
-
-        let fetch_invalidations = || {
-            env.runtime()
-                .block_on(async {
-                    let mut conn = env.async_db().async_conn().await;
-                    cdn::cloudfront::queued_or_active_crate_invalidations(&mut conn).await
-                })
-                .unwrap()
-        };
-
-        assert!(fetch_invalidations().is_empty());
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("will_succeed", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-
-        let queued_invalidations = fetch_invalidations();
-        assert_eq!(queued_invalidations.len(), 3);
-        assert!(
-            queued_invalidations
-                .iter()
-                .all(|i| i.krate == "will_succeed")
-        );
 
         queue.process_next_crate(|krate| {
             assert_eq!("will_fail", krate.name);
             anyhow::bail!("simulate a failure");
         })?;
 
-        let queued_invalidations = fetch_invalidations();
-        assert_eq!(queued_invalidations.len(), 6);
-        assert!(
-            queued_invalidations
-                .iter()
-                .skip(3)
-                .all(|i| i.krate == "will_fail")
-        );
+        m.expect(1).assert();
+
+        Ok(())
+    }
+    #[test]
+    fn test_invalidate_cdn_after_build() -> Result<()> {
+        let mut fastly_api = mockito::Server::new();
+
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .fastly_api_host(fastly_api.url().parse().unwrap())
+                .fastly_api_token(Some("test-token".into()))
+                .fastly_service_sid(Some("test-sid-1".into()))
+                .build()?,
+        )?;
+
+        let queue = env.build_queue();
+
+        let m = fastly_api
+            .mock("POST", "/service/test-sid-1/purge")
+            .with_status(200)
+            .create();
+
+        queue.add_crate("will_succeed", &V1, -1, None)?;
+
+        queue.process_next_crate(|krate| {
+            assert_eq!("will_succeed", krate.name);
+            Ok(BuildPackageSummary::default())
+        })?;
+
+        m.expect(1).assert();
 
         Ok(())
     }

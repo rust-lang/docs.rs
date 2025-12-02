@@ -8,7 +8,6 @@ pub(crate) use self::{
 };
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
-    cdn::{CdnMetrics, cloudfront::CdnBackend},
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
     error::Result,
@@ -17,7 +16,7 @@ use crate::{
     test::test_metrics::CollectedMetrics,
     web::{
         build_axum_app,
-        cache::{self, TargetCdn, X_RLNG_SOURCE_CDN},
+        cache::{self},
         headers::{IfNoneMatch, SURROGATE_CONTROL},
         page::TemplateData,
     },
@@ -107,13 +106,7 @@ impl AxumResponseTestExt for axum::response::Response {
         assert!(config.cache_control_stale_while_revalidate.is_some());
 
         // This method is only about asserting if the handler did set the right _policy_.
-        //
-        // But we only test for CloudFront here.
-        // The different policies are unique enough so we would have a test failure when
-        // we emit the wrong cache policy in a handler.
-        //
-        // The fastly specifics are tested in web::cache unittests.
-        assert_cache_headers_eq(self, &cache_policy.render(config, TargetCdn::Fastly));
+        assert_cache_headers_eq(self, &cache_policy.render(config));
     }
 
     fn error_for_status(self) -> Result<Self>
@@ -225,7 +218,6 @@ impl AxumRouterTestExt for axum::Router {
         {
             let cached_response = self
                 .get_with_headers(initial_path, |headers| {
-                    headers.insert(X_RLNG_SOURCE_CDN, HeaderValue::from_static("fastly"));
                     headers.typed_insert(if_none_match);
                 })
                 .await?;
@@ -284,13 +276,7 @@ impl AxumRouterTestExt for axum::Router {
     async fn get(&self, path: &str) -> Result<AxumResponse> {
         Ok(self
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(path)
-                    .header(X_RLNG_SOURCE_CDN, "fastly")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
             .await?)
     }
 
@@ -518,16 +504,8 @@ impl TestEnvironment {
         &self.context.build_queue
     }
 
-    pub(crate) fn cdn(&self) -> &CdnBackend {
-        &self.context.cdn
-    }
-
     pub(crate) fn config(&self) -> &Config {
         &self.context.config
-    }
-
-    pub(crate) fn cdn_metrics(&self) -> &CdnMetrics {
-        &self.context.cdn_metrics
     }
 
     pub(crate) fn async_storage(&self) -> &AsyncStorage {
@@ -536,10 +514,6 @@ impl TestEnvironment {
 
     pub(crate) fn storage(&self) -> &Storage {
         &self.context.storage
-    }
-
-    pub(crate) fn meter_provider(&self) -> &AnyMeterProvider {
-        &self.context.meter_provider
     }
 
     pub(crate) fn runtime(&self) -> &runtime::Handle {

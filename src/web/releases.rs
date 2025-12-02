@@ -5,7 +5,6 @@ use crate::build_queue::PRIORITY_CONTINUOUS;
 use crate::{
     AsyncBuildQueue, Config, RegistryApi,
     build_queue::QueuedCrate,
-    cdn,
     db::types::version::Version,
     impl_axum_webpage,
     utils::report_error,
@@ -32,7 +31,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     str,
     sync::Arc,
 };
@@ -713,7 +712,6 @@ struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
-    active_cdn_deployments: Vec<String>,
     in_progress_builds: Vec<(String, Version)>,
     expand_rebuild_queue: bool,
 }
@@ -730,20 +728,6 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let mut active_cdn_deployments: Vec<_> =
-        cdn::cloudfront::queued_or_active_crate_invalidations(&mut conn)
-            .await?
-            .into_iter()
-            .map(|i| i.krate)
-            .collect();
-
-    // deduplicate the list of crates while keeping their order
-    let mut set = HashSet::new();
-    active_cdn_deployments.retain(|k| set.insert(k.clone()));
-
-    // reverse the list, so the oldest comes first
-    active_cdn_deployments.reverse();
-
     let in_progress_builds: Vec<(String, Version)> = sqlx::query!(
         r#"SELECT
             crates.name,
@@ -791,7 +775,6 @@ pub(crate) async fn build_queue_handler(
         description: "crate documentation scheduled to build & deploy",
         queue,
         rebuild_queue,
-        active_cdn_deployments,
         in_progress_builds,
         expand_rebuild_queue: params.expand.is_some(),
     })
@@ -813,6 +796,7 @@ mod tests {
     use mockito::Matcher;
     use reqwest::StatusCode;
     use serde_json::json;
+    use std::collections::HashSet;
     use test_case::test_case;
 
     #[test]
@@ -1804,47 +1788,6 @@ mod tests {
             web.assert_success("/releases/feed").await?;
             Ok(())
         })
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_deployment_queue() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .cloudfront_distribution_id_web(Some("distribution_id_web".into()))
-                .build()?,
-        )
-        .await?;
-
-        let web = env.web_app().await;
-
-        let mut conn = env.async_db().async_conn().await;
-        cdn::queue_crate_invalidation(
-            &mut conn,
-            env.config(),
-            env.cdn_metrics(),
-            &"krate_2".parse().unwrap(),
-        )
-        .await?;
-
-        let content = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
-        assert!(
-            content
-                .select(".release > div > strong")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("active CDN deployments"))
-        );
-
-        let items = content
-            .select(".queue-list > li")
-            .expect("missing list items")
-            .collect::<Vec<_>>();
-
-        assert_eq!(items.len(), 1);
-        let a = items[0].as_node().select_first("a").expect("missing link");
-
-        assert!(a.text_contents().contains("krate_2"));
-
-        Ok(())
     }
 
     #[test]
