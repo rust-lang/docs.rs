@@ -71,7 +71,7 @@ tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 futures-util = "0.3.5"
 async-stream = "0.3.5"
-aws-config = "1.0.0"
+aws-config = { version = "1.0.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
 aws-sdk-s3 = "1.3.0"
 aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 http = "1.0.0"
