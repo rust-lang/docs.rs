@@ -10,7 +10,7 @@ use self::{
     s3::S3Backend,
 };
 use crate::{
-    Config, InstanceMetrics,
+    Config,
     db::{
         BuildId, Pool,
         file::{FileEntry, detect_mime},
@@ -265,7 +265,6 @@ pub struct AsyncStorage {
 impl AsyncStorage {
     pub async fn new(
         pool: Pool,
-        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
@@ -274,11 +273,11 @@ impl AsyncStorage {
         Ok(Self {
             backend: match config.storage_backend {
                 StorageKind::Database => {
-                    StorageBackend::Database(DatabaseBackend::new(pool, metrics, otel_metrics))
+                    StorageBackend::Database(DatabaseBackend::new(pool, otel_metrics))
                 }
-                StorageKind::S3 => StorageBackend::S3(Box::new(
-                    S3Backend::new(metrics, &config, otel_metrics).await?,
-                )),
+                StorageKind::S3 => {
+                    StorageBackend::S3(Box::new(S3Backend::new(&config, otel_metrics).await?))
+                }
             },
             config,
             locks: DashMap::new(),
@@ -1673,11 +1672,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_blobs(
-        env: &TestEnvironment,
-        storage: &Storage,
-        metrics: &InstanceMetrics,
-    ) -> Result<()> {
+    fn test_store_blobs(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -1704,8 +1699,6 @@ mod backend_tests {
             assert_eq!(blob.mime, actual.mime);
         }
 
-        assert_eq!(NAMES.len(), metrics.uploaded_files_total.get() as usize);
-
         let collected_metrics = env.collected_metrics();
 
         assert_eq!(
@@ -1726,11 +1719,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_all_in_archive(
-        _env: &TestEnvironment,
-        storage: &Storage,
-        metrics: &InstanceMetrics,
-    ) -> Result<()> {
+    fn test_store_all_in_archive(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-archive-test")
             .tempdir()?;
@@ -1791,16 +1780,20 @@ mod backend_tests {
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        let collected_metrics = env.collected_metrics();
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
 
         Ok(())
     }
 
-    fn test_store_all(
-        _env: &TestEnvironment,
-        storage: &Storage,
-        metrics: &InstanceMetrics,
-    ) -> Result<()> {
+    fn test_store_all(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -1839,7 +1832,14 @@ mod backend_tests {
 
         assert_eq!(algs, CompressionAlgorithm::default());
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        let collected_metrics = env.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
 
         Ok(())
     }
@@ -1947,7 +1947,7 @@ mod backend_tests {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
-                    use crate::storage::{ StorageKind};
+                    use crate::storage::{StorageKind};
 
                     fn get_env() -> anyhow::Result<crate::test::TestEnvironment> {
                         crate::test::TestEnvironment::with_config_and_runtime(
@@ -1976,7 +1976,7 @@ mod backend_tests {
                 #[test]
                 fn $test() -> anyhow::Result<()> {
                     let env = get_env()?;
-                    super::$test(&env, &*env.storage(), &*env.instance_metrics())
+                    super::$test(&env, &*env.storage())
                 }
             )*
         };

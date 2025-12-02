@@ -143,7 +143,6 @@ pub fn start_background_service_metric_collector(context: &Context) -> Result<()
 }
 
 pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
-    let metrics = context.instance_metrics.clone();
     let config = context.config.clone();
     let pool = context.pool.clone();
     let runtime = context.runtime.clone();
@@ -171,7 +170,6 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
             let pool = pool.clone();
             let config = config.clone();
             let cdn = cdn.clone();
-            let metrics = metrics.clone();
             let otel_metrics = otel_metrics.clone();
             async move {
                 let mut conn = pool.get_async().await?;
@@ -179,7 +177,6 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
                     cdn::cloudfront::handle_queued_invalidation_requests(
                         &config,
                         &cdn,
-                        &metrics,
                         &otel_metrics,
                         &mut conn,
                         distribution_id,
@@ -191,7 +188,6 @@ pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> 
                     cdn::cloudfront::handle_queued_invalidation_requests(
                         &config,
                         &cdn,
-                        &metrics,
                         &otel_metrics,
                         &mut conn,
                         distribution_id,

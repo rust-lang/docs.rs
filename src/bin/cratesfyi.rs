@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, Index, PackageKind, RustwideBuilder,
     db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
-    queue_rebuilds_faulty_rustdoc, start_background_metrics_webserver, start_web_server,
+    queue_rebuilds_faulty_rustdoc, start_web_server,
     utils::{
         ConfigName, daemon::start_background_service_metric_collector, get_config,
         get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
@@ -137,8 +137,6 @@ enum CommandLine {
     },
 
     StartRegistryWatcher {
-        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: SocketAddr,
         /// Enable or disable the repository stats updater
         #[arg(
             long = "repository-stats-updater",
@@ -152,10 +150,7 @@ enum CommandLine {
         queue_rebuilds: Toggle,
     },
 
-    StartBuildServer {
-        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: SocketAddr,
-    },
+    StartBuildServer,
 
     /// Starts the daemon
     Daemon {
@@ -186,7 +181,6 @@ impl CommandLine {
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx)?,
             Self::StartRegistryWatcher {
-                metric_server_socket_addr,
                 repository_stats_updater,
                 cdn_invalidator,
                 queue_rebuilds,
@@ -205,18 +199,12 @@ impl CommandLine {
                 // metrics from the registry watcher, which should only run once, and all the time.
                 start_background_service_metric_collector(&ctx)?;
 
-                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
-
                 ctx.runtime.block_on(docs_rs::utils::watch_registry(
                     &ctx.async_build_queue,
                     &ctx.config,
                 ))?;
             }
-            Self::StartBuildServer {
-                metric_server_socket_addr,
-            } => {
-                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
-
+            Self::StartBuildServer => {
                 queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
             }
             Self::StartWebServer { socket_addr } => {

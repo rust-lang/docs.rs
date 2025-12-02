@@ -2069,7 +2069,6 @@ dependencies = [
  "phf 0.13.1",
  "phf_codegen 0.13.1",
  "pretty_assertions",
- "prometheus",
  "rand 0.9.2",
  "rayon",
  "regex",
@@ -6055,20 +6054,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a6efc566849d3d9d737c5cb06cc50e48950ebe3d3f9d70631490fff3a07b139"
 dependencies = [
  "parking_lot",
-]
-
-[[package]]
-name = "prometheus"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ca5326d8d0b950a9acd87e6a3f94745394f62e4dae1b1ee22b2bc0c394af43a"
-dependencies = [
- "cfg-if",
- "fnv",
- "lazy_static",
- "memchr",
- "parking_lot",
- "thiserror 2.0.17",
 ]
 
 [[package]]

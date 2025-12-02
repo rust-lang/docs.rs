@@ -1,27 +1,18 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{InstanceMetrics, db::Pool, error::Result, web::headers::compute_etag};
+use crate::{db::Pool, error::Result, web::headers::compute_etag};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;
-use std::{io, sync::Arc};
+use std::io;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
-    metrics: Arc<InstanceMetrics>,
     otel_metrics: StorageMetrics,
 }
 
 impl DatabaseBackend {
-    pub(crate) fn new(
-        pool: Pool,
-        metrics: Arc<InstanceMetrics>,
-        otel_metrics: StorageMetrics,
-    ) -> Self {
-        Self {
-            pool,
-            metrics,
-            otel_metrics,
-        }
+    pub(crate) fn new(pool: Pool, otel_metrics: StorageMetrics) -> Self {
+        Self { pool, otel_metrics }
     }
 
     pub(super) async fn exists(&self, path: &str) -> Result<bool> {
@@ -121,7 +112,6 @@ impl DatabaseBackend {
                 compression,
             )
             .execute(&mut *trans).await?;
-            self.metrics.uploaded_files_total.inc();
             self.otel_metrics.uploaded_files.add(1, &[]);
         }
         trans.commit().await?;
