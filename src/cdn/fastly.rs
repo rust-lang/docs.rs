@@ -106,11 +106,7 @@ where
             None
         }
     }) {
-        for sid in config
-            .fastly_service_sid_web
-            .iter()
-            .chain(config.fastly_service_sid_static.iter())
-        {
+        if let Some(ref sid) = config.fastly_service_sid {
             // NOTE: we start with just calling the API, and logging an error if they happen.
             // We can then see if we need retries or escalation to full purges.
 
@@ -208,7 +204,7 @@ mod tests {
         let config = TestEnvironment::base_config()
             .fastly_api_host(fastly_api.url().parse().unwrap())
             .fastly_api_token(Some("test-token".into()))
-            .fastly_service_sid_web(Some("test-sid-1".into()))
+            .fastly_service_sid(Some("test-sid-1".into()))
             .build()?;
 
         let m = fastly_api
@@ -238,59 +234,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_purge_both() -> Result<()> {
-        let mut fastly_api = mockito::Server::new_async().await;
-
-        let config = TestEnvironment::base_config()
-            .fastly_api_host(fastly_api.url().parse().unwrap())
-            .fastly_api_token(Some("test-token".into()))
-            .fastly_service_sid_web(Some("test-sid-1".into()))
-            .fastly_service_sid_static(Some("test-sid-2".into()))
-            .build()?;
-
-        let m1 = fastly_api
-            .mock("POST", "/service/test-sid-1/purge")
-            .match_header(FASTLY_KEY, "test-token")
-            .match_header(&SURROGATE_KEY, "crate-foo crate-bar")
-            .with_status(200)
-            .create_async()
-            .await;
-
-        let m2 = fastly_api
-            .mock("POST", "/service/test-sid-2/purge")
-            .match_header(FASTLY_KEY, "test-token")
-            .match_header(&SURROGATE_KEY, "crate-foo crate-bar")
-            .with_status(200)
-            .create_async()
-            .await;
-
-        let (_exporter, meter_provider) = setup_test_meter_provider();
-        let metrics = CdnMetrics::new(&meter_provider);
-
-        purge_surrogate_keys(
-            &config,
-            &metrics,
-            vec![
-                SurrogateKey::from_str("crate-foo").unwrap(),
-                SurrogateKey::from_str("crate-bar").unwrap(),
-            ],
-        )
-        .await?;
-
-        m1.assert_async().await;
-        m2.assert_async().await;
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn test_purge_err_doesnt_err() -> Result<()> {
         let mut fastly_api = mockito::Server::new_async().await;
 
         let config = TestEnvironment::base_config()
             .fastly_api_host(fastly_api.url().parse().unwrap())
             .fastly_api_token(Some("test-token".into()))
-            .fastly_service_sid_web(Some("test-sid-1".into()))
+            .fastly_service_sid(Some("test-sid-1".into()))
             .build()?;
 
         let m = fastly_api
@@ -329,7 +279,7 @@ mod tests {
         let config = TestEnvironment::base_config()
             .fastly_api_host(fastly_api.url().parse().unwrap())
             .fastly_api_token(Some("test-token".into()))
-            .fastly_service_sid_web(Some("test-sid-1".into()))
+            .fastly_service_sid(Some("test-sid-1".into()))
             .build()?;
 
         let m = fastly_api

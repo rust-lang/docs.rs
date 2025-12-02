@@ -19,11 +19,6 @@
                 <div class="pure-u-1-2">
                     <strong>currently being built</strong>
                 </div>
-                <div class="pure-u-1-2">
-                    {%- if !active_cdn_deployments.is_empty() %}
-                        <strong>active CDN deployments</strong>
-                    {%- endif %}
-                </div>
             </div>
 
             <div class = "pure-g">
@@ -42,26 +37,6 @@
                     {%- else %}
                         <div class="about">
                             <p><strong>There is nothing currently being built</strong></p>
-                        </div>
-                    {%- endif %}
-                </div>
-                <div class="pure-u-1-2">
-                    {%- if !active_cdn_deployments.is_empty() %}
-                        <ol class="queue-list">
-                            {% for krate in active_cdn_deployments -%}
-                                <li>
-                                    <a href="/{{ krate }}">
-                                        {{ krate }}
-                                    </a>
-                                </li>
-                            {%- endfor %}
-                        </ol>
-                        <div class="about">
-                            <p>
-                                After the build finishes it may take up to 20 minutes for all documentation
-                                pages to be up-to-date and available to everybody.
-                            </p>
-                            <p>Especially <code>/latest/</code> URLs might be affected.</p>
                         </div>
                     {%- endif %}
                 </div>

@@ -1,4 +1,4 @@
-use crate::{cdn::cloudfront::CdnKind, storage::StorageKind};
+use crate::storage::StorageKind;
 use anyhow::{Context, Result, anyhow, bail};
 use std::{
     env::VarError,
@@ -104,22 +104,6 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    /// CDN backend to use for invalidations.
-    /// Only needed for cloudfront.
-    pub(crate) cdn_backend: CdnKind,
-
-    /// The maximum age of a queued invalidation request before it is
-    /// considered too old and we fall back to a full purge of the
-    /// distributions.
-    pub(crate) cdn_max_queued_age: Duration,
-
-    // CloudFront distribution ID for the web server.
-    // Will be used for invalidation-requests.
-    pub cloudfront_distribution_id_web: Option<String>,
-
-    /// same for the `static.docs.rs` distribution
-    pub cloudfront_distribution_id_static: Option<String>,
-
     /// Fastly API host, typically only overwritten for testing
     pub fastly_api_host: Url,
 
@@ -127,10 +111,7 @@ pub struct Config {
     pub fastly_api_token: Option<String>,
 
     /// fastly service SID for the main domain
-    pub fastly_service_sid_web: Option<String>,
-
-    /// same for the `static.docs.rs` distribution
-    pub fastly_service_sid_static: Option<String>,
+    pub fastly_service_sid: Option<String>,
 
     pub(crate) build_workspace_reinitialization_interval: Duration,
 
@@ -223,17 +204,12 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .cdn_backend(env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?)
-            .cdn_max_queued_age(Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?))
-            .cloudfront_distribution_id_web(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?)
-            .cloudfront_distribution_id_static(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?)
             .fastly_api_host(env(
                 "DOCSRS_FASTLY_API_HOST",
                 "https://api.fastly.com".parse().unwrap(),
             )?)
             .fastly_api_token(maybe_env("DOCSRS_FASTLY_API_TOKEN")?)
-            .fastly_service_sid_web(maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?)
-            .fastly_service_sid_static(maybe_env("DOCSRS_FASTLY_SERVICE_SID_STATIC")?)
+            .fastly_service_sid(maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?)
             .local_archive_cache_path(ensure_absolute_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
