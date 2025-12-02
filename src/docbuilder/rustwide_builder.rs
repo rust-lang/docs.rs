@@ -680,7 +680,6 @@ impl RustwideBuilder {
                             &self.async_storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
-                            false,
                         ))?;
                     algs.insert(new_alg);
                     files_list
@@ -776,7 +775,6 @@ impl RustwideBuilder {
                             &self.async_storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
-                            true,
                         ))?;
                     let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
                     self.metrics
@@ -1077,7 +1075,6 @@ impl RustwideBuilder {
 
                 self.storage
                     .store_one_uncompressed(&path, compressed_json.clone())?;
-                self.storage.set_public_access(&path, true)?;
             }
         }
 
@@ -1641,7 +1638,6 @@ mod tests {
                         Some(*alg),
                     );
                     assert!(storage.exists(&path)?);
-                    assert!(storage.get_public_access(&path)?);
 
                     let ext = compression::file_extension_for(*alg);
 

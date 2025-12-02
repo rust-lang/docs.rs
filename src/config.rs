@@ -45,11 +45,6 @@ pub struct Config {
     #[builder(default)]
     pub(crate) s3_bucket_is_temporary: bool,
 
-    // CloudFront domain which we can access
-    // public S3 files through
-    #[cfg_attr(test, builder(setter(into)))]
-    pub(crate) s3_static_root_path: String,
-
     // Github authentication
     pub(crate) github_accesstoken: Option<String>,
     pub(crate) github_updater_min_rate_limit: u32,
@@ -209,10 +204,6 @@ impl Config {
             .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
             .s3_region(env("S3_REGION", "us-west-1".to_string())?)
             .s3_endpoint(maybe_env("S3_ENDPOINT")?)
-            .s3_static_root_path(env(
-                "DOCSRS_S3_STATIC_ROOT_PATH",
-                "https://static.docs.rs".to_string(),
-            )?)
             .github_accesstoken(maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?)
             .github_updater_min_rate_limit(env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?)
             .gitlab_accesstoken(maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?)

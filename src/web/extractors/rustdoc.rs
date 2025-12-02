@@ -574,6 +574,13 @@ impl RustdocParams {
         EscapedURI::from_path(path)
     }
 
+    pub(crate) fn zip_download_url(&self) -> EscapedURI {
+        EscapedURI::from_path(format!(
+            "/crate/{}/{}/download",
+            self.name, self.req_version
+        ))
+    }
+
     pub(crate) fn json_download_url(
         &self,
         wanted_compression: Option<CompressionAlgorithm>,
@@ -1804,6 +1811,15 @@ mod tests {
                     .map(|c| format!(".{}", c.file_extension()))
                     .unwrap_or_default()
             )
+        );
+    }
+
+    #[test]
+    fn test_zip_download_url() {
+        let params = RustdocParams::new(KRATE).with_req_version(ReqVersion::Exact(V1));
+        assert_eq!(
+            params.zip_download_url(),
+            format!("/crate/{KRATE}/{V1}/download")
         );
     }
 }

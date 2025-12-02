@@ -41,13 +41,28 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
-use http::{HeaderMap, Uri, uri::Authority};
+use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
 };
 use tracing::{Instrument, error, info_span, instrument, trace};
+
+/// generate a "attachment" content disposition header for downloads.
+///
+/// Used in archive-download & json-download endpoints.
+///
+/// Typically I like typed-headers more, but the `headers::ContentDisposition` impl is lacking,
+/// and I don't want to rebuild it now.
+fn generate_content_disposition_header(storage_path: &str) -> anyhow::Result<HeaderValue> {
+    format!(
+        "attachment; filename=\"{}\"",
+        storage_path.replace("/", "-")
+    )
+    .parse()
+    .map_err(Into::into)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfficialCrateDescription {
@@ -996,43 +1011,40 @@ pub(crate) async fn json_download_handler(
 
 #[instrument(skip_all)]
 pub(crate) async fn download_handler(
-    Path((name, req_version)): Path<(String, ReqVersion)>,
+    params: RustdocParams,
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match_version(&mut conn, &name, &req_version)
+    let version = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                params.clone().with_req_version(version).zip_download_url(),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
         .into_version();
 
-    let archive_path = rustdoc_archive_path(&name, &version);
+    let archive_path = rustdoc_archive_path(params.name(), &version);
 
-    // not all archives are set for public access yet, so we check if
-    // the access is set and fix it if needed.
-    let archive_is_public = match storage
-        .get_public_access(&archive_path)
-        .await
-        .context("reading public access for archive")
-    {
-        Ok(is_public) => is_public,
-        Err(err) => {
-            if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
-                return Err(AxumNope::ResourceNotFound);
-            } else {
-                return Err(AxumNope::InternalError(err));
-            }
-        }
-    };
+    let mut response = StreamingFile(storage.get_raw_stream(&archive_path).await?)
+        .into_response(if_none_match.as_deref());
 
-    if !archive_is_public {
-        storage.set_public_access(&archive_path, true).await?;
-    }
+    // StreamingFile::into_response automatically set the default cache-policy for
+    // static assets (ForeverInCdnAndBrowser).
+    // Here we override it with the standard policy for build output.
+    response.extensions_mut().insert(CachePolicy::ForeverInCdn);
 
-    Ok(super::axum_cached_redirect(
-        format!("{}/{}", config.s3_static_root_path, archive_path),
-        CachePolicy::ForeverInCdn,
-    )?)
+    // set content-disposition to attachment to trigger download in browsers
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        generate_content_disposition_header(&archive_path)
+            .context("could not generate content-disposition header")?,
+    );
+
+    Ok(response)
 }
 
 /// Serves shared resources used by rustdoc-generated documentation.
@@ -1069,9 +1081,22 @@ mod test {
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, io};
     use test_case::test_case;
     use tracing::info;
+
+    /// try decompressing the zip & read the content
+    fn check_archive_consistency(compressed_body: &[u8]) -> anyhow::Result<()> {
+        let mut zip = zip::ZipArchive::new(io::Cursor::new(compressed_body))?;
+        for i in 0..zip.len() {
+            let mut file = zip.by_index(i)?;
+
+            let mut buf = Vec::new();
+            io::copy(&mut file, &mut buf)?;
+        }
+
+        Ok(())
+    }
 
     async fn try_latest_version_redirect(
         path: &str,
@@ -2977,10 +3002,8 @@ mod test {
     fn download_unknown_version_404() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
+            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
 
-            let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
@@ -2997,22 +3020,15 @@ mod test {
                 .await?;
 
             let web = env.web_app().await;
+            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
 
-            let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_semver() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::with_config(TestEnvironment::base_config().build()?).await?;
 
         env.fake_release()
             .await
@@ -3024,29 +3040,19 @@ mod test {
 
         let web = env.web_app().await;
 
-        web.assert_redirect_cached_unchecked(
+        web.assert_redirect_cached(
             "/crate/dummy/0.1/download",
-            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+            "/crate/dummy/0.1.0/download",
             CachePolicy::ForeverInCdn,
             env.config(),
         )
         .await?;
-        assert!(
-            env.async_storage()
-                .get_public_access("rustdoc/dummy/0.1.0.zip")
-                .await?
-        );
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_specfic_version() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -3057,32 +3063,25 @@ mod test {
             .await?;
 
         let web = env.web_app().await;
-        let storage = env.async_storage();
+        let path = "/crate/dummy/0.1.0/download";
 
-        // disable public access to be sure that the handler will enable it
-        storage
-            .set_public_access("rustdoc/dummy/0.1.0.zip", false)
+        let resp = web
+            .assert_success_cached(path, CachePolicy::ForeverInCdn, env.config())
             .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            "attachment; filename=\"rustdoc-dummy-0.1.0.zip\""
+        );
+        web.assert_conditional_get(path, &resp).await?;
 
-        web.assert_redirect_cached_unchecked(
-            "/crate/dummy/0.1.0/download",
-            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
-            CachePolicy::ForeverInCdn,
-            env.config(),
-        )
-        .await?;
-        assert!(storage.get_public_access("rustdoc/dummy/0.1.0.zip").await?);
+        check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
+
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_latest_version() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -3101,19 +3100,19 @@ mod test {
             .await?;
 
         let web = env.web_app().await;
+        let path = "/crate/dummy/latest/download";
 
-        web.assert_redirect_cached_unchecked(
-            "/crate/dummy/latest/download",
-            "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
-            CachePolicy::ForeverInCdn,
-            env.config(),
-        )
-        .await?;
-        assert!(
-            env.async_storage()
-                .get_public_access("rustdoc/dummy/0.2.0.zip")
-                .await?
+        let resp = web
+            .assert_success_cached(path, CachePolicy::ForeverInCdn, env.config())
+            .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            "attachment; filename=\"rustdoc-dummy-0.2.0.zip\""
         );
+        web.assert_conditional_get(path, &resp).await?;
+
+        check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
+
         Ok(())
     }
 

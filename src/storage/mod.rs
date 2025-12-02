@@ -293,22 +293,6 @@ impl AsyncStorage {
         }
     }
 
-    #[instrument]
-    pub(crate) async fn get_public_access(&self, path: &str) -> Result<bool> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.get_public_access(path).await,
-            StorageBackend::S3(s3) => s3.get_public_access(path).await,
-        }
-    }
-
-    #[instrument]
-    pub(crate) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.set_public_access(path, public).await,
-            StorageBackend::S3(s3) => s3.set_public_access(path, public).await,
-        }
-    }
-
     /// Fetch a rustdoc file from our blob storage.
     /// * `name` - the crate name
     /// * `version` - the crate version
@@ -935,15 +919,6 @@ impl Storage {
         self.runtime.block_on(self.inner.exists(path))
     }
 
-    pub(crate) fn get_public_access(&self, path: &str) -> Result<bool> {
-        self.runtime.block_on(self.inner.get_public_access(path))
-    }
-
-    pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.set_public_access(path, public))
-    }
-
     pub(crate) fn fetch_source_file(
         &self,
         name: &str,
@@ -1546,35 +1521,6 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_set_public(storage: &Storage) -> Result<()> {
-        let path: &str = "foo/bar.txt";
-
-        storage.store_blobs(vec![BlobUpload {
-            path: path.into(),
-            mime: mime::TEXT_PLAIN,
-            compression: None,
-            content: b"test content\n".to_vec(),
-        }])?;
-
-        assert!(!storage.get_public_access(path)?);
-        storage.set_public_access(path, true)?;
-        assert!(storage.get_public_access(path)?);
-        storage.set_public_access(path, false)?;
-        assert!(!storage.get_public_access(path)?);
-
-        for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
-            assert!(
-                storage
-                    .set_public_access(path, true)
-                    .unwrap_err()
-                    .downcast_ref::<PathNotFoundError>()
-                    .is_some()
-            );
-        }
-
-        Ok(())
-    }
-
     fn test_get_object(storage: &Storage) -> Result<()> {
         let path: &str = "foo/bar.txt";
         let blob = BlobUpload {
@@ -1593,21 +1539,10 @@ mod backend_tests {
         // it seems like minio does it too :)
         assert_eq!(found.etag, Some(compute_etag(&blob.content)));
 
-        // default visibility is private
-        assert!(!storage.get_public_access(path)?);
-
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
                 storage
                     .get(path, usize::MAX)
-                    .unwrap_err()
-                    .downcast_ref::<PathNotFoundError>()
-                    .is_some()
-            );
-
-            assert!(
-                storage
-                    .get_public_access(path)
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
                     .is_some()
@@ -2065,7 +2000,6 @@ mod backend_tests {
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
-            test_set_public,
         }
 
         tests_with_metrics {
