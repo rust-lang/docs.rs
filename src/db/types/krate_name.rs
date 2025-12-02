@@ -32,6 +32,12 @@ use std::{io::Write, str::FromStr};
 )]
 pub struct KrateName(String);
 
+impl From<&KrateName> for KrateName {
+    fn from(krate_name: &KrateName) -> Self {
+        krate_name.clone()
+    }
+}
+
 impl FromStr for KrateName {
     type Err = anyhow::Error;
 

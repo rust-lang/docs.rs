@@ -108,10 +108,13 @@ impl FeaturesPage {
 
 impl_axum_webpage! {
     FeaturesPage,
-    cache_policy = |page| if page.is_latest_url {
-        CachePolicy::ForeverInCdn
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser
+    cache_policy = |page| {
+        let name = &page.metadata.name;
+        if page.is_latest_url {
+            CachePolicy::ForeverInCdn(name.into())
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser(name.into())
+        }
     },
 }
 
@@ -146,10 +149,14 @@ pub(crate) async fn build_features_handler(
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
-        .into_canonical_req_version_or_else(|version| {
+        .into_canonical_req_version_or_else(|confirmed_name, version| {
+            let params = params
+                .clone()
+                .with_confirmed_name(Some(confirmed_name))
+                .with_req_version(version);
             AxumNope::Redirect(
-                params.clone().with_req_version(version).features_url(),
-                CachePolicy::ForeverInCdn,
+                params.features_url(),
+                CachePolicy::ForeverInCdn(confirmed_name.into()),
             )
         })?;
     let params = params.apply_matched_release(&matched_release);
@@ -264,9 +271,13 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::{
+        db::types::krate_name::KrateName,
+        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
+    };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
+    use std::str::FromStr as _;
 
     #[test]
     fn test_parsing_raw_features() {
@@ -403,7 +414,7 @@ mod tests {
             web.assert_redirect_cached(
                 "/crate/foo/~0.2/features",
                 "/crate/foo/0.2.1/features",
-                CachePolicy::ForeverInCdn,
+                CachePolicy::ForeverInCdn(KrateName::from_str("foo").unwrap().into()),
                 env.config(),
             )
             .await?;
@@ -425,7 +436,12 @@ mod tests {
             let web = env.web_app().await;
             let resp = web.get("/crate/foo/0.2.0/features").await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdnAndStaleInBrowser(
+                    KrateName::from_str("foo").unwrap().into(),
+                ),
+                env.config(),
+            );
             Ok(())
         });
     }
@@ -452,7 +468,10 @@ mod tests {
             let web = env.web_app().await;
             let resp = web.get("/crate/foo/latest/features").await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdn(KrateName::from_str("foo").unwrap().into()),
+                env.config(),
+            );
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
             assert!(body.contains("<a href=\"/crate/foo/latest/source/\""));

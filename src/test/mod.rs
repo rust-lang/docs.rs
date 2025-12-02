@@ -15,9 +15,8 @@ use crate::{
     storage::{AsyncStorage, Storage, StorageKind},
     test::test_metrics::CollectedMetrics,
     web::{
-        build_axum_app,
-        cache::{self},
-        headers::{IfNoneMatch, SURROGATE_CONTROL},
+        build_axum_app, cache,
+        headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys},
         page::TemplateData,
     },
 };
@@ -75,6 +74,11 @@ pub(crate) fn assert_cache_headers_eq(
         response.headers().get(&SURROGATE_CONTROL),
         "surrogate control header mismatch"
     );
+    assert_eq!(
+        expected_headers.surrogate_keys.as_ref(),
+        response.headers().typed_get::<SurrogateKeys>().as_ref(),
+        "surrogate key header mismatch"
+    );
 }
 
 pub(crate) trait AxumResponseTestExt {
@@ -106,7 +110,7 @@ impl AxumResponseTestExt for axum::response::Response {
         assert!(config.cache_control_stale_while_revalidate.is_some());
 
         // This method is only about asserting if the handler did set the right _policy_.
-        assert_cache_headers_eq(self, &cache_policy.render(config));
+        assert_cache_headers_eq(self, &cache_policy.render(config).unwrap());
     }
 
     fn error_for_status(self) -> Result<Self>

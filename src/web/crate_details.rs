@@ -486,10 +486,14 @@ pub(crate) async fn crate_details_handler(
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
-        .into_canonical_req_version_or_else(|version| {
+        .into_canonical_req_version_or_else(|confirmed_name, version| {
+            let params = params
+                .clone()
+                .with_confirmed_name(Some(confirmed_name))
+                .with_req_version(version);
             AxumNope::Redirect(
-                params.clone().with_req_version(version).crate_details_url(),
-                CachePolicy::ForeverInCdn,
+                params.crate_details_url(),
+                CachePolicy::ForeverInCdn(confirmed_name.into()),
             )
         })?;
     let params = params.apply_matched_release(&matched_release);
@@ -497,7 +501,7 @@ pub(crate) async fn crate_details_handler(
     if params.original_path() != params.crate_details_url().path() {
         return Err(AxumNope::Redirect(
             params.crate_details_url(),
-            CachePolicy::ForeverInCdn,
+            CachePolicy::ForeverInCdn(matched_release.name.into()),
         ));
     }
 
@@ -538,7 +542,7 @@ pub(crate) async fn crate_details_handler(
 
     let mut res = CrateDetailsPage {
         version,
-        name,
+        name: name.clone(),
         owners,
         metadata,
         documented_items,
@@ -570,9 +574,9 @@ pub(crate) async fn crate_details_handler(
     .into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if is_latest_version {
-            CachePolicy::ForeverInCdn
+            CachePolicy::ForeverInCdn(name.into())
         } else {
-            CachePolicy::ForeverInCdnAndStaleInBrowser
+            CachePolicy::ForeverInCdnAndStaleInBrowser(name.into())
         });
     Ok(res)
 }
@@ -581,13 +585,16 @@ pub(crate) async fn crate_details_handler(
 #[template(path = "rustdoc/releases.html")]
 #[derive(Debug, Clone, PartialEq)]
 struct ReleaseList {
+    crate_name: KrateName,
     releases: Vec<Release>,
     params: RustdocParams,
 }
 
 impl_axum_webpage! {
     ReleaseList,
-    cache_policy = |_| CachePolicy::ForeverInCdn,
+    cache_policy = |page| CachePolicy::ForeverInCdn(
+        page.crate_name.clone().into()
+    ),
     cpu_intensive_rendering = true,
 }
 
@@ -600,7 +607,7 @@ pub(crate) async fn get_all_releases(
     // NOTE: we're getting RustDocParams here, where both target and path are optional.
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
-        .into_canonical_req_version_or_else(|_| AxumNope::VersionNotFound)?;
+        .into_canonical_req_version_or_else(|_, _| AxumNope::VersionNotFound)?;
     let params = params.apply_matched_release(&matched_release);
 
     if matched_release.build_status() != BuildStatus::Success {
@@ -612,6 +619,7 @@ pub(crate) async fn get_all_releases(
     }
 
     Ok(ReleaseList {
+        crate_name: matched_release.name.clone(),
         releases: matched_release.all_releases,
         params,
     }
@@ -622,6 +630,7 @@ pub(crate) async fn get_all_releases(
 #[template(path = "rustdoc/platforms.html")]
 #[derive(Debug, Clone, PartialEq)]
 struct PlatformList {
+    crate_name: KrateName,
     use_direct_platform_links: bool,
     current_target: String,
     params: RustdocParams,
@@ -629,7 +638,9 @@ struct PlatformList {
 
 impl_axum_webpage! {
     PlatformList,
-    cache_policy = |_| CachePolicy::ForeverInCdn,
+    cache_policy = |page| CachePolicy::ForeverInCdn(
+        page.crate_name.clone().into()
+    ),
     cpu_intensive_rendering = true,
 }
 
@@ -649,19 +660,20 @@ pub(crate) async fn get_all_platforms_inner(
             AxumNope::Redirect(
                 params
                     .clone()
-                    .with_name(corrected_name)
+                    .with_confirmed_name(Some(corrected_name))
                     .with_req_version(req_version)
                     .platforms_partial_url(),
                 CachePolicy::NoCaching,
             )
         })?
-        .into_canonical_req_version_or_else(|version| {
+        .into_canonical_req_version_or_else(|confirmed_name, version| {
+            let params = params
+                .clone()
+                .with_confirmed_name(Some(confirmed_name))
+                .with_req_version(version);
             AxumNope::Redirect(
-                params
-                    .clone()
-                    .with_req_version(version)
-                    .platforms_partial_url(),
-                CachePolicy::ForeverInCdn,
+                params.platforms_partial_url(),
+                CachePolicy::ForeverInCdn(confirmed_name.into()),
             )
         })?;
     let params = params.apply_matched_release(&matched_release);
@@ -670,6 +682,7 @@ pub(crate) async fn get_all_platforms_inner(
         // when the build wasn't finished, we don't have any target platforms
         // we could read from.
         return Ok(PlatformList {
+            crate_name: matched_release.name.clone(),
             use_direct_platform_links: is_crate_root,
             current_target: "".into(),
             params,
@@ -690,6 +703,7 @@ pub(crate) async fn get_all_platforms_inner(
     };
 
     Ok(PlatformList {
+        crate_name: matched_release.name.clone(),
         use_direct_platform_links: is_crate_root,
         current_target,
         params,
@@ -714,6 +728,7 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::types::krate_name::KrateName;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
         async_wrapper, fake_release_that_failed_before_build,
@@ -724,6 +739,7 @@ mod tests {
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
+    use std::str::FromStr as _;
     use test_case::test_case;
 
     async fn release_build_status(
@@ -1163,8 +1179,16 @@ mod tests {
                 .create()
                 .await?;
 
-            let response = env.web_app().await.get("/crate/foo/0.0.1").await?;
-            response.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+            let krate: KrateName = "foo".parse().unwrap();
+            let response = env
+                .web_app()
+                .await
+                .get(&format!("/crate/{krate}/0.0.1"))
+                .await?;
+            response.assert_cache_control(
+                CachePolicy::ForeverInCdnAndStaleInBrowser(krate.into()),
+                env.config(),
+            );
 
             assert!(
                 response
@@ -1868,7 +1892,10 @@ mod tests {
                 "{}",
                 response.text().await.unwrap()
             );
-            response.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+            response.assert_cache_control(
+                CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
+                env.config(),
+            );
             let list2 = dbg!(check_links(
                 response.text().await.unwrap(),
                 true,
@@ -2045,7 +2072,10 @@ mod tests {
 
             let resp = web.get("/crate/dummy/latest").await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
+                env.config(),
+            );
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest/builds\""));
@@ -2057,7 +2087,7 @@ mod tests {
             web.assert_redirect_cached(
                 "/crate/dummy",
                 "/crate/dummy/latest",
-                CachePolicy::ForeverInCdn,
+                CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
                 env.config(),
             )
             .await?;

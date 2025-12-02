@@ -2,14 +2,13 @@
 //! see
 //! https://www.fastly.com/documentation/reference/http/http-headers/Surrogate-Key/haeders.surrogate keys
 
+use crate::db::types::krate_name::KrateName;
 use anyhow::{Context as _, bail};
 use axum_extra::headers::{self, Header};
 use derive_more::Deref;
 use http::{HeaderName, HeaderValue};
 use itertools::Itertools as _;
-use std::{fmt::Display, iter, str::FromStr};
-
-use crate::db::types::krate_name::KrateName;
+use std::{collections::BTreeSet, fmt::Display, iter, str::FromStr};
 
 pub static SURROGATE_KEY: HeaderName = HeaderName::from_static("surrogate-key");
 
@@ -18,6 +17,29 @@ pub static SURROGATE_KEY: HeaderName = HeaderName::from_static("surrogate-key");
 /// The typical Fastly `Surrogate-Key` header might include more than one.
 #[derive(Debug, Clone, Deref, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SurrogateKey(HeaderValue);
+
+impl SurrogateKey {
+    pub const fn from_static(s: &'static str) -> Self {
+        if s.is_empty() {
+            panic!("surrogate key cannot be empty");
+        }
+        if s.len() > 1024 {
+            panic!("surrogate key exceeds maximum length of 1024 bytes");
+        }
+
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x21 || b > 0x7E {
+                panic!("invalid character found in surrogate key");
+            }
+            i += 1;
+        }
+
+        SurrogateKey(HeaderValue::from_static(s))
+    }
+}
 
 impl FromStr for SurrogateKey {
     type Err = anyhow::Error;
@@ -73,9 +95,36 @@ impl From<KrateName> for SurrogateKey {
     }
 }
 
-/// A full Fastly Surrogate-Key header, containing one or more keys.
-#[derive(Debug, PartialEq)]
-pub struct SurrogateKeys(Vec<SurrogateKey>);
+/// A full Fastly Surrogate-Key header, containing zero or more keys.
+#[derive(Debug, PartialEq, Clone)]
+pub struct SurrogateKeys(BTreeSet<SurrogateKey>);
+
+impl IntoIterator for SurrogateKeys {
+    type Item = SurrogateKey;
+    type IntoIter = <BTreeSet<SurrogateKey> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl From<SurrogateKey> for SurrogateKeys {
+    fn from(key: SurrogateKey) -> Self {
+        SurrogateKeys(BTreeSet::from_iter(vec![key]))
+    }
+}
+
+impl From<KrateName> for SurrogateKeys {
+    fn from(name: KrateName) -> Self {
+        SurrogateKey::from(name).into()
+    }
+}
+
+impl From<&KrateName> for SurrogateKeys {
+    fn from(name: &KrateName) -> Self {
+        SurrogateKey::from(name.clone()).into()
+    }
+}
 
 impl Display for SurrogateKeys {
     #[allow(unstable_name_collisions)]
@@ -101,12 +150,26 @@ impl Header for SurrogateKeys {
         &SURROGATE_KEY
     }
 
-    fn decode<'i, I>(_values: &mut I) -> Result<Self, headers::Error>
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
     where
         Self: Sized,
         I: Iterator<Item = &'i http::HeaderValue>,
     {
-        unimplemented!();
+        let Some(value) = values.next() else {
+            return Err(headers::Error::invalid());
+        };
+
+        let Ok(value) = value.to_str() else {
+            return Err(headers::Error::invalid());
+        };
+
+        let keys = value
+            .split(' ')
+            .map(SurrogateKey::from_str)
+            .collect::<Result<BTreeSet<_>, _>>()
+            .map_err(|_| headers::Error::invalid())?;
+
+        Ok(SurrogateKeys(keys))
     }
 
     fn encode<E: Extend<http::HeaderValue>>(&self, values: &mut E) {
@@ -119,10 +182,14 @@ impl Header for SurrogateKeys {
 }
 
 impl SurrogateKeys {
-    /// Build SurrogateKeys from an iterator, de-duplicating keys.
-    /// Takes only as many elements as would fit into the header,
-    /// then stops consuming the iterator.
-    pub fn from_iter_until_full<I>(iter: I) -> Self
+    pub fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+
+    // Build SurrogateKeys from an iterator, de-duplicating keys.
+    // Takes only as many elements as would fit into the header,
+    // then stops consuming the iterator.
+    pub fn extend_until_full<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = SurrogateKey>,
     {
@@ -135,27 +202,55 @@ impl SurrogateKeys {
 
         const MAX_LEN: u64 = 16_384;
 
-        let mut current_key_size: u64 = 0;
+        let mut current_key_size: u64 = self.encoded_len();
 
-        SurrogateKeys(
-            iter.into_iter()
-                .unique()
-                .take_while(|key| {
-                    let key_size = key.len() as u64 + 1; // +1 for the space or terminator
-                    if current_key_size + key_size > MAX_LEN {
-                        false
-                    } else {
-                        current_key_size += key_size;
-                        true
-                    }
-                })
-                .collect(),
-        )
+        self.0.extend(iter.into_iter().take_while(|key| {
+            let key_size = key.len() as u64 + 1; // +1 for the space or terminator
+            if current_key_size + key_size > MAX_LEN {
+                false
+            } else {
+                current_key_size += key_size;
+                true
+            }
+        }))
+    }
+
+    pub fn from_iter_until_full<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = SurrogateKey>,
+    {
+        let mut keys = SurrogateKeys::new();
+        keys.extend_until_full(iter);
+        keys
+    }
+
+    pub fn try_extend<I>(&mut self, iter: I) -> anyhow::Result<()>
+    where
+        I: IntoIterator<Item = SurrogateKey>,
+    {
+        let mut iter = iter.into_iter().peekable();
+
+        self.extend_until_full(&mut iter);
+
+        if iter.peek().is_some() {
+            bail!("adding surrogate key would exceed maximum header length of 16,384 bytes");
+        }
+
+        Ok(())
     }
 
     #[cfg(test)]
-    pub fn encoded_len(&self) -> usize {
-        self.0.iter().map(|k| k.0.len() + 1).sum::<usize>()
+    pub fn try_from_iter<I>(iter: I) -> anyhow::Result<Self>
+    where
+        I: IntoIterator<Item = SurrogateKey>,
+    {
+        let mut keys = SurrogateKeys::new();
+        keys.try_extend(iter)?;
+        Ok(keys)
+    }
+
+    pub fn encoded_len(&self) -> u64 {
+        self.0.iter().map(|k| (k.0.len() + 1) as u64).sum::<u64>()
     }
 
     pub fn key_count(&self) -> usize {
@@ -171,7 +266,7 @@ impl FromStr for SurrogateKeys {
         let keys = s
             .split(' ')
             .map(SurrogateKey::from_str)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<BTreeSet<_>, _>>()?;
         Ok(SurrogateKeys(keys))
     }
 }
@@ -179,7 +274,7 @@ impl FromStr for SurrogateKeys {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::headers::test_typed_encode;
+    use crate::test::headers::{test_typed_decode, test_typed_encode};
     use std::ops::RangeInclusive;
     use test_case::test_case;
 
@@ -187,6 +282,14 @@ mod tests {
     fn test_parse_surrogate_key_too_long() {
         let input = "X".repeat(1025);
         assert!(SurrogateKey::from_str(&input).is_err());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_parse_surrogate_key_too_long_const() {
+        const INPUT: [u8; 1025] = [b'X'; 1025];
+        let input = std::str::from_utf8(&INPUT).unwrap();
+        SurrogateKey::from_static(input);
     }
 
     #[test_case(""; "empty")]
@@ -200,8 +303,9 @@ mod tests {
     #[test_case("1234")]
     #[test_case("crate-some-crate")]
     #[test_case("release-some-crate-1.2.3")]
-    fn test_parse_surrogate_key_ok(input: &str) {
+    fn test_parse_surrogate_key_ok(input: &'static str) {
         assert_eq!(SurrogateKey::from_str(input).unwrap(), input);
+        assert_eq!(SurrogateKey::from_static(input), input);
     }
 
     #[test]
@@ -217,7 +321,20 @@ mod tests {
 
         assert_eq!(
             test_typed_encode(SurrogateKeys::from_iter_until_full([k1, k2, k3])),
-            "key-2 key-1"
+            "key-1 key-2"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode() -> anyhow::Result<()> {
+        assert_eq!(
+            test_typed_decode::<SurrogateKeys, _>("key-1 key-2 key-2")?.unwrap(),
+            SurrogateKeys::from_iter_until_full([
+                SurrogateKey::from_str("key-2").unwrap(),
+                SurrogateKey::from_str("key-1").unwrap(),
+            ]),
         );
 
         Ok(())

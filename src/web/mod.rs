@@ -241,7 +241,7 @@ impl MatchedRelease {
 
     fn into_exactly_named_or_else<F>(self, f: F) -> Result<Self, AxumNope>
     where
-        F: FnOnce(&str, &ReqVersion) -> AxumNope,
+        F: FnOnce(&KrateName, &ReqVersion) -> AxumNope,
     {
         if let Some(corrected_name) = self.corrected_name {
             Err(f(&corrected_name, &self.req_version))
@@ -278,7 +278,7 @@ impl MatchedRelease {
     /// version specification.
     fn into_canonical_req_version_or_else<F>(self, f: F) -> Result<Self, AxumNope>
     where
-        F: FnOnce(&ReqVersion) -> AxumNope,
+        F: FnOnce(&KrateName, &ReqVersion) -> AxumNope,
     {
         let original_req_version = self.req_version.clone();
         let canonicalized = self.into_canonical_req_version();
@@ -286,7 +286,7 @@ impl MatchedRelease {
         if canonicalized.req_version == original_req_version {
             Ok(canonicalized)
         } else {
-            Err(f(&canonicalized.req_version))
+            Err(f(&canonicalized.name, &canonicalized.req_version))
         }
     }
 
