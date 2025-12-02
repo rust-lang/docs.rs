@@ -246,7 +246,13 @@ impl RustdocParams {
     }
     pub(crate) fn with_confirmed_name(self, confirmed_name: Option<impl Into<KrateName>>) -> Self {
         self.update(|mut params| {
-            params.confirmed_name = confirmed_name.map(Into::into);
+            let confirmed_name = confirmed_name.map(Into::into);
+
+            if let Some(ref confirmed_name) = confirmed_name {
+                params.name = confirmed_name.to_string();
+            }
+
+            params.confirmed_name = confirmed_name;
             params
         })
     }
