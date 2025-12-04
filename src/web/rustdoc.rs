@@ -2,12 +2,13 @@
 
 use crate::{
     AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
+    db::types::dependencies::ReleaseDependency,
     registry_api::OwnerKind,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
         rustdoc_json_path,
     },
-    utils::{self, Dependency},
+    utils::{self},
     web::{
         MetaData, ReqVersion, axum_cached_redirect,
         cache::CachePolicy,
@@ -401,7 +402,7 @@ pub struct LimitedCrateDetails {
     documentation_url: Option<String>,
     repository_url: Option<String>,
     owners: Vec<(String, String, OwnerKind)>,
-    dependencies: Vec<Dependency>,
+    dependencies: Vec<ReleaseDependency>,
     total_items: Option<i32>,
     documented_items: Option<i32>,
 }
@@ -1082,7 +1083,6 @@ mod test {
         registry_api::{CrateOwner, OwnerKind},
         storage::decompress,
         test::*,
-        utils::Dependency,
         web::{cache::CachePolicy, encode_url_path},
     };
     use anyhow::{Context, Result};
@@ -1090,6 +1090,7 @@ mod test {
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
+    use semver::VersionReq;
     use std::{collections::BTreeMap, io};
     use test_case::test_case;
     use tracing::info;
@@ -2870,8 +2871,12 @@ mod test {
                 .version("0.1.0")
                 .rustdoc_file("testing/index.html")
                 .add_dependency(
-                    Dependency::new("optional-dep".to_string(), "1.2.3".parse().unwrap())
-                        .set_optional(true),
+                    dummy_metadata_dependency()
+                        .name("optional-dep".to_string())
+                        .req(VersionReq::parse("1.2.3").unwrap())
+                        .optional(true)
+                        .build()
+                        .unwrap(),
                 )
                 .create()
                 .await?;

@@ -7,7 +7,7 @@ use crate::{
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::{MetadataPackage, rustc_version::parse_rustc_date},
+    utils::{cargo_metadata::PackageExt, rustc_version::parse_rustc_date},
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
@@ -34,7 +34,7 @@ pub(crate) async fn finish_release(
     conn: &mut sqlx::PgConnection,
     crate_id: CrateId,
     release_id: ReleaseId,
-    metadata_pkg: &MetadataPackage,
+    metadata_pkg: &cargo_metadata::Package,
     source_dir: &Path,
     default_target: &str,
     source_files: Value,
@@ -388,7 +388,7 @@ pub(crate) async fn initialize_build(
 }
 
 /// Reads features and converts them to Vec<Feature> with default being first
-fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
+fn get_features(pkg: &cargo_metadata::Package) -> Vec<Feature> {
     let mut features = Vec::with_capacity(pkg.features.len());
     if let Some(subfeatures) = pkg.features.get("default") {
         features.push(Feature::new("default".into(), subfeatures.clone()));
@@ -403,8 +403,8 @@ fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
 }
 
 /// Reads readme if there is any read defined in Cargo.toml of a Package
-fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md"));
+fn get_readme(pkg: &cargo_metadata::Package, source_dir: &Path) -> Result<Option<String>> {
+    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md".into()));
 
     if !readme_path.exists() {
         return Ok(None);
@@ -424,8 +424,8 @@ fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>
     }
 }
 
-fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    if let Some(src_path) = &pkg.targets.first().and_then(|t| t.src_path.as_ref()) {
+fn get_rustdoc(pkg: &cargo_metadata::Package, source_dir: &Path) -> Result<Option<String>> {
+    if let Some(src_path) = &pkg.targets.first().map(|t| &t.src_path) {
         let src_path = Path::new(src_path);
         if src_path.is_absolute() {
             read_rust_doc(src_path)
@@ -473,7 +473,7 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
 /// Adds keywords into database
 async fn add_keywords_into_database(
     conn: &mut sqlx::PgConnection,
-    pkg: &MetadataPackage,
+    pkg: &cargo_metadata::Package,
     release_id: ReleaseId,
 ) -> Result<()> {
     let wanted_keywords: HashMap<String, String> = pkg
@@ -625,7 +625,7 @@ mod test {
     use super::*;
     use crate::registry_api::OwnerKind;
     use crate::test::*;
-    use crate::utils::CargoMetadata;
+    use crate::utils::cargo_metadata::{MetadataExt as _, load_cargo_metadata_from_host_path};
     use chrono::NaiveDate;
     use std::slice;
     use test_case::test_case;
@@ -1171,7 +1171,7 @@ mod test {
         "#;
 
         std::fs::write(dir.path().join("Cargo.toml"), [base, extra].concat())?;
-        let metadata = CargoMetadata::load_from_host_path(dir.path())?;
+        let metadata = load_cargo_metadata_from_host_path(dir.path())?;
         let features = super::get_features(metadata.root());
         assert_eq!(features, expected.as_ref());
 

@@ -1,10 +1,10 @@
 mod fakes;
 pub(crate) mod headers;
-mod test_metrics;
+pub(crate) mod test_metrics;
 
-pub(crate) use self::{
-    fakes::{FakeBuild, fake_release_that_failed_before_build},
-    test_metrics::setup_test_meter_provider,
+pub(crate) use self::fakes::{
+    FakeBuild, dummy_metadata_dependency, dummy_metadata_package,
+    fake_release_that_failed_before_build,
 };
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
@@ -13,7 +13,7 @@ use crate::{
     error::Result,
     metrics::otel::AnyMeterProvider,
     storage::{AsyncStorage, Storage, StorageKind},
-    test::test_metrics::CollectedMetrics,
+    test::test_metrics::{CollectedMetrics, setup_test_meter_provider},
     web::{
         build_axum_app,
         cache::{self},

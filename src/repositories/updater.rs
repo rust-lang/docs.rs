@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::repositories::{GitHub, GitLab, RateLimitReached};
-use crate::utils::MetadataPackage;
 use crate::{Config, db::Pool};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -81,7 +80,10 @@ impl RepositoryStatsUpdater {
         Self { updaters, pool }
     }
 
-    pub(crate) async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
+    pub(crate) async fn load_repository(
+        &self,
+        metadata: &cargo_metadata::Package,
+    ) -> Result<Option<i32>> {
         let url = match &metadata.repository {
             Some(url) => url,
             None => {

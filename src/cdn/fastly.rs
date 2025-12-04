@@ -175,7 +175,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{TestEnvironment, setup_test_meter_provider};
+    use crate::test::{TestEnvironment, test_metrics::setup_test_meter_provider};
     use chrono::TimeZone;
     use std::str::FromStr as _;
 
