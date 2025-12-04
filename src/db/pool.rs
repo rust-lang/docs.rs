@@ -1,6 +1,6 @@
-use crate::Config;
-use crate::metrics::InstanceMetrics;
+use crate::{Config, metrics::otel::AnyMeterProvider};
 use futures_util::{future::BoxFuture, stream::BoxStream};
+use opentelemetry::metrics::{Counter, ObservableGauge};
 use sqlx::{Executor, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
@@ -12,35 +12,89 @@ use tracing::debug;
 
 const DEFAULT_SCHEMA: &str = "public";
 
+#[derive(Debug)]
+struct PoolMetrics {
+    failed_connections: Counter<u64>,
+    _idle_connections: ObservableGauge<u64>,
+    _used_connections: ObservableGauge<u64>,
+    _max_connections: ObservableGauge<u64>,
+}
+
+impl PoolMetrics {
+    fn new(pool: sqlx::PgPool, meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("pool");
+        const PREFIX: &str = "docsrs.db.pool";
+        Self {
+            failed_connections: meter
+                .u64_counter(format!("{PREFIX}.failed_connections"))
+                .with_unit("1")
+                .build(),
+            _idle_connections: meter
+                .u64_observable_gauge(format!("{PREFIX}.idle_connections"))
+                .with_unit("1")
+                .with_callback({
+                    let pool = pool.clone();
+                    move |observer| {
+                        observer.observe(pool.num_idle() as u64, &[]);
+                    }
+                })
+                .build(),
+            _used_connections: meter
+                .u64_observable_gauge(format!("{PREFIX}.used_connections"))
+                .with_unit("1")
+                .with_callback({
+                    let pool = pool.clone();
+                    move |observer| {
+                        let used = pool.size() as u64 - pool.num_idle() as u64;
+                        observer.observe(used, &[]);
+                    }
+                })
+                .build(),
+            _max_connections: meter
+                .u64_observable_gauge(format!("{PREFIX}.max_connections"))
+                .with_unit("1")
+                .with_callback({
+                    let pool = pool.clone();
+                    move |observer| {
+                        observer.observe(pool.size() as u64, &[]);
+                    }
+                })
+                .build(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Pool {
     async_pool: sqlx::PgPool,
     runtime: runtime::Handle,
-    metrics: Arc<InstanceMetrics>,
-    max_size: u32,
+    otel_metrics: Arc<PoolMetrics>,
 }
 
 impl Pool {
-    pub async fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Pool, PoolError> {
+    pub async fn new(
+        config: &Config,
+        otel_meter_provider: &AnyMeterProvider,
+    ) -> Result<Pool, PoolError> {
         debug!(
             "creating database pool (if this hangs, consider running `docker-compose up -d db s3`)"
         );
-        Self::new_inner(config, metrics, DEFAULT_SCHEMA).await
+        Self::new_inner(config, DEFAULT_SCHEMA, otel_meter_provider).await
     }
 
     #[cfg(test)]
     pub(crate) async fn new_with_schema(
         config: &Config,
-        metrics: Arc<InstanceMetrics>,
         schema: &str,
+        otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Pool, PoolError> {
-        Self::new_inner(config, metrics, schema).await
+        Self::new_inner(config, schema, otel_meter_provider).await
     }
 
     async fn new_inner(
         config: &Config,
-        metrics: Arc<InstanceMetrics>,
         schema: &str,
+        otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Pool, PoolError> {
         let acquire_timeout = Duration::from_secs(30);
         let max_lifetime = Duration::from_secs(30 * 60);
@@ -76,10 +130,9 @@ impl Pool {
             .map_err(PoolError::AsyncPoolCreationFailed)?;
 
         Ok(Pool {
-            async_pool,
-            metrics,
+            async_pool: async_pool.clone(),
             runtime: runtime::Handle::current(),
-            max_size: config.max_pool_size,
+            otel_metrics: Arc::new(PoolMetrics::new(async_pool, otel_meter_provider)),
         })
     }
 
@@ -90,22 +143,10 @@ impl Pool {
                 runtime: self.runtime.clone(),
             }),
             Err(err) => {
-                self.metrics.failed_db_connections.inc();
+                self.otel_metrics.failed_connections.add(1, &[]);
                 Err(PoolError::AsyncClientError(err))
             }
         }
-    }
-
-    pub(crate) fn used_connections(&self) -> u32 {
-        self.async_pool.size() - self.async_pool.num_idle() as u32
-    }
-
-    pub(crate) fn idle_connections(&self) -> u32 {
-        self.async_pool.num_idle() as u32
-    }
-
-    pub(crate) fn max_size(&self) -> u32 {
-        self.max_size
     }
 }
 

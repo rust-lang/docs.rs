@@ -1,5 +1,7 @@
-use crate::error::Result;
-use crate::storage::{FileRange, compression::CompressionAlgorithm};
+use crate::{
+    error::Result,
+    storage::{FileRange, compression::CompressionAlgorithm},
+};
 use anyhow::{Context as _, bail};
 use itertools::Itertools as _;
 use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};

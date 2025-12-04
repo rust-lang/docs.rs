@@ -1,31 +1,47 @@
 mod fakes;
+pub(crate) mod headers;
+pub(crate) mod test_metrics;
 
 pub(crate) use self::fakes::{
     FakeBuild, dummy_metadata_dependency, dummy_metadata_package,
     fake_release_that_failed_before_build,
 };
 use crate::{
-    AsyncBuildQueue, BuildQueue, Config, Context, InstanceMetrics,
-    cdn::CdnBackend,
+    AsyncBuildQueue, BuildQueue, Config, Context,
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
     error::Result,
+    metrics::otel::AnyMeterProvider,
     storage::{AsyncStorage, Storage, StorageKind},
-    web::{build_axum_app, cache, page::TemplateData},
+    test::test_metrics::{CollectedMetrics, setup_test_meter_provider},
+    web::{
+        build_axum_app,
+        cache::{self},
+        headers::{IfNoneMatch, SURROGATE_CONTROL},
+        page::TemplateData,
+    },
 };
-use anyhow::Context as _;
+use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
+use axum_extra::headers::{ETag, HeaderMapExt as _};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
-use http_body_util::BodyExt; // for `collect`
+use http::{
+    HeaderMap, HeaderName, HeaderValue, StatusCode,
+    header::{CACHE_CONTROL, CONTENT_TYPE},
+};
+use http_body_util::BodyExt;
+use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
-use std::{fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
 use tokio::{runtime, task::block_in_place};
 use tower::ServiceExt;
 use tracing::error;
 
+// testing krate name constants
+pub(crate) const KRATE: &str = "krate";
 // some versions as constants for tests
 pub(crate) const V0_1: Version = Version::new(0, 1, 0);
 pub(crate) const V1: Version = Version::new(1, 0, 0);
@@ -43,6 +59,22 @@ where
     );
 
     env.runtime().block_on(f(env.clone())).expect("test failed");
+}
+
+pub(crate) fn assert_cache_headers_eq(
+    response: &axum::response::Response,
+    expected_headers: &cache::ResponseCacheHeaders,
+) {
+    assert_eq!(
+        expected_headers.cache_control.as_ref(),
+        response.headers().get(CACHE_CONTROL),
+        "cache control header mismatch"
+    );
+    assert_eq!(
+        expected_headers.surrogate_control.as_ref(),
+        response.headers().get(&SURROGATE_CONTROL),
+        "surrogate control header mismatch"
+    );
 }
 
 pub(crate) trait AxumResponseTestExt {
@@ -72,19 +104,9 @@ impl AxumResponseTestExt for axum::response::Response {
     }
     fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config) {
         assert!(config.cache_control_stale_while_revalidate.is_some());
-        let cache_control = self.headers().get("Cache-Control");
 
-        if let Some(expected_directives) = cache_policy.render(config) {
-            assert_eq!(
-                cache_control
-                    .expect("missing cache-control header")
-                    .to_str()
-                    .unwrap(),
-                expected_directives.to_str().unwrap(),
-            );
-        } else {
-            assert!(cache_control.is_none(), "{:?}", cache_control);
-        }
+        // This method is only about asserting if the handler did set the right _policy_.
+        assert_cache_headers_eq(self, &cache_policy.render(config));
     }
 
     fn error_for_status(self) -> Result<Self>
@@ -101,6 +123,9 @@ impl AxumResponseTestExt for axum::response::Response {
 }
 
 pub(crate) trait AxumRouterTestExt {
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap);
     async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse>;
     async fn assert_redirect_cached_unchecked(
         &self,
@@ -110,12 +135,19 @@ pub(crate) trait AxumRouterTestExt {
         config: &Config,
     ) -> Result<AxumResponse>;
     async fn assert_not_found(&self, path: &str) -> Result<()>;
+    async fn assert_conditional_get(
+        &self,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
+    ) -> Result<()>;
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()>;
+
     async fn assert_success_cached(
         &self,
         path: &str,
         cache_policy: cache::CachePolicy,
         config: &Config,
-    ) -> Result<()>;
+    ) -> Result<AxumResponse>;
     async fn assert_success(&self, path: &str) -> Result<AxumResponse>;
     async fn get(&self, path: &str) -> Result<AxumResponse>;
     async fn post(&self, path: &str) -> Result<AxumResponse>;
@@ -155,20 +187,70 @@ impl AxumRouterTestExt for axum::Router {
         Ok(response)
     }
 
+    async fn assert_conditional_get(
+        &self,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
+    ) -> Result<()> {
+        let etag: ETag = uncached_response
+            .headers()
+            .typed_get()
+            .ok_or_else(|| anyhow!("missing ETag header"))?;
+
+        let if_none_match = IfNoneMatch::from(etag.clone());
+
+        // general rule:
+        //
+        // if a header influences how any client or intermediate proxy should treat the response,
+        // it should be repeated on the 304 response.
+        //
+        // This logic assumes _all_ headers have to be repeated, except for a few known ones.
+        const NON_CACHE_HEADERS: &[&HeaderName] = &[&CONTENT_TYPE];
+
+        // store original headers, to assert that they are repeated on the 304 response.
+        let original_headers: HashMap<HeaderName, HeaderValue> = uncached_response
+            .headers()
+            .iter()
+            .filter(|(k, _)| !NON_CACHE_HEADERS.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        {
+            let cached_response = self
+                .get_with_headers(initial_path, |headers| {
+                    headers.typed_insert(if_none_match);
+                })
+                .await?;
+            assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+
+            // most headers are repeated on the 304 response.
+            let cached_response_headers: HashMap<HeaderName, HeaderValue> = cached_response
+                .headers()
+                .iter()
+                .filter_map(|(k, v)| {
+                    if original_headers.contains_key(k) {
+                        Some((k.clone(), v.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            assert_eq!(original_headers, cached_response_headers);
+        }
+        Ok(())
+    }
+
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()> {
+        self.assert_conditional_get(path, &self.assert_success(path).await?)
+            .await
+    }
+
     async fn assert_not_found(&self, path: &str) -> Result<()> {
         let response = self.get(path).await?;
 
         // for now, 404s should always have `no-cache`
-        // assert_no_cache(&response);
-        assert_eq!(
-            response
-                .headers()
-                .get("Cache-Control")
-                .expect("missing cache-control header")
-                .to_str()
-                .unwrap(),
-            cache::NO_CACHING.to_str().unwrap(),
-        );
+        assert_cache_headers_eq(&response, &cache::NO_CACHING);
 
         assert_eq!(response.status(), 404, "GET {path} should have been a 404");
         Ok(())
@@ -179,7 +261,7 @@ impl AxumRouterTestExt for axum::Router {
         path: &str,
         cache_policy: cache::CachePolicy,
         config: &Config,
-    ) -> Result<()> {
+    ) -> Result<AxumResponse> {
         let response = self.get(path).await?;
         let status = response.status();
         assert!(
@@ -188,13 +270,26 @@ impl AxumRouterTestExt for axum::Router {
             response.redirect_target().unwrap_or_default()
         );
         response.assert_cache_control(cache_policy, config);
-        Ok(())
+        Ok(response)
     }
 
     async fn get(&self, path: &str) -> Result<AxumResponse> {
         Ok(self
             .clone()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap),
+    {
+        let mut builder = Request::builder().uri(path);
+        f(builder.headers_mut().unwrap());
+
+        Ok(self
+            .clone()
+            .oneshot(builder.body(Body::empty()).unwrap())
             .await?)
     }
 
@@ -320,6 +415,7 @@ pub(crate) struct TestEnvironment {
     db: TestDatabase,
     pub context: Context,
     owned_runtime: Option<Arc<runtime::Runtime>>,
+    collected_metrics: InMemoryMetricExporter,
 }
 
 pub(crate) fn init_logger() {
@@ -365,15 +461,18 @@ impl TestEnvironment {
         // create index directory
         fs::create_dir_all(config.registry_index_path.clone())?;
 
-        let instance_metrics = Arc::new(InstanceMetrics::new()?);
-        let test_db = TestDatabase::new(&config, instance_metrics.clone())
+        let (metric_exporter, meter_provider) = setup_test_meter_provider();
+
+        let test_db = TestDatabase::new(&config, &meter_provider)
             .await
             .context("can't initialize test database")?;
 
         Ok(Self {
-            context: Context::from_config(config, instance_metrics, test_db.pool().clone()).await?,
+            context: Context::from_test_config(config, meter_provider, test_db.pool().clone())
+                .await?,
             db: test_db,
             owned_runtime: None,
+            collected_metrics: metric_exporter,
         })
     }
 
@@ -405,10 +504,6 @@ impl TestEnvironment {
         &self.context.build_queue
     }
 
-    pub(crate) fn cdn(&self) -> &CdnBackend {
-        &self.context.cdn
-    }
-
     pub(crate) fn config(&self) -> &Config {
         &self.context.config
     }
@@ -421,16 +516,17 @@ impl TestEnvironment {
         &self.context.storage
     }
 
-    pub(crate) fn instance_metrics(&self) -> &InstanceMetrics {
-        &self.context.instance_metrics
-    }
-
     pub(crate) fn runtime(&self) -> &runtime::Handle {
         &self.context.runtime
     }
 
     pub(crate) fn async_db(&self) -> &TestDatabase {
         &self.db
+    }
+
+    pub(crate) fn collected_metrics(&self) -> CollectedMetrics {
+        self.context.meter_provider.force_flush().unwrap();
+        CollectedMetrics(self.collected_metrics.get_finished_metrics().unwrap())
     }
 
     pub(crate) async fn web_app(&self) -> Router {
@@ -473,12 +569,12 @@ pub(crate) struct TestDatabase {
 }
 
 impl TestDatabase {
-    async fn new(config: &Config, metrics: Arc<InstanceMetrics>) -> Result<Self> {
+    async fn new(config: &Config, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
 
-        let pool = Pool::new_with_schema(config, metrics, &schema).await?;
+        let pool = Pool::new_with_schema(config, &schema, otel_meter_provider).await?;
 
         let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
         sqlx::query(&format!("CREATE SCHEMA {schema}"))

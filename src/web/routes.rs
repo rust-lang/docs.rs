@@ -85,22 +85,6 @@ async fn block_blacklisted_prefixes_middleware(
     next.run(request).await
 }
 
-pub(super) fn build_metric_routes() -> AxumRouter {
-    AxumRouter::new()
-        .route_with_tsr(
-            "/about/metrics/instance",
-            get_internal(super::metrics::instance_metrics_handler),
-        )
-        .route_with_tsr(
-            "/about/metrics/service",
-            get_internal(super::metrics::service_metrics_handler),
-        )
-        .route_with_tsr(
-            "/about/metrics",
-            get_internal(super::metrics::metrics_handler),
-        )
-}
-
 fn cached_permanent_redirect(uri: &str) -> impl IntoResponse {
     (
         Extension(CachePolicy::ForeverInCdnAndBrowser),
@@ -154,7 +138,6 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/about/builds",
             get_internal(super::sitemap::about_builds_handler),
         )
-        .merge(build_metric_routes())
         .route_with_tsr("/about", get_internal(super::sitemap::about_handler))
         .route_with_tsr(
             "/about/{subpage}",
@@ -193,8 +176,12 @@ pub(super) fn build_axum_routes() -> AxumRouter {
             "/releases/failures/{page}",
             get_internal(super::releases::releases_failures_by_stars_handler),
         )
-        .route_with_tsr(
+        .route(
             "/crate/{name}",
+            get_internal(super::crate_details::crate_details_handler),
+        )
+        .route(
+            "/crate/{name}/",
             get_internal(super::crate_details::crate_details_handler),
         )
         .route_with_tsr(

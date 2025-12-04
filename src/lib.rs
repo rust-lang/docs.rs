@@ -2,16 +2,17 @@
 //! documentation of crates for the Rust Programming Language.
 #![allow(clippy::cognitive_complexity)]
 
-pub use self::build_queue::{AsyncBuildQueue, BuildQueue, queue_rebuilds};
+pub use self::build_queue::{
+    AsyncBuildQueue, BuildQueue, queue_rebuilds, queue_rebuilds_faulty_rustdoc,
+};
 pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
 pub use self::index::Index;
-pub use self::metrics::{InstanceMetrics, ServiceMetrics};
 pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
-pub use self::web::{start_background_metrics_webserver, start_web_server};
+pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
 
@@ -32,13 +33,6 @@ mod test;
 pub mod utils;
 mod web;
 
-#[allow(dead_code)]
-mod target {
-    //! [`crate::target::TargetAtom`] is an interned string type for rustc targets, such as
-    //! `x86_64-unknown-linux-gnu`. See the [`string_cache`] docs for usage examples.
-    include!(concat!(env!("OUT_DIR"), "/target_atom.rs"));
-}
-
 use web::page::GlobalAlert;
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
@@ -56,8 +50,21 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
 /// commit hash and build date
 pub const BUILD_VERSION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("GIT_SHA"),
     " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
+    env!("BUILD_DATE"),
+    " )"
+);
+
+pub const APP_USER_AGENT: &str = concat!(
+    env!("CARGO_PKG_NAME"),
+    " ",
+    " (",
+    env!("GIT_SHA"),
+    " ",
+    env!("BUILD_DATE"),
+    " )"
 );
 
 /// Where rustdoc's static files are stored in S3.

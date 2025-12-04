@@ -1,14 +1,19 @@
-use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
+use super::{
+    cache::CachePolicy, headers::IfNoneMatch, metrics::request_recorder, routes::get_static,
+};
+use crate::db::mimes::APPLICATION_OPENSEARCH_XML;
 use axum::{
     Router as AxumRouter,
     extract::{Extension, Request},
-    http::header::CONTENT_TYPE,
-    middleware,
-    middleware::Next,
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get_service,
 };
-use axum_extra::headers::HeaderValue;
+use axum_extra::{
+    headers::{ContentType, ETag, HeaderMapExt as _},
+    typed_header::TypedHeader,
+};
+use http::{StatusCode, Uri};
 use tower_http::services::ServeDir;
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
@@ -19,10 +24,14 @@ const RUSTDOC_2021_12_05_CSS: &str =
 const RUSTDOC_2025_08_20_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2025-08-20.css"));
 
+const STATIC_CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
+
+include!(concat!(env!("OUT_DIR"), "/static_etag_map.rs"));
+
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     (
-        Extension(CachePolicy::ForeverInCdnAndBrowser),
-        [(CONTENT_TYPE, mime::TEXT_CSS.as_ref())],
+        Extension(STATIC_CACHE_POLICY),
+        TypedHeader(ContentType::from(mime::TEXT_CSS)),
         content,
     )
 }
@@ -34,21 +43,58 @@ async fn set_needed_static_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
 
     if response.status().is_success() {
-        response
-            .extensions_mut()
-            .insert(CachePolicy::ForeverInCdnAndBrowser);
+        response.extensions_mut().insert(STATIC_CACHE_POLICY);
     }
 
     if is_opensearch_xml {
         // overwrite the content type for opensearch.xml,
         // otherwise mime-guess would return `text/xml`.
-        response.headers_mut().insert(
-            CONTENT_TYPE,
-            HeaderValue::from_static("application/opensearchdescription+xml"),
-        );
+        response
+            .headers_mut()
+            .typed_insert(ContentType::from(APPLICATION_OPENSEARCH_XML.clone()));
     }
 
     response
+}
+
+async fn conditional_get(
+    partial_uri: Uri,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let if_none_match = if_none_match.map(|th| th.0);
+    let resource_path = partial_uri.path().trim_start_matches('/');
+    let Some(etag) = STATIC_ETAG_MAP.get(resource_path).map(|etag| {
+        etag.parse::<ETag>()
+            .expect("compile time generated, should always pass")
+    }) else {
+        let res = next.run(req).await;
+
+        debug_assert!(
+            !res.status().is_success(),
+            "no etag found for static resource at {}, but should exist.\n{:?}",
+            resource_path,
+            STATIC_ETAG_MAP,
+        );
+
+        return res;
+    };
+
+    if let Some(if_none_match) = if_none_match
+        && !if_none_match.precondition_passes(&etag)
+    {
+        return (
+            StatusCode::NOT_MODIFIED,
+            TypedHeader(etag),
+            Extension(CachePolicy::ForeverInCdnAndBrowser),
+        )
+            .into_response();
+    }
+
+    let mut res = next.run(req).await;
+    res.headers_mut().typed_insert(etag);
+    res
 }
 
 pub(crate) fn build_static_router() -> AxumRouter {
@@ -80,25 +126,30 @@ pub(crate) fn build_static_router() -> AxumRouter {
                     request_recorder(request, next, Some("static resource")).await
                 })),
         )
+        .layer(middleware::from_fn(conditional_get))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{STYLE_CSS, VENDORED_CSS};
+    use super::*;
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
-        web::cache::CachePolicy,
+        web::headers::compute_etag,
     };
-    use axum::response::Response as AxumResponse;
-    use reqwest::StatusCode;
+    use axum::{Router, body::Body};
+    use http::{
+        HeaderMap,
+        header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},
+    };
     use std::fs;
     use test_case::test_case;
+    use tower::ServiceExt as _;
 
     const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
-    fn content_length(resp: &AxumResponse) -> u64 {
+    fn content_length(resp: &Response) -> u64 {
         resp.headers()
-            .get("Content-Length")
+            .get(CONTENT_LENGTH)
             .expect("content-length header")
             .to_str()
             .unwrap()
@@ -106,20 +157,72 @@ mod tests {
             .unwrap()
     }
 
+    fn etag(resp: &Response) -> ETag {
+        resp.headers().typed_get().unwrap()
+    }
+
+    async fn test_conditional_get(web: &Router, path: &str) -> anyhow::Result<()> {
+        fn req(path: &str, f: impl FnOnce(&mut HeaderMap)) -> Request {
+            let mut builder = Request::builder().uri(path);
+            f(builder.headers_mut().unwrap());
+            builder.body(Body::empty()).unwrap()
+        }
+
+        // original request = 200
+        let resp = web.clone().oneshot(req(path, |_| {})).await?;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let etag = etag(&resp);
+
+        {
+            // if-none-match with correct etag
+            let if_none_match: IfNoneMatch = etag.into();
+
+            let cached_response = web
+                .clone()
+                .oneshot(req(path, |h| h.typed_insert(if_none_match)))
+                .await?;
+
+            assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+        }
+
+        {
+            let other_if_none_match: IfNoneMatch = "\"some-other-etag\""
+                .parse::<ETag>()
+                .expect("valid etag")
+                .into();
+
+            let uncached_response = web
+                .clone()
+                .oneshot(req(path, |h| h.typed_insert(other_if_none_match)))
+                .await?;
+
+            assert_eq!(uncached_response.status(), StatusCode::OK);
+        }
+
+        Ok(())
+    }
+
     #[test]
     fn style_css() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
 
-            let resp = web.get("/-/static/style.css").await?;
+            const PATH: &str = "/-/static/style.css";
+            let resp = web.get(PATH).await?;
             assert!(resp.status().is_success());
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+            let headers = resp.headers();
             assert_eq!(
-                resp.headers().get("Content-Type"),
+                headers.get(CONTENT_TYPE),
                 Some(&"text/css".parse().unwrap()),
             );
+
             assert_eq!(content_length(&resp), STYLE_CSS.len() as u64);
+            assert_eq!(etag(&resp), compute_etag(STYLE_CSS.as_bytes()));
             assert_eq!(resp.bytes().await?, STYLE_CSS.as_bytes());
+
+            test_conditional_get(&web, PATH).await?;
 
             Ok(())
         });
@@ -130,15 +233,21 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
 
-            let resp = web.get("/-/static/vendored.css").await?;
-            assert!(resp.status().is_success());
+            const PATH: &str = "/-/static/vendored.css";
+
+            let resp = web.get(PATH).await?;
+            assert!(resp.status().is_success(), "{}", resp.text().await?);
+
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
-                resp.headers().get("Content-Type"),
+                resp.headers().get(CONTENT_TYPE),
                 Some(&"text/css".parse().unwrap()),
             );
             assert_eq!(content_length(&resp), VENDORED_CSS.len() as u64);
+            assert_eq!(etag(&resp), compute_etag(VENDORED_CSS.as_bytes()));
             assert_eq!(resp.text().await?, VENDORED_CSS);
+
+            test_conditional_get(&web, PATH).await?;
 
             Ok(())
         });
@@ -157,6 +266,7 @@ mod tests {
             // to an IO-error.
             let resp = web.get("/-/static/index.js/something").await?;
             assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
+            assert!(resp.headers().get(ETAG).is_none());
 
             Ok(())
         });
@@ -174,11 +284,14 @@ mod tests {
             assert!(resp.status().is_success());
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
             assert_eq!(
-                resp.headers().get("Content-Type"),
+                resp.headers().get(CONTENT_TYPE),
                 Some(&"text/javascript".parse().unwrap()),
             );
             assert!(content_length(&resp) > 10);
+            etag(&resp); // panics if etag missing or invalid
             assert!(resp.text().await?.contains(expected_content));
+
+            test_conditional_get(&web, path).await?;
 
             Ok(())
         });
@@ -203,11 +316,11 @@ mod tests {
 
                     assert!(resp.status().is_success(), "failed to fetch {url:?}");
                     resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-                    assert_eq!(
-                        resp.bytes().await?,
-                        fs::read(path).unwrap(),
-                        "failed to fetch {url:?}",
-                    );
+                    let content = fs::read(path).unwrap();
+                    assert_eq!(etag(&resp), compute_etag(&content));
+                    assert_eq!(resp.bytes().await?, content, "failed to fetch {url:?}",);
+
+                    test_conditional_get(&web, &url).await?;
                 }
             }
 
@@ -221,6 +334,7 @@ mod tests {
             let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
             response.assert_cache_control(CachePolicy::NoCaching, env.config());
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert!(response.headers().get(ETAG).is_none());
 
             Ok(())
         });
@@ -238,7 +352,7 @@ mod tests {
                 let resp = web.get(&url).await?;
 
                 assert_eq!(
-                    resp.headers().get("Content-Type"),
+                    resp.headers().get(CONTENT_TYPE),
                     Some(&mime.parse().unwrap()),
                     "{url:?} has an incorrect content type",
                 );

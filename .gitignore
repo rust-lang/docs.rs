@@ -1,5 +1,6 @@
 /ignored
 /.env
+/.docker.env
 /src/web/badge/Cargo.lock
 target
 *.css
@@ -10,5 +11,5 @@ target
 .vagrant
 .rustwide
 .rustwide-docker
-.archive_cache
+archive_cache
 .workspace

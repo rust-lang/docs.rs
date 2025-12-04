@@ -2,7 +2,10 @@ use crate::{
     AsyncStorage,
     db::{
         BuildId, CrateId, ReleaseId,
-        types::{BuildStatus, dependencies::ReleaseDependencyList, version::Version},
+        types::{
+            BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName,
+            version::Version,
+        },
     },
     impl_axum_webpage,
     registry_api::OwnerKind,
@@ -36,7 +39,7 @@ use std::sync::Arc;
 // TODO: Add target name and versions
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CrateDetails {
-    pub(crate) name: String,
+    pub(crate) name: KrateName,
     pub(crate) version: Version,
     pub(crate) description: Option<String>,
     pub(crate) owners: Vec<(String, String, OwnerKind)>,
@@ -136,7 +139,7 @@ impl CrateDetails {
             r#"SELECT
                 crates.id AS "crate_id: CrateId",
                 releases.id AS "release_id: ReleaseId",
-                crates.name,
+                crates.name as "name: KrateName",
                 releases.version,
                 releases.description,
                 releases.dependencies,
@@ -434,7 +437,7 @@ pub(crate) async fn releases_for_crate(
 #[template(path = "crate/details.html")]
 struct CrateDetailsPage {
     version: Version,
-    name: String,
+    name: KrateName,
     owners: Vec<(String, String, OwnerKind)>,
     metadata: MetaData,
     documented_items: Option<i32>,
@@ -477,13 +480,6 @@ pub(crate) async fn crate_details_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
-    if params.original_path() != params.crate_details_url().path() {
-        return Err(AxumNope::Redirect(
-            params.crate_details_url(),
-            CachePolicy::ForeverInCdn,
-        ));
-    }
-
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
@@ -494,6 +490,13 @@ pub(crate) async fn crate_details_handler(
             )
         })?;
     let params = params.apply_matched_release(&matched_release);
+
+    if params.original_path() != params.crate_details_url().path() {
+        return Err(AxumNope::Redirect(
+            params.crate_details_url(),
+            CachePolicy::ForeverInCdn,
+        ));
+    }
 
     let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
@@ -714,10 +717,11 @@ mod tests {
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
-    use reqwest::StatusCode;
     use std::collections::BTreeMap;
+    use test_case::test_case;
 
     async fn release_build_status(
         conn: &mut sqlx::PgConnection,
@@ -2059,6 +2063,26 @@ mod tests {
         });
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("/crate/rayon/^1.11.0", "/crate/rayon/1.11.0")]
+    #[test_case("/crate/rayon/%5E1.11.0", "/crate/rayon/1.11.0")]
+    #[test_case("/crate/rayon", "/crate/rayon/latest"; "without trailing slash")]
+    #[test_case("/crate/rayon/", "/crate/rayon/latest")]
+    async fn test_version_redirects(path: &str, expected_target: &str) -> anyhow::Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name("rayon")
+            .version("1.11.0")
+            .create()
+            .await?;
+        let web = env.web_app().await;
+
+        web.assert_redirect(path, expected_target).await?;
+
+        Ok(())
+    }
+
     #[test]
     fn readme() {
         async_wrapper(|env| async move {
@@ -2196,10 +2220,19 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            assert_eq!(
-                env.web_app().await.get("/crate/dummy%3E").await?.status(),
-                StatusCode::FOUND
-            );
+            let resp = env.web_app().await.get("/crate/dummy%3E").await?;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+            Ok(())
+        })
+    }
+
+    #[test_case("/crate/dummy"; "without")]
+    #[test_case("/crate/dummy/"; "slash")]
+    fn test_unknown_crate_not_found_doesnt_redirect(path: &str) {
+        async_wrapper(|env| async move {
+            let resp = env.web_app().await.get(path).await?;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
             Ok(())
         })

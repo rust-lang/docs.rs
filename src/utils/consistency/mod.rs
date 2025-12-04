@@ -1,3 +1,4 @@
+use crate::build_queue::PRIORITY_CONSISTENCY_CHECK;
 use crate::{Context, db::delete};
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
@@ -7,8 +8,6 @@ mod data;
 mod db;
 mod diff;
 mod index;
-
-const BUILD_PRIORITY: i32 = 15;
 
 /// consistency check
 ///
@@ -101,7 +100,7 @@ where
                     if !dry_run
                         && let Err(err) = ctx
                             .async_build_queue
-                            .add_crate(name, version, BUILD_PRIORITY, None)
+                            .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
                             .await
                     {
                         warn!("{:?}", err);
@@ -128,7 +127,7 @@ where
                 if !dry_run
                     && let Err(err) = ctx
                         .async_build_queue
-                        .add_crate(name, version, BUILD_PRIORITY, None)
+                        .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
                         .await
                 {
                     warn!("{:?}", err);

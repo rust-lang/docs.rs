@@ -3,14 +3,14 @@ name: Deploy Dev
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   docker:
     name: Build and upload docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Build the Docker image
         run: docker build -t docs-rs-web -f dockerfiles/Dockerfile --target web-server .

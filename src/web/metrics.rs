@@ -1,65 +1,49 @@
-use crate::{
-    AsyncBuildQueue, Config, InstanceMetrics, ServiceMetrics, db::Pool,
-    metrics::duration_to_seconds, web::error::AxumResult,
-};
-use anyhow::{Context as _, Result};
+use crate::metrics::{RESPONSE_TIME_HISTOGRAM_BUCKETS, otel::AnyMeterProvider};
 use axum::{
-    extract::{Extension, MatchedPath, Request as AxumRequest},
-    http::{StatusCode, header::CONTENT_TYPE},
+    extract::{MatchedPath, Request as AxumRequest},
+    http::StatusCode,
     middleware::Next,
     response::IntoResponse,
 };
-use prometheus::{Encoder, TextEncoder, proto::MetricFamily};
-use std::{borrow::Cow, future::Future, sync::Arc, time::Instant};
+use opentelemetry::{
+    KeyValue,
+    metrics::{Counter, Histogram},
+};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 
-async fn fetch_and_render_metrics<Fut>(fetch_metrics: Fut) -> AxumResult<impl IntoResponse>
-where
-    Fut: Future<Output = Result<Vec<MetricFamily>>> + Send + 'static,
-{
-    let metrics_families = fetch_metrics.await?;
+#[derive(Debug)]
+pub(crate) struct WebMetrics {
+    pub(crate) html_rewrite_ooms: Counter<u64>,
+    pub(crate) im_feeling_lucky_searches: Counter<u64>,
 
-    let mut buffer = Vec::new();
-    TextEncoder::new()
-        .encode(&metrics_families, &mut buffer)
-        .context("error encoding metrics")?;
-
-    Ok((
-        StatusCode::OK,
-        [(CONTENT_TYPE, mime::TEXT_PLAIN.as_ref())],
-        buffer,
-    ))
+    routes_visited: Counter<u64>,
+    response_time: Histogram<f64>,
 }
 
-pub(super) async fn metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(config): Extension<Arc<Config>>,
-    Extension(instance_metrics): Extension<Arc<InstanceMetrics>>,
-    Extension(service_metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move {
-        let mut families = Vec::new();
-        families.extend_from_slice(&instance_metrics.gather(&pool)?);
-        families.extend_from_slice(&service_metrics.gather(&pool, &queue, &config).await?);
-        Ok(families)
-    })
-    .await
-}
-
-pub(super) async fn service_metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(config): Extension<Arc<Config>>,
-    Extension(metrics): Extension<Arc<ServiceMetrics>>,
-    Extension(queue): Extension<Arc<AsyncBuildQueue>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move { metrics.gather(&pool, &queue, &config).await }).await
-}
-
-pub(super) async fn instance_metrics_handler(
-    Extension(pool): Extension<Pool>,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
-) -> AxumResult<impl IntoResponse> {
-    fetch_and_render_metrics(async move { metrics.gather(&pool) }).await
+impl WebMetrics {
+    pub(crate) fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("web");
+        const PREFIX: &str = "docsrs.web";
+        Self {
+            html_rewrite_ooms: meter
+                .u64_counter(format!("{PREFIX}.html_rewrite_ooms"))
+                .with_unit("1")
+                .build(),
+            im_feeling_lucky_searches: meter
+                .u64_counter(format!("{PREFIX}.im_feeling_lucky_searches"))
+                .with_unit("1")
+                .build(),
+            routes_visited: meter
+                .u64_counter(format!("{PREFIX}.routes_visited"))
+                .with_unit("1")
+                .build(),
+            response_time: meter
+                .f64_histogram(format!("{PREFIX}.response_time"))
+                .with_boundaries(RESPONSE_TIME_HISTOGRAM_BUCKETS.to_vec())
+                .with_unit("s")
+                .build(),
+        }
+    }
 }
 
 /// Request recorder middleware
@@ -86,31 +70,45 @@ pub(crate) async fn request_recorder(
         Cow::Owned(request.uri().path().to_string())
     };
 
-    let metrics = request
+    let otel_metrics = request
         .extensions()
-        .get::<Arc<InstanceMetrics>>()
-        .expect("metrics missing in request extensions")
+        .get::<Arc<WebMetrics>>()
+        .expect("otel metrics missing in request extensions")
         .clone();
 
     let start = Instant::now();
     let result = next.run(request).await;
-    let resp_time = duration_to_seconds(start.elapsed());
+    let resp_time = start.elapsed().as_secs_f64();
 
-    metrics
-        .routes_visited
-        .with_label_values(&[&route_name])
-        .inc();
-    metrics
-        .response_time
-        .with_label_values(&[&route_name])
-        .observe(resp_time);
+    // to be able to differentiate between kinds of responses (e.g., 2xx vs 4xx vs 5xx)
+    // in response times, or RPM.
+    // Special case for 304 Not Modified since it's about caching and not just redirecting.
+    let status_kind = match result.status() {
+        StatusCode::NOT_MODIFIED => "not_modified",
+        s if s.is_informational() => "informational",
+        s if s.is_success() => "success",
+        s if s.is_redirection() => "redirection",
+        s if s.is_client_error() => "client_error",
+        s if s.is_server_error() => "server_error",
+        _ => "other",
+    };
+
+    let attrs = [
+        KeyValue::new("route", route_name.to_string()),
+        KeyValue::new("status_kind", status_kind),
+    ];
+
+    otel_metrics.routes_visited.add(1, &attrs);
+    otel_metrics.response_time.record(resp_time, &attrs);
 
     result
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::test::{AxumRouterTestExt, async_wrapper};
+    use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+    use pretty_assertions::assert_eq;
     use std::collections::HashMap;
 
     #[test]
@@ -172,7 +170,6 @@ mod tests {
                 .await?;
 
             let frontend = env.web_app().await;
-            let metrics = env.instance_metrics();
 
             for (route, _) in ROUTES.iter() {
                 frontend.get(route).await?;
@@ -185,80 +182,99 @@ mod tests {
                 *entry += 2;
             }
 
-            // this shows what the routes were *actually* recorded as, making it easier to update ROUTES if the name changes.
-            let metrics_serialized = metrics.gather(&env.context.pool)?;
-            let all_routes_visited = metrics_serialized
-                .iter()
-                .find(|x| x.name() == "docsrs_routes_visited")
-                .unwrap();
-            let routes_visited_pretty: Vec<_> = all_routes_visited
-                .get_metric()
-                .iter()
-                .map(|metric| {
-                    let labels = metric.get_label();
-                    assert_eq!(labels.len(), 1); // not sure when this would be false
-                    let route = labels[0].value();
-                    let count = metric.get_counter().get_value();
-                    format!("{route}: {count}")
+            let collected = dbg!(env.collected_metrics());
+            let AggregatedMetrics::U64(MetricData::Sum(routes_visited)) = collected
+                .get_metric("web", "docsrs.web.routes_visited")?
+                .data()
+            else {
+                panic!("Expected Sum<U64> metric data");
+            };
+
+            dbg!(&routes_visited);
+
+            let routes_visited: HashMap<String, u64> = routes_visited
+                .data_points()
+                .map(|dp| {
+                    let route = dp
+                        .attributes()
+                        .find(|kv| kv.key.as_str() == "route")
+                        .unwrap()
+                        .clone()
+                        .value;
+
+                    (route.to_string(), dp.value())
                 })
                 .collect();
-            println!("routes: {routes_visited_pretty:?}");
 
-            for (label, count) in expected.iter() {
-                assert_eq!(
-                    metrics.routes_visited.with_label_values(&[*label]).get(),
-                    *count,
-                    "routes_visited metrics for {label} are incorrect",
-                );
-                assert_eq!(
-                    metrics
-                        .response_time
-                        .with_label_values(&[*label])
-                        .get_sample_count(),
-                    *count,
-                    "response_time metrics for {label} are incorrect",
-                );
-            }
+            assert_eq!(
+                routes_visited,
+                HashMap::from_iter(
+                    vec![
+                        ("/", 2),
+                        ("/-/sitemap/{letter}/sitemap.xml", 2),
+                        ("/crate/{name}/{version}", 4),
+                        ("/crate/{name}/{version}/status.json", 2),
+                        ("/releases", 2),
+                        ("/releases/feed", 2),
+                        ("/releases/queue", 2),
+                        ("/releases/recent-failures", 2),
+                        ("/releases/recent-failures/{page}", 2),
+                        ("/releases/recent/{page}", 2),
+                        ("/sitemap.xml", 2),
+                        ("rustdoc page", 4),
+                        ("static resource", 16),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                )
+            );
 
-            Ok(())
-        })
-    }
+            let AggregatedMetrics::F64(MetricData::Histogram(response_time)) = collected
+                .get_metric("web", "docsrs.web.response_time")?
+                .data()
+            else {
+                panic!("Expected Histogram<F64> metric data");
+            };
 
-    #[test]
-    fn test_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics").await?;
-            assert!(response.status().is_success());
+            dbg!(&response_time);
 
-            let body = response.text().await?;
-            assert!(body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(body.contains("queued_crates_count"), "{}", body);
-            Ok(())
-        })
-    }
+            let response_time_sample_counts: HashMap<String, u64> = response_time
+                .data_points()
+                .map(|dp| {
+                    let route = dp
+                        .attributes()
+                        .find(|kv| kv.key.as_str() == "route")
+                        .unwrap()
+                        .clone()
+                        .value;
 
-    #[test]
-    fn test_service_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics/service").await?;
-            assert!(response.status().is_success());
+                    (route.to_string(), dp.count())
+                })
+                .collect();
 
-            let body = response.text().await?;
-            assert!(!body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(body.contains("queued_crates_count"), "{}", body);
-            Ok(())
-        })
-    }
+            assert_eq!(
+                response_time_sample_counts,
+                HashMap::from_iter(
+                    vec![
+                        ("/", 2),
+                        ("/-/sitemap/{letter}/sitemap.xml", 2),
+                        ("/crate/{name}/{version}", 4),
+                        ("/crate/{name}/{version}/status.json", 2),
+                        ("/releases", 2),
+                        ("/releases/feed", 2),
+                        ("/releases/queue", 2),
+                        ("/releases/recent-failures", 2),
+                        ("/releases/recent-failures/{page}", 2),
+                        ("/releases/recent/{page}", 2),
+                        ("/sitemap.xml", 2),
+                        ("rustdoc page", 4),
+                        ("static resource", 16),
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                )
+            );
 
-    #[test]
-    fn test_instance_metrics_page_success() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/about/metrics/instance").await?;
-            assert!(response.status().is_success());
-
-            let body = response.text().await?;
-            assert!(body.contains("docsrs_failed_builds"), "{}", body);
-            assert!(!body.contains("queued_crates_count"), "{}", body);
             Ok(())
         })
     }

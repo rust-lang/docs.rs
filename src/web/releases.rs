@@ -1,9 +1,10 @@
 //! Releases web handlersrelease
 
+use super::cache::CachePolicy;
+use crate::build_queue::PRIORITY_CONTINUOUS;
 use crate::{
-    AsyncBuildQueue, Config, InstanceMetrics, RegistryApi,
-    build_queue::{QueuedCrate, REBUILD_PRIORITY},
-    cdn,
+    AsyncBuildQueue, Config, RegistryApi,
+    build_queue::QueuedCrate,
     db::types::version::Version,
     impl_axum_webpage,
     utils::report_error,
@@ -12,6 +13,7 @@ use crate::{
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
+        metrics::WebMetrics,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
         rustdoc::OfficialCrateDescription,
     },
@@ -29,14 +31,12 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     str,
     sync::Arc,
 };
 use tracing::{trace, warn};
 use url::form_urlencoded;
-
-use super::cache::CachePolicy;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -454,7 +454,7 @@ impl Default for Search {
 
 async fn redirect_to_random_crate(
     config: Arc<Config>,
-    metrics: Arc<InstanceMetrics>,
+    otel_metrics: Arc<WebMetrics>,
     conn: &mut sqlx::PgConnection,
 ) -> AxumResult<impl IntoResponse + use<>> {
     // We try to find a random crate and redirect to it.
@@ -491,7 +491,7 @@ async fn redirect_to_random_crate(
     .context("error fetching random crate")?;
 
     if let Some(row) = row {
-        metrics.im_feeling_lucky_searches.inc();
+        otel_metrics.im_feeling_lucky_searches.add(1, &[]);
 
         let params = RustdocParams::new(&row.name)
             .with_req_version(ReqVersion::Exact(
@@ -519,7 +519,7 @@ pub(crate) async fn search_handler(
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(registry): Extension<Arc<RegistryApi>>,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
+    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
     Query(mut query_params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
     let mut query = query_params
@@ -535,7 +535,7 @@ pub(crate) async fn search_handler(
     if query_params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
         // redirect to a random crate if query is empty
         if query.is_empty() {
-            return Ok(redirect_to_random_crate(config, metrics, &mut conn)
+            return Ok(redirect_to_random_crate(config, otel_metrics, &mut conn)
                 .await?
                 .into_response());
         }
@@ -712,7 +712,6 @@ struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
-    active_cdn_deployments: Vec<String>,
     in_progress_builds: Vec<(String, Version)>,
     expand_rebuild_queue: bool,
 }
@@ -729,19 +728,6 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let mut active_cdn_deployments: Vec<_> = cdn::queued_or_active_crate_invalidations(&mut conn)
-        .await?
-        .into_iter()
-        .map(|i| i.krate)
-        .collect();
-
-    // deduplicate the list of crates while keeping their order
-    let mut set = HashSet::new();
-    active_cdn_deployments.retain(|k| set.insert(k.clone()));
-
-    // reverse the list, so the oldest comes first
-    active_cdn_deployments.reverse();
-
     let in_progress_builds: Vec<(String, Version)> = sqlx::query!(
         r#"SELECT
             crates.name,
@@ -773,7 +759,7 @@ pub(crate) async fn build_queue_handler(
         .collect_vec();
 
     queue.retain_mut(|krate| {
-        if krate.priority >= REBUILD_PRIORITY {
+        if krate.priority >= PRIORITY_CONTINUOUS {
             rebuild_queue.push(krate.clone());
             false
         } else {
@@ -789,7 +775,6 @@ pub(crate) async fn build_queue_handler(
         description: "crate documentation scheduled to build & deploy",
         queue,
         rebuild_queue,
-        active_cdn_deployments,
         in_progress_builds,
         expand_rebuild_queue: params.expand.is_some(),
     })
@@ -811,6 +796,7 @@ mod tests {
     use mockito::Matcher;
     use reqwest::StatusCode;
     use serde_json::json;
+    use std::collections::HashSet;
     use test_case::test_case;
 
     #[test]
@@ -1802,41 +1788,6 @@ mod tests {
         })
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_deployment_queue() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .cloudfront_distribution_id_web(Some("distribution_id_web".into()))
-                .build()?,
-        )
-        .await?;
-
-        let web = env.web_app().await;
-
-        let mut conn = env.async_db().async_conn().await;
-        cdn::queue_crate_invalidation(&mut conn, env.config(), "krate_2").await?;
-
-        let content = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
-        assert!(
-            content
-                .select(".release > div > strong")
-                .expect("missing heading")
-                .any(|el| el.text_contents().contains("active CDN deployments"))
-        );
-
-        let items = content
-            .select(".queue-list > li")
-            .expect("missing list items")
-            .collect::<Vec<_>>();
-
-        assert_eq!(items.len(), 1);
-        let a = items[0].as_node().select_first("a").expect("missing link");
-
-        assert!(a.text_contents().contains("krate_2"));
-
-        Ok(())
-    }
-
     #[test]
     fn test_releases_queue() {
         async_wrapper(|env| async move {
@@ -1974,12 +1925,14 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
             let queue = env.async_build_queue();
-            queue.add_crate("foo", &V1, REBUILD_PRIORITY, None).await?;
             queue
-                .add_crate("bar", &V2, REBUILD_PRIORITY + 1, None)
+                .add_crate("foo", &V1, PRIORITY_CONTINUOUS, None)
                 .await?;
             queue
-                .add_crate("baz", &V3, REBUILD_PRIORITY - 1, None)
+                .add_crate("bar", &V2, PRIORITY_CONTINUOUS + 1, None)
+                .await?;
+            queue
+                .add_crate("baz", &V3, PRIORITY_CONTINUOUS - 1, None)
                 .await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);

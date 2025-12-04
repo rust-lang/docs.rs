@@ -1,12 +1,14 @@
 use anyhow::{Context as _, Result, anyhow};
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
-    Config, Context, PackageKind, RustwideBuilder,
+    Config, Context, Index, PackageKind, RustwideBuilder,
     db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
-    start_background_metrics_webserver, start_web_server,
+    queue_rebuilds_faulty_rustdoc, start_web_server,
     utils::{
-        ConfigName, get_config, get_crate_pattern_and_priority, list_crate_priorities,
-        queue_builder, remove_crate_priority, set_config, set_crate_priority,
+        ConfigName, daemon::start_background_service_metric_collector, get_config,
+        get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
+        remove_crate_priority, set_config, set_crate_priority,
     },
 };
 use futures_util::StreamExt;
@@ -135,8 +137,6 @@ enum CommandLine {
     },
 
     StartRegistryWatcher {
-        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: SocketAddr,
         /// Enable or disable the repository stats updater
         #[arg(
             long = "repository-stats-updater",
@@ -144,16 +144,11 @@ enum CommandLine {
             value_enum
         )]
         repository_stats_updater: Toggle,
-        #[arg(long = "cdn-invalidator", default_value = "enabled", value_enum)]
-        cdn_invalidator: Toggle,
         #[arg(long = "queue-rebuilds", default_value = "enabled", value_enum)]
         queue_rebuilds: Toggle,
     },
 
-    StartBuildServer {
-        #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-        metric_server_socket_addr: SocketAddr,
-    },
+    StartBuildServer,
 
     /// Starts the daemon
     Daemon {
@@ -184,33 +179,26 @@ impl CommandLine {
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx)?,
             Self::StartRegistryWatcher {
-                metric_server_socket_addr,
                 repository_stats_updater,
-                cdn_invalidator,
                 queue_rebuilds,
             } => {
                 if repository_stats_updater == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
                 }
-                if cdn_invalidator == Toggle::Enabled {
-                    docs_rs::utils::daemon::start_background_cdn_invalidator(&ctx)?;
-                }
                 if queue_rebuilds == Toggle::Enabled {
                     docs_rs::utils::daemon::start_background_queue_rebuild(&ctx)?;
                 }
 
-                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
+                // When people run the services separately, we assume that we can collect service
+                // metrics from the registry watcher, which should only run once, and all the time.
+                start_background_service_metric_collector(&ctx)?;
 
-                ctx.runtime.block_on(async move {
-                    docs_rs::utils::watch_registry(&ctx.async_build_queue, &ctx.config, ctx.index)
-                        .await
-                })?;
+                ctx.runtime.block_on(docs_rs::utils::watch_registry(
+                    &ctx.async_build_queue,
+                    &ctx.config,
+                ))?;
             }
-            Self::StartBuildServer {
-                metric_server_socket_addr,
-            } => {
-                start_background_metrics_webserver(Some(metric_server_socket_addr), &ctx)?;
-
+            Self::StartBuildServer => {
                 queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
             }
             Self::StartWebServer { socket_addr } => {
@@ -269,6 +257,17 @@ enum QueueSubcommand {
         #[arg(long, conflicts_with("reference"))]
         head: bool,
     },
+
+    /// Queue rebuilds for broken nightly versions of rustdoc, either for a single date (start) or a range (start inclusive, end exclusive)
+    RebuildBrokenNightly {
+        /// Start date of nightly builds to rebuild (inclusive)
+        #[arg(name = "START", short = 's', long = "start")]
+        start_nightly_date: NaiveDate,
+
+        /// End date of nightly builds to rebuild (exclusive, optional)
+        #[arg(name = "END", short = 'e', long = "end")]
+        end_nightly_date: Option<NaiveDate>,
+    },
 }
 
 impl QueueSubcommand {
@@ -298,7 +297,10 @@ impl QueueSubcommand {
                     (Some(reference), false) => reference,
                     (None, true) => {
                         println!("Fetching changes to set reference to HEAD");
-                        ctx.runtime.block_on(ctx.index.latest_commit_reference())?
+                        ctx.runtime.block_on(async move {
+                            let index = Index::from_config(&ctx.config).await?;
+                            index.latest_commit_reference().await
+                        })?
                     }
                     (_, _) => unreachable!(),
                 };
@@ -308,6 +310,15 @@ impl QueueSubcommand {
             }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
+
+            Self::RebuildBrokenNightly { start_nightly_date, end_nightly_date } => {
+                ctx.runtime.block_on(async move {
+                    let mut conn = ctx.pool.get_async().await?;
+                    let queued_rebuilds_amount = queue_rebuilds_faulty_rustdoc(&mut conn, &ctx.async_build_queue, &start_nightly_date, &end_nightly_date).await?;
+                    println!("Queued {queued_rebuilds_amount} rebuilds for broken nightly versions of rustdoc");
+                    Ok::<(), anyhow::Error>(())
+                })?
+            }
         }
         Ok(())
     }
@@ -435,6 +446,8 @@ impl BuildSubcommand {
             } => {
                 let mut builder = rustwide_builder()?;
 
+                builder.update_toolchain_and_add_essential_files()?;
+
                 if let Some(path) = local {
                     builder
                         .build_local_package(&path)
@@ -473,17 +486,7 @@ impl BuildSubcommand {
                     return Ok(());
                 }
 
-                rustwide_builder()?
-                    .update_toolchain()
-                    .context("failed to update toolchain")?;
-
-                rustwide_builder()?
-                    .purge_caches()
-                    .context("failed to purge caches")?;
-
-                rustwide_builder()?
-                    .add_essential_files()
-                    .context("failed to add essential files")?;
+                rustwide_builder()?.update_toolchain_and_add_essential_files()?;
             }
 
             Self::AddEssentialFiles => {

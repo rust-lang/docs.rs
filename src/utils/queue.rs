@@ -1,8 +1,7 @@
 //! Utilities for interacting with the build queue
+use crate::build_queue::PRIORITY_DEFAULT;
 use crate::error::Result;
 use futures_util::stream::TryStreamExt;
-
-const DEFAULT_PRIORITY: i32 = 0;
 
 /// Get the build queue priority for a crate, returns the matching pattern too
 pub async fn list_crate_priorities(conn: &mut sqlx::PgConnection) -> Result<Vec<(String, i32)>> {
@@ -34,7 +33,7 @@ pub async fn get_crate_pattern_and_priority(
 pub async fn get_crate_priority(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
     Ok(get_crate_pattern_and_priority(conn, name)
         .await?
-        .map_or(DEFAULT_PRIORITY, |(_, priority)| priority))
+        .map_or(PRIORITY_DEFAULT, |(_, priority)| priority))
 }
 
 /// Set all crates that match [`pattern`] to have a certain priority
@@ -96,22 +95,22 @@ mod tests {
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "docsrs").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
 
             set_crate_priority(&mut conn, "_c_", 100).await?;
             assert_eq!(get_crate_priority(&mut conn, "rcc").await?, 100);
-            assert_eq!(get_crate_priority(&mut conn, "rc").await?, DEFAULT_PRIORITY);
+            assert_eq!(get_crate_priority(&mut conn, "rc").await?, PRIORITY_DEFAULT);
 
             set_crate_priority(&mut conn, "hexponent", 10).await?;
             assert_eq!(get_crate_priority(&mut conn, "hexponent").await?, 10);
             assert_eq!(
                 get_crate_priority(&mut conn, "hexponents").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "floathexponent").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
 
             Ok(())
@@ -133,7 +132,7 @@ mod tests {
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "docsrs-").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
 
             Ok(())
@@ -160,7 +159,7 @@ mod tests {
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "unrelated").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
 
             Ok(())
@@ -175,23 +174,23 @@ mod tests {
 
             assert_eq!(
                 get_crate_priority(&mut conn, "docsrs").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "rcc").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "lasso").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "hexponent").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
             assert_eq!(
                 get_crate_priority(&mut conn, "rust4lyfe").await?,
-                DEFAULT_PRIORITY
+                PRIORITY_DEFAULT
             );
 
             Ok(())

@@ -1,13 +1,47 @@
 name: Docker
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
 
 jobs:
   docker:
+    strategy:
+      matrix:
+        target: [
+          "web-server",
+          "build-server",
+          "registry-watcher",
+          "cli"
+        ]
     name: Test docker image builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
-      - name: Build the Docker image
-        run: docker build -t docs-rs -f dockerfiles/Dockerfile .
+      - name: setup docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: build docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: "./dockerfiles/Dockerfile"
+          platforms: linux/amd64
+          target: ${{ matrix.target }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            PROFILE=release
+            PROFILE_DIR=release
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: false
+
+          # TODO: later we would set `push: true` and also provide nice tags
+          # for the images.
+          # Unclear is how the deploy would work then.

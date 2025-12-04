@@ -1,4 +1,4 @@
-use crate::{db::types::version::Version, error::Result, utils::retry_async};
+use crate::{APP_USER_AGENT, db::types::version::Version, error::Result, utils::retry_async};
 use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, Utc};
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
@@ -6,12 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::instrument;
 use url::Url;
-
-const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    " ",
-    include_str!(concat!(env!("OUT_DIR"), "/git_version"))
-);
 
 #[derive(Debug)]
 pub struct RegistryApi {
@@ -50,7 +44,17 @@ pub struct CrateOwner {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, sqlx::Type,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    sqlx::Type,
+    bincode::Encode,
 )]
 #[sqlx(type_name = "owner_kind", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]

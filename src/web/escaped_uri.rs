@@ -1,4 +1,4 @@
-use crate::web::encode_url_path;
+use crate::web::{encode_url_path, url_decode};
 use askama::filters::HtmlSafe;
 use http::{Uri, uri::PathAndQuery};
 use std::{borrow::Borrow, fmt::Display, iter, str::FromStr};
@@ -8,6 +8,8 @@ use url::form_urlencoded;
 ///
 /// Ensures that the path part is always properly percent-encoded, including some characters
 /// that http::Uri would allow, but we still want to encode, like umlauts.
+/// Also ensures that some characters are _not_ encoded that sometimes arrive percent-encoded
+/// from browsers, so we then can easily compare URIs, knowing they are encoded the same way.
 ///
 /// Also we support fragments, with http::Uri doesn't support yet.
 /// See https://github.com/hyperium/http/issues/775
@@ -17,10 +19,36 @@ pub struct EscapedURI {
     fragment: Option<String>,
 }
 
+impl bincode::Encode for EscapedURI {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        // encode as separate parts so we don't have to clone
+        self.uri.scheme_str().encode(encoder)?;
+        self.uri.authority().map(|a| a.as_str()).encode(encoder)?;
+        self.uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .encode(encoder)?;
+        self.fragment.encode(encoder)?;
+        Ok(())
+    }
+}
+
 impl EscapedURI {
     pub fn from_uri(uri: Uri) -> Self {
         if uri.path_and_query().is_some() {
-            let encoded_path = encode_url_path(uri.path());
+            let encoded_path = encode_url_path(
+                // we re-encode the path so we know all EscapedURI instances are comparable and
+                // encoded the same way.
+                // Example: "^" is not escaped when axum generates an Uri, we also didn't do it
+                // for a long time so we have nicers URLs with caret, since it's supported by
+                // most browsers to be shown in the URL bar.
+                // But: the actual request will have it encoded, which means the `Uri`
+                // we get from axum when handling the request will have it encoded.
+                &url_decode(uri.path()).expect("was in Uri, so has to have been correct"),
+            );
             if uri.path() == encoded_path {
                 Self {
                     uri,
@@ -223,6 +251,22 @@ impl From<Uri> for EscapedURI {
     }
 }
 
+impl TryFrom<String> for EscapedURI {
+    type Error = http::uri::InvalidUri;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl TryFrom<&str> for EscapedURI {
+    type Error = http::uri::InvalidUri;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
 impl PartialEq<String> for &EscapedURI {
     fn eq(&self, other: &String) -> bool {
         *self == other
@@ -286,6 +330,7 @@ mod tests {
     }
 
     #[test_case("/something" => "/something"; "plain path")]
+    #[test_case("/semver/%5E1.2.3" => "/semver/^1.2.3"; "we encode less")]
     #[test_case("/somethingäöü" => "/something%C3%A4%C3%B6%C3%BC"; "path with umlauts")]
     fn test_escaped_uri_encodes_path_from_uri(path: &str) -> String {
         let uri: Uri = path.parse().unwrap();

@@ -80,14 +80,10 @@ pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     storage: &AsyncStorage,
     archive_path: &str,
     path: P,
-    public_access: bool,
 ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
     let (file_list, algorithm) = storage
         .store_all_in_archive(archive_path, path.as_ref())
         .await?;
-    if public_access {
-        storage.set_public_access(archive_path, true).await?;
-    }
     Ok((file_list, algorithm))
 }
 

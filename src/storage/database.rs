@@ -1,18 +1,18 @@
-use super::{Blob, FileRange, StreamingBlob};
-use crate::{InstanceMetrics, db::Pool, error::Result};
+use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
+use crate::{db::Pool, error::Result, web::headers::compute_etag};
 use chrono::{DateTime, Utc};
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;
-use std::{io, sync::Arc};
+use std::io;
 
 pub(crate) struct DatabaseBackend {
     pool: Pool,
-    metrics: Arc<InstanceMetrics>,
+    otel_metrics: StorageMetrics,
 }
 
 impl DatabaseBackend {
-    pub(crate) fn new(pool: Pool, metrics: Arc<InstanceMetrics>) -> Self {
-        Self { pool, metrics }
+    pub(crate) fn new(pool: Pool, otel_metrics: StorageMetrics) -> Self {
+        Self { pool, otel_metrics }
     }
 
     pub(super) async fn exists(&self, path: &str) -> Result<bool> {
@@ -22,40 +22,6 @@ impl DatabaseBackend {
         )
         .fetch_one(&self.pool)
         .await?)
-    }
-
-    pub(super) async fn get_public_access(&self, path: &str) -> Result<bool> {
-        match sqlx::query_scalar!(
-            "SELECT public
-             FROM files
-             WHERE path = $1",
-            path
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        {
-            Some(public) => Ok(public),
-            None => Err(super::PathNotFoundError.into()),
-        }
-    }
-
-    pub(super) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        if sqlx::query!(
-            "UPDATE files
-             SET public = $2
-             WHERE path = $1",
-            path,
-            public,
-        )
-        .execute(&self.pool)
-        .await?
-        .rows_affected()
-            == 1
-        {
-            Ok(())
-        } else {
-            Err(super::PathNotFoundError.into())
-        }
     }
 
     pub(super) async fn get_stream(
@@ -114,6 +80,8 @@ impl DatabaseBackend {
         });
         let content = result.content.unwrap_or_default();
         let content_len = content.len();
+
+        let etag = compute_etag(&content);
         Ok(StreamingBlob {
             path: result.path,
             mime: result
@@ -121,13 +89,14 @@ impl DatabaseBackend {
                 .parse()
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated: result.date_updated,
+            etag: Some(etag),
             content: Box::new(io::Cursor::new(content)),
             content_length: content_len,
             compression,
         })
     }
 
-    pub(super) async fn store_batch(&self, batch: Vec<Blob>) -> Result<()> {
+    pub(super) async fn store_batch(&self, batch: Vec<BlobUpload>) -> Result<()> {
         let mut conn = self.pool.get_async().await?;
         let mut trans = conn.begin().await?;
         for blob in batch {
@@ -143,7 +112,7 @@ impl DatabaseBackend {
                 compression,
             )
             .execute(&mut *trans).await?;
-            self.metrics.uploaded_files_total.inc();
+            self.otel_metrics.uploaded_files.add(1, &[]);
         }
         trans.commit().await?;
         Ok(())

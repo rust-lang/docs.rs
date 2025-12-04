@@ -1,6 +1,13 @@
-use crate::{cdn::CdnKind, storage::StorageKind};
+use crate::storage::StorageKind;
 use anyhow::{Context, Result, anyhow, bail};
-use std::{env::VarError, error::Error, path::PathBuf, str::FromStr, time::Duration};
+use std::{
+    env::VarError,
+    error::Error,
+    io,
+    path::{self, Path, PathBuf},
+    str::FromStr,
+    time::Duration,
+};
 use tracing::trace;
 use url::Url;
 
@@ -37,11 +44,6 @@ pub struct Config {
     #[cfg(test)]
     #[builder(default)]
     pub(crate) s3_bucket_is_temporary: bool,
-
-    // CloudFront domain which we can access
-    // public S3 files through
-    #[cfg_attr(test, builder(setter(into)))]
-    pub(crate) s3_static_root_path: String,
 
     // Github authentication
     pub(crate) github_accesstoken: Option<String>,
@@ -102,18 +104,15 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    pub(crate) cdn_backend: CdnKind,
+    /// Fastly API host, typically only overwritten for testing
+    pub fastly_api_host: Url,
 
-    /// The maximum age of a queued invalidation request before it is
-    /// considered too old and we fall back to a full purge of the
-    /// distributions.
-    pub(crate) cdn_max_queued_age: Duration,
+    /// Fastly API token for purging the services below.
+    pub fastly_api_token: Option<String>,
 
-    // CloudFront distribution ID for the web server.
-    // Will be used for invalidation-requests.
-    pub cloudfront_distribution_id_web: Option<String>,
-    /// same for the `static.docs.rs` distribution
-    pub cloudfront_distribution_id_static: Option<String>,
+    /// fastly service SID for the main domain
+    pub fastly_service_sid: Option<String>,
+
     pub(crate) build_workspace_reinitialization_interval: Duration,
 
     // Build params
@@ -130,6 +129,9 @@ pub struct Config {
 
     // automatic rebuild configuration
     pub(crate) max_queued_rebuilds: Option<u16>,
+
+    // opentelemetry endpoint to send OTLP to
+    pub(crate) opentelemetry_endpoint: Option<Url>,
 }
 
 impl Config {
@@ -173,6 +175,7 @@ impl Config {
                 "DOCSRS_REGISTRY_API_HOST",
                 "https://crates.io".parse().unwrap(),
             )?)
+            .opentelemetry_endpoint(maybe_env("OTEL_EXPORTER_OTLP_ENDPOINT")?)
             .prefix(prefix.clone())
             .database_url(require_env("DOCSRS_DATABASE_URL")?)
             .max_pool_size(env("DOCSRS_MAX_POOL_SIZE", 90u32)?)
@@ -182,10 +185,6 @@ impl Config {
             .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
             .s3_region(env("S3_REGION", "us-west-1".to_string())?)
             .s3_endpoint(maybe_env("S3_ENDPOINT")?)
-            .s3_static_root_path(env(
-                "DOCSRS_S3_STATIC_ROOT_PATH",
-                "https://static.docs.rs".to_string(),
-            )?)
             .github_accesstoken(maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?)
             .github_updater_min_rate_limit(env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?)
             .gitlab_accesstoken(maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?)
@@ -205,14 +204,16 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .cdn_backend(env("DOCSRS_CDN_BACKEND", CdnKind::Dummy)?)
-            .cdn_max_queued_age(Duration::from_secs(env("DOCSRS_CDN_MAX_QUEUED_AGE", 3600)?))
-            .cloudfront_distribution_id_web(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_WEB")?)
-            .cloudfront_distribution_id_static(maybe_env("CLOUDFRONT_DISTRIBUTION_ID_STATIC")?)
-            .local_archive_cache_path(env(
+            .fastly_api_host(env(
+                "DOCSRS_FASTLY_API_HOST",
+                "https://api.fastly.com".parse().unwrap(),
+            )?)
+            .fastly_api_token(maybe_env("DOCSRS_FASTLY_API_TOKEN")?)
+            .fastly_service_sid(maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?)
+            .local_archive_cache_path(ensure_absolute_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
-            )?)
+            )?)?)
             .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
             .temp_dir(temp_dir)
             .rustwide_workspace(env(
@@ -232,6 +233,26 @@ impl Config {
                 86400,
             )?))
             .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?))
+    }
+
+    pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
+        static HTML: &str = "html";
+
+        if let Some(ext) = path.as_ref().extension()
+            && ext == HTML
+        {
+            self.max_file_size_html
+        } else {
+            self.max_file_size
+        }
+    }
+}
+
+fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Ok(path::absolute(&path)?)
     }
 }
 

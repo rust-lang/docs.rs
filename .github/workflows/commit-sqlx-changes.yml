@@ -1,7 +1,7 @@
 on:
   pull_request_target:
     branches:
-      - master
+      - main
     types: [closed]
 
 env:
@@ -28,12 +28,12 @@ jobs:
     outputs:
       need_pr: ${{ steps.sqlx_check.outputs.need_pr }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Ensure repository is up to date
         run: |
           git fetch origin
-          git rebase origin/master
+          git rebase origin/main
 
       - name: install `just`
         run: sudo snap install --edge --classic just
@@ -59,11 +59,11 @@ jobs:
       - name: run database migrations
         run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
 
-      - name: Commit sqlx changes on master branch if any
+      - name: Commit sqlx changes on main branch if any
         id: sqlx_check
         run: |
           just sqlx-prepare
-          # If there are differences in the SQLX files, then we push them on the master branch
+          # If there are differences in the SQLX files, then we push them on the main branch
           if git status --porcelain .sqlx ; then
             echo "need_pr=1" >> "$GITHUB_OUTPUT"
           else

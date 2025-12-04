@@ -1,6 +1,5 @@
 use crate::{
-    AsyncStorage, Config, Context, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi,
-    Storage,
+    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
     db::{
         BuildId, CrateId, Pool, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
@@ -11,6 +10,7 @@ use crate::{
     },
     docbuilder::Limits,
     error::Result,
+    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS, otel::AnyMeterProvider},
     repositories::RepositoryStatsUpdater,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
@@ -19,12 +19,13 @@ use crate::{
     utils::{
         ConfigName,
         cargo_metadata::{MetadataExt as _, PackageExt as _, load_cargo_metadata_from_rustwide},
-        copy_dir_all, get_config, parse_rustc_version, report_error, set_config,
+        copy_dir_all, get_config, parse_rustc_version, report_error, retry, set_config,
     },
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
+use opentelemetry::metrics::{Counter, Histogram};
 use regex::Regex;
 use rustwide::{
     AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
@@ -53,7 +54,7 @@ pub const RUSTDOC_JSON_COMPRESSION_ALGORITHMS: &[CompressionAlgorithm] =
     &[CompressionAlgorithm::Zstd, CompressionAlgorithm::Gzip];
 
 /// read the format version from a rustdoc JSON file.
-fn read_format_version_from_rustdoc_json(
+pub fn read_format_version_from_rustdoc_json(
     reader: impl std::io::Read,
 ) -> Result<RustdocJsonFormatVersion> {
     let reader = BufReader::new(reader);
@@ -114,6 +115,52 @@ pub enum PackageKind<'a> {
     Registry(&'a str),
 }
 
+#[derive(Debug)]
+pub struct BuilderMetrics {
+    pub total_builds: Counter<u64>,
+    pub build_time: Histogram<f64>,
+    pub successful_builds: Counter<u64>,
+    pub failed_builds: Counter<u64>,
+    pub non_library_builds: Counter<u64>,
+    pub documentation_size: Histogram<u64>,
+}
+
+impl BuilderMetrics {
+    pub fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("builder");
+        const PREFIX: &str = "docsrs.builder";
+        Self {
+            failed_builds: meter
+                .u64_counter(format!("{PREFIX}.failed_builds"))
+                .with_unit("1")
+                .build(),
+            build_time: meter
+                .f64_histogram(format!("{PREFIX}.build_time"))
+                .with_boundaries(BUILD_TIME_HISTOGRAM_BUCKETS.to_vec())
+                .with_unit("s")
+                .build(),
+            total_builds: meter
+                .u64_counter(format!("{PREFIX}.total_builds"))
+                .with_unit("1")
+                .build(),
+            successful_builds: meter
+                .u64_counter(format!("{PREFIX}.successful_builds"))
+                .with_unit("1")
+                .build(),
+            non_library_builds: meter
+                .u64_counter(format!("{PREFIX}.non_library_builds"))
+                .with_unit("1")
+                .build(),
+            documentation_size: meter
+                .u64_histogram(format!("{PREFIX}.documentation_size"))
+                .with_boundaries(DOCUMENTATION_SIZE_BUCKETS.to_vec())
+                .with_unit("bytes")
+                .with_description("size of the generated documentation in bytes")
+                .build(),
+        }
+    }
+}
+
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
@@ -122,10 +169,10 @@ pub struct RustwideBuilder {
     db: Pool,
     storage: Arc<Storage>,
     async_storage: Arc<AsyncStorage>,
-    metrics: Arc<InstanceMetrics>,
     registry_api: Arc<RegistryApi>,
     repository_stats_updater: Arc<RepositoryStatsUpdater>,
     workspace_initialize_time: Instant,
+    builder_metrics: Arc<BuilderMetrics>,
 }
 
 impl RustwideBuilder {
@@ -143,10 +190,10 @@ impl RustwideBuilder {
             runtime: context.runtime.clone(),
             storage: context.storage.clone(),
             async_storage: context.async_storage.clone(),
-            metrics: context.instance_metrics.clone(),
             registry_api: context.registry_api.clone(),
             repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
+            builder_metrics: context.async_build_queue.builder_metrics(),
         })
     }
 
@@ -174,11 +221,46 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    pub fn update_toolchain(&mut self) -> Result<bool> {
+    #[instrument(skip_all)]
+    pub fn update_toolchain_and_add_essential_files(&mut self) -> Result<()> {
+        info!("try updating the toolchain");
+        let updated = retry(
+            || {
+                self.update_toolchain()
+                    .context("downloading new toolchain failed")
+            },
+            3,
+        )?;
+
+        debug!(updated, "toolchain update check complete");
+
+        if updated {
+            // toolchain has changed, purge caches
+            retry(
+                || {
+                    self.purge_caches()
+                        .context("purging rustwide caches failed")
+                },
+                3,
+            )?;
+
+            self.add_essential_files()
+                .context("adding essential files failed")?;
+        }
+
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    fn update_toolchain(&mut self) -> Result<bool> {
         self.toolchain = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
+        debug!(
+            configured_toolchain = self.toolchain.to_string(),
+            "configured toolchain"
+        );
 
         // For CI builds, a lot of the normal update_toolchain things don't apply.
         // CI builds are only for one platform (https://forge.rust-lang.org/infra/docs/rustc-ci.html#try-builds)
@@ -247,7 +329,72 @@ impl RustwideBuilder {
             }
         }
 
-        let has_changed = old_version != Some(self.rustc_version()?);
+        let new_version = self.rustc_version()?;
+        debug!(new_version, "detected new rustc version");
+        let mut has_changed = old_version.as_ref() != Some(&new_version);
+
+        if !has_changed {
+            // This fixes an edge-case on a fresh build server.
+            //
+            // It seems like on the fresh server, there _is_ a recent nightly toolchain
+            // installed. In this case, this method will just install necessary components and
+            // doc-targets/platforms.
+            //
+            // But: *for this local old toolchain, we never ran `add_essential_files`*, because it
+            // was not installed by us.
+            //
+            // Now the culprit: even through we "fix" the previously installed nightly toolchain
+            // with the needed components & targets, we return "updated = false", since the
+            // version number didn't change.
+            //
+            // As a result, `BuildQueue::update_toolchain` will not call `add_essential_files`,
+            // which then means we don't have the toolchain-shared static files on our S3 bucket.
+            //
+            // The workaround specifically for `add_essential_files` is the following:
+            //
+            // After `add_essential_files` is finished, it sets `ConfigName::RustcVersion` in the
+            // config database to the rustc version it uploaded the essential files for.
+            //
+            // This means, if `ConfigName::RustcVersion` is empty, or different from the current new
+            // version, we can set `updated = true` too.
+            //
+            // I feel like there are more edge-cases, but for now this is OK.
+            //
+            // Alternative would have been to run `build update-toolchain --only-first-time`
+            // in a newly created `ENTRYPOINT` script for the build-server. This is how it was
+            // done in the previous (one-dockerfile-and-process-for-everything) approach.
+            // The `entrypoint.sh` script did call `add-essential-files --only-first-time`.
+            //
+            // Problem with that approach: this approach postpones the boot process of the
+            // build-server, where docker and later the infra will try to check with a HTTP
+            // endpoint to see if the build server is ready.
+            //
+            // So I leaned to towards a more self-contained solution which doesn't need docker
+            // at all, and also would work if you run the build-server directly on your machine.
+            //
+            // Fixing it here also means the startup of the actual build-server including its
+            // metrics collection endpoints don't be delayed. Generally should doesn't be
+            // a differene how much time is needed on a fresh build-server, between picking the
+            // release up from the queue, and actually starting to build the release. In the old
+            // solution, the entrypoint would do the toolchain-update & add-essential files
+            // before even starting the build-server, now we're roughly doing the same thing
+            // inside the main builder loop.
+
+            let rustc_version = self.runtime.block_on({
+                let pool = self.db.clone();
+                async move {
+                    let mut conn = pool
+                        .get_async()
+                        .await
+                        .context("failed to get a database connection")?;
+
+                    get_config::<String>(&mut conn, ConfigName::RustcVersion).await
+                }
+            })?;
+
+            has_changed = rustc_version.is_none() || rustc_version != Some(new_version);
+        }
+
         Ok(has_changed)
     }
 
@@ -531,7 +678,6 @@ impl RustwideBuilder {
                             &self.async_storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
-                            false,
                         ))?;
                     algs.insert(new_alg);
                     files_list
@@ -627,12 +773,9 @@ impl RustwideBuilder {
                             &self.async_storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
-                            true,
                         ))?;
                     let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
-                    self.metrics
-                        .documentation_size
-                        .observe(documentation_size as f64 / 1024.0 / 1024.0);
+                    self.builder_metrics.documentation_size.record(documentation_size, &[]);
                     algs.insert(new_alg);
                     Some(documentation_size)
                 } else {
@@ -666,11 +809,11 @@ impl RustwideBuilder {
                 }
 
                 if res.result.successful {
-                    self.metrics.successful_builds.inc();
+                    self.builder_metrics.successful_builds.add(1, &[]);
                 } else if res.cargo_metadata.root().is_library() {
-                    self.metrics.failed_builds.inc();
+                    self.builder_metrics.failed_builds.add(1, &[]);
                 } else {
-                    self.metrics.non_library_builds.inc();
+                    self.builder_metrics.non_library_builds.add(1, &[]);
                 }
 
                 let release_data = if !is_local {
@@ -924,7 +1067,6 @@ impl RustwideBuilder {
 
                 self.storage
                     .store_one_uncompressed(&path, compressed_json.clone())?;
-                self.storage.set_public_access(&path, true)?;
             }
         }
 
@@ -1490,7 +1632,6 @@ mod tests {
                         Some(*alg),
                     );
                     assert!(storage.exists(&path)?);
-                    assert!(storage.get_public_access(&path)?);
 
                     let ext = compression::file_extension_for(*alg);
 

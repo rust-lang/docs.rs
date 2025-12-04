@@ -5,12 +5,12 @@ mod s3;
 
 pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
 use self::{
-    compression::{wrap_reader_for_decompression, wrap_writer_for_compression},
+    compression::{compress_async, wrap_reader_for_decompression},
     database::DatabaseBackend,
     s3::S3Backend,
 };
 use crate::{
-    Config, InstanceMetrics,
+    Config,
     db::{
         BuildId, Pool,
         file::{FileEntry, detect_mime},
@@ -18,30 +18,38 @@ use crate::{
         types::version::Version,
     },
     error::Result,
+    metrics::otel::AnyMeterProvider,
     utils::spawn_blocking,
 };
 use anyhow::anyhow;
+use axum_extra::headers;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use fn_error_context::context;
 use futures_util::stream::BoxStream;
 use mime::Mime;
+use opentelemetry::metrics::Counter;
 use path_slash::PathExt;
 use std::{
     fmt,
     fs::{self, File},
     io::{self, BufReader},
+    iter,
     num::ParseIntError,
     ops::RangeInclusive,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
-use std::{iter, str::FromStr};
 use tokio::{
-    io::{AsyncRead, AsyncWriteExt},
+    io::{AsyncBufRead, AsyncBufReadExt},
     runtime,
+    sync::RwLock,
 };
-use tracing::{error, info_span, instrument, trace};
+use tracing::{error, info_span, instrument, trace, warn};
 use walkdir::WalkDir;
+
+const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 type FileRange = RangeInclusive<u64>;
 
@@ -49,28 +57,44 @@ type FileRange = RangeInclusive<u64>;
 #[error("path not found")]
 pub(crate) struct PathNotFoundError;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct Blob {
+/// represents a blob to be uploaded to storage.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BlobUpload {
     pub(crate) path: String,
     pub(crate) mime: Mime,
-    pub(crate) date_updated: DateTime<Utc>,
     pub(crate) content: Vec<u8>,
     pub(crate) compression: Option<CompressionAlgorithm>,
 }
 
-impl Blob {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.mime == "application/x-empty"
+impl From<Blob> for BlobUpload {
+    fn from(value: Blob) -> Self {
+        Self {
+            path: value.path,
+            mime: value.mime,
+            content: value.content,
+            compression: value.compression,
+        }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Blob {
+    pub(crate) path: String,
+    pub(crate) mime: Mime,
+    pub(crate) date_updated: DateTime<Utc>,
+    pub(crate) etag: Option<headers::ETag>,
+    pub(crate) content: Vec<u8>,
+    pub(crate) compression: Option<CompressionAlgorithm>,
 }
 
 pub(crate) struct StreamingBlob {
     pub(crate) path: String,
     pub(crate) mime: Mime,
     pub(crate) date_updated: DateTime<Utc>,
+    pub(crate) etag: Option<headers::ETag>,
     pub(crate) compression: Option<CompressionAlgorithm>,
     pub(crate) content_length: usize,
-    pub(crate) content: Box<dyn AsyncRead + Unpin + Send>,
+    pub(crate) content: Box<dyn AsyncBufRead + Unpin + Send>,
 }
 
 impl std::fmt::Debug for StreamingBlob {
@@ -79,6 +103,7 @@ impl std::fmt::Debug for StreamingBlob {
             .field("path", &self.path)
             .field("mime", &self.mime)
             .field("date_updated", &self.date_updated)
+            .field("etag", &self.etag)
             .field("compression", &self.compression)
             .finish()
     }
@@ -87,19 +112,38 @@ impl std::fmt::Debug for StreamingBlob {
 impl StreamingBlob {
     /// wrap the content stream in a streaming decompressor according to the
     /// algorithm found in `compression` attribute.
-    pub(crate) fn decompress(mut self) -> Self {
+    pub(crate) async fn decompress(mut self) -> Result<Self, io::Error> {
         let Some(alg) = self.compression else {
-            return self;
+            return Ok(self);
         };
 
         self.content = wrap_reader_for_decompression(self.content, alg);
+
+        // We fill the first bytes here to force the compressor to start decompressing.
+        // This is because we want a failure here in this method when the data is corrupted,
+        // so we can directly act on that, and users don't have any errors when they just
+        // stream the data.
+        // This won't _comsume_ the bytes. The user of this StreamingBlob will still be able
+        // to stream the whole content.
+        //
+        // This doesn't work 100% of the time. We might get other i/o error here,
+        // or the decompressor might stumble on corrupted data later during streaming.
+        //
+        // But: the most common error is that the format "magic bytes" at the beginning
+        // of the stream are missing, and that's caught here.
+        let decompressed_buf = self.content.fill_buf().await?;
+        debug_assert!(
+            !decompressed_buf.is_empty(),
+            "we assume if we have > 0 decompressed bytes, start of the decompression works."
+        );
+
         self.compression = None;
-        self
+        // not touching the etag, it should represent the original content
+        Ok(self)
     }
 
+    /// consume the inner stream and materialize the full blob into memory.
     pub(crate) async fn materialize(mut self, max_size: usize) -> Result<Blob> {
-        self = self.decompress();
-
         let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
         content.reserve(self.content_length);
 
@@ -109,9 +153,24 @@ impl StreamingBlob {
             path: self.path,
             mime: self.mime,
             date_updated: self.date_updated,
+            etag: self.etag, // downloading doesn't change the etag
             content: content.into_inner(),
             compression: self.compression,
         })
+    }
+}
+
+impl From<Blob> for StreamingBlob {
+    fn from(value: Blob) -> Self {
+        Self {
+            path: value.path,
+            mime: value.mime,
+            date_updated: value.date_updated,
+            etag: value.etag,
+            compression: value.compression,
+            content_length: value.content.len(),
+            content: Box::new(io::Cursor::new(value.content)),
+        }
     }
 }
 
@@ -173,6 +232,24 @@ impl std::str::FromStr for StorageKind {
     }
 }
 
+#[derive(Debug)]
+struct StorageMetrics {
+    uploaded_files: Counter<u64>,
+}
+
+impl StorageMetrics {
+    fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("storage");
+        const PREFIX: &str = "docsrs.storage";
+        Self {
+            uploaded_files: meter
+                .u64_counter(format!("{PREFIX}.uploaded_files"))
+                .with_unit("1")
+                .build(),
+        }
+    }
+}
+
 enum StorageBackend {
     Database(DatabaseBackend),
     S3(Box<S3Backend>),
@@ -181,24 +258,29 @@ enum StorageBackend {
 pub struct AsyncStorage {
     backend: StorageBackend,
     config: Arc<Config>,
+    /// Locks to synchronize access to the locally cached archive index files.
+    locks: DashMap<PathBuf, Arc<RwLock<()>>>,
 }
 
 impl AsyncStorage {
     pub async fn new(
         pool: Pool,
-        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
+        otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
+        let otel_metrics = StorageMetrics::new(otel_meter_provider);
+
         Ok(Self {
             backend: match config.storage_backend {
                 StorageKind::Database => {
-                    StorageBackend::Database(DatabaseBackend::new(pool, metrics))
+                    StorageBackend::Database(DatabaseBackend::new(pool, otel_metrics))
                 }
                 StorageKind::S3 => {
-                    StorageBackend::S3(Box::new(S3Backend::new(metrics, &config).await?))
+                    StorageBackend::S3(Box::new(S3Backend::new(&config, otel_metrics).await?))
                 }
             },
             config,
+            locks: DashMap::new(),
         })
     }
 
@@ -207,30 +289,6 @@ impl AsyncStorage {
         match &self.backend {
             StorageBackend::Database(db) => db.exists(path).await,
             StorageBackend::S3(s3) => s3.exists(path).await,
-        }
-    }
-
-    #[instrument]
-    pub(crate) async fn get_public_access(&self, path: &str) -> Result<bool> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.get_public_access(path).await,
-            StorageBackend::S3(s3) => s3.get_public_access(path).await,
-        }
-    }
-
-    #[instrument]
-    pub(crate) async fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.set_public_access(path, public).await,
-            StorageBackend::S3(s3) => s3.set_public_access(path, public).await,
-        }
-    }
-
-    fn max_file_size_for(&self, path: &str) -> usize {
-        if path.ends_with(".html") {
-            self.config.max_file_size_html
-        } else {
-            self.config.max_file_size
         }
     }
 
@@ -272,17 +330,28 @@ impl AsyncStorage {
         path: &str,
         archive_storage: bool,
     ) -> Result<Blob> {
-        Ok(if archive_storage {
-            self.get_from_archive(
-                &source_archive_path(name, version),
-                latest_build_id,
-                path,
-                self.max_file_size_for(path),
-            )
+        self.stream_source_file(name, version, latest_build_id, path, archive_storage)
             .await?
+            .materialize(self.config.max_file_size_for(path))
+            .await
+    }
+
+    #[instrument]
+    pub(crate) async fn stream_source_file(
+        &self,
+        name: &str,
+        version: &Version,
+        latest_build_id: Option<BuildId>,
+        path: &str,
+        archive_storage: bool,
+    ) -> Result<StreamingBlob> {
+        trace!("fetch source file");
+        Ok(if archive_storage {
+            self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
+                .await?
         } else {
             let remote_path = format!("sources/{name}/{version}/{path}");
-            self.get(&remote_path, self.max_file_size_for(path)).await?
+            self.get_stream(&remote_path).await?
         })
     }
 
@@ -313,12 +382,10 @@ impl AsyncStorage {
         path: &str,
     ) -> Result<bool> {
         match self
-            .download_archive_index(archive_path, latest_build_id)
+            .find_in_archive_index(archive_path, latest_build_id, path)
             .await
         {
-            Ok(index_filename) => Ok(archive_index::find_in_file(index_filename, path)
-                .await?
-                .is_some()),
+            Ok(file_info) => Ok(file_info.is_some()),
             Err(err) => {
                 if err.downcast_ref::<PathNotFoundError>().is_some() {
                     Ok(false)
@@ -329,20 +396,31 @@ impl AsyncStorage {
         }
     }
 
+    /// get, decompress and materialize an object from store
     #[instrument]
     pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         self.get_stream(path).await?.materialize(max_size).await
     }
 
+    /// get a raw stream to an object in storage
+    ///
+    /// We don't decompress ourselves, S3 only decompresses with a correct
+    /// `Content-Encoding` header set, which we don't.
     #[instrument]
-    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
-        let blob = match &self.backend {
+    pub(crate) async fn get_raw_stream(&self, path: &str) -> Result<StreamingBlob> {
+        match &self.backend {
             StorageBackend::Database(db) => db.get_stream(path, None).await,
             StorageBackend::S3(s3) => s3.get_stream(path, None).await,
-        }?;
-        Ok(blob.decompress())
+        }
     }
 
+    /// get a decompressing stream to an object in storage.
+    #[instrument]
+    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
+        Ok(self.get_raw_stream(path).await?.decompress().await?)
+    }
+
+    /// get, decompress and materialize part of an object from store
     #[instrument]
     pub(super) async fn get_range(
         &self,
@@ -357,6 +435,7 @@ impl AsyncStorage {
             .await
     }
 
+    /// get a decompressing stream to a range inside an object in storage
     #[instrument]
     pub(super) async fn get_range_stream(
         &self,
@@ -364,52 +443,118 @@ impl AsyncStorage {
         range: FileRange,
         compression: Option<CompressionAlgorithm>,
     ) -> Result<StreamingBlob> {
-        let mut blob = match &self.backend {
+        let mut raw_stream = match &self.backend {
             StorageBackend::Database(db) => db.get_stream(path, Some(range)).await,
             StorageBackend::S3(s3) => s3.get_stream(path, Some(range)).await,
         }?;
         // `compression` represents the compression of the file-stream inside the archive.
         // We don't compress the whole archive, so the encoding of the archive's blob is irrelevant
         // here.
-        blob.compression = compression;
-        Ok(blob.decompress())
+        raw_stream.compression = compression;
+        Ok(raw_stream.decompress().await?)
     }
 
-    #[instrument]
-    pub(super) async fn download_archive_index(
+    fn local_index_cache_lock(&self, local_index_path: impl AsRef<Path>) -> Arc<RwLock<()>> {
+        let local_index_path = local_index_path.as_ref().to_path_buf();
+
+        self.locks
+            .entry(local_index_path)
+            .or_insert_with(|| Arc::new(RwLock::new(())))
+            .downgrade()
+            .clone()
+    }
+
+    async fn purge_archive_index_cache(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
-    ) -> Result<PathBuf> {
-        // remote/folder/and/x.zip.index
-        let remote_index_path = format!("{archive_path}.index");
+    ) -> Result<()> {
+        // we know that config.local_archive_cache_path is an absolute path, not relative.
+        // So it will be usable as key in the DashMap.
         let local_index_path = self.config.local_archive_cache_path.join(format!(
-            "{archive_path}.{}.index",
+            "{archive_path}.{}.{ARCHIVE_INDEX_FILE_EXTENSION}",
             latest_build_id.map(|id| id.0).unwrap_or(0)
         ));
 
-        if !local_index_path.exists() {
-            let index_content = self.get(&remote_index_path, usize::MAX).await?.content;
+        let rwlock = self.local_index_cache_lock(&local_index_path);
 
-            tokio::fs::create_dir_all(
-                local_index_path
-                    .parent()
-                    .ok_or_else(|| anyhow!("index path without parent"))?,
-            )
-            .await?;
+        let _write_guard = rwlock.write().await;
 
-            // when we don't have a locally cached index and many parallel request
-            // we might download the same archive index multiple times here.
-            // So we're storing the content into a temporary file before renaming it
-            // into the final location.
-            let temp_path = tempfile::NamedTempFile::new_in(&self.config.local_archive_cache_path)?
-                .into_temp_path();
-            let mut file = tokio::fs::File::create(&temp_path).await?;
-            file.write_all(&index_content).await?;
-            tokio::fs::rename(temp_path, &local_index_path).await?;
+        if tokio::fs::try_exists(&local_index_path).await? {
+            tokio::fs::remove_file(&local_index_path).await?;
         }
 
-        Ok(local_index_path)
+        Ok(())
+    }
+
+    /// Find find the file into needed to fetch a certain path inside a remote archive.
+    /// Will try to use a local cache of the index file, and otherwise download it
+    /// from storage.
+    #[instrument]
+    async fn find_in_archive_index(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+        path_in_archive: &str,
+    ) -> Result<Option<archive_index::FileInfo>> {
+        // we know that config.local_archive_cache_path is an absolute path, not relative.
+        // So it will be usable as key in the DashMap.
+        let local_index_path = self.config.local_archive_cache_path.join(format!(
+            "{archive_path}.{}.{ARCHIVE_INDEX_FILE_EXTENSION}",
+            latest_build_id.map(|id| id.0).unwrap_or(0)
+        ));
+
+        let rwlock = self.local_index_cache_lock(&local_index_path);
+
+        // directly acquire the read-lock, so the syscall (`path.exists()`) below is already
+        // protected.
+        let mut _read_guard = rwlock.read().await;
+
+        if !tokio::fs::try_exists(&local_index_path).await? {
+            // upgrade the lock to a write-lock for downloading & storing the index.
+            drop(_read_guard);
+            let _write_guard = rwlock.write().await;
+
+            // check existence again in case of Race Condition (TOCTOU)
+            if !tokio::fs::try_exists(&local_index_path).await? {
+                // remote/folder/and/x.zip.index
+                let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+
+                let parent = local_index_path
+                    .parent()
+                    .ok_or_else(|| anyhow!("index path without parent"))?
+                    .to_path_buf();
+                tokio::fs::create_dir_all(&parent).await?;
+
+                let mut temp_path = spawn_blocking({
+                    // this creates the tempfile and directly drops it again,
+                    // just to return a valid temp-path.
+                    // This could be optimized.
+                    let folder = self.config.local_archive_cache_path.clone();
+                    move || Ok(tempfile::NamedTempFile::new_in(&folder)?.into_temp_path())
+                })
+                .await?;
+
+                let mut file = tokio::fs::File::create(&temp_path).await?;
+                let mut stream = self.get_stream(&remote_index_path).await?.content;
+                tokio::io::copy(&mut stream, &mut file).await?;
+                file.sync_all().await?;
+
+                temp_path.disable_cleanup(true);
+                tokio::fs::rename(&temp_path, &local_index_path).await?;
+
+                // fsync parent dir to make rename durable (blocking)
+                spawn_blocking(move || {
+                    let dir = std::fs::File::open(parent)?;
+                    dir.sync_all().map_err(Into::into)
+                })
+                .await?;
+            }
+
+            _read_guard = _write_guard.downgrade();
+        }
+
+        archive_index::find_in_file(local_index_path, path_in_archive).await
     }
 
     #[instrument]
@@ -420,61 +565,71 @@ impl AsyncStorage {
         path: &str,
         max_size: usize,
     ) -> Result<Blob> {
-        let index_filename = self
-            .download_archive_index(archive_path, latest_build_id)
-            .await?;
-
-        let info = archive_index::find_in_file(index_filename, path)
+        self.stream_from_archive(archive_path, latest_build_id, path)
             .await?
-            .ok_or(PathNotFoundError)?;
-
-        let blob = self
-            .get_range(
-                archive_path,
-                max_size,
-                info.range(),
-                Some(info.compression()),
-            )
-            .await?;
-        assert_eq!(blob.compression, None);
-
-        Ok(Blob {
-            path: format!("{archive_path}/{path}"),
-            mime: detect_mime(path),
-            date_updated: blob.date_updated,
-            content: blob.content,
-            compression: None,
-        })
+            .materialize(max_size)
+            .await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub(crate) async fn stream_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         path: &str,
     ) -> Result<StreamingBlob> {
-        let index_filename = self
-            .download_archive_index(archive_path, latest_build_id)
-            .await?;
+        for attempt in 0..2 {
+            let info = self
+                .find_in_archive_index(archive_path, latest_build_id, path)
+                .await?
+                .ok_or(PathNotFoundError)?;
 
-        let info = archive_index::find_in_file(index_filename, path)
-            .await?
-            .ok_or(PathNotFoundError)?;
+            match self
+                .get_range_stream(archive_path, info.range(), Some(info.compression()))
+                .await
+            {
+                Ok(stream) => {
+                    debug_assert_eq!(stream.compression, None);
+                    return Ok(StreamingBlob {
+                        path: format!("{archive_path}/{path}"),
+                        mime: detect_mime(path),
+                        date_updated: stream.date_updated,
+                        etag: stream.etag,
+                        content: stream.content,
+                        content_length: stream.content_length,
+                        compression: None,
+                    });
+                }
+                Err(err) if attempt == 0 => {
+                    // We have some existing race conditions where the local cache of the index
+                    // file is outdated.
+                    // These mostly appear as "invalid bzip2 header" errors from the decompression
+                    // of the downloaded data, because we're fetching the wrong range from the
+                    // archive.
+                    // While we're also working on fixing the root causes, we want to have a fallback
+                    // here so the user impact is less.
+                    // In this case, we purge the locally cached index file and retry once.
+                    // We're not checking for the _type_ of error here, which could be improved
+                    // in the future, but also doesn't hurt much.
+                    //
+                    // NOTE: this only works because when creating the stream in `get_stream`, we're
+                    // already starting to decompress the first couple of bytes by filling
+                    // the BufReader buffer.
+                    // The reader of the `StreamingBlob` will still see the full stream.
+                    warn!(
+                        ?err,
+                        "error fetching range from archive, purging local index cache and retrying once"
+                    );
+                    self.purge_archive_index_cache(archive_path, latest_build_id)
+                        .await?;
 
-        let blob = self
-            .get_range_stream(archive_path, info.range(), Some(info.compression()))
-            .await?;
-        assert_eq!(blob.compression, None);
+                    continue;
+                }
+                Err(err) => return Err(err),
+            }
+        }
 
-        Ok(StreamingBlob {
-            path: format!("{archive_path}/{path}"),
-            mime: detect_mime(path),
-            date_updated: blob.date_updated,
-            content: blob.content,
-            content_length: blob.content_length,
-            compression: None,
-        })
+        unreachable!("stream_from_archive retry loop exited unexpectedly");
     }
 
     #[instrument(skip(self))]
@@ -531,7 +686,7 @@ impl AsyncStorage {
             .await?;
 
         let alg = CompressionAlgorithm::default();
-        let remote_index_path = format!("{}.index", &archive_path);
+        let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
         let compressed_index_content = {
             let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
@@ -543,28 +698,27 @@ impl AsyncStorage {
                 .await?;
 
             let mut buf: Vec<u8> = Vec::new();
-            tokio::io::copy(
+            compress_async(
                 &mut tokio::io::BufReader::new(tokio::fs::File::open(&local_index_path).await?),
-                &mut wrap_writer_for_compression(&mut buf, alg),
+                &mut buf,
+                alg,
             )
             .await?;
             buf
         };
 
         self.store_inner(vec![
-            Blob {
+            BlobUpload {
                 path: archive_path.to_string(),
                 mime: mimes::APPLICATION_ZIP.clone(),
                 content: zip_content,
                 compression: None,
-                date_updated: Utc::now(),
             },
-            Blob {
+            BlobUpload {
                 path: remote_index_path,
                 mime: mime::APPLICATION_OCTET_STREAM,
                 content: compressed_index_content,
                 compression: Some(alg),
-                date_updated: Utc::now(),
             },
         ])
         .await?;
@@ -586,7 +740,7 @@ impl AsyncStorage {
             let root_dir = root_dir.to_owned();
             move || {
                 let mut file_paths = Vec::new();
-                let mut blobs: Vec<Blob> = Vec::new();
+                let mut blobs: Vec<BlobUpload> = Vec::new();
                 for file_path in get_file_list(&root_dir) {
                     let file_path = file_path?;
 
@@ -609,13 +763,11 @@ impl AsyncStorage {
                     let mime = file_info.mime();
                     file_paths.push(file_info);
 
-                    blobs.push(Blob {
+                    blobs.push(BlobUpload {
                         path: bucket_path,
                         mime,
                         content,
                         compression: Some(alg),
-                        // this field is ignored by the backend
-                        date_updated: Utc::now(),
                     });
                 }
                 Ok((blobs, file_paths))
@@ -628,7 +780,7 @@ impl AsyncStorage {
     }
 
     #[cfg(test)]
-    pub(crate) async fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
+    pub(crate) async fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
         self.store_inner(blobs).await
     }
 
@@ -644,13 +796,11 @@ impl AsyncStorage {
         let content = content.into();
         let mime = detect_mime(&path).to_owned();
 
-        self.store_inner(vec![Blob {
+        self.store_inner(vec![BlobUpload {
             path,
             mime,
             content,
             compression: None,
-            // this field is ignored by the backend
-            date_updated: Utc::now(),
         }])
         .await?;
 
@@ -671,13 +821,11 @@ impl AsyncStorage {
         let content = compress(&*content, alg)?;
         let mime = detect_mime(&path).to_owned();
 
-        self.store_inner(vec![Blob {
+        self.store_inner(vec![BlobUpload {
             path,
             mime,
             content,
             compression: Some(alg),
-            // this field is ignored by the backend
-            date_updated: Utc::now(),
         }])
         .await?;
 
@@ -698,20 +846,18 @@ impl AsyncStorage {
 
         let mime = detect_mime(&target_path).to_owned();
 
-        self.store_inner(vec![Blob {
+        self.store_inner(vec![BlobUpload {
             path: target_path,
             mime,
             content,
             compression: Some(alg),
-            // this field is ignored by the backend
-            date_updated: Utc::now(),
         }])
         .await?;
 
         Ok(alg)
     }
 
-    async fn store_inner(&self, batch: Vec<Blob>) -> Result<()> {
+    async fn store_inner(&self, batch: Vec<BlobUpload>) -> Result<()> {
         match &self.backend {
             StorageBackend::Database(db) => db.store_batch(batch).await,
             StorageBackend::S3(s3) => s3.store_batch(batch).await,
@@ -770,15 +916,6 @@ impl Storage {
 
     pub(crate) fn exists(&self, path: &str) -> Result<bool> {
         self.runtime.block_on(self.inner.exists(path))
-    }
-
-    pub(crate) fn get_public_access(&self, path: &str) -> Result<bool> {
-        self.runtime.block_on(self.inner.get_public_access(path))
-    }
-
-    pub(crate) fn set_public_access(&self, path: &str, public: bool) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.set_public_access(path, public))
     }
 
     pub(crate) fn fetch_source_file(
@@ -842,17 +979,6 @@ impl Storage {
             .block_on(self.inner.get_range(path, max_size, range, compression))
     }
 
-    pub(super) fn download_index(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-    ) -> Result<PathBuf> {
-        self.runtime.block_on(
-            self.inner
-                .download_archive_index(archive_path, latest_build_id),
-        )
-    }
-
     pub(crate) fn get_from_archive(
         &self,
         archive_path: &str,
@@ -887,7 +1013,7 @@ impl Storage {
     }
 
     #[cfg(test)]
-    pub(crate) fn store_blobs(&self, blobs: Vec<Blob>) -> Result<()> {
+    pub(crate) fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
         self.runtime.block_on(self.inner.store_blobs(blobs))
     }
 
@@ -1011,8 +1137,179 @@ pub(crate) fn source_archive_path(name: &str, version: &Version) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{test::TestEnvironment, web::headers::compute_etag};
     use std::env;
     use test_case::test_case;
+
+    const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
+
+    fn streaming_blob(
+        content: impl Into<Vec<u8>>,
+        alg: Option<CompressionAlgorithm>,
+    ) -> StreamingBlob {
+        let content = content.into();
+        StreamingBlob {
+            path: "some_path.db".into(),
+            mime: mime::APPLICATION_OCTET_STREAM,
+            date_updated: Utc::now(),
+            compression: alg,
+            etag: Some(compute_etag(&content)),
+            content_length: content.len(),
+            content: Box::new(io::Cursor::new(content)),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_streaming_blob_uncompressed() -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world!";
+
+        // without decompression
+        {
+            let stream = streaming_blob(CONTENT, None);
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        // with decompression, does nothing
+        {
+            let stream = streaming_blob(CONTENT, None);
+            let blob = stream.decompress().await?.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_broken_zstd_blob() -> Result<()> {
+        const NOT_ZSTD: &[u8] = b"Hello, world!";
+        let alg = CompressionAlgorithm::Zstd;
+
+        // without decompression
+        // Doesn't fail because we don't call `.decompress`
+        {
+            let stream = streaming_blob(NOT_ZSTD, Some(alg));
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, NOT_ZSTD);
+            assert_eq!(blob.compression, Some(alg));
+        }
+
+        // with decompression
+        // should fail in the `.decompress` call,
+        // not later when materializing / streaming.
+        {
+            let err = streaming_blob(NOT_ZSTD, Some(alg))
+                .decompress()
+                .await
+                .unwrap_err();
+
+            assert_eq!(err.kind(), io::ErrorKind::Other);
+
+            assert_eq!(
+                err.to_string(),
+                "Unknown frame descriptor",
+                "unexpected error: {}",
+                err
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_streaming_blob_zstd() -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world!";
+        let mut compressed_content = Vec::new();
+        let alg = CompressionAlgorithm::Zstd;
+        compress_async(
+            &mut io::Cursor::new(CONTENT.to_vec()),
+            &mut compressed_content,
+            alg,
+        )
+        .await?;
+
+        // without decompression
+        {
+            let stream = streaming_blob(compressed_content.clone(), Some(alg));
+            let blob = stream.materialize(usize::MAX).await?;
+            assert_eq!(blob.content, compressed_content);
+            assert_eq!(blob.content.last_chunk::<3>().unwrap(), &ZSTD_EOF_BYTES);
+            assert_eq!(blob.compression, Some(alg));
+        }
+
+        // with decompression
+        {
+            let blob = streaming_blob(compressed_content.clone(), Some(alg))
+                .decompress()
+                .await?
+                .materialize(usize::MAX)
+                .await?;
+            assert_eq!(blob.content, CONTENT);
+            assert!(blob.compression.is_none());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[test_case(CompressionAlgorithm::Zstd)]
+    #[test_case(CompressionAlgorithm::Bzip2)]
+    #[test_case(CompressionAlgorithm::Gzip)]
+    async fn test_async_compression(alg: CompressionAlgorithm) -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
+
+        let compressed_index_content = {
+            let mut buf: Vec<u8> = Vec::new();
+            compress_async(&mut io::Cursor::new(CONTENT.to_vec()), &mut buf, alg).await?;
+            buf
+        };
+
+        {
+            // try low-level async decompression
+            let mut decompressed_buf: Vec<u8> = Vec::new();
+            let mut reader = wrap_reader_for_decompression(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+            );
+
+            tokio::io::copy(&mut reader, &mut io::Cursor::new(&mut decompressed_buf)).await?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        {
+            // try sync decompression
+            let decompressed_buf: Vec<u8> = decompress(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+                usize::MAX,
+            )?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        // try decompress via storage API
+        let blob = StreamingBlob {
+            path: "some_path.db".into(),
+            mime: mime::APPLICATION_OCTET_STREAM,
+            date_updated: Utc::now(),
+            etag: None,
+            compression: Some(alg),
+            content_length: compressed_index_content.len(),
+            content: Box::new(io::Cursor::new(compressed_index_content)),
+        }
+        .decompress()
+        .await?
+        .materialize(usize::MAX)
+        .await?;
+
+        assert_eq!(blob.compression, None);
+        assert_eq!(blob.content, CONTENT);
+
+        Ok(())
+    }
 
     #[test_case("latest", RustdocJsonFormatVersion::Latest)]
     #[test_case("42", RustdocJsonFormatVersion::Version(42))]
@@ -1056,6 +1353,140 @@ mod test {
         let detected_mime = detect_mime(Path::new(&path));
         assert_eq!(detected_mime, expected_mime);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_outdated_local_archive_index_gets_redownloaded() -> Result<()> {
+        use tokio::fs;
+
+        let env = TestEnvironment::with_config(
+            TestEnvironment::base_config()
+                .storage_backend(StorageKind::S3)
+                .build()?,
+        )
+        .await?;
+
+        let storage = env.async_storage();
+
+        // virtual latest build id, used for local caching of the index files
+        const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(42));
+        let cache_root = env.config().local_archive_cache_path.clone();
+
+        let cache_filename = |archive_name: &str| {
+            cache_root.join(format!(
+                "{}.{}.{}",
+                archive_name,
+                LATEST_BUILD_ID.unwrap(),
+                ARCHIVE_INDEX_FILE_EXTENSION
+            ))
+        };
+
+        /// dummy archives, files will contain their name as content
+        async fn create_archive(
+            storage: &AsyncStorage,
+            archive_name: &str,
+            filenames: &[&str],
+        ) -> Result<()> {
+            let dir = tempfile::Builder::new()
+                .prefix("docs.rs-upload-archive-test")
+                .tempdir()?;
+            for &file in filenames.iter() {
+                let path = dir.path().join(file);
+                fs::write(path, file).await?;
+            }
+            storage
+                .store_all_in_archive(archive_name, dir.path())
+                .await?;
+
+            Ok(())
+        }
+
+        // create two archives with indexes that contain the same filename
+        create_archive(
+            storage,
+            "test1.zip",
+            &["file1.txt", "file2.txt", "important.txt"],
+        )
+        .await?;
+
+        create_archive(
+            storage,
+            "test2.zip",
+            &["important.txt", "another_file_1.txt", "another_file_2.txt"],
+        )
+        .await?;
+
+        for archive_name in &["test1.zip", "test2.zip"] {
+            assert!(storage.exists(archive_name).await?);
+
+            assert!(
+                storage
+                    .exists(&format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", archive_name))
+                    .await?
+            );
+            // local index cache doesn't exist yet
+            let local_index_file = cache_filename(archive_name);
+            assert!(!fs::try_exists(&local_index_file).await?);
+
+            // this will then create the cache
+            assert!(
+                storage
+                    .exists_in_archive(archive_name, LATEST_BUILD_ID, "important.txt")
+                    .await?
+            );
+            assert!(fs::try_exists(&local_index_file).await?);
+
+            // fetching the content out of the archive also works
+            assert_eq!(
+                storage
+                    .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt", usize::MAX)
+                    .await?
+                    .content,
+                b"important.txt"
+            );
+        }
+
+        // validate if the positions are really different in the archvies,
+        // for the same filename.
+        let pos_in_test1_zip = storage
+            .find_in_archive_index("test1.zip", LATEST_BUILD_ID, "important.txt")
+            .await?
+            .unwrap();
+        let pos_in_test2_zip = storage
+            .find_in_archive_index("test2.zip", LATEST_BUILD_ID, "important.txt")
+            .await?
+            .unwrap();
+
+        assert_ne!(pos_in_test1_zip.range(), pos_in_test2_zip.range());
+
+        // now I'm swapping the local index files.
+        // This should simulate hat I have an outdated byte-range for a file
+
+        let local_index_file_1 = cache_filename("test1.zip");
+        let local_index_file_2 = cache_filename("test2.zip");
+
+        {
+            let temp_path = cache_root.join("temp_index_swap.tmp");
+            fs::rename(&local_index_file_1, &temp_path).await?;
+            fs::rename(&local_index_file_2, &local_index_file_1).await?;
+            fs::rename(&temp_path, &local_index_file_2).await?;
+        }
+
+        // now try to fetch the files inside the archives again, the local files
+        // should be removed, refetched, and all should be fine.
+        // Without our fallback / delete mechanism, this would fail.
+
+        for archive_name in &["test1.zip", "test2.zip"] {
+            assert_eq!(
+                storage
+                    .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt", usize::MAX)
+                    .await?
+                    .content,
+                b"important.txt"
+            );
+        }
+
+        Ok(())
+    }
 }
 
 /// Backend tests are a set of tests executed on all the supported storage backends. They ensure
@@ -1068,6 +1499,7 @@ mod test {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
+    use crate::{test::TestEnvironment, web::headers::compute_etag};
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
@@ -1076,10 +1508,9 @@ mod backend_tests {
 
     fn test_exists(storage: &Storage) -> Result<()> {
         assert!(!storage.exists("path/to/file.txt").unwrap());
-        let blob = Blob {
+        let blob = BlobUpload {
             path: "path/to/file.txt".into(),
             mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
             content: "Hello world!".into(),
             compression: None,
         };
@@ -1089,42 +1520,11 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_set_public(storage: &Storage) -> Result<()> {
-        let path: &str = "foo/bar.txt";
-
-        storage.store_blobs(vec![Blob {
-            path: path.into(),
-            mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
-            compression: None,
-            content: b"test content\n".to_vec(),
-        }])?;
-
-        assert!(!storage.get_public_access(path)?);
-        storage.set_public_access(path, true)?;
-        assert!(storage.get_public_access(path)?);
-        storage.set_public_access(path, false)?;
-        assert!(!storage.get_public_access(path)?);
-
-        for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
-            assert!(
-                storage
-                    .set_public_access(path, true)
-                    .unwrap_err()
-                    .downcast_ref::<PathNotFoundError>()
-                    .is_some()
-            );
-        }
-
-        Ok(())
-    }
-
     fn test_get_object(storage: &Storage) -> Result<()> {
         let path: &str = "foo/bar.txt";
-        let blob = Blob {
+        let blob = BlobUpload {
             path: path.into(),
             mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
         };
@@ -1134,22 +1534,14 @@ mod backend_tests {
         let found = storage.get(path, usize::MAX)?;
         assert_eq!(blob.mime, found.mime);
         assert_eq!(blob.content, found.content);
-
-        // default visibility is private
-        assert!(!storage.get_public_access(path)?);
+        // while our db backend just does MD5,
+        // it seems like minio does it too :)
+        assert_eq!(found.etag, Some(compute_etag(&blob.content)));
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
                 storage
                     .get(path, usize::MAX)
-                    .unwrap_err()
-                    .downcast_ref::<PathNotFoundError>()
-                    .is_some()
-            );
-
-            assert!(
-                storage
-                    .get_public_access(path)
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
                     .is_some()
@@ -1160,28 +1552,33 @@ mod backend_tests {
     }
 
     fn test_get_range(storage: &Storage) -> Result<()> {
-        let blob = Blob {
+        let blob = BlobUpload {
             path: "foo/bar.txt".into(),
             mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
             compression: None,
             content: b"test content\n".to_vec(),
         };
 
+        let full_etag = compute_etag(&blob.content);
+
         storage.store_blobs(vec![blob.clone()])?;
 
-        assert_eq!(
-            blob.content[0..=4],
-            storage
-                .get_range("foo/bar.txt", usize::MAX, 0..=4, None)?
-                .content
-        );
-        assert_eq!(
-            blob.content[5..=12],
-            storage
-                .get_range("foo/bar.txt", usize::MAX, 5..=12, None)?
-                .content
-        );
+        let mut etags = Vec::new();
+
+        for range in [0..=4, 5..=12] {
+            let partial_blob = storage.get_range("foo/bar.txt", usize::MAX, range.clone(), None)?;
+            let range = (*range.start() as usize)..=(*range.end() as usize);
+            assert_eq!(blob.content[range], partial_blob.content);
+
+            etags.push(partial_blob.etag.unwrap());
+        }
+        if let [etag1, etag2] = &etags[..] {
+            assert_ne!(etag1, etag2);
+            assert_ne!(etag1, &full_etag);
+            assert_ne!(etag2, &full_etag);
+        } else {
+            panic!("expected two etags");
+        }
 
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
@@ -1202,10 +1599,9 @@ mod backend_tests {
         storage.store_blobs(
             FILENAMES
                 .iter()
-                .map(|&filename| Blob {
+                .map(|&filename| BlobUpload {
                     path: filename.into(),
                     mime: mime::TEXT_PLAIN,
-                    date_updated: Utc::now(),
                     compression: None,
                     content: b"test content\n".to_vec(),
                 })
@@ -1245,17 +1641,15 @@ mod backend_tests {
     fn test_get_too_big(storage: &Storage) -> Result<()> {
         const MAX_SIZE: usize = 1024;
 
-        let small_blob = Blob {
+        let small_blob = BlobUpload {
             path: "small-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
             content: vec![0; MAX_SIZE],
             compression: None,
         };
-        let big_blob = Blob {
+        let big_blob = BlobUpload {
             path: "big-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            date_updated: Utc::now(),
             content: vec![0; MAX_SIZE * 2],
             compression: None,
         };
@@ -1278,7 +1672,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_blobs(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
+    fn test_store_blobs(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -1289,10 +1683,9 @@ mod backend_tests {
 
         let blobs = NAMES
             .iter()
-            .map(|&path| Blob {
+            .map(|&path| BlobUpload {
                 path: path.into(),
                 mime: mime::TEXT_PLAIN,
-                date_updated: Utc::now(),
                 compression: None,
                 content: b"Hello world!\n".to_vec(),
             })
@@ -1306,7 +1699,15 @@ mod backend_tests {
             assert_eq!(blob.mime, actual.mime);
         }
 
-        assert_eq!(NAMES.len(), metrics.uploaded_files_total.get() as usize);
+        let collected_metrics = env.collected_metrics();
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_files")?
+                .get_u64_counter()
+                .value(),
+            NAMES.len() as u64,
+        );
 
         Ok(())
     }
@@ -1318,7 +1719,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_all_in_archive(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
+    fn test_store_all_in_archive(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-archive-test")
             .tempdir()?;
@@ -1335,12 +1736,12 @@ mod backend_tests {
             .inner
             .config
             .local_archive_cache_path
-            .join("folder/test.zip.0.index");
+            .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
         let (stored_files, compression_alg) =
             storage.store_all_in_archive("folder/test.zip", dir.path())?;
 
-        assert!(storage.exists("folder/test.zip.index")?);
+        assert!(storage.exists(&format!("folder/test.zip.{ARCHIVE_INDEX_FILE_EXTENSION}"))?);
 
         assert_eq!(compression_alg, CompressionAlgorithm::Bzip2);
         assert_eq!(stored_files.len(), files.len());
@@ -1379,12 +1780,20 @@ mod backend_tests {
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        let collected_metrics = env.collected_metrics();
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
 
         Ok(())
     }
 
-    fn test_store_all(storage: &Storage, metrics: &InstanceMetrics) -> Result<()> {
+    fn test_store_all(env: &TestEnvironment, storage: &Storage) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -1423,21 +1832,26 @@ mod backend_tests {
 
         assert_eq!(algs, CompressionAlgorithm::default());
 
-        assert_eq!(2, metrics.uploaded_files_total.get());
+        let collected_metrics = env.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
 
         Ok(())
     }
 
     fn test_batched_uploads(storage: &Storage) -> Result<()> {
-        let now = Utc::now();
         let uploads: Vec<_> = (0..=100)
             .map(|i| {
                 let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
-                Blob {
+                BlobUpload {
                     mime: mimes::TEXT_RUST.clone(),
                     content,
                     path: format!("{i}.rs"),
-                    date_updated: now,
                     compression: None,
                 }
             })
@@ -1495,12 +1909,11 @@ mod backend_tests {
         storage.store_blobs(
             start
                 .iter()
-                .map(|path| Blob {
+                .map(|path| BlobUpload {
                     path: (*path).to_string(),
                     content: b"foo\n".to_vec(),
                     compression: None,
                     mime: mime::TEXT_PLAIN,
-                    date_updated: Utc::now(),
                 })
                 .collect(),
         )?;
@@ -1534,7 +1947,7 @@ mod backend_tests {
             $(
                 mod $backend {
                     use crate::test::TestEnvironment;
-                    use crate::storage::{ StorageKind};
+                    use crate::storage::{StorageKind};
 
                     fn get_env() -> anyhow::Result<crate::test::TestEnvironment> {
                         crate::test::TestEnvironment::with_config_and_runtime(
@@ -1563,7 +1976,7 @@ mod backend_tests {
                 #[test]
                 fn $test() -> anyhow::Result<()> {
                     let env = get_env()?;
-                    super::$test(&*env.storage(), &*env.instance_metrics())
+                    super::$test(&env, &*env.storage())
                 }
             )*
         };
@@ -1587,7 +2000,6 @@ mod backend_tests {
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
-            test_set_public,
         }
 
         tests_with_metrics {

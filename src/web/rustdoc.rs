@@ -1,12 +1,14 @@
-//! rustdoc handler
+//! rustdoc handlerr
 
 use crate::{
-    AsyncStorage, Config, InstanceMetrics, RUSTDOC_STATIC_STORAGE_PREFIX,
+    AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
+    db::types::dependencies::ReleaseDependency,
+    registry_api::OwnerKind,
     storage::{
-        CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob,
-        compression::compression_from_file_extension, rustdoc_archive_path, rustdoc_json_path,
+        CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
+        rustdoc_json_path,
     },
-    utils,
+    utils::{self},
     web::{
         MetaData, ReqVersion, axum_cached_redirect,
         cache::CachePolicy,
@@ -15,11 +17,13 @@ use crate::{
         error::{AxumNope, AxumResult},
         escaped_uri::EscapedURI,
         extractors::{
-            DbConnection, Path, PathFileExtension,
+            DbConnection, Path, WantedCompression,
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        match_version,
+        headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG},
+        licenses, match_version,
+        metrics::WebMetrics,
         page::{
             TemplateData,
             templates::{RenderBrands, RenderRegular, RenderSolid, filters},
@@ -34,13 +38,32 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
-use http::{HeaderValue, Uri, header};
+use axum_extra::{
+    headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
+    typed_header::TypedHeader,
+};
+use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
 };
 use tracing::{Instrument, error, info_span, instrument, trace};
+
+/// generate a "attachment" content disposition header for downloads.
+///
+/// Used in archive-download & json-download endpoints.
+///
+/// Typically I like typed-headers more, but the `headers::ContentDisposition` impl is lacking,
+/// and I don't want to rebuild it now.
+fn generate_content_disposition_header(storage_path: &str) -> anyhow::Result<HeaderValue> {
+    format!(
+        "attachment; filename=\"{}\"",
+        storage_path.replace("/", "-")
+    )
+    .parse()
+    .map_err(Into::into)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfficialCrateDescription {
@@ -192,6 +215,7 @@ pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: LazyLock<HashMap<&str, OfficialCr
 async fn try_serve_legacy_toolchain_asset(
     storage: Arc<AsyncStorage>,
     path: impl AsRef<str>,
+    if_none_match: Option<&IfNoneMatch>,
 ) -> AxumResult<AxumResponse> {
     let path = path.as_ref().to_owned();
     // FIXME: this could be optimized: when a path doesn't exist
@@ -203,8 +227,8 @@ async fn try_serve_legacy_toolchain_asset(
     // toolchain specific resources into the new folder,
     // which is reached via the new handler.
     Ok(StreamingFile::from_path(&storage, &path)
-        .await
-        .map(IntoResponse::into_response)?)
+        .await?
+        .into_response(if_none_match))
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
@@ -214,11 +238,13 @@ pub(crate) async fn rustdoc_redirector_handler(
     params: RustdocParams,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
 
     fn redirect_to_doc(
+        original_uri: Option<&EscapedURI>,
         url: EscapedURI,
         cache_policy: CachePolicy,
         path_in_crate: Option<&str>,
@@ -229,7 +255,20 @@ pub(crate) async fn rustdoc_redirector_handler(
             url
         };
 
-        trace!("redirect to doc");
+        if let Some(original_uri) = original_uri
+            && original_uri.path() == url.path()
+            && (url.authority().is_none()
+                || url.authority() == Some(&Authority::from_static("docs.rs")))
+        {
+            return Err(anyhow!(
+                "infinite redirect detected, \noriginal_uri = {}, redirect_url = {}",
+                original_uri,
+                url
+            )
+            .into());
+        }
+
+        trace!(%url, ?cache_policy, path_in_crate, "redirect to doc");
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
 
@@ -240,7 +279,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             .binary_search(&extension)
             .is_ok()
     {
-        return try_serve_legacy_toolchain_asset(storage, params.name())
+        return try_serve_legacy_toolchain_asset(storage, params.name(), if_none_match.as_deref())
             .instrument(info_span!("serve static asset"))
             .await;
     }
@@ -266,6 +305,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         let target_uri =
             EscapedURI::from_uri(description.href.clone()).append_raw_query(original_query);
         return redirect_to_doc(
+            params.original_uri(),
             target_uri,
             CachePolicy::ForeverInCdnAndStaleInBrowser,
             path_in_crate.as_deref(),
@@ -303,7 +343,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                 )
                 .await
             {
-                Ok(blob) => Ok(StreamingFile(blob).into_response()),
+                Ok(blob) => Ok(StreamingFile(blob).into_response(if_none_match.as_deref())),
                 Err(err) => {
                     if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
                         && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
@@ -316,7 +356,12 @@ pub(crate) async fn rustdoc_redirector_handler(
                     // docs that were affected by this bug.
                     // https://github.com/rust-lang/docs.rs/issues/1979
                     if inner_path.starts_with("search-") || inner_path.starts_with("settings-") {
-                        try_serve_legacy_toolchain_asset(storage, inner_path).await
+                        try_serve_legacy_toolchain_asset(
+                            storage,
+                            inner_path,
+                            if_none_match.as_deref(),
+                        )
+                        .await
                     } else {
                         Err(err.into())
                     }
@@ -329,6 +374,7 @@ pub(crate) async fn rustdoc_redirector_handler(
 
     if matched_release.rustdoc_status() {
         Ok(redirect_to_doc(
+            params.original_uri(),
             params.rustdoc_url().append_raw_query(original_query),
             if matched_release.is_latest_url() {
                 CachePolicy::ForeverInCdn
@@ -347,7 +393,76 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-#[derive(Template)]
+/// small wrapper around CrateDetails to limit serialized fields we hand
+/// to the template.
+/// Mostly to know what we have to serialize into the etag.
+pub struct LimitedCrateDetails {
+    parsed_license: Option<Vec<licenses::LicenseSegment>>,
+    homepage_url: Option<String>,
+    documentation_url: Option<String>,
+    repository_url: Option<String>,
+    owners: Vec<(String, String, OwnerKind)>,
+    dependencies: Vec<ReleaseDependency>,
+    total_items: Option<i32>,
+    documented_items: Option<i32>,
+}
+
+impl From<CrateDetails> for LimitedCrateDetails {
+    fn from(value: CrateDetails) -> Self {
+        let CrateDetails {
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+            total_items,
+            documented_items,
+            ..
+        } = value;
+
+        Self {
+            total_items,
+            documented_items,
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+        }
+    }
+}
+
+impl bincode::Encode for LimitedCrateDetails {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let LimitedCrateDetails {
+            parsed_license,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            owners,
+            dependencies,
+            total_items,
+            documented_items,
+        } = self;
+
+        parsed_license.encode(encoder)?;
+        homepage_url.encode(encoder)?;
+        documentation_url.encode(encoder)?;
+        repository_url.encode(encoder)?;
+        owners.encode(encoder)?;
+        dependencies.encode(encoder)?;
+        total_items.encode(encoder)?;
+        documented_items.encode(encoder)?;
+        Ok(())
+    }
+}
+
+#[derive(Template, bincode::Encode)]
 #[template(path = "rustdoc/topbar.html")]
 pub struct RustdocPage {
     pub latest_path: EscapedURI,
@@ -358,43 +473,104 @@ pub struct RustdocPage {
     // true if the URL specifies a version using the string "latest."
     pub is_latest_url: bool,
     pub is_prerelease: bool,
-    pub krate: CrateDetails,
+    pub krate: LimitedCrateDetails,
     pub metadata: MetaData,
     pub current_target: String,
     params: RustdocParams,
 }
 
 impl RustdocPage {
+    /// generate an ETag for this rustdoc page, currently based on
+    /// * the ETag of the original rustdoc HTML file
+    /// * the BUILD_VERION
+    /// * the serialized RustdocPage struct
+    ///
+    /// we might not use all of the details in html rewriting, so we might
+    /// change the etag more often than we could, but this is for now the
+    /// safe and easy way.
+    ///
+    /// Can be optimized by removing data from the struct or its children
+    /// that we don't need in the HTML rewriting.
+    #[instrument(skip_all)]
+    fn generate_etag(&self, original_rustdoc_html_etag: &ETag) -> ETag {
+        let mut etag = ETagComputer::new();
+
+        // a new release might change the HTML we generate
+        etag.consume(BUILD_VERSION);
+
+        {
+            // add the etag of the original rustdoc file from storage.
+            //
+            // This is a little annoying, there is no other way to get the inner
+            // entity-tag value out of an `headers::ETag`.
+            let mut map = HeaderMap::with_capacity(1);
+            map.typed_insert(original_rustdoc_html_etag.clone());
+            etag.consume(map.get(ETag::name()).expect("we just inserted this header"));
+        }
+
+        // we assume that all the info we put into the `RustdocPage` struct might change the
+        // page content. So we have to pipe all of it into the ETag.
+        // I chose to add the additional bincode dependency because I was worried about the
+        // added processing time when handling these responses, since this is our
+        // most accessed handler on the origin.
+        let config = bincode::config::standard()
+            .with_big_endian()
+            .with_variable_int_encoding();
+        bincode::encode_into_std_write(self, &mut etag, config)
+            .expect("bincode::Encode impl in RustdocPage can't fail");
+
+        etag.finalize()
+    }
+
+    #[instrument(skip_all)]
     async fn into_response(
         self: &Arc<Self>,
         template_data: Arc<TemplateData>,
-        metrics: Arc<InstanceMetrics>,
+        otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
-    ) -> AxumResult<AxumResponse> {
-        let is_latest_url = self.is_latest_url;
+        if_none_match: Option<&IfNoneMatch>,
+    ) -> AxumResponse {
+        let cache_policy = if self.is_latest_url {
+            CachePolicy::ForeverInCdn
+        } else {
+            CachePolicy::ForeverInCdnAndStaleInBrowser
+        };
+        let robots_tag = (!self.is_latest_url).then_some([(&X_ROBOTS_TAG, "noindex")]);
 
-        Ok((
-            StatusCode::OK,
-            (!is_latest_url).then_some([("X-Robots-Tag", "noindex")]),
-            Extension(if is_latest_url {
-                CachePolicy::ForeverInCdn
-            } else {
-                CachePolicy::ForeverInCdnAndStaleInBrowser
-            }),
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
-            )],
-            Body::from_stream(utils::rewrite_rustdoc_html_stream(
-                template_data,
-                rustdoc_html.content,
-                max_parse_memory,
-                self.clone(),
-                metrics,
-            )),
-        )
-            .into_response())
+        let etag = rustdoc_html
+            .etag
+            .as_ref()
+            .map(|etag| self.generate_etag(etag));
+
+        if let Some(if_none_match) = if_none_match
+            && let Some(ref etag) = etag
+            && !if_none_match.precondition_passes(etag)
+        {
+            (
+                StatusCode::NOT_MODIFIED,
+                robots_tag,
+                TypedHeader(etag.clone()),
+                Extension(cache_policy),
+            )
+                .into_response()
+        } else {
+            (
+                StatusCode::OK,
+                robots_tag,
+                etag.map(TypedHeader),
+                Extension(cache_policy),
+                TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),
+                Body::from_stream(utils::rewrite_rustdoc_html_stream(
+                    template_data,
+                    rustdoc_html.content,
+                    max_parse_memory,
+                    self.clone(),
+                    otel_metrics,
+                )),
+            )
+                .into_response()
+        }
     }
 
     pub(crate) fn use_direct_platform_links(&self) -> bool {
@@ -410,12 +586,13 @@ impl RustdocPage {
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_html_server_handler(
     params: RustdocParams,
-    Extension(metrics): Extension<Arc<InstanceMetrics>>,
+    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
     Extension(templates): Extension<Arc<TemplateData>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
     RawQuery(original_query): RawQuery,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
@@ -578,7 +755,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
-        return Ok(StreamingFile(blob).into_response());
+        return Ok(StreamingFile(blob).into_response(if_none_match.as_deref()));
     }
 
     let latest_release = krate.latest_release()?;
@@ -610,10 +787,6 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     let current_target = params.doc_target_or_default().unwrap_or_default();
 
-    metrics
-        .recently_accessed_releases
-        .record(krate.crate_id, krate.release_id, current_target);
-
     // Build the page of documentation,
     let page = Arc::new(RustdocPage {
         latest_path,
@@ -623,11 +796,18 @@ pub(crate) async fn rustdoc_html_server_handler(
         is_prerelease,
         metadata: krate.metadata.clone(),
         current_target: current_target.to_owned(),
-        krate,
+        krate: krate.into(),
         params,
     });
-    page.into_response(templates, metrics, blob, config.max_parse_memory)
-        .await
+    Ok(page
+        .into_response(
+            templates,
+            otel_metrics,
+            blob,
+            config.max_parse_memory,
+            if_none_match.as_deref(),
+        )
+        .await)
 }
 
 #[instrument(skip_all)]
@@ -707,35 +887,39 @@ pub(crate) async fn badge_handler(
 
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct JsonDownloadParams {
-    pub(crate) name: String,
-    pub(crate) version: ReqVersion,
-    pub(crate) target: Option<String>,
     pub(crate) format_version: Option<String>,
 }
 
 #[instrument(skip_all)]
 pub(crate) async fn json_download_handler(
-    Path(params): Path<JsonDownloadParams>,
+    mut params: RustdocParams,
+    Path(json_params): Path<JsonDownloadParams>,
     mut conn: DbConnection,
-    Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    file_extension: Option<PathFileExtension>,
-) -> AxumResult<impl IntoResponse> {
-    // TODO: we could also additionally read the accept-encoding header here. But especially
-    // in combination with priorities it's complex to parse correctly. So for now only
-    // file extensions in the URL.
-    let wanted_compression =
-        if let Some(ext) = file_extension.map(|ext| ext.0) {
-            Some(compression_from_file_extension(&ext).ok_or_else(|| {
-                AxumNope::BadRequest(anyhow!("unknown compression file extension"))
-            })?)
-        } else {
-            None
-        };
-
-    let matched_release = match_version(&mut conn, &params.name, &params.version)
+    wanted_compression: Option<WantedCompression>,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
+) -> AxumResult<AxumResponse> {
+    let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
-        .assume_exact_name()?;
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                params.clone().with_req_version(version).json_download_url(
+                    wanted_compression.clone().map(|c| c.0),
+                    json_params.format_version.as_deref(),
+                ),
+                CachePolicy::ForeverInCdn,
+            )
+        })?;
+
+    // this validates the doc ttarget too
+    params = params.apply_matched_release(&matched_release);
+
+    if params.doc_target().is_none() && !params.inner_path().is_empty() {
+        // an unkonwn target leads to doc-target being removed, and the target being
+        // added to the inner path
+        return Err(AxumNope::TargetNotFound);
+    }
 
     if !matched_release.rustdoc_status() {
         // without docs we'll never have JSON docs too
@@ -744,29 +928,7 @@ pub(crate) async fn json_download_handler(
 
     let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
-    let target = if let Some(wanted_target) = params.target {
-        if krate
-            .metadata
-            .doc_targets
-            .as_ref()
-            .expect("we are checking rustdoc_status() above, so we always have metadata")
-            .iter()
-            .any(|s| s == &wanted_target)
-        {
-            wanted_target
-        } else {
-            return Err(AxumNope::TargetNotFound);
-        }
-    } else {
-        krate
-            .metadata
-            .default_target
-            .as_ref()
-            .expect("we are checking rustdoc_status() above, so we always have metadata")
-            .to_string()
-    };
-
-    let wanted_format_version = if let Some(request_format_version) = params.format_version {
+    let wanted_format_version = if let Some(request_format_version) = json_params.format_version {
         // axum doesn't support extension suffixes in the route yet, not as parameter, and not
         // statically, when combined with a parameter (like `.../{format_version}.gz`).
         // This is solved in matchit 0.8.6, but not yet in axum:
@@ -776,7 +938,7 @@ pub(crate) async fn json_download_handler(
         // Because of this we have cases where `format_version` also contains a file extension
         // suffix like `.zstd`. `wanted_compression` is already extracted above, so we only
         // need to strip the extension from the `format_version` before trying to parse it.
-        let stripped_format_version = if let Some(wanted_compression) = wanted_compression {
+        let stripped_format_version = if let Some(ref wanted_compression) = wanted_compression {
             request_format_version
                 .strip_suffix(&format!(".{}", wanted_compression.file_extension()))
                 .expect("should exist")
@@ -791,88 +953,108 @@ pub(crate) async fn json_download_handler(
         RustdocJsonFormatVersion::Latest
     };
 
-    let wanted_compression = wanted_compression.unwrap_or_default();
+    let wanted_compression = wanted_compression.map(|c| c.0).unwrap_or_default();
+
+    let target = params.doc_target().unwrap_or_else(|| {
+        params
+            .default_target()
+            .expect("with applied matched version we always have a default target")
+    });
 
     let storage_path = rustdoc_json_path(
         &krate.name,
         &krate.version,
-        &target,
+        target,
         wanted_format_version,
         Some(wanted_compression),
     );
 
-    let redirect = |storage_path: &str| {
-        super::axum_cached_redirect(
-            format!("{}/{}", config.s3_static_root_path, storage_path),
-            CachePolicy::ForeverInCdn,
-        )
-    };
-
-    if storage.exists(&storage_path).await? {
-        Ok(redirect(&storage_path)?)
-    } else {
-        // we have old files on the bucket where we stored zstd compressed files,
-        // with content-encoding=zstd & just a `.json` file extension.
-        // As a fallback, we redirect to that, if zstd was requested (which is also the default).
-        if wanted_compression == CompressionAlgorithm::Zstd {
-            let storage_path = rustdoc_json_path(
-                &krate.name,
-                &krate.version,
-                &target,
-                wanted_format_version,
-                None,
-            );
-
-            if storage.exists(&storage_path).await? {
+    let (mut response, updated_storage_path) = match storage.get_raw_stream(&storage_path).await {
+        Ok(file) => (
+            StreamingFile(file).into_response(if_none_match.as_deref()),
+            None,
+        ),
+        Err(err) if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) => {
+            // we have old files on the bucket where we stored zstd compressed files,
+            // with content-encoding=zstd & just a `.json` file extension.
+            // As a fallback, we redirect to that, if zstd was requested (which is also the default).
+            if wanted_compression == CompressionAlgorithm::Zstd {
+                let storage_path = rustdoc_json_path(
+                    &krate.name,
+                    &krate.version,
+                    target,
+                    wanted_format_version,
+                    None,
+                );
                 // we have an old file with a `.json` extension,
                 // redirect to that as fallback
-                return Ok(redirect(&storage_path)?);
+                (
+                    StreamingFile(storage.get_raw_stream(&storage_path).await?)
+                        .into_response(if_none_match.as_deref()),
+                    Some(storage_path),
+                )
+            } else {
+                return Err(AxumNope::ResourceNotFound);
             }
         }
+        Err(err) => return Err(err.into()),
+    };
 
-        Err(AxumNope::ResourceNotFound)
-    }
+    // StreamingFile::into_response automatically set the default cache-policy for
+    // static assets (ForeverInCdnAndBrowser).
+    // Here we override it with the standard policy for build output.
+    response.extensions_mut().insert(CachePolicy::ForeverInCdn);
+
+    // set content-disposition to attachment to trigger download in browsers
+    // For the attachment filename we can use just the filename without the path,
+    // since that already contains all the info.
+    let storage_path = updated_storage_path.unwrap_or(storage_path);
+    let (_, filename) = storage_path.rsplit_once('/').unwrap_or(("", &storage_path));
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        generate_content_disposition_header(filename)
+            .context("could not generate content-disposition header")?,
+    );
+
+    Ok(response)
 }
 
 #[instrument(skip_all)]
 pub(crate) async fn download_handler(
-    Path((name, req_version)): Path<(String, ReqVersion)>,
+    params: RustdocParams,
     mut conn: DbConnection,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
-    let version = match_version(&mut conn, &name, &req_version)
+    let version = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                params.clone().with_req_version(version).zip_download_url(),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
         .into_version();
 
-    let archive_path = rustdoc_archive_path(&name, &version);
+    let archive_path = rustdoc_archive_path(params.name(), &version);
 
-    // not all archives are set for public access yet, so we check if
-    // the access is set and fix it if needed.
-    let archive_is_public = match storage
-        .get_public_access(&archive_path)
-        .await
-        .context("reading public access for archive")
-    {
-        Ok(is_public) => is_public,
-        Err(err) => {
-            if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) {
-                return Err(AxumNope::ResourceNotFound);
-            } else {
-                return Err(AxumNope::InternalError(err));
-            }
-        }
-    };
+    let mut response = StreamingFile(storage.get_raw_stream(&archive_path).await?)
+        .into_response(if_none_match.as_deref());
 
-    if !archive_is_public {
-        storage.set_public_access(&archive_path, true).await?;
-    }
+    // StreamingFile::into_response automatically set the default cache-policy for
+    // static assets (ForeverInCdnAndBrowser).
+    // Here we override it with the standard policy for build output.
+    response.extensions_mut().insert(CachePolicy::ForeverInCdn);
 
-    Ok(super::axum_cached_redirect(
-        format!("{}/{}", config.s3_static_root_path, archive_path),
-        CachePolicy::ForeverInCdn,
-    )?)
+    // set content-disposition to attachment to trigger download in browsers
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        generate_content_disposition_header(&archive_path)
+            .context("could not generate content-disposition header")?,
+    );
+
+    Ok(response)
 }
 
 /// Serves shared resources used by rustdoc-generated documentation.
@@ -882,10 +1064,13 @@ pub(crate) async fn download_handler(
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");
 
-    Ok(StreamingFile::from_path(&storage, &storage_path).await?)
+    Ok(StreamingFile::from_path(&storage, &storage_path)
+        .await?
+        .into_response(if_none_match.as_deref()))
 }
 
 #[cfg(test)]
@@ -894,9 +1079,9 @@ mod test {
     use crate::{
         Config,
         db::types::version::Version,
-        docbuilder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS,
+        docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
         registry_api::{CrateOwner, OwnerKind},
-        storage::compression::file_extension_for,
+        storage::decompress,
         test::*,
         web::{cache::CachePolicy, encode_url_path},
     };
@@ -906,9 +1091,22 @@ mod test {
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
     use semver::VersionReq;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, io};
     use test_case::test_case;
     use tracing::info;
+
+    /// try decompressing the zip & read the content
+    fn check_archive_consistency(compressed_body: &[u8]) -> anyhow::Result<()> {
+        let mut zip = zip::ZipArchive::new(io::Cursor::new(compressed_body))?;
+        for i in 0..zip.len() {
+            let mut file = zip.by_index(i)?;
+
+            let mut buf = Vec::new();
+            io::copy(&mut file, &mut buf)?;
+        }
+
+        Ok(())
+    }
 
     async fn try_latest_version_redirect(
         path: &str,
@@ -970,6 +1168,9 @@ mod test {
                 env.config(),
             )
             .await?;
+
+            web.assert_success_and_conditional_get("/krate/0.1.0/help.html")
+                .await?;
             Ok(())
         });
     }
@@ -1087,7 +1288,8 @@ mod test {
             )
             .await?;
 
-            web.assert_success("/dummy/latest/dummy/").await?;
+            web.assert_success_and_conditional_get("/dummy/latest/dummy/")
+                .await?;
 
             // set an explicit target that requires cross-compile
             let target = "x86_64-pc-windows-msvc";
@@ -1101,7 +1303,7 @@ mod test {
                 .create()
                 .await?;
             let base = "/dummy/0.2.0/dummy/";
-            web.assert_success(base).await?;
+            web.assert_success_and_conditional_get(base).await?;
             web.assert_redirect("/dummy/0.2.0/x86_64-pc-windows-msvc/dummy/", base)
                 .await?;
 
@@ -1188,11 +1390,15 @@ mod test {
         {
             let resp = web.get("/dummy/latest/dummy/").await?;
             resp.assert_cache_control(CachePolicy::ForeverInCdn, env.config());
+            web.assert_conditional_get("/dummy/latest/dummy/", &resp)
+                .await?;
         }
 
         {
             let resp = web.get("/dummy/0.1.0/dummy/").await?;
             resp.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+            web.assert_conditional_get("/dummy/0.1.0/dummy/", &resp)
+                .await?;
         }
         Ok(())
     }
@@ -2060,11 +2266,13 @@ mod test {
                 .create()
                 .await?;
             let web = env.web_app().await;
-            let resp = web
-                .assert_redirect("/dummy", "/dummy/latest/dummy/")
-                .await?;
-            assert_eq!(resp.status(), StatusCode::FOUND);
-            assert!(resp.headers().get("Cache-Control").is_none());
+            web.assert_redirect_cached(
+                "/dummy",
+                "/dummy/latest/dummy/",
+                CachePolicy::ForeverInCdn,
+                env.config(),
+            )
+            .await?;
             Ok(())
         })
     }
@@ -2808,10 +3016,8 @@ mod test {
     fn download_unknown_version_404() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
+            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
 
-            let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
@@ -2828,22 +3034,15 @@ mod test {
                 .await?;
 
             let web = env.web_app().await;
+            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
 
-            let response = web.get("/crate/dummy/0.1.0/download").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_semver() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::with_config(TestEnvironment::base_config().build()?).await?;
 
         env.fake_release()
             .await
@@ -2855,29 +3054,19 @@ mod test {
 
         let web = env.web_app().await;
 
-        web.assert_redirect_cached_unchecked(
+        web.assert_redirect_cached(
             "/crate/dummy/0.1/download",
-            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
+            "/crate/dummy/0.1.0/download",
             CachePolicy::ForeverInCdn,
             env.config(),
         )
         .await?;
-        assert!(
-            env.async_storage()
-                .get_public_access("rustdoc/dummy/0.1.0.zip")
-                .await?
-        );
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_specfic_version() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -2888,32 +3077,25 @@ mod test {
             .await?;
 
         let web = env.web_app().await;
-        let storage = env.async_storage();
+        let path = "/crate/dummy/0.1.0/download";
 
-        // disable public access to be sure that the handler will enable it
-        storage
-            .set_public_access("rustdoc/dummy/0.1.0.zip", false)
+        let resp = web
+            .assert_success_cached(path, CachePolicy::ForeverInCdn, env.config())
             .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            "attachment; filename=\"rustdoc-dummy-0.1.0.zip\""
+        );
+        web.assert_conditional_get(path, &resp).await?;
 
-        web.assert_redirect_cached_unchecked(
-            "/crate/dummy/0.1.0/download",
-            "https://static.docs.rs/rustdoc/dummy/0.1.0.zip",
-            CachePolicy::ForeverInCdn,
-            env.config(),
-        )
-        .await?;
-        assert!(storage.get_public_access("rustdoc/dummy/0.1.0.zip").await?);
+        check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
+
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn download_latest_version() -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -2932,19 +3114,19 @@ mod test {
             .await?;
 
         let web = env.web_app().await;
+        let path = "/crate/dummy/latest/download";
 
-        web.assert_redirect_cached_unchecked(
-            "/crate/dummy/latest/download",
-            "https://static.docs.rs/rustdoc/dummy/0.2.0.zip",
-            CachePolicy::ForeverInCdn,
-            env.config(),
-        )
-        .await?;
-        assert!(
-            env.async_storage()
-                .get_public_access("rustdoc/dummy/0.2.0.zip")
-                .await?
+        let resp = web
+            .assert_success_cached(path, CachePolicy::ForeverInCdn, env.config())
+            .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            "attachment; filename=\"rustdoc-dummy-0.2.0.zip\""
         );
+        web.assert_conditional_get(path, &resp).await?;
+
+        check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
+
         Ok(())
     }
 
@@ -2962,18 +3144,64 @@ mod test {
                 .await?;
 
             let web = env.web_app().await;
-            let response = web.get(&format!("/dummy/0.1.0/{name}")).await?;
-            assert!(response.status().is_success());
-            assert_eq!(response.text().await?, "content");
+
+            assert_eq!(
+                web.assert_success(&format!("/dummy/0.1.0/{name}"))
+                    .await?
+                    .text()
+                    .await?,
+                "content"
+            );
+
+            web.assert_success_and_conditional_get(&format!("/dummy/0.1.0/{name}"))
+                .await?;
 
             Ok(())
         })
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("folder/file.js")]
+    #[test_case("root.css")]
+    async fn test_static_asset_handler(path: &str) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let storage = env.async_storage();
+        storage
+            .store_one(
+                format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}"),
+                b"static content",
+            )
+            .await?;
+
+        let web = env.web_app().await;
+
+        assert_eq!(
+            web.assert_success(&format!("/-/rustdoc.static/{path}"),)
+                .await?
+                .text()
+                .await?,
+            "static content"
+        );
+
+        web.assert_success_and_conditional_get(&format!("/-/rustdoc.static/{path}"))
+            .await?;
+
+        Ok(())
+    }
+
     #[test_case("search-1234.js")]
     #[test_case("settings-1234.js")]
     fn fallback_to_root_storage_for_some_js_assets(path: &str) {
-        // test workaround for https://github.com/rust-lang/docs.rs/issues/1979
+        // tests for two separate things needed to serve old rustdoc content
+        // 1. `/{crate}/{version}/asset.js`, where we try to find the assets in the rustdoc archive
+        // 2. `/asset.js` where we try to find it in RUSTDOC_STATIC_STORAGE_PREFIX
+        //
+        // For 2), new builds use the assets from RUSTDOC_STATIC_STORAGE_PREFIX via
+        // `/-/rustdoc.static/asset.js`.
+        //
+        // For 1) I'm actually not sure, new builds don't seem to have these assets.
+        // ( the logic is special-cased to `search-` and `settings-` prefixes.)
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
@@ -2983,25 +3211,30 @@ mod test {
                 .create()
                 .await?;
 
+            const ROOT_ASSET: &str = "normalize-20200403-1.44.0-nightly-74bd074ee.css";
+
             let storage = env.async_storage();
-            storage.store_one("asset.js", *b"content").await?;
+            storage.store_one(ROOT_ASSET, *b"content").await?;
             storage.store_one(path, *b"more_content").await?;
 
             let web = env.web_app().await;
 
-            let response = web.get("/dummy/0.1.0/asset.js").await?;
+            let response = web.get(&format!("/dummy/0.1.0/{ROOT_ASSET}")).await?;
             assert_eq!(
                 response.status(),
                 StatusCode::NOT_FOUND,
                 "{:?}",
                 response.headers().get("Location"),
             );
-            assert!(web.get("/asset.js").await?.status().is_success());
 
-            assert!(web.get(&format!("/{path}")).await?.status().is_success());
-            let response = web.get(&format!("/dummy/0.1.0/{path}")).await?;
-            assert!(response.status().is_success());
-            assert_eq!(response.text().await?, "more_content");
+            for (path, expected_content) in [
+                (format!("/{ROOT_ASSET}"), "content"),
+                (format!("/dummy/0.1.0/{path}"), "more_content"),
+            ] {
+                let resp = web.assert_success(&path).await?;
+                web.assert_conditional_get(&path, &resp).await?;
+                assert_eq!(resp.text().await?, expected_content);
+            }
 
             Ok(())
         })
@@ -3045,7 +3278,7 @@ mod test {
 
             web.assert_redirect_cached_unchecked(
                 "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
-                "/clap/latest/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
+                "/clap/latest/clap/clapproc%20macro%20%60Parser%60%20not%20expanded:%20Cannot%20create%20expander%20for",
                 CachePolicy::ForeverInCdn,
                 env.config(),
             ).await?;
@@ -3097,105 +3330,10 @@ mod test {
         });
     }
 
-    #[test_case(
-        "latest/json",
-        "0.2.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/json.gz",
-        "0.2.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Gzip
-    )]
-    #[test_case(
-        "0.1/json",
-        "0.1.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Zstd;
-        "semver"
-    )]
-    #[test_case(
-        "0.1.0/json",
-        "0.1.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/json/latest",
-        "0.2.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/json/latest.gz",
-        "0.2.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Gzip
-    )]
-    #[test_case(
-        "latest/json/42",
-        "0.2.0",
-        "x86_64-unknown-linux-gnu",
-        RustdocJsonFormatVersion::Version(42),
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/i686-pc-windows-msvc/json",
-        "0.2.0",
-        "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/i686-pc-windows-msvc/json.gz",
-        "0.2.0",
-        "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Latest,
-        CompressionAlgorithm::Gzip
-    )]
-    #[test_case(
-        "latest/i686-pc-windows-msvc/json/42",
-        "0.2.0",
-        "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Version(42),
-        CompressionAlgorithm::Zstd
-    )]
-    #[test_case(
-        "latest/i686-pc-windows-msvc/json/42.gz",
-        "0.2.0",
-        "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Version(42),
-        CompressionAlgorithm::Gzip
-    )]
-    #[test_case(
-        "latest/i686-pc-windows-msvc/json/42.zst",
-        "0.2.0",
-        "i686-pc-windows-msvc",
-        RustdocJsonFormatVersion::Version(42),
-        CompressionAlgorithm::Zstd
-    )]
+    #[test_case("/crate/dummy/0.1/json", "/crate/dummy/0.1.0/json")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn json_download(
-        request_path_suffix: &str,
-        redirect_version: &str,
-        redirect_target: &str,
-        redirect_format_version: RustdocJsonFormatVersion,
-        redirect_compression: CompressionAlgorithm,
-    ) -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+    async fn json_download_semver_redirect(path: &str, expected_redirect: &str) -> Result<()> {
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -3219,16 +3357,149 @@ mod test {
 
         let web = env.web_app().await;
 
-        let compression_ext = file_extension_for(redirect_compression);
+        web.assert_redirect_cached(
+            path,
+            expected_redirect,
+            CachePolicy::ForeverInCdn,
+            env.config(),
+        )
+        .await?;
+        Ok(())
+    }
 
-        web.assert_redirect_cached_unchecked(
-                &format!("/crate/dummy/{request_path_suffix}"),
-                &format!("https://static.docs.rs/rustdoc-json/dummy/{redirect_version}/{redirect_target}/\
-                    dummy_{redirect_version}_{redirect_target}_{redirect_format_version}.json.{compression_ext}"),
-                CachePolicy::ForeverInCdn,
-                env.config(),
-            )
+    #[test_case(
+        "latest/json",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json.gz",
+        CompressionAlgorithm::Gzip,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "0.1.0/json",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.1.0"
+    )]
+    #[test_case(
+        "latest/json/latest",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json/latest.gz",
+        CompressionAlgorithm::Gzip,
+        "x86_64-unknown-linux-gnu",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/json/42",
+        CompressionAlgorithm::Zstd,
+        "x86_64-unknown-linux-gnu",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json.gz",
+        CompressionAlgorithm::Gzip,
+        "i686-pc-windows-msvc",
+        "latest",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.gz",
+        CompressionAlgorithm::Gzip,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
+    #[test_case(
+        "latest/i686-pc-windows-msvc/json/42.zst",
+        CompressionAlgorithm::Zstd,
+        "i686-pc-windows-msvc",
+        "42",
+        "0.2.0"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn json_download(
+        request_path_suffix: &str,
+        expected_compression: CompressionAlgorithm,
+        expected_target: &str,
+        expected_format_version: &str,
+        expected_version: &str,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .create()
             .await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .add_target("i686-pc-windows-msvc")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        let path = format!("/crate/dummy/{request_path_suffix}");
+        let resp = web
+            .assert_success_cached(&path, CachePolicy::ForeverInCdn, env.config())
+            .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            &format!(
+                "attachment; filename=\"dummy_{expected_version}_{expected_target}_{expected_format_version}.json.{}\"",
+                expected_compression.file_extension()
+            )
+        );
+        web.assert_conditional_get(&path, &resp).await?;
+
+        {
+            let compressed_body = web.assert_success(&path).await?.bytes().await?.to_vec();
+            let json_body = decompress(&*compressed_body, expected_compression, usize::MAX)?;
+            assert_eq!(
+                read_format_version_from_rustdoc_json(&*json_body)?,
+                // for both "Latest", and "Version(42)", the version number in json is the
+                // specific number.
+                "42".parse().unwrap()
+            );
+        }
+
         Ok(())
     }
 
@@ -3238,12 +3509,7 @@ mod test {
     async fn test_json_download_fallback_to_old_files_without_compression_extension(
         ext: &str,
     ) -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         const NAME: &str = "dummy";
         const VERSION: Version = Version::new(0, 1, 0);
@@ -3289,16 +3555,15 @@ mod test {
 
         let web = env.web_app().await;
 
-        web.assert_redirect_cached_unchecked(
-            &format!("/crate/dummy/latest/json{ext}"),
-            &format!(
-                "https://static.docs.rs/rustdoc-json/{NAME}/{VERSION}/{TARGET}/\
-                    {NAME}_{VERSION}_{TARGET}_{FORMAT_VERSION}.json" // without .zstd
-            ),
-            CachePolicy::ForeverInCdn,
-            env.config(),
-        )
-        .await?;
+        let path = format!("/crate/dummy/latest/json{ext}");
+        let resp = web
+            .assert_success_cached(&path, CachePolicy::ForeverInCdn, env.config())
+            .await?;
+        assert_eq!(
+            resp.headers().get(CONTENT_DISPOSITION).unwrap(),
+            &format!("attachment; filename=\"{NAME}_{VERSION}_{TARGET}_latest.json\""),
+        );
+        web.assert_conditional_get(&path, &resp).await?;
         Ok(())
     }
 
@@ -3308,12 +3573,7 @@ mod test {
     #[test_case("0.42.0/json"; "unknown version")]
     #[tokio::test(flavor = "multi_thread")]
     async fn json_download_not_found(request_path_suffix: &str) -> Result<()> {
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .s3_static_root_path("https://static.docs.rs")
-                .build()?,
-        )
-        .await?;
+        let env = TestEnvironment::new().await?;
 
         env.fake_release()
             .await
@@ -3341,8 +3601,95 @@ mod test {
         let response = web
             .get(&format!("/crate/dummy/{request_path_suffix}"))
             .await?;
-
+        assert!(response.headers().get(CONTENT_DISPOSITION).is_none());
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case("/dummy/"; "only krate")]
+    #[test_case("/dummy/latest/"; "with version")]
+    #[test_case("/dummy/latest/dummy"; "target-name as path, without trailing slash")]
+    #[test_case("/dummy/latest/dummy/"; "final target")]
+    async fn test_full_latest_url_without_trailing_slash(path: &str) -> Result<()> {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("1.0.0")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        const TARGET: &str = "/dummy/latest/dummy/";
+        if path == TARGET {
+            web.get(path).await?.status().is_success();
+        } else {
+            web.assert_redirect_unchecked(path, "/dummy/latest/dummy/")
+                .await?;
+        }
+
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case(
+        "/dummy/latest/other_path",
+        "/dummy/latest/dummy/other_path";
+        "other path, without trailing slash"
+    )]
+    #[test_case(
+        "/dummy/latest/other_path.html",
+        "/dummy/latest/dummy/other_path.html";
+        "other html path, without trailing slash"
+    )]
+    async fn test_full_latest_url_some_path_but_trailing_slash(
+        path: &str,
+        expected_redirect: &str,
+    ) -> Result<()> {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("1.0.0")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        web.assert_redirect_unchecked(path, expected_redirect)
+            .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fetch_item_with_semver_url() -> Result<()> {
+        // https://github.com/rust-lang/docs.rs/issues/3036
+        // This fixes an issue where we mistakenly attached a
+        // trailing `/` to a rustdoc URL when redirecting
+        // to the exact version, coming from a semver version.
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("itertools")
+            .version("0.14.0")
+            .rustdoc_file("itertools/trait.Itertools.html")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+        web.assert_redirect(
+            "/itertools/^0.14/itertools/trait.Itertools.html",
+            "/itertools/0.14.0/itertools/trait.Itertools.html",
+        )
+        .await?;
+
         Ok(())
     }
 }

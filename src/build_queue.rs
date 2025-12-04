@@ -1,27 +1,58 @@
 use crate::{
-    BuildPackageSummary, Config, Context, Index, InstanceMetrics, RustwideBuilder, cdn,
+    BuildPackageSummary, Config, Context, Index, RustwideBuilder,
+    cdn::{self, CdnMetrics},
     db::{
-        CrateId, Pool, delete_crate, delete_version, types::version::Version,
+        CrateId, Pool, delete_crate, delete_version,
+        types::{krate_name::KrateName, version::Version},
         update_latest_version_id,
     },
-    docbuilder::PackageKind,
+    docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
+    metrics::otel::AnyMeterProvider,
     storage::AsyncStorage,
     utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config},
 };
 use anyhow::Context as _;
+use chrono::NaiveDate;
 use fn_error_context::context;
 use futures_util::{StreamExt, stream::TryStreamExt};
+use opentelemetry::metrics::Counter;
 use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::runtime;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
-/// The static priority for background rebuilds.
-/// Used when queueing rebuilds, and when rendering them
-/// collapsed in the UI.
-/// For normal build priorities we use smaller values.
-pub(crate) const REBUILD_PRIORITY: i32 = 20;
+#[derive(Debug)]
+struct BuildQueueMetrics {
+    queued_builds: Counter<u64>,
+}
+
+impl BuildQueueMetrics {
+    fn new(meter_provider: &AnyMeterProvider) -> Self {
+        let meter = meter_provider.meter("build_queue");
+        const PREFIX: &str = "docsrs.build_queue";
+        Self {
+            queued_builds: meter
+                .u64_counter(format!("{PREFIX}.queued_builds"))
+                .with_unit("1")
+                .build(),
+        }
+    }
+}
+
+pub(crate) const PRIORITY_DEFAULT: i32 = 0;
+/// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
+#[allow(dead_code)]
+pub(crate) const PRIORITY_DEPRIORITIZED: i32 = 1;
+/// Rebuilds triggered from crates.io, see issue #2442
+pub(crate) const PRIORITY_MANUAL_FROM_CRATES_IO: i32 = 5;
+/// Used for rebuilds queued through cratesfyi for crate versions failed due to a broken Rustdoc nightly version.
+/// Note: a broken rustdoc version does not necessarily imply a failed build.
+pub(crate) const PRIORITY_BROKEN_RUSTDOC: i32 = 10;
+/// Used by the synchronize cratesfyi command when queueing builds that are in the crates.io index but not in the database.
+pub(crate) const PRIORITY_CONSISTENCY_CHECK: i32 = 15;
+/// The static priority for background rebuilds, used when queueing rebuilds, and when rendering them collapsed in the UI.
+pub(crate) const PRIORITY_CONTINUOUS: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub(crate) struct QueuedCrate {
@@ -39,24 +70,33 @@ pub struct AsyncBuildQueue {
     config: Arc<Config>,
     storage: Arc<AsyncStorage>,
     pub(crate) db: Pool,
-    metrics: Arc<InstanceMetrics>,
+    queue_metrics: BuildQueueMetrics,
+    builder_metrics: Arc<BuilderMetrics>,
+    cdn_metrics: Arc<CdnMetrics>,
     max_attempts: i32,
 }
 
 impl AsyncBuildQueue {
     pub fn new(
         db: Pool,
-        metrics: Arc<InstanceMetrics>,
         config: Arc<Config>,
         storage: Arc<AsyncStorage>,
+        cdn_metrics: Arc<CdnMetrics>,
+        otel_meter_provider: &AnyMeterProvider,
     ) -> Self {
         AsyncBuildQueue {
             max_attempts: config.build_attempts.into(),
             config,
             db,
-            metrics,
             storage,
+            queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
+            builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
+            cdn_metrics,
         }
+    }
+
+    pub fn builder_metrics(&self) -> Arc<BuilderMetrics> {
+        self.builder_metrics.clone()
     }
 
     pub async fn last_seen_reference(&self) -> Result<Option<crates_index_diff::gix::ObjectId>> {
@@ -202,6 +242,39 @@ impl AsyncBuildQueue {
         .await?
         .is_some())
     }
+
+    async fn remove_crate_from_queue(&self, name: &str) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+        sqlx::query!(
+            "DELETE
+             FROM queue
+             WHERE name = $1
+             ",
+            name
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn remove_version_from_queue(&self, name: &str, version: &Version) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+        sqlx::query!(
+            "DELETE
+             FROM queue
+             WHERE
+                name = $1 AND
+                version = $2
+             ",
+            name,
+            version as _,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
 }
 
 /// Locking functions.
@@ -230,14 +303,41 @@ impl AsyncBuildQueue {
 
 /// Index methods.
 impl AsyncBuildQueue {
+    async fn queue_crate_invalidation(&self, krate: &str) {
+        let krate = match krate
+            .parse::<KrateName>()
+            .with_context(|| format!("can't parse crate name '{}'", krate))
+        {
+            Ok(krate) => krate,
+            Err(err) => {
+                report_error(&err);
+                return;
+            }
+        };
+
+        if let Err(err) =
+            cdn::queue_crate_invalidation(&self.config, &self.cdn_metrics, &krate).await
+        {
+            report_error(&err);
+        }
+    }
+
     /// Updates registry index repository and adds new crates into build queue.
     ///
     /// Returns the number of crates added
     pub async fn get_new_crates(&self, index: &Index) -> Result<usize> {
-        let last_seen_reference = self
-            .last_seen_reference()
-            .await?
-            .context("no last_seen_reference set in database")?;
+        let last_seen_reference = self.last_seen_reference().await?;
+        let last_seen_reference = if let Some(oid) = last_seen_reference {
+            oid
+        } else {
+            warn!(
+                        "no last-seen reference found in our database. We assume a fresh install and
+                         set the latest reference (HEAD) as last. This means we will then start to queue
+                         builds for new releases only from now on, and not for all existing releases."
+                    );
+            index.latest_commit_reference().await?
+        };
+
         index.set_last_seen_reference(last_seen_reference).await?;
 
         let (changes, new_reference) = index.peek_changes_ordered().await?;
@@ -259,24 +359,24 @@ impl AsyncBuildQueue {
                     ),
                     Err(err) => report_error(&err),
                 }
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, krate).await
-                {
-                    report_error(&err);
-                }
+
+                self.queue_crate_invalidation(krate).await;
+                self.remove_crate_from_queue(krate).await?;
                 continue;
             }
 
             if let Some(release) = change.version_deleted() {
+                let version: Version = release
+                    .version
+                    .parse()
+                    .context("couldn't parse release version as semver")?;
+
                 match delete_version(
                     &mut conn,
                     &self.storage,
                     &self.config,
                     &release.name,
-                    &release
-                        .version
-                        .parse()
-                        .context("couldn't parse release version as semver")?,
+                    &version,
                 )
                 .await
                 .with_context(|| {
@@ -291,11 +391,10 @@ impl AsyncBuildQueue {
                     ),
                     Err(err) => report_error(&err),
                 }
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, &release.name).await
-                {
-                    report_error(&err);
-                }
+
+                self.queue_crate_invalidation(&release.name).await;
+                self.remove_version_from_queue(&release.name, &version)
+                    .await?;
                 continue;
             }
 
@@ -324,7 +423,7 @@ impl AsyncBuildQueue {
                             "{}-{} added into build queue",
                             release.name, release.version
                         );
-                        self.metrics.queued_builds.inc();
+                        self.queue_metrics.queued_builds.add(1, &[]);
                         crates_added += 1;
                     }
                     Err(err) => report_error(&err),
@@ -349,11 +448,7 @@ impl AsyncBuildQueue {
                     report_error(&err);
                 }
 
-                if let Err(err) =
-                    cdn::queue_crate_invalidation(&mut conn, &self.config, &release.name).await
-                {
-                    report_error(&err);
-                }
+                self.queue_crate_invalidation(&release.name).await;
             }
         }
 
@@ -532,20 +627,18 @@ impl BuildQueue {
             None => return Ok(()),
         };
 
-        let res = self
-            .inner
-            .metrics
-            .build_time
-            .observe_closure_duration(|| f(&to_process));
+        let res = {
+            let instant = Instant::now();
+            let res = f(&to_process);
+            let elapsed = instant.elapsed().as_secs_f64();
+            self.inner.builder_metrics.build_time.record(elapsed, &[]);
+            res
+        };
 
-        self.inner.metrics.total_builds.inc();
-        if let Err(err) = self.runtime.block_on(cdn::queue_crate_invalidation(
-            &mut transaction,
-            &self.inner.config,
-            &to_process.name,
-        )) {
-            report_error(&err);
-        }
+        self.inner.builder_metrics.total_builds.add(1, &[]);
+
+        self.runtime
+            .block_on(self.inner.queue_crate_invalidation(&to_process.name));
 
         let mut increase_attempt_count = || -> Result<()> {
             let attempt: i32 = self.runtime.block_on(
@@ -562,7 +655,7 @@ impl BuildQueue {
             )?;
 
             if attempt >= self.inner.max_attempts {
-                self.inner.metrics.failed_builds.inc();
+                self.inner.builder_metrics.failed_builds.add(1, &[]);
             }
             Ok(())
         };
@@ -593,35 +686,6 @@ impl BuildQueue {
         }
 
         self.runtime.block_on(transaction.commit())?;
-        Ok(())
-    }
-
-    fn update_toolchain(&self, builder: &mut RustwideBuilder) -> Result<()> {
-        let updated = retry(
-            || {
-                builder
-                    .update_toolchain()
-                    .context("downloading new toolchain failed")
-            },
-            3,
-        )?;
-
-        if updated {
-            // toolchain has changed, purge caches
-            retry(
-                || {
-                    builder
-                        .purge_caches()
-                        .context("purging rustwide caches failed")
-                },
-                3,
-            )?;
-
-            builder
-                .add_essential_files()
-                .context("adding essential files failed")?;
-        }
-
         Ok(())
     }
 
@@ -657,8 +721,8 @@ impl BuildQueue {
                 return Err(err);
             }
 
-            if let Err(err) = self
-                .update_toolchain(&mut *builder)
+            if let Err(err) = builder
+                .update_toolchain_and_add_essential_files()
                 .context("Updating toolchain failed, locking queue")
             {
                 report_error(&err);
@@ -695,7 +759,7 @@ pub async fn queue_rebuilds(
         .pending_count_by_priority()
         .await?
         .iter()
-        .filter_map(|(priority, count)| (*priority >= REBUILD_PRIORITY).then_some(count))
+        .filter_map(|(priority, count)| (*priority >= PRIORITY_CONTINUOUS).then_some(count))
         .sum();
 
     let rebuilds_to_queue = config
@@ -739,7 +803,7 @@ pub async fn queue_rebuilds(
         {
             info!("queueing rebuild for {} {}...", &row.name, &row.version);
             build_queue
-                .add_crate(&row.name, &row.version, REBUILD_PRIORITY, None)
+                .add_crate(&row.name, &row.version, PRIORITY_CONTINUOUS, None)
                 .await?;
         }
     }
@@ -747,10 +811,72 @@ pub async fn queue_rebuilds(
     Ok(())
 }
 
+/// Queue rebuilds for failed crates due to a faulty version of rustdoc
+///
+/// It is assumed that the version of rustdoc matches the one of rustc, which is persisted in the DB.
+/// The priority of the resulting rebuild requests will be lower than previously failed builds.
+/// If a crate is already queued to be rebuilt, it will not be requeued.
+/// Start date is inclusive, end date is exclusive.
+#[instrument(skip_all)]
+pub async fn queue_rebuilds_faulty_rustdoc(
+    conn: &mut sqlx::PgConnection,
+    build_queue: &AsyncBuildQueue,
+    start_nightly_date: &NaiveDate,
+    end_nightly_date: &Option<NaiveDate>,
+) -> Result<i32> {
+    let end_nightly_date =
+        end_nightly_date.unwrap_or_else(|| start_nightly_date.succ_opt().unwrap());
+    let mut results = sqlx::query!(
+        r#"
+SELECT c.name,
+       r.version AS "version: Version"
+FROM crates AS c
+         JOIN releases AS r
+              ON c.id = r.crate_id
+         JOIN release_build_status AS rbs
+            ON rbs.rid = r.id
+         JOIN builds AS b
+             ON b.rid = r.id
+             AND b.build_finished = rbs.last_build_time
+             AND b.rustc_nightly_date >= $1
+             AND b.rustc_nightly_date < $2
+
+
+"#,
+        start_nightly_date,
+        end_nightly_date
+    )
+    .fetch(&mut *conn);
+
+    let mut results_count = 0;
+    while let Some(row) = results.next().await {
+        let row = row?;
+
+        if !build_queue
+            .has_build_queued(&row.name, &row.version)
+            .await?
+        {
+            results_count += 1;
+            info!(
+                name=%row.name,
+                version=%row.version,
+                priority=PRIORITY_BROKEN_RUSTDOC,
+               "queueing rebuild"
+            );
+            build_queue
+                .add_crate(&row.name, &row.version, PRIORITY_BROKEN_RUSTDOC, None)
+                .await?;
+        }
+    }
+
+    Ok(results_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{FakeBuild, TestEnvironment, V1, V2};
+    use crate::db::types::BuildStatus;
+    use crate::test::{FakeBuild, KRATE, TestEnvironment, V1, V2};
     use chrono::Utc;
     use std::time::Duration;
 
@@ -783,7 +909,188 @@ mod tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].name, "foo");
         assert_eq!(queue[0].version, V1);
-        assert_eq!(queue[0].priority, REBUILD_PRIORITY);
+        assert_eq!(queue[0].priority, PRIORITY_CONTINUOUS);
+
+        Ok(())
+    }
+
+    /// Verifies whether a rebuild is queued for all releases with the latest build performed with a specific nightly version of rustdoc
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rebuild_broken_rustdoc_specific_date_simple() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            // All those should match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V2),
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
+            env.fake_release()
+                .await
+                .name(crate_name)
+                .version(version)
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version(
+                            format!(
+                                "rustc 1.84.0-nightly (e7c0d2750 {})",
+                                nightly.format("%Y-%m-%d")
+                            )
+                            .as_str(),
+                        )
+                        .build_status(BuildStatus::Failure),
+                ])
+                .create()
+                .await?;
+        }
+
+        let build_queue = env.async_build_queue();
+        assert!(build_queue.queued_crates().await?.is_empty());
+
+        let mut conn = env.async_db().async_conn().await;
+        queue_rebuilds_faulty_rustdoc(
+            &mut conn,
+            build_queue,
+            &NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(),
+            &None,
+        )
+        .await?;
+
+        let queue = build_queue.queued_crates().await?;
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue[0].name, "foo1");
+        assert_eq!(queue[0].version, V1);
+        assert_eq!(queue[0].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[1].name, "foo1");
+        assert_eq!(queue[1].version, V2);
+        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[2].name, "foo2");
+        assert_eq!(queue[2].version, V1);
+        assert_eq!(queue[2].priority, PRIORITY_BROKEN_RUSTDOC);
+
+        Ok(())
+    }
+
+    /// Verifies whether a rebuild is NOT queued for any crate if the nightly specified doesn't match any latest build of any release
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rebuild_broken_rustdoc_specific_date_skipped() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release even if the nightly matches
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
+            env.fake_release()
+                .await
+                .name(crate_name)
+                .version(version)
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version(
+                            format!(
+                                "rustc 1.84.0-nightly (e7c0d2750 {})",
+                                nightly.format("%Y-%m-%d")
+                            )
+                            .as_str(),
+                        )
+                        .build_status(BuildStatus::Failure),
+                ])
+                .create()
+                .await?;
+        }
+
+        let build_queue = env.async_build_queue();
+        assert!(build_queue.queued_crates().await?.is_empty());
+
+        let mut conn = env.async_db().async_conn().await;
+        queue_rebuilds_faulty_rustdoc(
+            &mut conn,
+            build_queue,
+            &NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(),
+            &None,
+        )
+        .await?;
+
+        let queue = build_queue.queued_crates().await?;
+        assert_eq!(queue.len(), 0);
+
+        Ok(())
+    }
+
+    /// Verifies whether a rebuild is queued for all releases with the latest build performed with a nightly version between two dates
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rebuild_broken_rustdoc_date_range() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        // Matrix of test builds (crate name, nightly date, version)
+        let build_matrix = [
+            // Should be skipped since this is not the latest build for this release
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            // All those should match
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            ("foo1", NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+            // Should be skipped since the nightly doesn't match (end date is exclusive)
+            ("foo2", NaiveDate::from_ymd_opt(2020, 10, 5).unwrap(), V2),
+        ];
+        for build in build_matrix.into_iter() {
+            let (crate_name, nightly, version) = build;
+            env.fake_release()
+                .await
+                .name(crate_name)
+                .version(version)
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version(
+                            format!(
+                                "rustc 1.84.0-nightly (e7c0d2750 {})",
+                                nightly.format("%Y-%m-%d")
+                            )
+                            .as_str(),
+                        )
+                        .build_status(BuildStatus::Failure),
+                ])
+                .create()
+                .await?;
+        }
+
+        let build_queue = env.async_build_queue();
+        assert!(build_queue.queued_crates().await?.is_empty());
+
+        let mut conn = env.async_db().async_conn().await;
+        queue_rebuilds_faulty_rustdoc(
+            &mut conn,
+            build_queue,
+            &NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(),
+            &NaiveDate::from_ymd_opt(2020, 10, 5),
+        )
+        .await?;
+
+        let queue = build_queue.queued_crates().await?;
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue[0].name, "foo1");
+        assert_eq!(queue[0].version, V1);
+        assert_eq!(queue[0].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[1].name, "foo1");
+        assert_eq!(queue[1].version, V2);
+        assert_eq!(queue[1].priority, PRIORITY_BROKEN_RUSTDOC);
+        assert_eq!(queue[2].name, "foo2");
+        assert_eq!(queue[2].version, V1);
+        assert_eq!(queue[2].priority, PRIORITY_BROKEN_RUSTDOC);
 
         Ok(())
     }
@@ -799,10 +1106,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         let mut conn = env.async_db().async_conn().await;
@@ -841,10 +1148,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, REBUILD_PRIORITY, None)
+            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         env.fake_release()
@@ -1066,78 +1373,94 @@ mod tests {
         })?;
         assert!(!called, "there were still items in the queue");
 
-        // Ensure metrics were recorded correctly
-        let metrics = env.instance_metrics();
-        assert_eq!(metrics.total_builds.get(), 9);
-        assert_eq!(metrics.failed_builds.get(), 1);
-        assert_eq!(metrics.build_time.get_sample_count(), 9);
+        let collected_metrics = env.collected_metrics();
 
-        // no invalidations were run since we don't have a distribution id configured
-        assert!(
-            env.runtime()
-                .block_on(async {
-                    cdn::queued_or_active_crate_invalidations(
-                        &mut *env.async_db().async_conn().await,
-                    )
-                    .await
-                })?
-                .is_empty()
+        assert_eq!(
+            collected_metrics
+                .get_metric("builder", "docsrs.builder.total_builds")?
+                .get_u64_counter()
+                .value(),
+            9
+        );
+
+        assert_eq!(
+            collected_metrics
+                .get_metric("builder", "docsrs.builder.failed_builds")?
+                .get_u64_counter()
+                .value(),
+            1
+        );
+
+        assert_eq!(
+            dbg!(
+                collected_metrics
+                    .get_metric("builder", "docsrs.builder.build_time")?
+                    .get_f64_histogram()
+                    .count()
+            ),
+            9
         );
 
         Ok(())
     }
 
     #[test]
-    fn test_invalidate_cdn_after_build_and_error() -> Result<()> {
+    fn test_invalidate_cdn_after_error() -> Result<()> {
+        let mut fastly_api = mockito::Server::new();
+
         let env = TestEnvironment::with_config_and_runtime(
             TestEnvironment::base_config()
-                .cloudfront_distribution_id_web(Some("distribution_id_web".into()))
-                .cloudfront_distribution_id_static(Some("distribution_id_static".into()))
+                .fastly_api_host(fastly_api.url().parse().unwrap())
+                .fastly_api_token(Some("test-token".into()))
+                .fastly_service_sid(Some("test-sid-1".into()))
                 .build()?,
         )?;
 
         let queue = env.build_queue();
 
-        queue.add_crate("will_succeed", &V1, -1, None)?;
+        let m = fastly_api
+            .mock("POST", "/service/test-sid-1/purge")
+            .with_status(200)
+            .create();
+
         queue.add_crate("will_fail", &V1, 0, None)?;
-
-        let fetch_invalidations = || {
-            env.runtime()
-                .block_on(async {
-                    let mut conn = env.async_db().async_conn().await;
-                    cdn::queued_or_active_crate_invalidations(&mut conn).await
-                })
-                .unwrap()
-        };
-
-        assert!(fetch_invalidations().is_empty());
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("will_succeed", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-
-        let queued_invalidations = fetch_invalidations();
-        assert_eq!(queued_invalidations.len(), 3);
-        assert!(
-            queued_invalidations
-                .iter()
-                .all(|i| i.krate == "will_succeed")
-        );
 
         queue.process_next_crate(|krate| {
             assert_eq!("will_fail", krate.name);
             anyhow::bail!("simulate a failure");
         })?;
 
-        let queued_invalidations = fetch_invalidations();
-        assert_eq!(queued_invalidations.len(), 6);
-        assert!(
-            queued_invalidations
-                .iter()
-                .skip(3)
-                .all(|i| i.krate == "will_fail")
-        );
+        m.expect(1).assert();
+
+        Ok(())
+    }
+    #[test]
+    fn test_invalidate_cdn_after_build() -> Result<()> {
+        let mut fastly_api = mockito::Server::new();
+
+        let env = TestEnvironment::with_config_and_runtime(
+            TestEnvironment::base_config()
+                .fastly_api_host(fastly_api.url().parse().unwrap())
+                .fastly_api_token(Some("test-token".into()))
+                .fastly_service_sid(Some("test-sid-1".into()))
+                .build()?,
+        )?;
+
+        let queue = env.build_queue();
+
+        let m = fastly_api
+            .mock("POST", "/service/test-sid-1/purge")
+            .with_status(200)
+            .create();
+
+        queue.add_crate("will_succeed", &V1, -1, None)?;
+
+        queue.process_next_crate(|krate| {
+            assert_eq!("will_succeed", krate.name);
+            Ok(BuildPackageSummary::default())
+        })?;
+
+        m.expect(1).assert();
 
         Ok(())
     }
@@ -1407,6 +1730,50 @@ mod tests {
             assert_eq!(long_version, krate.version);
             Ok(BuildPackageSummary::default())
         })?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_version_from_queue() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let queue = env.async_build_queue();
+        assert_eq!(queue.pending_count().await?, 0);
+
+        queue.add_crate(KRATE, &V1, 0, None).await?;
+        queue.add_crate(KRATE, &V2, 0, None).await?;
+
+        assert_eq!(queue.pending_count().await?, 2);
+        queue.remove_version_from_queue(KRATE, &V1).await?;
+
+        assert_eq!(queue.pending_count().await?, 1);
+
+        // only v2 remains
+        if let [k] = queue.queued_crates().await?.as_slice() {
+            assert_eq!(k.name, KRATE);
+            assert_eq!(k.version, V2);
+        } else {
+            panic!("expected only one queued crate");
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_crate_from_queue() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let queue = env.async_build_queue();
+        assert_eq!(queue.pending_count().await?, 0);
+
+        queue.add_crate(KRATE, &V1, 0, None).await?;
+        queue.add_crate(KRATE, &V2, 0, None).await?;
+
+        assert_eq!(queue.pending_count().await?, 2);
+        queue.remove_crate_from_queue(KRATE).await?;
+
+        assert_eq!(queue.pending_count().await?, 0);
 
         Ok(())
     }

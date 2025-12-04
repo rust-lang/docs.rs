@@ -10,9 +10,11 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use tracing::warn;
 
-use crate::repositories::{
-    APP_USER_AGENT, FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge,
-    RepositoryName,
+use crate::{
+    APP_USER_AGENT,
+    repositories::{
+        FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,
+    },
 };
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {

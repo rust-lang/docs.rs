@@ -1,11 +1,15 @@
 //! custom axum extractors for path parameters
-use crate::web::error::AxumNope;
+use crate::{
+    storage::{CompressionAlgorithm, compression::compression_from_file_extension},
+    web::error::AxumNope,
+};
 use anyhow::anyhow;
 use axum::{
     RequestPartsExt,
     extract::{FromRequestParts, OptionalFromRequestParts},
     http::request::Parts,
 };
+use derive_more::Deref;
 
 /// custom axum `Path` extractor that uses our own AxumNope::BadRequest
 /// as error response instead of a plain text "bad request"
@@ -94,6 +98,58 @@ where
         }
 
         Ok(None)
+    }
+}
+
+/// get wanted compression from file extension in path.
+///
+/// TODO: we could also additionally read the accept-encoding header here. But especially
+/// in combination with priorities it's complex to parse correctly. So for now only
+/// file extensions in the URL.
+/// When using Accept-Encoding, we also have to return "Vary: Accept-Encoding" to ensure
+/// the cache behaves correctly.
+#[derive(Debug, Clone, Deref, Default, PartialEq)]
+pub(crate) struct WantedCompression(pub(crate) CompressionAlgorithm);
+
+impl<S> FromRequestParts<S> for WantedCompression
+where
+    S: Send + Sync,
+{
+    type Rejection = AxumNope;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extract::<Option<WantedCompression>>()
+            .await
+            .expect("can never fail")
+            .ok_or_else(|| AxumNope::BadRequest(anyhow!("compression extension not found in path")))
+    }
+}
+
+impl<S> OptionalFromRequestParts<S> for WantedCompression
+where
+    S: Send + Sync,
+{
+    type Rejection = AxumNope;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        if let Some(ext) = parts
+            .extract::<Option<PathFileExtension>>()
+            .await
+            .expect("can't fail")
+            .map(|ext| ext.0)
+        {
+            Ok(Some(WantedCompression(
+                compression_from_file_extension(&ext).ok_or_else(|| {
+                    AxumNope::BadRequest(anyhow!("unknown compression file extension: {}", ext))
+                })?,
+            )))
+        } else {
+            Ok(None)
+        }
     }
 }
 

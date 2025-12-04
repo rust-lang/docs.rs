@@ -5,14 +5,18 @@ pub mod page;
 use crate::{
     db::{
         CrateId,
-        types::{BuildStatus, version::Version},
+        types::{BuildStatus, krate_name::KrateName, version::Version},
     },
-    utils::{get_correct_docsrs_style_file, report_error},
-    web::page::templates::{RenderBrands, RenderSolid, filters},
+    utils::get_correct_docsrs_style_file,
+    web::{
+        metrics::WebMetrics,
+        page::templates::{RenderBrands, RenderSolid, filters},
+    },
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
+use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, instrument};
 
@@ -26,7 +30,7 @@ mod escaped_uri;
 mod extractors;
 mod features;
 mod file;
-mod headers;
+pub(crate) mod headers;
 mod highlight;
 mod licenses;
 mod markdown;
@@ -77,6 +81,10 @@ pub(crate) fn encode_url_path(path: &str) -> String {
     utf8_percent_encode(path, PATH).to_string()
 }
 
+pub(crate) fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
+    Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
+}
+
 const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
 
 /// Represents a version identifier in a request in the original state.
@@ -92,6 +100,30 @@ pub(crate) enum ReqVersion {
 impl ReqVersion {
     pub(crate) fn is_latest(&self) -> bool {
         matches!(self, ReqVersion::Latest)
+    }
+}
+
+impl bincode::Encode for ReqVersion {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        // manual implementation since VersionReq doesn't implement Encode,
+        // and I don't want to NewType it right now.
+        match self {
+            ReqVersion::Exact(v) => {
+                0u8.encode(encoder)?;
+                v.encode(encoder)
+            }
+            ReqVersion::Semver(req) => {
+                1u8.encode(encoder)?;
+                req.to_string().encode(encoder)
+            }
+            ReqVersion::Latest => {
+                2u8.encode(encoder)?;
+                Ok(())
+            }
+        }
     }
 }
 
@@ -169,12 +201,12 @@ impl TryFrom<&str> for ReqVersion {
 #[derive(Debug)]
 pub(crate) struct MatchedRelease {
     /// crate name
-    pub name: String,
+    pub name: KrateName,
 
     /// The crate name that was found when attempting to load a crate release.
     /// `match_version` will attempt to match a provided crate name against similar crate names with
     /// dashes (`-`) replaced with underscores (`_`) and vice versa.
-    pub corrected_name: Option<String>,
+    pub corrected_name: Option<KrateName>,
 
     /// what kind of version did we get in the request? ("latest", semver, exact)
     pub req_version: ReqVersion,
@@ -312,12 +344,12 @@ async fn match_version(
     name: &str,
     input_version: &ReqVersion,
 ) -> Result<MatchedRelease, AxumNope> {
-    let (crate_id, corrected_name) = {
+    let (crate_id, name, corrected_name) = {
         let row = sqlx::query!(
             r#"
              SELECT
                 id as "id: CrateId",
-                name
+                name as "name: KrateName"
              FROM crates
              WHERE normalize_crate_name(name) = normalize_crate_name($1)"#,
             name,
@@ -327,10 +359,14 @@ async fn match_version(
         .context("error fetching crate")?
         .ok_or(AxumNope::CrateNotFound)?;
 
+        let name: KrateName = name
+            .parse()
+            .expect("here we know it's valid, because we found it after normalizing");
+
         if row.name != name {
-            (row.id, Some(row.name))
+            (row.id, name, Some(row.name))
         } else {
-            (row.id, None)
+            (row.id, name, None)
         }
     };
 
@@ -351,7 +387,7 @@ async fn match_version(
                 .find(|release| &release.version == parsed_req_version)
             {
                 return Ok(MatchedRelease {
-                    name: name.to_owned(),
+                    name,
                     corrected_name,
                     req_version: input_version.clone(),
                     release: release.clone(),
@@ -442,6 +478,8 @@ async fn apply_middleware(
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
 
+    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
+
     Ok(router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -457,13 +495,12 @@ async fn apply_middleware(
                     .report_request_timeouts
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
-            .layer(option_layer(
-                context.config.request_timeout.map(TimeoutLayer::new),
-            ))
+            .layer(option_layer(context.config.request_timeout.map(|to| {
+                TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to)
+            })))
             .layer(Extension(context.pool.clone()))
             .layer(Extension(context.async_build_queue.clone()))
-            .layer(Extension(context.service_metrics.clone()))
-            .layer(Extension(context.instance_metrics.clone()))
+            .layer(Extension(web_metrics))
             .layer(Extension(context.config.clone()))
             .layer(Extension(context.registry_api.clone()))
             .layer(Extension(context.async_storage.clone()))
@@ -481,49 +518,6 @@ pub(crate) async fn build_axum_app(
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
     apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
-}
-
-pub(crate) async fn build_metrics_axum_app(context: &Context) -> Result<AxumRouter, Error> {
-    apply_middleware(routes::build_metric_routes(), context, None).await
-}
-
-pub fn start_background_metrics_webserver(
-    addr: Option<SocketAddr>,
-    context: &Context,
-) -> Result<(), Error> {
-    let axum_addr: SocketAddr = addr.unwrap_or(DEFAULT_BIND);
-
-    tracing::info!(
-        "Starting metrics web server on `{}:{}`",
-        axum_addr.ip(),
-        axum_addr.port()
-    );
-
-    let metrics_axum_app = context
-        .runtime
-        .block_on(build_metrics_axum_app(context))?
-        .into_make_service();
-
-    context.runtime.spawn(async move {
-        match tokio::net::TcpListener::bind(axum_addr)
-            .await
-            .context("error binding socket for metrics web server")
-        {
-            Ok(listener) => {
-                if let Err(err) = axum::serve(listener, metrics_axum_app)
-                    .await
-                    .context("error running metrics web server")
-                {
-                    report_error(&err);
-                }
-            }
-            Err(err) => {
-                report_error(&err);
-            }
-        };
-    });
-
-    Ok(())
 }
 
 #[instrument(skip_all)]
@@ -544,7 +538,7 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(
             .into_make_service();
         let listener = tokio::net::TcpListener::bind(axum_addr)
             .await
-            .context("error binding socket for metrics web server")?;
+            .context("error binding socket for web server")?;
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
@@ -652,10 +646,9 @@ where
 }
 
 /// MetaData used in header
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, bincode::Encode)]
 pub(crate) struct MetaData {
-    pub(crate) name: String,
+    pub(crate) name: KrateName,
     /// The exact version of the release being shown.
     pub(crate) version: Version,
     /// The version identifier in the request that was used to request this page.
@@ -684,7 +677,7 @@ impl MetaData {
     ) -> Result<MetaData> {
         let row = sqlx::query!(
             r#"SELECT
-                crates.name,
+                crates.name as "name: KrateName",
                 releases.version,
                 releases.description,
                 releases.target_name,
@@ -1174,7 +1167,7 @@ mod test {
     #[test]
     fn serialize_metadata() {
         let mut metadata = MetaData {
-            name: "serde".to_string(),
+            name: "serde".parse().unwrap(),
             version: "1.0.0".parse().unwrap(),
             req_version: ReqVersion::Latest,
             description: Some("serde does stuff".to_string()),
@@ -1261,7 +1254,7 @@ mod test {
             assert_eq!(
                 metadata.unwrap(),
                 MetaData {
-                    name: "foo".to_string(),
+                    name: "foo".parse().unwrap(),
                     version: "0.1.0".parse().unwrap(),
                     req_version: ReqVersion::Latest,
                     description: Some("Fake package".to_string()),

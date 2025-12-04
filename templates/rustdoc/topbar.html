@@ -13,9 +13,9 @@
     </script>
     {%- if krate is defined -%}
         <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link crate-name" title="{{ krate.description.as_deref().unwrap_or_default() }}">
+            <a href="#" class="pure-menu-link crate-name" title="{{ metadata.description.as_deref().unwrap_or_default() }}">
                 {{ crate::icons::IconCube.render_solid(false, false, "") }}
-                <span class="title">{{ krate.name }}-{{ krate.version }}</span>
+                <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>
 
             {#- Crate details -#}
@@ -23,7 +23,7 @@
                 {# Crate name, description and license #}
                 <ul class="pure-menu-list menu-item-divided">
                     <li class="pure-menu-heading" id="crate-title">
-                        {{ krate.name }} {{ krate.version }}
+                        {{ metadata.name }} {{ metadata.version }}
                         <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
                     </li>
 
@@ -36,7 +36,7 @@
                     {%- endif -%}
 
                     <li class="pure-menu-item">
-                        <a href="{{ params.crate_details_url() }}" class="pure-menu-link description" title="See {{ krate.name }} in docs.rs">
+                        <a href="{{ params.crate_details_url() }}" class="pure-menu-link description" title="See {{ metadata.name }} in docs.rs">
                             {{ crate::icons::IconCube.render_solid(false, false, "") }} Docs.rs crate page
                         </a>
                     </li>
@@ -93,7 +93,7 @@
                             {%- endif -%}
 
                             <li class="pure-menu-item">
-                                <a href="https://crates.io/crates/{{ krate.name }}" class="pure-menu-link" title="See {{ krate.name }} in crates.io">
+                                <a href="https://crates.io/crates/{{ metadata.name }}" class="pure-menu-link" title="See {{ metadata.name }} in crates.io">
                                     {{ crate::icons::IconCube.render_solid(false, false, "") }} crates.io
                                 </a>
                             </li>

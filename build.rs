@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Error, Result};
-use std::{env, path::Path};
+use std::{env, fs::File, io::Write as _, path::Path};
 
 mod tracked {
     use std::{
@@ -68,49 +68,88 @@ mod tracked {
     }
 }
 
+type ETagMap<'a> = phf_codegen::Map<'a, String>;
+
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
-    write_git_version(out_dir)?;
-    compile_sass(out_dir)?;
-    write_known_targets(out_dir)?;
+    read_git_version()?;
+
+    let mut etag_map: ETagMap = ETagMap::new();
+
+    compile_sass(out_dir, &mut etag_map)?;
     compile_syntax(out_dir).context("could not compile syntax files")?;
+    calculate_static_etags(&mut etag_map)?;
+
+    let mut etag_file = File::create(out_dir.join("static_etag_map.rs"))?;
+    writeln!(
+        &mut etag_file,
+        "pub static STATIC_ETAG_MAP: ::phf::Map<&'static str, &'static str> = {};",
+        etag_map.build()
+    )?;
+    etag_file.sync_all()?;
 
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
     Ok(())
 }
 
-fn write_git_version(out_dir: &Path) -> Result<()> {
-    let maybe_hash = get_git_hash()?;
-    let git_hash = maybe_hash.as_deref().unwrap_or("???????");
+fn read_git_version() -> Result<()> {
+    if let Ok(v) = env::var("GIT_SHA") {
+        // first try to read an externally provided git SAH, e.g., from CI
+        println!("cargo:rustc-env=GIT_SHA={v}");
+    } else {
+        // then try to read the git repo.
+        let maybe_hash = get_git_hash()?;
+        let git_hash = maybe_hash.as_deref().unwrap_or("???????");
+        println!("cargo:rustc-env=GIT_SHA={git_hash}");
+    }
 
-    let build_date = time::OffsetDateTime::now_utc().date();
-
-    std::fs::write(
-        out_dir.join("git_version"),
-        format!("({git_hash} {build_date})"),
-    )?;
+    println!(
+        "cargo:rustc-env=BUILD_DATE={}",
+        time::OffsetDateTime::now_utc().date(),
+    );
 
     Ok(())
 }
 
 fn get_git_hash() -> Result<Option<String>> {
-    match gix::open_opts(env::current_dir()?, gix::open::Options::isolated()) {
-        Ok(repo) => {
-            let head_id = repo.head()?.id();
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let hash = String::from_utf8(output.stdout)?.trim().to_string();
 
             // TODO: are these right?
             tracked::track(".git/HEAD")?;
             tracked::track(".git/index")?;
 
-            Ok(head_id.map(|h| format!("{}", h.shorten_or_id())))
+            Ok(Some(hash))
+        }
+        Ok(output) => {
+            let err = String::from_utf8_lossy(&output.stderr);
+            eprintln!("failed to get git repo: {}", err.trim());
+            Ok(None)
         }
         Err(err) => {
-            eprintln!("failed to get git repo: {err}");
+            eprintln!("failed to execute git: {err}");
             Ok(None)
         }
     }
+}
+
+fn etag_from_path(path: impl AsRef<Path>) -> Result<String> {
+    Ok(etag_from_content(std::fs::read(&path)?))
+}
+
+fn etag_from_content(content: impl AsRef<[u8]>) -> String {
+    let digest = md5::compute(content);
+    let md5_hex = format!("{:x}", digest);
+    format!(r#""\"{md5_hex}\"""#)
 }
 
 fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
@@ -128,7 +167,7 @@ fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn compile_sass(out_dir: &Path) -> Result<()> {
+fn compile_sass(out_dir: &Path, etag_map: &mut ETagMap) -> Result<()> {
     const STYLE_DIR: &str = "templates/style";
 
     for entry in walkdir::WalkDir::new(STYLE_DIR) {
@@ -141,12 +180,13 @@ fn compile_sass(out_dir: &Path) -> Result<()> {
                 .to_str()
                 .context("file name must be a utf-8 string")?;
             if !file_name.starts_with('_') {
-                let dest = out_dir
-                    .join(entry.path().strip_prefix(STYLE_DIR)?)
-                    .with_extension("css");
+                let dest = out_dir.join(file_name).with_extension("css");
                 compile_sass_file(entry.path(), &dest).with_context(|| {
                     format!("compiling {} to {}", entry.path().display(), dest.display())
                 })?;
+
+                let dest_str = dest.file_name().unwrap().to_str().unwrap().to_owned();
+                etag_map.entry(dest_str, etag_from_path(&dest)?);
             }
         }
     }
@@ -155,25 +195,32 @@ fn compile_sass(out_dir: &Path) -> Result<()> {
     let pure = tracked::read_to_string("vendor/pure-css/css/pure-min.css")?;
     let grids = tracked::read_to_string("vendor/pure-css/css/grids-responsive-min.css")?;
     let vendored = pure + &grids;
-    std::fs::write(out_dir.join("vendored").with_extension("css"), vendored)?;
+    std::fs::write(out_dir.join("vendored").with_extension("css"), &vendored)?;
+
+    etag_map.entry(
+        "vendored.css".to_owned(),
+        etag_from_content(vendored.as_bytes()),
+    );
 
     Ok(())
 }
 
-fn write_known_targets(out_dir: &Path) -> Result<()> {
-    use std::io::BufRead;
+fn calculate_static_etags(etag_map: &mut ETagMap) -> Result<()> {
+    const STATIC_DIRS: &[&str] = &["static", "vendor"];
 
-    let targets: Vec<String> = std::process::Command::new("rustc")
-        .args(["--print", "target-list"])
-        .output()?
-        .stdout
-        .lines()
-        .filter(|s| s.as_ref().map_or(true, |s| !s.is_empty()))
-        .collect::<std::io::Result<_>>()?;
+    for static_dir in STATIC_DIRS {
+        for entry in walkdir::WalkDir::new(static_dir) {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
 
-    string_cache_codegen::AtomType::new("target::TargetAtom", "target_atom!")
-        .atoms(&targets)
-        .write_to_file(&out_dir.join("target_atom.rs"))?;
+            let partial_path = path.strip_prefix(static_dir).unwrap();
+            let partial_path_str = partial_path.to_string_lossy().to_string();
+            etag_map.entry(partial_path_str, etag_from_path(path)?);
+        }
+    }
 
     Ok(())
 }

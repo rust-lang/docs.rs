@@ -63,6 +63,17 @@
         This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
     </p>
 
+    <h4 id="testing-builds-ci"> <a href="#testing-builds-ci">Testing documentation builds in CI</a> </h4>
+    <p>
+        When you start using docs.rs metadata or <code>#[cfg(docsrs)]</code> in your code, you might run into issues
+        where your code builds fine locally but fails on docs.rs.
+
+        To avoid this, you can add <a href="https://github.com/dtolnay/cargo-docs-rs"><code>cargo docs-rs</code></a> to
+        your test-suite.
+
+        While it doesn't perfectly replicate our build environment, it can catch many common issues.
+    </p>
+
     <h4 id="testing-builds-locally"> <a href="#testing-builds-locally">Testing documentation builds locally</a> </h4>
     {%- set build_subcommand = "{}/blob/master/README.md#build-subcommand"|format(docsrs_repo) -%}
     <p>

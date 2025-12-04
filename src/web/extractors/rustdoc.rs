@@ -1,10 +1,11 @@
 //! special rustdoc extractors
 
 use crate::{
-    db::BuildId,
+    db::{BuildId, types::krate_name::KrateName},
+    storage::CompressionAlgorithm,
     web::{
         MatchedRelease, MetaData, ReqVersion, error::AxumNope, escaped_uri::EscapedURI,
-        extractors::Path,
+        extractors::Path, url_decode,
     },
 };
 use anyhow::Result;
@@ -15,12 +16,18 @@ use axum::{
 };
 use itertools::Itertools as _;
 use serde::Deserialize;
-use std::borrow::Cow;
 
 const INDEX_HTML: &str = "index.html";
 const FOLDER_AND_INDEX_HTML: &str = "/index.html";
 
-#[derive(Clone, Debug, PartialEq)]
+pub(crate) const ROOT_RUSTDOC_HTML_FILES: &[&str] = &[
+    "all.html",
+    "help.html",
+    "settings.html",
+    "scrape-examples-help.html",
+];
+
+#[derive(Clone, Debug, PartialEq, bincode::Encode)]
 pub(crate) enum PageKind {
     Rustdoc,
     Source,
@@ -36,13 +43,14 @@ pub(crate) enum PageKind {
 /// All of these have more or less detail depending on how much metadata we have here.
 /// Maintains some additional fields containing "fixed" things, whos quality
 /// gets better the more metadata we provide.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, bincode::Encode)]
 pub(crate) struct RustdocParams {
     // optional behaviour marker
     page_kind: Option<PageKind>,
 
-    original_uri: Option<Uri>,
+    original_uri: Option<EscapedURI>,
     name: String,
+    confirmed_name: Option<KrateName>,
     req_version: ReqVersion,
     doc_target: Option<String>,
     inner_path: Option<String>,
@@ -61,6 +69,7 @@ impl std::fmt::Debug for RustdocParams {
             .field("page_kind", &self.page_kind)
             .field("original_uri", &self.original_uri)
             .field("name", &self.name)
+            .field("confirmed_name", &self.confirmed_name)
             .field("req_version", &self.req_version)
             .field("doc_target", &self.doc_target)
             .field("inner_path", &self.inner_path)
@@ -159,6 +168,7 @@ impl RustdocParams {
     pub(crate) fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into().trim().into(),
+            confirmed_name: None,
             req_version: ReqVersion::default(),
             original_uri: None,
             doc_target: None,
@@ -193,11 +203,12 @@ impl RustdocParams {
     }
 
     pub(crate) fn from_metadata(metadata: &MetaData) -> Self {
-        RustdocParams::new(&metadata.name).apply_metadata(metadata)
+        RustdocParams::new(metadata.name.to_string()).apply_metadata(metadata)
     }
 
     pub(crate) fn apply_metadata(self, metadata: &MetaData) -> RustdocParams {
-        self.with_name(&metadata.name)
+        self.with_name(metadata.name.to_string())
+            .with_confirmed_name(Some(metadata.name.clone()))
             .with_req_version(&metadata.req_version)
             // first set the doc-target list
             .with_maybe_doc_targets(metadata.doc_targets.clone())
@@ -207,12 +218,13 @@ impl RustdocParams {
     }
 
     pub(crate) fn from_matched_release(matched_release: &MatchedRelease) -> Self {
-        RustdocParams::new(&matched_release.name).apply_matched_release(matched_release)
+        RustdocParams::new(matched_release.name.to_string()).apply_matched_release(matched_release)
     }
 
     pub(crate) fn apply_matched_release(self, matched_release: &MatchedRelease) -> RustdocParams {
         let release = &matched_release.release;
-        self.with_name(&matched_release.name)
+        self.with_name(matched_release.name.to_string())
+            .with_confirmed_name(Some(matched_release.name.clone()))
             .with_req_version(&matched_release.req_version)
             .with_maybe_doc_targets(release.doc_targets.as_deref())
             .with_maybe_default_target(release.default_target.as_deref())
@@ -225,6 +237,16 @@ impl RustdocParams {
     pub(crate) fn with_name(self, name: impl Into<String>) -> Self {
         self.update(|mut params| {
             params.name = name.into().trim().into();
+            params
+        })
+    }
+
+    pub(crate) fn confirmed_name(&self) -> Option<&KrateName> {
+        self.confirmed_name.as_ref()
+    }
+    pub(crate) fn with_confirmed_name(self, confirmed_name: Option<impl Into<KrateName>>) -> Self {
+        self.update(|mut params| {
+            params.confirmed_name = confirmed_name.map(Into::into);
             params
         })
     }
@@ -270,13 +292,16 @@ impl RustdocParams {
         })
     }
 
-    pub(crate) fn original_uri(&self) -> Option<&Uri> {
+    pub(crate) fn original_uri(&self) -> Option<&EscapedURI> {
         self.original_uri.as_ref()
     }
-    pub(crate) fn with_original_uri(self, original_uri: impl Into<Uri>) -> Self {
+    pub(crate) fn with_original_uri(self, original_uri: impl Into<EscapedURI>) -> Self {
         self.with_maybe_original_uri(Some(original_uri))
     }
-    pub(crate) fn with_maybe_original_uri(self, original_uri: Option<impl Into<Uri>>) -> Self {
+    pub(crate) fn with_maybe_original_uri(
+        self,
+        original_uri: Option<impl Into<EscapedURI>>,
+    ) -> Self {
         self.update(|mut params| {
             params.original_uri = original_uri.map(Into::into);
             params
@@ -285,7 +310,7 @@ impl RustdocParams {
     #[cfg(test)]
     pub(crate) fn try_with_original_uri<V>(self, original_uri: V) -> Result<Self>
     where
-        V: TryInto<Uri>,
+        V: TryInto<EscapedURI>,
         V::Error: std::error::Error + Send + Sync + 'static,
     {
         use anyhow::Context as _;
@@ -564,6 +589,37 @@ impl RustdocParams {
         EscapedURI::from_path(path)
     }
 
+    pub(crate) fn zip_download_url(&self) -> EscapedURI {
+        EscapedURI::from_path(format!(
+            "/crate/{}/{}/download",
+            self.name, self.req_version
+        ))
+    }
+
+    pub(crate) fn json_download_url(
+        &self,
+        wanted_compression: Option<CompressionAlgorithm>,
+        format_version: Option<&str>,
+    ) -> EscapedURI {
+        let mut path = format!("/crate/{}/{}", self.name, self.req_version);
+
+        if let Some(doc_target) = self.doc_target() {
+            path.push_str(&format!("/{doc_target}"));
+        }
+
+        if let Some(format_version) = format_version {
+            path.push_str(&format!("/json/{format_version}"));
+        } else {
+            path.push_str("/json");
+        }
+
+        if let Some(wanted_compression) = wanted_compression {
+            path.push_str(&format!(".{}", wanted_compression.file_extension()));
+        }
+
+        EscapedURI::from_path(path)
+    }
+
     pub(crate) fn features_url(&self) -> EscapedURI {
         EscapedURI::from_path(format!(
             "/crate/{}/{}/features",
@@ -704,10 +760,6 @@ fn get_file_extension(path: &str) -> Option<&str> {
     })
 }
 
-fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
-    Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
-}
-
 fn generate_rustdoc_url(name: &str, version: &ReqVersion, path: &str) -> EscapedURI {
     EscapedURI::from_path(format!("/{}/{}/{}", name, version, path))
 }
@@ -715,21 +767,61 @@ fn generate_rustdoc_url(name: &str, version: &ReqVersion, path: &str) -> Escaped
 fn generate_rustdoc_path_for_url(
     target_name: Option<&str>,
     default_target: Option<&str>,
-    doc_target: Option<&str>,
-    inner_path: Option<&str>,
+    mut doc_target: Option<&str>,
+    mut inner_path: Option<&str>,
 ) -> String {
+    // if we have an "unparsed" set of params, we might have a part of
+    // the inner path in `doc_target`. Thing is:
+    // We don't know if that's a real target, or a part of the path,
+    // But the "saner" default for this method is to treat it as part
+    // of the path, not a potential doc target.
+    let inner_path = if target_name.is_none()
+        && default_target.is_none()
+        && let (Some(doc_target), Some(inner_path)) = (doc_target.take(), inner_path.as_mut())
+        && !doc_target.is_empty()
+    {
+        Some(format!("{doc_target}/{inner_path}"))
+    } else {
+        inner_path.map(|s| s.to_string())
+    };
+
     // first validate & fix the inner path to use.
     let result = if let Some(path) = inner_path
         && !path.is_empty()
         && path != INDEX_HTML
     {
-        // ust juse the given inner to start, if:
-        // * it's not empty
-        // * it's not just "index.html"
-        path.to_string()
+        // for none-elements paths we have to guarantee that we have a
+        // trailing slash, otherwise the rustdoc-url won't hit the html-handler and
+        // lead to redirect loops.
+        if path.contains('/') {
+            // just use the given inner to start, if:
+            // * it's not empty
+            // * it's not just "index.html"
+            // * we have a slash in the path.
+            path.to_string()
+        } else if ROOT_RUSTDOC_HTML_FILES.contains(&path.as_str()) {
+            // special case: some files are at the root of the rustdoc output,
+            // without a trailing slash, and the routes are fine with that.
+            // e.g. `/help.html`, `/settings.html`, `/all.html`, ...
+            path.to_string()
+        } else if let Some(target_name) = target_name {
+            if target_name == path {
+                // when we have the target name as path, without a trailing slash,
+                // just add the slash.
+                format!("{}/", path)
+            } else {
+                // when someone just attaches some path to the URL, like
+                // `/{krate}/{version}/somefile.html`, we assume they meant
+                // `/{krate}/{version}/{target_name}/somefile.html`.
+                format!("{}/{}", target_name, path)
+            }
+        } else {
+            // fallback: just attach a slash and redirect.
+            format!("{}/", path)
+        }
     } else if let Some(target_name) = target_name {
         // after having no usable given path, we generate one with the
-        // target name, if we have one.
+        // target name, if we have one/.
         format!("{}/", target_name)
     } else {
         // no usable given path:
@@ -818,7 +910,7 @@ mod tests {
     use super::*;
     use crate::{
         db::types::version::Version,
-        test::{AxumResponseTestExt, AxumRouterTestExt},
+        test::{AxumResponseTestExt, AxumRouterTestExt, V1},
     };
     use axum::{Router, routing::get};
     use test_case::test_case;
@@ -986,12 +1078,17 @@ mod tests {
     )]
     #[test_case(
         None, Some("something"), false,
-        None, "something", "something";
+        None, "something", "krate/something";
         "without trailing slash"
     )]
     #[test_case(
+        None, Some("settings.html"), false,
+        None, "settings.html", "settings.html";
+        "without trailing slash, but known root name"
+    )]
+    #[test_case(
         None, Some("/something"), false,
-        None, "something", "something";
+        None, "something", "krate/something";
         "leading slash is cut"
     )]
     #[test_case(
@@ -1013,7 +1110,7 @@ mod tests {
     )]
     #[test_case(
         None, Some(&format!("{DEFAULT_TARGET}/one")), false,
-        Some(DEFAULT_TARGET), "one", "one";
+        Some(DEFAULT_TARGET), "one", "krate/one";
         "target + one without trailing slash"
     )]
     #[test_case(
@@ -1059,7 +1156,7 @@ mod tests {
     )]
     #[test_case(
         Some(UNKNOWN_TARGET), None, false,
-        None, UNKNOWN_TARGET, UNKNOWN_TARGET;
+        None, UNKNOWN_TARGET, &format!("krate/{UNKNOWN_TARGET}");
         "unknown target without trailing slash"
     )]
     #[test_case(
@@ -1111,7 +1208,7 @@ mod tests {
             .with_req_version(ReqVersion::Latest)
             .with_maybe_doc_target(target)
             .with_maybe_inner_path(path)
-            .try_with_original_uri(&dummy_path)
+            .try_with_original_uri(&dummy_path[..])
             .unwrap()
             .with_default_target(DEFAULT_TARGET)
             .with_target_name(KRATE)
@@ -1599,5 +1696,145 @@ mod tests {
         let params = params.with_doc_target(DEFAULT_TARGET);
         assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+    }
+
+    #[test]
+    fn test_parse_something() {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+        let params = dbg!(
+            RustdocParams::new(KRATE)
+                .with_page_kind(PageKind::Rustdoc)
+                .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
+                .unwrap()
+                .with_req_version(ReqVersion::Latest)
+                .with_doc_target(KRATE)
+        );
+
+        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+
+        let params = dbg!(
+            params
+                .with_target_name(KRATE)
+                .with_default_target(DEFAULT_TARGET)
+                .with_doc_targets(TARGETS.iter().cloned())
+        );
+
+        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+    }
+
+    #[test_case("other_path.html", "/krate/latest/krate/other_path.html")]
+    #[test_case("other_path", "/krate/latest/krate/other_path"; "without .html")]
+    #[test_case("other_path.html", "/krate/latest/krate/other_path.html"; "with .html")]
+    #[test_case("settings.html", "/krate/latest/settings.html"; "static routes")]
+    #[test_case(KRATE, "/krate/latest/krate/"; "same as target name, without slash")]
+    fn test_redirect_some_odd_paths_we_saw(inner_path: &str, expected_url: &str) {
+        // test for https://github.com/rust-lang/docs.rs/issues/2989
+        let params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .try_with_original_uri(format!("/{KRATE}/latest/{inner_path}"))
+            .unwrap()
+            .with_req_version(ReqVersion::Latest)
+            .with_maybe_doc_target(None::<String>)
+            .with_inner_path(inner_path)
+            .with_default_target(DEFAULT_TARGET)
+            .with_target_name(KRATE)
+            .with_doc_targets(TARGETS.iter().cloned());
+
+        dbg!(&params);
+
+        assert_eq!(params.rustdoc_url(), expected_url);
+    }
+
+    #[test]
+    fn test_item_with_semver_url() {
+        // https://github.com/rust-lang/docs.rs/issues/3036
+        // This fixes an issue where we mistakenly attached a
+        // trailing `/` to a rustdoc URL when redirecting
+        // to the exact version, coming from a semver version.
+
+        let ver: Version = "0.14.0".parse().unwrap();
+        let params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(ver))
+            .with_doc_target(KRATE)
+            .with_inner_path("trait.Itertools.html");
+
+        dbg!(&params);
+
+        assert_eq!(
+            params.rustdoc_url(),
+            format!("/{KRATE}/0.14.0/{KRATE}/trait.Itertools.html")
+        )
+    }
+
+    #[test_case(None)]
+    #[test_case(Some(CompressionAlgorithm::Gzip))]
+    #[test_case(Some(CompressionAlgorithm::Zstd))]
+    fn test_plain_json_url(wanted_compression: Option<CompressionAlgorithm>) {
+        let mut params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(V1));
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, None),
+            format!(
+                "/crate/{KRATE}/{V1}/json{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+
+        params = params.with_doc_target("some-target");
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, None),
+            format!(
+                "/crate/{KRATE}/{V1}/some-target/json{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+    }
+
+    #[test_case(None)]
+    #[test_case(Some(CompressionAlgorithm::Gzip))]
+    #[test_case(Some(CompressionAlgorithm::Zstd))]
+    fn test_plain_json_url_with_format(wanted_compression: Option<CompressionAlgorithm>) {
+        let mut params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .with_req_version(ReqVersion::Exact(V1));
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, Some("42")),
+            format!(
+                "/crate/{KRATE}/{V1}/json/42{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+
+        params = params.with_doc_target("some-target");
+
+        assert_eq!(
+            params.json_download_url(wanted_compression, Some("42")),
+            format!(
+                "/crate/{KRATE}/{V1}/some-target/json/42{}",
+                wanted_compression
+                    .map(|c| format!(".{}", c.file_extension()))
+                    .unwrap_or_default()
+            )
+        );
+    }
+
+    #[test]
+    fn test_zip_download_url() {
+        let params = RustdocParams::new(KRATE).with_req_version(ReqVersion::Exact(V1));
+        assert_eq!(
+            params.zip_download_url(),
+            format!("/crate/{KRATE}/{V1}/download")
+        );
     }
 }

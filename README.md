@@ -28,15 +28,6 @@ The recommended way to develop docs.rs is a combination of `cargo run` for
 the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
 This gives you reasonable incremental build times without having to add new users and packages to your host machine.
 
-### Git Hooks
-
-For ease of use, `git_hooks` directory contains useful `git hooks` to make your development easier.
-
-```bash
-# Unix
-cd .git/hooks && ln -s ../../.git_hooks/* . && cd ../..
-# Powershell
-cd .git/hooks && New-Item -Path ../../.git_hooks/* -ItemType SymbolicLink -Value . && cd ../..
 ```
 
 ### Dependencies
@@ -70,8 +61,7 @@ mkdir -p ignored/cratesfyi-prefix/crates.io-index
 # Builds the docs.rs binary
 SQLX_OFFLINE=1 cargo build
 # Start the external services.
-# It may be `docker compose` in newer versions
-docker-compose up -d db s3
+docker compose up --wait db s3
 # anything that doesn't run via docker-compose needs the settings defined in
 # .env. Either via `. ./.env` as below, or via any dotenv shell integration.
 . ./.env
@@ -109,7 +99,7 @@ cargo test
 To run GUI tests:
 
 ```
-./dockerfiles/run-gui-tests.sh
+just run-gui-tests
 ```
 
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
@@ -129,49 +119,100 @@ npm install browser-ui-test
 
 ### Pure docker-compose
 
-If you have trouble with the above commands, consider using `docker-compose up --build`,
+If you have trouble with the above commands, consider using `just compose-up-web`,
 which uses docker-compose for the web server as well.
 This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
 but makes sure that you're in a known environment so you should have fewer problems getting started.
 
-You can also use the `web` container to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+You can put environment overrides for the docker containers into `.docker.env`,
+first. The migrations will be run by our just recipes when needed.
+
 ```sh
-# run a build for a single crate
-docker-compose run web build crate regex 1.3.1
-# or build essential files
-docker-compose run web build add-essential-files
-# rebuild the web container when you changed code.
-docker-compose build web
+just cli-db-migrate
+just compose-up-web
 ```
 
-Note that running tests is not supported when using pure docker-compose.
+You can also use the `builder` compose profile to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+
+```sh
+just compose-up-builder
+
+# and if needed
+
+# update the toolchain
+just cli-build-update-toolchain
+
+# run a build for a single crate
+just cli-build-crate regex 1.3.1
+```
+
+You can also run other non-build commands like the setup steps above, or queueing crates for the background builders from within the `cli` container:
+
+```sh
+just cli-db-migrate
+just cli-queue-add regex 1.3.1
+```
+
+If you want to run the registry watcher, you can use the `watcher` profile:
+```sh
+just compose-up-watcher
+```
+
+It it was never run, we will start watching for registry changes at the current HEAD of the index.
+
+If you want to start from another point:
+
+```sh
+just cli-queue-reset-last-seen-ref GIT_REF
+```
+
+Note that running tests is currently not supported when using pure docker-compose.
+
+Some of the above commands are included in the `Justfile` for ease of use,
+check `just --list` for an overview.
+
+Some of the above commands are included in the `Justfile` for ease of use,
+check the `[compose]` group in `just --list`.
 
 Please file bugs for any trouble you have running docs.rs!
 
 ### Docker-Compose
 
 The services started by Docker-Compose are defined in [docker-compose.yml].
-Three services are defined:
-
-| name | access                                          | credentials                | description                            |
-|------|-------------------------------------------------|----------------------------|----------------------------------------|
-| web  | http://localhost:3000                           | N/A                        | A container running the docs.rs binary |
-| db   | postgresql://cratesfyi:password@localhost:15432 | -                          | Postgres database used by web          |
-| s3   | http://localhost:9000                           | `cratesfyi` - `secret_key` | MinIO (simulates AWS S3) used by web   |
+For convenience, there are plenty of `just` recipes built around it.
 
 [docker-compose.yml]: ./docker-compose.yml
 
 #### Rebuilding Containers
 
-To rebuild the site, run `docker-compose build`.
-Note that docker-compose caches the build even if you change the source code,
-so this will be necessary anytime you make changes.
+The `just` recipes for compose handle rebuilds themselves, so nothing needs to
+be done here.
 
 If you want to completely clean up the database, don't forget to remove the volumes too:
 
 ```sh
-$ docker-compose down --volumes
+# just shut down containers normally
+$ just compose-down
+
+# shut down and clear all volumes.
+$ just compose-down-and-wipe
 ```
+
+#### testing opentelemetry metrics
+
+When you add or update any metrics you might want to test them. While there is
+a way to check metric in unit-tests (see `TestEnvironment::collected_metrics`),
+you might also want to test manually.
+
+We have set up a small docker-compose service (`opentelemetry`) you can start up
+via `docker compose up opentelemetry`. This start up a local instance of
+the [opentelemetry collector
+contrib](https://hub.docker.com/r/otel/opentelemetry-collector-contrib) image,
+configured for debug-logging.
+
+After configuring your local environment for `OTEL_EXPORTER_OTLP_ENDPOINT` => `http://localhost:4317`
+(either in `.env` or `.docker.env`, depending on how you run the webserver), you
+can see any metrics you report and how they are exported to your collector.
 
 #### FAQ
 
@@ -184,7 +225,7 @@ This is probably because you have `git.autocrlf` set to true,
 
 ##### I see the error `/opt/rustwide/cargo-home/bin/cargo: cannot execute binary file: Exec format error` when running builds.
 
-You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker-compose run web build [...]` workaround described above.
+You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker compose run --rm builder-a build [...]` workaround described above.
 
 See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details about supporting more platforms directly.
 
@@ -212,11 +253,11 @@ cargo run -- start-web-server
 ```sh
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
-# For example, `docker-compose run web build crate regex 1.1.6`
+# For example, `docker compose run --rm builder-a build crate regex 1.1.6`
 cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
 
-# alternatively, via the web container
-docker-compose run web build crate <CRATE_NAME> <CRATE_VERSION>
+# alternatively, within docker-compose containers
+docker compose run --rm builder-a build crate <CRATE_NAME> <CRATE_VERSION>
 
 # Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)

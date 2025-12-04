@@ -1,5 +1,5 @@
 use crate::{
-    AsyncStorage,
+    AsyncStorage, Config,
     db::{BuildId, types::version::Version},
     impl_axum_webpage,
     storage::PathNotFoundError,
@@ -11,8 +11,9 @@ use crate::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
-        file::File as DbFile,
+        file::StreamingFile,
         headers::CanonicalUrl,
+        headers::IfNoneMatch,
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -20,7 +21,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{Extension, response::IntoResponse};
-use axum_extra::headers::HeaderMapExt;
+use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -188,7 +189,9 @@ impl SourcePage {
 pub(crate) async fn source_browser_handler(
     params: RustdocParams,
     Extension(storage): Extension<Arc<AsyncStorage>>,
+    Extension(config): Extension<Arc<Config>>,
     mut conn: DbConnection,
+    if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let params = params.with_page_kind(PageKind::Source);
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
@@ -239,9 +242,9 @@ pub(crate) async fn source_browser_handler(
 
     // try to get actual file first
     // skip if request is a directory
-    let (blob, is_file_too_large) = if !params.path_is_folder() {
+    let stream = if !params.path_is_folder() {
         match storage
-            .fetch_source_file(
+            .stream_source_file(
                 params.name(),
                 &version,
                 row.latest_build_id,
@@ -251,23 +254,14 @@ pub(crate) async fn source_browser_handler(
             .await
             .context("error fetching source file")
         {
-            Ok(blob) => (Some(blob), false),
+            Ok(stream) => Some(stream),
             Err(err) => match err {
-                err if err.is::<PathNotFoundError>() => (None, false),
-                // if file is too large, set is_file_too_large to true
-                err if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
-                    err.get_ref()
-                        .map(|err| err.is::<crate::error::SizeLimitReached>())
-                        .unwrap_or(false)
-                }) =>
-                {
-                    (None, true)
-                }
+                err if err.is::<PathNotFoundError>() => None,
                 _ => return Err(err.into()),
             },
         }
     } else {
-        (None, false)
+        None
     };
 
     let canonical_url = CanonicalUrl::from_uri(
@@ -277,28 +271,47 @@ pub(crate) async fn source_browser_handler(
             .source_url(),
     );
 
-    let (file, file_content) = if let Some(blob) = blob {
-        let is_text = blob.mime.type_() == mime::TEXT || blob.mime == mime::APPLICATION_JSON;
-        // serve the file with DatabaseFileHandler if file isn't text and not empty
-        if !is_text && !blob.is_empty() {
-            let mut response = DbFile(blob).into_response();
+    let mut is_file_too_large = false;
+
+    let (file, file_content) = if let Some(stream) = stream {
+        let is_text = stream.mime.type_() == mime::TEXT || stream.mime == mime::APPLICATION_JSON;
+        if !is_text {
+            // if the file isn't text, serve it directly to the client
+            let mut response = StreamingFile(stream).into_response(if_none_match.as_deref());
             response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
                 .insert(CachePolicy::ForeverInCdnAndStaleInBrowser);
             return Ok(response);
-        } else if is_text && !blob.is_empty() {
-            let path = blob
-                .path
-                .rsplit_once('/')
-                .map(|(_, path)| path)
-                .unwrap_or(&blob.path);
-            (
-                Some(File::from_path_and_mime(path, &blob.mime)),
-                String::from_utf8(blob.content).ok(),
-            )
         } else {
-            (None, None)
+            let max_file_size = config.max_file_size_for(&stream.path);
+
+            // otherwise we'll now download the content to render it into our template.
+            match stream.materialize(max_file_size).await {
+                Ok(blob) => {
+                    let path = blob
+                        .path
+                        .rsplit_once('/')
+                        .map(|(_, path)| path)
+                        .unwrap_or(&blob.path);
+                    (
+                        Some(File::from_path_and_mime(path, &blob.mime)),
+                        Some(String::from_utf8_lossy(&blob.content).to_string()),
+                    )
+                }
+                Err(err)
+                    // if file is too large, set is_file_too_large to true
+                    if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
+                        err.get_ref()
+                            .map(|err| err.is::<crate::error::SizeLimitReached>())
+                            .unwrap_or(false)
+                    }) =>
+                {
+                    is_file_too_large = true;
+                    (None, None)
+                }
+                Err(err) => return Err(err.into()),
+            }
         }
     } else {
         (None, None)
@@ -341,10 +354,12 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
-        web::{cache::CachePolicy, encode_url_path},
+        web::{cache::CachePolicy, encode_url_path, headers::IfNoneMatch},
     };
     use anyhow::Result;
+    use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
     use kuchikiki::traits::TendrilSink;
+    use mime::APPLICATION_PDF;
     use reqwest::StatusCode;
     use test_case::test_case;
 
@@ -436,24 +451,34 @@ mod tests {
                 .create()
                 .await?;
             let web = env.web_app().await;
-            let response = web.get("/crate/fake/0.1.0/source/some_file.pdf").await?;
+
+            const URL: &str = "/crate/fake/0.1.0/source/some_file.pdf";
+
+            // first request, uncached
+            let response = web.get(URL).await?;
             assert!(response.status().is_success());
+            let headers = response.headers();
             assert_eq!(
-                response.headers().get("link").unwrap(),
+                headers.get("link").unwrap(),
                 "<https://docs.rs/crate/fake/latest/source/some_file.pdf>; rel=\"canonical\""
             );
             assert_eq!(
-                response
-                    .headers()
-                    .get("content-type")
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-                "application/pdf"
+                headers.typed_get::<ContentType>().unwrap(),
+                APPLICATION_PDF.into(),
             );
-
             response.assert_cache_control(CachePolicy::ForeverInCdnAndStaleInBrowser, env.config());
+
+            let etag: ETag = headers.typed_get().unwrap();
+
             assert!(response.text().await?.contains("some_random_content"));
+
+            let response = web
+                .get_with_headers(URL, |headers| {
+                    headers.typed_insert(IfNoneMatch::from(etag));
+                })
+                .await?;
+            assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+
             Ok(())
         });
     }

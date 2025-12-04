@@ -3,7 +3,9 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder, cdn, queue_rebuilds,
+    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
+    metrics::service::OtelServiceMetrics,
+    queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
 };
@@ -13,16 +15,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::{runtime, time::Instant};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub async fn watch_registry(
-    build_queue: &AsyncBuildQueue,
-    config: &Config,
-    index: Arc<Index>,
-) -> Result<(), Error> {
+pub async fn watch_registry(build_queue: &AsyncBuildQueue, config: &Config) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
     loop {
@@ -30,6 +28,7 @@ pub async fn watch_registry(
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
+            let index = Index::from_config(config).await?;
             match build_queue
                 .get_new_crates(&index)
                 .await
@@ -38,11 +37,11 @@ pub async fn watch_registry(
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => report_error(&e),
             }
-        }
 
-        if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-            index.run_git_gc().await;
-            last_gc = Instant::now();
+            if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+                index.run_git_gc().await;
+                last_gc = Instant::now();
+            }
         }
         tokio::time::sleep(config.delay_between_registry_fetches).await;
     }
@@ -51,13 +50,12 @@ pub async fn watch_registry(
 fn start_registry_watcher(context: &Context) -> Result<(), Error> {
     let build_queue = context.async_build_queue.clone();
     let config = context.config.clone();
-    let index = context.index.clone();
 
     context.runtime.spawn(async move {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(&build_queue, &config, index).await
+        watch_registry(&build_queue, &config).await
     });
 
     Ok(())
@@ -114,59 +112,23 @@ pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn start_background_cdn_invalidator(context: &Context) -> Result<(), Error> {
-    let metrics = context.instance_metrics.clone();
-    let config = context.config.clone();
-    let pool = context.pool.clone();
+pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
     let runtime = context.runtime.clone();
-    let cdn = context.cdn.clone();
-
-    if config.cloudfront_distribution_id_web.is_none()
-        && config.cloudfront_distribution_id_static.is_none()
-    {
-        info!("no cloudfront distribution IDs found, skipping background cdn invalidation");
-        return Ok(());
-    }
-
-    if !config.cache_invalidatable_responses {
-        info!("full page cache disabled, skipping background cdn invalidation");
-        return Ok(());
-    }
+    let build_queue = context.async_build_queue.clone();
+    let service_metrics = Arc::new(OtelServiceMetrics::new(&context.meter_provider));
 
     async_cron(
         &runtime,
-        "cdn invalidator",
-        Duration::from_secs(60),
+        "background service metric collector",
+        // old prometheus scrape interval seems to have been ~5s, but IMO that's far too frequent
+        // for these service metrics.
+        Duration::from_secs(30),
         move || {
-            let pool = pool.clone();
-            let config = config.clone();
-            let cdn = cdn.clone();
-            let metrics = metrics.clone();
+            let build_queue = build_queue.clone();
+            let service_metrics = service_metrics.clone();
             async move {
-                let mut conn = pool.get_async().await?;
-                if let Some(distribution_id) = config.cloudfront_distribution_id_web.as_ref() {
-                    cdn::handle_queued_invalidation_requests(
-                        &config,
-                        &cdn,
-                        &metrics,
-                        &mut conn,
-                        distribution_id,
-                    )
-                    .await
-                    .context("error handling queued invalidations for web CDN invalidation")?;
-                }
-                if let Some(distribution_id) = config.cloudfront_distribution_id_static.as_ref() {
-                    cdn::handle_queued_invalidation_requests(
-                        &config,
-                        &cdn,
-                        &metrics,
-                        &mut conn,
-                        distribution_id,
-                    )
-                    .await
-                    .context("error handling queued invalidations for static CDN invalidation")?;
-                }
-                Ok(())
+                trace!("collecting service metrics");
+                service_metrics.gather(&build_queue).await
             }
         },
     );
@@ -200,8 +162,11 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
         .unwrap();
 
     start_background_repository_stats_updater(&context)?;
-    start_background_cdn_invalidator(&context)?;
     start_background_queue_rebuild(&context)?;
+
+    // when people run the daemon, we assume the daemon is the one single process where
+    // we can collect the service metrics.
+    start_background_service_metric_collector(&context)?;
 
     // NOTE: if a error occurred earlier in `start_daemon`, the server will _not_ be joined -
     // instead it will get killed when the process exits.

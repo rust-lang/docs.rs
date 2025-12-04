@@ -12,6 +12,21 @@ pub(crate) struct ReleaseDependency {
     pub(crate) optional: bool,
 }
 
+impl bincode::Encode for ReleaseDependency {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        // manual implementation since VersionReq doesn't implement Encode,
+        // and I don't want to NewType it right now.
+        self.name.encode(encoder)?;
+        self.req.to_string().encode(encoder)?;
+        self.kind.to_string().encode(encoder)?;
+        self.optional.encode(encoder)?;
+        Ok(())
+    }
+}
+
 impl<'de> Deserialize<'de> for ReleaseDependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

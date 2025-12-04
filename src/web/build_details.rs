@@ -1,16 +1,14 @@
 use crate::{
     AsyncStorage, Config,
-    db::{
-        BuildId,
-        types::{BuildStatus, version::Version},
-    },
+    db::{BuildId, types::BuildStatus},
     impl_axum_webpage,
     web::{
         MetaData,
+        cache::CachePolicy,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         file::File,
-        filters,
+        filters, match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
@@ -55,23 +53,36 @@ impl BuildDetailsPage {
 
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct BuildDetailsParams {
-    pub(crate) name: String,
-    pub(crate) version: Version,
     pub(crate) id: String,
     pub(crate) filename: Option<String>,
 }
 
 pub(crate) async fn build_details_handler(
-    Path(params): Path<BuildDetailsParams>,
+    params: RustdocParams,
+    Path(build_params): Path<BuildDetailsParams>,
     mut conn: DbConnection,
     Extension(config): Extension<Arc<Config>>,
     Extension(storage): Extension<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
-    let id = params
+    let id = build_params
         .id
         .parse()
         .map(BuildId)
         .map_err(|_| AxumNope::BuildNotFound)?;
+
+    let version = match_version(&mut conn, params.name(), params.req_version())
+        .await?
+        .assume_exact_name()?
+        .into_canonical_req_version_or_else(|version| {
+            AxumNope::Redirect(
+                params
+                    .clone()
+                    .with_req_version(version)
+                    .build_details_url(id, build_params.filename.as_deref()),
+                CachePolicy::ForeverInCdn,
+            )
+        })?
+        .into_version();
 
     let row = sqlx::query!(
         r#"SELECT
@@ -87,8 +98,8 @@ pub(crate) async fn build_details_handler(
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
         id.0,
-        params.name,
-        params.version.to_string(),
+        params.name(),
+        version as _
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -114,7 +125,7 @@ pub(crate) async fn build_details_handler(
             .try_collect()
             .await?;
 
-        let current_filename = if let Some(filename) = params.filename {
+        let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
             Some(filename)
         } else if let Some(default_target) = row.default_target {
@@ -144,8 +155,14 @@ pub(crate) async fn build_details_handler(
         (file_content, all_log_filenames, current_filename)
     };
 
-    let metadata = MetaData::from_crate(&mut conn, &params.name, &params.version, None).await?;
-    let params = RustdocParams::from_metadata(&metadata);
+    let metadata = MetaData::from_crate(
+        &mut conn,
+        params.name(),
+        &version,
+        Some(params.req_version().clone()),
+    )
+    .await?;
+    let params = params.apply_metadata(&metadata);
 
     Ok(BuildDetailsPage {
         metadata,
@@ -167,9 +184,12 @@ pub(crate) async fn build_details_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{
-        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, V1, async_wrapper,
-        fake_release_that_failed_before_build,
+    use crate::{
+        db::types::{BuildId, ReleaseId},
+        test::{
+            AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, V0_1, V1,
+            async_wrapper, fake_release_that_failed_before_build,
+        },
     };
     use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
@@ -185,6 +205,22 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    async fn build_ids_for_release(
+        conn: &mut sqlx::PgConnection,
+        release_id: ReleaseId,
+    ) -> Vec<BuildId> {
+        sqlx::query!(
+            "SELECT id FROM builds WHERE rid = $1 ORDER BY id ASC",
+            release_id as _
+        )
+        .fetch_all(conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| BuildId(row.id))
+        .collect()
     }
 
     #[test]
@@ -466,5 +502,31 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_detail_via_latest() -> anyhow::Result<()> {
+        let env = TestEnvironment::new().await?;
+        let rid = env
+            .fake_release()
+            .await
+            .name("foo")
+            .version(V0_1)
+            .create()
+            .await?;
+
+        let mut conn = env.async_db().async_conn().await;
+        let build_id = {
+            let ids = build_ids_for_release(&mut conn, rid).await;
+            assert_eq!(ids.len(), 1);
+            ids[0]
+        };
+
+        env.web_app()
+            .await
+            .assert_success(&format!("/crate/foo/latest/builds/{build_id}"))
+            .await?;
+
+        Ok(())
     }
 }
