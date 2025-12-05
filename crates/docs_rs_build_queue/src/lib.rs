@@ -30,19 +30,19 @@ pub const PRIORITY_CONSISTENCY_CHECK: i32 = 15;
 pub const PRIORITY_CONTINUOUS: i32 = 20;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
-pub(crate) struct QueuedCrate {
+pub struct QueuedCrate {
     #[serde(skip)]
     id: i32,
-    pub(crate) name: String,
-    pub(crate) version: Version,
-    pub(crate) priority: i32,
-    pub(crate) registry: Option<String>,
-    pub(crate) attempt: i32,
+    pub name: String,
+    pub version: Version,
+    pub priority: i32,
+    pub registry: Option<String>,
+    pub attempt: i32,
 }
 
 #[derive(Debug)]
 pub struct AsyncBuildQueue {
-    pub(crate) db: Pool,
+    pub db: Pool,
     queue_metrics: metrics::BuildQueueMetrics,
     // builder_metrics: Arc<BuilderMetrics>,
     // cdn_metrics: Arc<CdnMetrics>,

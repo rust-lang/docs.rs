@@ -5,20 +5,22 @@ use std::{
 };
 use tokio::io::AsyncWrite;
 
-pub(crate) struct SizedBuffer {
+use crate::errors::SizeLimitReached;
+
+pub struct SizedBuffer {
     inner: Vec<u8>,
     limit: usize,
 }
 
 impl SizedBuffer {
-    pub(crate) fn new(limit: usize) -> Self {
+    pub fn new(limit: usize) -> Self {
         SizedBuffer {
             inner: Vec::new(),
             limit,
         }
     }
 
-    pub(crate) fn reserve(&mut self, amount: usize) {
+    pub fn reserve(&mut self, amount: usize) {
         if self.inner.len() + amount > self.limit {
             self.inner.reserve_exact(self.limit - self.inner.len());
         } else {
@@ -26,7 +28,7 @@ impl SizedBuffer {
         }
     }
 
-    pub(crate) fn into_inner(self) -> Vec<u8> {
+    pub fn into_inner(self) -> Vec<u8> {
         self.inner
     }
 }
@@ -34,7 +36,7 @@ impl SizedBuffer {
 impl Write for SizedBuffer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.inner.len() + buf.len() > self.limit {
-            Err(io::Error::other(crate::error::SizeLimitReached))
+            Err(io::Error::other(SizeLimitReached))
         } else {
             self.inner.write(buf)
         }

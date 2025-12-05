@@ -1,24 +1,22 @@
-use crate::{
-    error::Result,
-    storage::{FileRange, compression::CompressionAlgorithm},
-};
-use anyhow::{Context as _, bail};
+use anyhow::{Context as _, Result, bail};
 use itertools::Itertools as _;
 use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};
 use std::{fs, io, path::Path};
 use tracing::instrument;
 
+use crate::{CompressionAlgorithm, FileRange};
+
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) struct FileInfo {
+pub struct FileInfo {
     range: FileRange,
     compression: CompressionAlgorithm,
 }
 
 impl FileInfo {
-    pub(crate) fn range(&self) -> FileRange {
+    pub fn range(&self) -> FileRange {
         self.range.clone()
     }
-    pub(crate) fn compression(&self) -> CompressionAlgorithm {
+    pub fn compression(&self) -> CompressionAlgorithm {
         self.compression
     }
 }
@@ -63,7 +61,7 @@ async fn sqlite_open<P: AsRef<Path>>(path: P) -> Result<sqlx::SqlitePool> {
 ///
 /// Will delete the destination file if it already exists.
 #[instrument(skip(zipfile))]
-pub(crate) async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::Debug>(
+pub async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::Debug>(
     zipfile: &mut R,
     destination: P,
 ) -> Result<()> {
@@ -165,7 +163,7 @@ where
 }
 
 #[instrument]
-pub(crate) async fn find_in_file<P: AsRef<Path> + std::fmt::Debug>(
+pub async fn find_in_file<P: AsRef<Path> + std::fmt::Debug>(
     archive_index_path: P,
     search_for: &str,
 ) -> Result<Option<FileInfo>> {

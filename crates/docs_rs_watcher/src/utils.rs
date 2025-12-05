@@ -19,7 +19,7 @@ use std::thread;
 ///
 /// Generally speaking, using tokio's `spawn_blocking` is also ok-ish, if the work is sporadic.
 /// But then I wouldn't get thread-names.
-pub(crate) async fn run_blocking<N, R, F>(name: N, f: F) -> Result<R>
+pub async fn run_blocking<N, R, F>(name: N, f: F) -> Result<R>
 where
     N: Into<String> + fmt::Display,
     F: FnOnce() -> Result<R> + Send + 'static,

@@ -1,5 +1,5 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{Config, web::headers::compute_etag};
+use crate::Config;
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
@@ -10,8 +10,8 @@ use aws_sdk_s3::{
     types::{Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
-use axum_extra::headers;
 use chrono::Utc;
+use docs_rs_headers::{ETag, etag::compute_etag};
 use futures_util::{
     future::TryFutureExt,
     pin_mut,
@@ -180,7 +180,7 @@ impl S3Backend {
                     range.end()
                 )))
             } else {
-                match s3_etag.parse::<headers::ETag>() {
+                match s3_etag.parse::<ETag>() {
                     Ok(etag) => Some(etag),
                     Err(err) => {
                         error!(?err, s3_etag, "Failed to parse ETag from S3");

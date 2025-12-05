@@ -2,9 +2,9 @@ use docs_rs_env_vars::{env, maybe_env};
 
 #[derive(Debug)]
 pub struct Config {
-    pub(crate) build_attempts: u16,
+    pub build_attempts: u16,
     // automatic rebuild configuration
-    pub(crate) max_queued_rebuilds: Option<u16>,
+    pub max_queued_rebuilds: Option<u16>,
 }
 
 impl Config {

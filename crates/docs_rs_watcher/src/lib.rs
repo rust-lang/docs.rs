@@ -1,6 +1,7 @@
 mod config;
 mod consistency;
 mod index;
+mod repositories;
 mod utils;
 
 use anyhow::Error;

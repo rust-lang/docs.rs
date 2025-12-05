@@ -7,54 +7,26 @@
 //! It's recommended that you use the S3 bucket in production to avoid running out of disk space.
 //! However, postgres is still available for testing and backwards compatibility.
 
-use crate::error::Result;
-use crate::{
-    db::mimes,
-    storage::{AsyncStorage, CompressionAlgorithm},
-};
+use anyhow::Result;
+use docs_rs_database::mimes::detect_mime;
 use mime::Mime;
 use serde_json::Value;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
+
+use crate::{AsyncStorage, CompressionAlgorithm};
 
 /// represents a file path from our source or documentation builds.
 /// Used to return metadata about the file.
 #[derive(Debug)]
 pub struct FileEntry {
-    pub(crate) path: PathBuf,
-    pub(crate) size: u64,
+    pub path: PathBuf,
+    pub size: u64,
 }
 
 impl FileEntry {
-    pub(crate) fn mime(&self) -> Mime {
+    pub fn mime(&self) -> Mime {
         detect_mime(&self.path)
-    }
-}
-
-pub(crate) fn detect_mime(file_path: impl AsRef<Path>) -> Mime {
-    let mime = mime_guess::from_path(file_path.as_ref())
-        .first()
-        .unwrap_or(mime::TEXT_PLAIN);
-
-    match mime.as_ref() {
-        "text/plain" | "text/troff" | "text/x-markdown" | "text/x-rust" | "text/x-toml" => {
-            match file_path.as_ref().extension().and_then(OsStr::to_str) {
-                Some("md") => mimes::TEXT_MARKDOWN.clone(),
-                Some("rs") => mimes::TEXT_RUST.clone(),
-                Some("markdown") => mimes::TEXT_MARKDOWN.clone(),
-                Some("css") => mime::TEXT_CSS,
-                Some("toml") => mimes::TEXT_TOML.clone(),
-                Some("js") => mime::TEXT_JAVASCRIPT,
-                Some("json") => mime::APPLICATION_JSON,
-                Some("gz") => mimes::APPLICATION_GZIP.clone(),
-                Some("zst") => mimes::APPLICATION_ZSTD.clone(),
-                _ => mime,
-            }
-        }
-        "image/svg" => mime::IMAGE_SVG,
-
-        _ => mime,
     }
 }
 
@@ -87,7 +59,7 @@ pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     Ok((file_list, algorithm))
 }
 
-pub(crate) fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> Value {
+pub fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> Value {
     Value::Array(
         files
             .into_iter()
@@ -105,6 +77,7 @@ pub(crate) fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use docs_rs_database::mimes;
     use test_case::test_case;
 
     // some standard mime types that mime-guess handles

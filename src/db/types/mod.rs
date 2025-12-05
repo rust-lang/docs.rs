@@ -1,20 +1,7 @@
-use derive_more::{Display, FromStr};
 use serde::{Deserialize, Serialize};
 
 pub mod dependencies;
 pub mod krate_name;
-
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, Serialize, sqlx::Type)]
-#[sqlx(transparent)]
-pub struct CrateId(pub i32);
-
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, FromStr, Serialize, sqlx::Type)]
-#[sqlx(transparent)]
-pub struct ReleaseId(pub i32);
-
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, Hash, Serialize, sqlx::Type)]
-#[sqlx(transparent)]
-pub struct BuildId(pub i32);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::Type)]
 #[sqlx(type_name = "feature")]

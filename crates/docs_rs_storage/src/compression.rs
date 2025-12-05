@@ -53,7 +53,7 @@ impl std::convert::TryFrom<i32> for CompressionAlgorithm {
     }
 }
 
-pub(crate) fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
+pub fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
     match algorithm {
         CompressionAlgorithm::Zstd => "zst",
         CompressionAlgorithm::Bzip2 => "bz2",
@@ -61,7 +61,7 @@ pub(crate) fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static st
     }
 }
 
-pub(crate) fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
+pub fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
     match ext {
         "zst" => Some(CompressionAlgorithm::Zstd),
         "bz2" => Some(CompressionAlgorithm::Bzip2),
@@ -169,6 +169,8 @@ pub fn decompress(
 
 #[cfg(test)]
 mod tests {
+    use crate::errors::SizeLimitReached;
+
     use super::*;
     use strum::IntoEnumIterator;
     use test_case::test_case;
@@ -219,7 +221,7 @@ mod tests {
             assert!(
                 err.downcast_ref::<std::io::Error>()
                     .and_then(|io| io.get_ref())
-                    .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                    .and_then(|err| err.downcast_ref::<SizeLimitReached>())
                     .is_some()
             );
         }

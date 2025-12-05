@@ -1,6 +1,7 @@
-use crate::error::Result;
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
     Client as HttpClient,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
@@ -10,11 +11,9 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use tracing::warn;
 
-use crate::{
-    APP_USER_AGENT,
-    repositories::{
-        FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,
-    },
+use crate::repositories::{
+    RateLimitReached,
+    updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {

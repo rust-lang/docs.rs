@@ -3,7 +3,7 @@ use url::Url;
 
 pub struct Config {
     // opentelemetry endpoint to send OTLP to
-    pub(crate) endpoint: Option<Url>,
+    pub endpoint: Option<Url>,
 }
 
 impl Config {

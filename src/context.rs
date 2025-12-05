@@ -63,8 +63,8 @@ impl Context {
         let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
 
         Ok(Self {
-            async_build_queue,
-            build_queue,
+            // async_build_queue,
+            // build_queue,
             storage,
             async_storage,
             cdn_metrics,
@@ -73,7 +73,7 @@ impl Context {
                 config.registry_api_host.clone(),
                 config.crates_io_api_call_retries,
             )?),
-            repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
+            // repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
             runtime,
             config,
             meter_provider,

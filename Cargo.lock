@@ -1944,25 +1944,18 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "askama",
- "async-compression",
  "async-stream",
- "async-trait",
- "aws-config",
- "aws-sdk-s3",
  "aws-smithy-runtime",
  "aws-smithy-types",
- "aws-smithy-types-convert",
  "axum",
  "axum-extra",
  "base64 0.22.1",
  "bincode 2.0.1",
- "bzip2",
  "chrono",
  "clap",
  "comrak",
  "constant_time_eq",
  "criterion",
- "dashmap",
  "derive_builder",
  "derive_more 2.0.1",
  "docs_rs_build_queue",
@@ -1970,7 +1963,6 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "docsrs-metadata",
- "flate2",
  "fn-error-context",
  "font-awesome-as-a-crate",
  "futures-util",
@@ -1987,7 +1979,6 @@ dependencies = [
  "lol_html",
  "md5",
  "mime",
- "mime_guess",
  "mockito",
  "num_cpus",
  "opentelemetry",
@@ -2017,7 +2008,6 @@ dependencies = [
  "tempfile",
  "test-case",
  "thiserror 2.0.17",
- "time",
  "tokio",
  "tokio-util",
  "toml 0.9.8",
@@ -2029,8 +2019,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "walkdir",
- "zip",
- "zstd",
 ]
 
 [[package]]
@@ -2059,6 +2047,8 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "futures-util",
+ "mime",
+ "mime_guess",
  "opentelemetry",
  "semver",
  "serde",
@@ -2080,6 +2070,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_headers"
+version = "0.1.0"
+dependencies = [
+ "headers",
+ "md5",
+]
+
+[[package]]
 name = "docs_rs_opentelemetry"
 version = "0.1.0"
 dependencies = [
@@ -2094,18 +2092,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-compression",
+ "async-stream",
+ "aws-config",
+ "aws-sdk-s3",
+ "aws-smithy-types-convert",
+ "bzip2",
+ "chrono",
+ "dashmap",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_headers",
+ "docs_rs_opentelemetry",
+ "docs_rs_utils",
+ "flate2",
+ "futures-util",
+ "http 1.4.0",
+ "itertools 0.14.0",
+ "mime",
+ "opentelemetry",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "strum",
+ "tempfile",
+ "test-case",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "walkdir",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "docs_rs_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "docs_rs_watcher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "chrono",
  "crates-index",
  "crates-index-diff",
  "docs_rs_build_queue",
  "docs_rs_database",
  "docs_rs_env_vars",
+ "docs_rs_utils",
+ "futures-util",
  "itertools 0.14.0",
+ "mockito",
  "rayon",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
  "sqlx",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "url",

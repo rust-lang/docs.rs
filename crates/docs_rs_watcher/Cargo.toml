@@ -16,3 +16,15 @@ url = { workspace = true }
 itertools = { workspace = true }
 sqlx = { workspace = true }
 rayon = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+async-trait = "0.1.83"
+futures-util = { workspace = true }
+regex = { workspace = true }
+serde_json = { workspace = true }
+docs_rs_utils = { path = "../docs_rs_utils" }
+
+[dev-dependencies]
+mockito = { workspace = true }

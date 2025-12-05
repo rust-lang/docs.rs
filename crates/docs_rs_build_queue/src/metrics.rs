@@ -2,12 +2,12 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use opentelemetry::metrics::Counter;
 
 #[derive(Debug)]
-pub(crate) struct BuildQueueMetrics {
+pub struct BuildQueueMetrics {
     queued_builds: Counter<u64>,
 }
 
 impl BuildQueueMetrics {
-    pub(crate) fn new(meter_provider: &AnyMeterProvider) -> Self {
+    pub fn new(meter_provider: &AnyMeterProvider) -> Self {
         let meter = meter_provider.meter("build_queue");
         const PREFIX: &str = "docsrs.build_queue";
         Self {

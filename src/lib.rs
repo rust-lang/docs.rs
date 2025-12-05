@@ -50,16 +50,6 @@ pub const BUILD_VERSION: &str = concat!(
     " )"
 );
 
-pub const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    " ",
-    " (",
-    env!("GIT_SHA"),
-    " ",
-    env!("BUILD_DATE"),
-    " )"
-);
-
 /// Where rustdoc's static files are stored in S3.
 /// Since the prefix starts with `/`, it needs to be referenced with a double slash in
 /// API & AWS CLI.

@@ -24,10 +24,7 @@ pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;
 pub(crate) mod sized_buffer;
 
-use anyhow::Result;
-use serde::{Serialize, de::DeserializeOwned};
-use std::{future::Future, panic, thread, time::Duration};
-use tracing::{Span, error, warn};
+use tracing::error;
 
 pub(crate) fn report_error(err: &anyhow::Error) {
     // Debug-format for anyhow errors includes context & backtrace
@@ -39,195 +36,63 @@ pub(crate) fn report_error(err: &anyhow::Error) {
     }
 }
 
-#[derive(strum::IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub enum ConfigName {
-    RustcVersion,
-    LastSeenIndexReference,
-    QueueLocked,
-    Toolchain,
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::test::async_wrapper;
+//     use serde_json::Value;
+//     use test_case::test_case;
 
-pub async fn set_config(
-    conn: &mut sqlx::PgConnection,
-    name: ConfigName,
-    value: impl Serialize,
-) -> anyhow::Result<()> {
-    let name: &'static str = name.into();
-    sqlx::query!(
-        "INSERT INTO config (name, value)
-         VALUES ($1, $2)
-         ON CONFLICT (name) DO UPDATE SET value = $2;",
-        name,
-        &serde_json::to_value(value)?,
-    )
-    .execute(conn)
-    .await?;
-    Ok(())
-}
+//     #[test_case(ConfigName::RustcVersion, "rustc_version")]
+//     #[test_case(ConfigName::QueueLocked, "queue_locked")]
+//     #[test_case(ConfigName::LastSeenIndexReference, "last_seen_index_reference")]
+//     fn test_configname_variants(variant: ConfigName, expected: &'static str) {
+//         let name: &'static str = variant.into();
+//         assert_eq!(name, expected);
+//     }
 
-pub async fn get_config<T>(conn: &mut sqlx::PgConnection, name: ConfigName) -> Result<Option<T>>
-where
-    T: DeserializeOwned,
-{
-    let name: &'static str = name.into();
-    Ok(
-        match sqlx::query!("SELECT value FROM config WHERE name = $1;", name)
-            .fetch_optional(conn)
-            .await?
-        {
-            Some(row) => serde_json::from_value(row.value)?,
-            None => None,
-        },
-    )
-}
+//     #[test]
+//     fn test_get_config_empty() {
+//         async_wrapper(|env| async move {
+//             let mut conn = env.async_db().async_conn().await;
+//             sqlx::query!("DELETE FROM config")
+//                 .execute(&mut *conn)
+//                 .await?;
 
-/// a wrapper around tokio's `spawn_blocking` that
-/// enables us to write nicer code when the closure
-/// returns an `anyhow::Result`.
-///
-/// The join-error will also be converted into an `anyhow::Error`.
-///
-/// with standard `tokio::task::spawn_blocking`:
-/// ```text,ignore
-/// let data = spawn_blocking(move || -> anyhow::Result<_> {
-///     let data = get_the_data()?;
-///     Ok(data)
-/// })
-/// .await
-/// .context("failed to join thread")??;
-/// ```
-///
-/// with this helper function:
-/// ```text,ignore
-/// let data = spawn_blocking(move || {
-///     let data = get_the_data()?;
-///     Ok(data)
-/// })
-/// .await?
-/// ```
-pub(crate) async fn spawn_blocking<F, R>(f: F) -> Result<R>
-where
-    F: FnOnce() -> Result<R> + Send + 'static,
-    R: Send + 'static,
-{
-    let span = Span::current();
+//             assert!(
+//                 get_config::<String>(&mut conn, ConfigName::RustcVersion)
+//                     .await?
+//                     .is_none()
+//             );
+//             Ok(())
+//         });
+//     }
 
-    let result = tokio::task::spawn_blocking(move || {
-        let _guard = span.enter();
-        f()
-    })
-    .await;
+//     #[test]
+//     fn test_set_and_get_config_() {
+//         async_wrapper(|env| async move {
+//             let mut conn = env.async_db().async_conn().await;
+//             sqlx::query!("DELETE FROM config")
+//                 .execute(&mut *conn)
+//                 .await?;
 
-    match result {
-        Ok(result) => result,
-        Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
-        Err(err) => Err(err.into()),
-    }
-}
+//             assert!(
+//                 get_config::<String>(&mut conn, ConfigName::RustcVersion)
+//                     .await?
+//                     .is_none()
+//             );
 
-pub(crate) fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T> {
-    for attempt in 1.. {
-        match f() {
-            Ok(result) => return Ok(result),
-            Err(err) => {
-                if attempt > max_attempts {
-                    return Err(err);
-                } else {
-                    let sleep_for = 2u32.pow(attempt);
-                    warn!(
-                        "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt, sleep_for, err
-                    );
-                    thread::sleep(Duration::from_secs(sleep_for as u64));
-                }
-            }
-        }
-    }
-    unreachable!()
-}
-
-pub(crate) async fn retry_async<T, Fut, F: FnMut() -> Fut>(mut f: F, max_attempts: u32) -> Result<T>
-where
-    Fut: Future<Output = Result<T>>,
-{
-    for attempt in 1.. {
-        match f().await {
-            Ok(result) => return Ok(result),
-            Err(err) => {
-                if attempt > max_attempts {
-                    return Err(err);
-                } else {
-                    let sleep_for = 2u32.pow(attempt);
-                    warn!(
-                        "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt, sleep_for, err
-                    );
-                    tokio::time::sleep(Duration::from_secs(sleep_for as u64)).await;
-                }
-            }
-        }
-    }
-    unreachable!();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test::async_wrapper;
-    use serde_json::Value;
-    use test_case::test_case;
-
-    #[test_case(ConfigName::RustcVersion, "rustc_version")]
-    #[test_case(ConfigName::QueueLocked, "queue_locked")]
-    #[test_case(ConfigName::LastSeenIndexReference, "last_seen_index_reference")]
-    fn test_configname_variants(variant: ConfigName, expected: &'static str) {
-        let name: &'static str = variant.into();
-        assert_eq!(name, expected);
-    }
-
-    #[test]
-    fn test_get_config_empty() {
-        async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
-            sqlx::query!("DELETE FROM config")
-                .execute(&mut *conn)
-                .await?;
-
-            assert!(
-                get_config::<String>(&mut conn, ConfigName::RustcVersion)
-                    .await?
-                    .is_none()
-            );
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn test_set_and_get_config_() {
-        async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
-            sqlx::query!("DELETE FROM config")
-                .execute(&mut *conn)
-                .await?;
-
-            assert!(
-                get_config::<String>(&mut conn, ConfigName::RustcVersion)
-                    .await?
-                    .is_none()
-            );
-
-            set_config(
-                &mut conn,
-                ConfigName::RustcVersion,
-                Value::String("some value".into()),
-            )
-            .await?;
-            assert_eq!(
-                get_config(&mut conn, ConfigName::RustcVersion).await?,
-                Some("some value".to_string())
-            );
-            Ok(())
-        });
-    }
-}
+//             set_config(
+//                 &mut conn,
+//                 ConfigName::RustcVersion,
+//                 Value::String("some value".into()),
+//             )
+//             .await?;
+//             assert_eq!(
+//                 get_config(&mut conn, ConfigName::RustcVersion).await?,
+//                 Some("some value".to_string())
+//             );
+//             Ok(())
+//         });
+//     }
+// }

@@ -1,4 +1,5 @@
 mod config;
+pub mod mimes;
 pub mod service_config;
 pub mod types;
 
@@ -87,7 +88,7 @@ impl Pool {
     }
 
     #[cfg(feature = "testing")]
-    pub(crate) async fn new_with_schema(
+    pub async fn new_with_schema(
         config: &config::Config,
         schema: &str,
         otel_meter_provider: &AnyMeterProvider,

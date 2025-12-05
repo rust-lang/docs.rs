@@ -1,9 +1,11 @@
-use crate::error::Result;
-use crate::repositories::{GitHub, GitLab, RateLimitReached};
-use crate::utils::MetadataPackage;
-use crate::{Config, db::Pool};
+use crate::{
+    config::Config,
+    repositories::{GitHub, GitLab, RateLimitReached},
+};
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use docs_rs_database::Pool;
 use futures_util::stream::TryStreamExt;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -81,7 +83,7 @@ impl RepositoryStatsUpdater {
         Self { updaters, pool }
     }
 
-    pub(crate) async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
+    pub async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         let url = match &metadata.repository {
             Some(url) => url,
             None => {
@@ -308,7 +310,7 @@ impl RepositoryStatsUpdater {
     }
 }
 
-pub(crate) fn repository_name(url: &str) -> Option<RepositoryName<'_>> {
+pub fn repository_name(url: &str) -> Option<RepositoryName<'_>> {
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"https?://(?P<host>[^/]+)/(?P<owner>[\w\._/-]+)/(?P<repo>[\w\._-]+)").unwrap()
     });

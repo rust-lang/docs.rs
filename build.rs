@@ -73,7 +73,6 @@ type ETagMap<'a> = phf_codegen::Map<'a, String>;
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
     let out_dir = Path::new(&out_dir);
-    read_git_version()?;
 
     let mut etag_map: ETagMap = ETagMap::new();
 
@@ -92,54 +91,6 @@ fn main() -> Result<()> {
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
     Ok(())
-}
-
-fn read_git_version() -> Result<()> {
-    if let Ok(v) = env::var("GIT_SHA") {
-        // first try to read an externally provided git SAH, e.g., from CI
-        println!("cargo:rustc-env=GIT_SHA={v}");
-    } else {
-        // then try to read the git repo.
-        let maybe_hash = get_git_hash()?;
-        let git_hash = maybe_hash.as_deref().unwrap_or("???????");
-        println!("cargo:rustc-env=GIT_SHA={git_hash}");
-    }
-
-    println!(
-        "cargo:rustc-env=BUILD_DATE={}",
-        time::OffsetDateTime::now_utc().date(),
-    );
-
-    Ok(())
-}
-
-fn get_git_hash() -> Result<Option<String>> {
-    use std::process::Command;
-
-    let output = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output();
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let hash = String::from_utf8(output.stdout)?.trim().to_string();
-
-            // TODO: are these right?
-            tracked::track(".git/HEAD")?;
-            tracked::track(".git/index")?;
-
-            Ok(Some(hash))
-        }
-        Ok(output) => {
-            let err = String::from_utf8_lossy(&output.stderr);
-            eprintln!("failed to get git repo: {}", err.trim());
-            Ok(None)
-        }
-        Err(err) => {
-            eprintln!("failed to execute git: {err}");
-            Ok(None)
-        }
-    }
 }
 
 fn etag_from_path(path: impl AsRef<Path>) -> Result<String> {
