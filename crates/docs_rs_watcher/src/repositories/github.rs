@@ -271,16 +271,14 @@ mod tests {
     use super::{Config, GitHub};
     use crate::repositories::RateLimitReached;
     use crate::repositories::updater::{RepositoryForge, repository_name};
-    use crate::test::TestEnvironment;
     use anyhow::Result;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 
     fn github_config() -> anyhow::Result<Config> {
-        TestEnvironment::base_config()
-            .github_accesstoken(Some(TEST_TOKEN.to_owned()))
-            .build()
-            .map_err(Into::into)
+        let mut cfg = Config::from_environment()?;
+        cfg.github_accesstoken = Some(TEST_TOKEN.to_owned());
+        Ok(cfg)
     }
 
     async fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {
