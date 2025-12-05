@@ -297,8 +297,6 @@ mod tests {
             .cache_control_stale_while_revalidate(stale_while_revalidate)
             .build()?;
 
-        // let headers = policy.clone().render(&config)?;
-
         fn validate_headers(headers: &ResponseCacheHeaders) -> Result<()> {
             if let Some(ref cache_control) = headers.cache_control {
                 validate_cache_control(cache_control)
@@ -375,19 +373,25 @@ mod tests {
     #[test]
     fn render_fastly_forever_in_cdn() -> Result<()> {
         let config = TestEnvironment::base_config().build()?;
+        // this surrogate key is user-defined, identifies the crate.
         let key = SurrogateKey::from_static("something");
         let headers = CachePolicy::ForeverInCdn(key.clone().into()).render(&config)?;
 
+        // browser or other proxies: mostly no caching
         assert_eq!(
             headers.cache_control,
             Some(HeaderValue::from_static("max-age=0"))
         );
 
+        // CDN: cache forever.
+        // Fastly will completely ignore cache-control if it finds surrogate-control.
         assert_eq!(
             headers.surrogate_control,
             Some(HeaderValue::from_static("max-age=31536000"))
         );
 
+        // both: our key + the global "all" key.
+        // So we can purge the CDN for these keys.
         assert_eq!(
             headers.surrogate_keys.unwrap(),
             SurrogateKeys::try_from_iter([key, SURROGATE_KEY_ALL]).unwrap()
