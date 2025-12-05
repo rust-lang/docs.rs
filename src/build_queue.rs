@@ -372,15 +372,12 @@ impl AsyncBuildQueue {
         let (changes, new_reference) = index.peek_changes_ordered().await?;
 
         let mut conn = self.db.get_async().await?;
-        let mut crates_added = 0;
 
-        debug!("queueing changes from {last_seen_reference} to {new_reference}");
+        debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-        for change in &changes {
-            if self.process_change(index, &mut conn, change).await? {
-                crates_added += 1;
-            }
-        }
+        let crates_added = self
+            .process_changes(&mut conn, &changes, index.repository_url())
+            .await;
 
         // set the reference in the database
         // so this survives recreating the registry watcher
@@ -390,21 +387,38 @@ impl AsyncBuildQueue {
         Ok(crates_added)
     }
 
+    async fn process_changes(
+        &self,
+        conn: &mut AsyncPoolClient,
+        changes: &Vec<Change>,
+        registry: Option<&str>,
+    ) -> usize {
+        let mut crates_added = 0;
+
+        for change in changes {
+            match self.process_change(conn, change, registry).await {
+                Ok(added) => {
+                    if added {
+                        crates_added += 1;
+                    }
+                }
+                Err(err) => report_error(&err),
+            }
+        }
+        crates_added
+    }
+
     /// Process a crate change, returning whether the change was a crate addition or not.
     async fn process_change(
         &self,
-        index: &Index,
         conn: &mut AsyncPoolClient,
         change: &Change,
+        registry: Option<&str>,
     ) -> Result<bool> {
         match change {
-            Change::Added(release) => {
-                self.process_version_added(conn, release, index.repository_url())
-                    .await?
-            }
+            Change::Added(release) => self.process_version_added(conn, release, registry).await?,
             Change::AddedAndYanked(release) => {
-                self.process_version_added(conn, release, index.repository_url())
-                    .await?;
+                self.process_version_added(conn, release, registry).await?;
                 self.process_version_yank_status(conn, release).await?;
             }
             Change::Unyanked(release) | Change::Yanked(release) => {
@@ -460,8 +474,9 @@ impl AsyncBuildQueue {
                 )
             })?;
         debug!(
-            "{}-{} added into build queue",
-            release.name, release.version
+            name=%release.name,
+            version=%release.version,
+            "added into build queue",
         );
         self.queue_metrics.queued_builds.add(1, &[]);
         self.deprioritize_other_releases(&release.name, version, PRIORITY_MANUAL_FROM_CRATES_IO)
@@ -489,8 +504,9 @@ impl AsyncBuildQueue {
                 )
             })?;
         info!(
-            "release {}-{} was deleted from the index and the database",
-            release.name, release.version
+            name=%release.name,
+            version=%release.version,
+            "release was deleted from the index and the database",
         );
         self.queue_crate_invalidation(&release.name).await;
         self.remove_version_from_queue(&release.name, &version)
@@ -503,8 +519,8 @@ impl AsyncBuildQueue {
             .await
             .with_context(|| format!("failed to delete crate {krate}"))?;
         info!(
-            "crate {} was deleted from the index and the database",
-            krate
+            name=%krate,
+            "crate deleted from the index and the database",
         );
         self.queue_crate_invalidation(krate).await;
         self.remove_crate_from_queue(krate).await
@@ -542,7 +558,12 @@ impl AsyncBuildQueue {
         .fetch_optional(&mut *conn)
         .await?
         {
-            debug!("{}-{} {}", name, version, activity);
+            debug!(
+                %name,
+                %version,
+                %activity,
+                "updating latest version id"
+            );
             update_latest_version_id(&mut *conn, crate_id).await?;
         } else {
             match self
@@ -552,8 +573,9 @@ impl AsyncBuildQueue {
             {
                 Ok(false) => {
                     error!(
-                        "tried to yank or unyank non-existing release: {} {}",
-                        name, version
+                        %name,
+                        %version,
+                        "tried to yank or unyank non-existing release",
                     );
                 }
                 Ok(true) => {
@@ -1092,6 +1114,57 @@ mod tests {
         .await?;
         assert_eq!(row.len(), 1);
         assert_eq!(row[0].id, rid_1.0);
+        Ok(())
+    }
+
+    /// Ensure changes can be processed with graceful error handling and proper tracking of added versions
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_changes() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let build_queue = env.async_build_queue();
+        let mut conn = env.async_db().async_conn().await;
+
+        env.fake_release()
+            .await
+            .name("krate_already_present")
+            .version(V1)
+            .create()
+            .await?;
+
+        let krate1 = CrateVersion {
+            name: "krate1".parse()?,
+            version: V1.to_string().parse()?,
+            ..Default::default()
+        };
+        let krate2 = CrateVersion {
+            name: "krate2".parse()?,
+            version: V1.to_string().parse()?,
+            ..Default::default()
+        };
+        let krate_already_present = CrateVersion {
+            name: "krate_already_present".parse()?,
+            version: V1.to_string().parse()?,
+            ..Default::default()
+        };
+        let non_existing_krate = CrateVersion {
+            name: "krate_already_present".parse()?,
+            version: V2.to_string().parse()?,
+            ..Default::default()
+        };
+        let added = build_queue
+            .process_changes(
+                &mut conn,
+                &vec![
+                    Change::Added(krate1),                         // Should be added correctly
+                    Change::Added(krate2),                         // Should be added correctly
+                    Change::VersionDeleted(krate_already_present), // Should be deleted correctly, without affecting the returned counter
+                    Change::VersionDeleted(non_existing_krate), // Should error out, but the error should be handled gracefully
+                ],
+                None,
+            )
+            .await;
+
+        assert_eq!(added, 2);
         Ok(())
     }
 
