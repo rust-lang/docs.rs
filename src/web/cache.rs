@@ -18,6 +18,9 @@ use tracing::error;
 /// This enables us to use the fastly "soft purge" for everything.
 pub const SURROGATE_KEY_ALL: SurrogateKey = SurrogateKey::from_static("all");
 
+/// cache poicy for static assets like rustdoc files or build assets.
+pub const STATIC_ASSET_CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResponseCacheHeaders {
     pub cache_control: Option<HeaderValue>,

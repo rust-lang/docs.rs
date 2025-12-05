@@ -5,15 +5,14 @@ use crate::{
     storage::PathNotFoundError,
     web::{
         MetaData, ReqVersion,
-        cache::CachePolicy,
+        cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
         error::{AxumNope, AxumResult},
         extractors::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        headers::CanonicalUrl,
-        headers::IfNoneMatch,
+        headers::{CanonicalUrl, IfNoneMatch},
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -285,7 +284,8 @@ pub(crate) async fn source_browser_handler(
         let is_text = stream.mime.type_() == mime::TEXT || stream.mime == mime::APPLICATION_JSON;
         if !is_text {
             // if the file isn't text, serve it directly to the client
-            let mut response = StreamingFile(stream).into_response(if_none_match.as_deref());
+            let mut response = StreamingFile(stream)
+                .into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY);
             response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
