@@ -2,31 +2,24 @@
 //! documentation of crates for the Rust Programming Language.
 #![allow(clippy::cognitive_complexity)]
 
-pub use self::build_queue::{
-    AsyncBuildQueue, BuildQueue, queue_rebuilds, queue_rebuilds_faulty_rustdoc,
-};
 pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
-pub use self::index::Index;
 pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
 pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
 
-mod build_queue;
 pub mod cdn;
 mod config;
 mod context;
 pub mod db;
 mod docbuilder;
 mod error;
-pub mod index;
 pub mod metrics;
 mod registry_api;
-pub mod repositories;
 pub mod storage;
 #[cfg(test)]
 mod test;

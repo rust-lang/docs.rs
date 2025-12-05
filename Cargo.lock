@@ -1961,12 +1961,11 @@ dependencies = [
  "clap",
  "comrak",
  "constant_time_eq",
- "crates-index",
- "crates-index-diff",
  "criterion",
  "dashmap",
  "derive_builder",
  "derive_more 2.0.1",
+ "docs_rs_env_vars",
  "docsrs-metadata",
  "flate2",
  "fn-error-context",
@@ -2029,6 +2028,80 @@ dependencies = [
  "walkdir",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "docs_rs_build_queue"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_opentelemetry",
+ "futures-util",
+ "opentelemetry",
+ "serde",
+ "sqlx",
+ "tracing",
+]
+
+[[package]]
+name = "docs_rs_database"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode 2.0.1",
+ "derive_more 2.0.1",
+ "docs_rs_env_vars",
+ "docs_rs_opentelemetry",
+ "futures-util",
+ "opentelemetry",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sqlx",
+ "strum",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "docs_rs_env_vars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tracing",
+]
+
+[[package]]
+name = "docs_rs_opentelemetry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_env_vars",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-resource-detectors",
+ "opentelemetry_sdk",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "docs_rs_watcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crates-index",
+ "crates-index-diff",
+ "docs_rs_build_queue",
+ "docs_rs_env_vars",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]

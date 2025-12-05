@@ -3,9 +3,8 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
+    Context, RustwideBuilder,
     metrics::service::OtelServiceMetrics,
-    queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
 };
@@ -14,103 +13,8 @@ use std::future::Future;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tokio::{runtime, time::Instant};
-use tracing::{debug, info, trace};
-
-/// Run the registry watcher
-/// NOTE: this should only be run once, otherwise crates would be added
-/// to the queue multiple times.
-pub async fn watch_registry(build_queue: &AsyncBuildQueue, config: &Config) -> Result<(), Error> {
-    let mut last_gc = Instant::now();
-
-    loop {
-        if build_queue.is_locked().await? {
-            debug!("Queue is locked, skipping checking new crates");
-        } else {
-            debug!("Checking new crates");
-            let index = Index::from_config(config).await?;
-            match build_queue
-                .get_new_crates(&index)
-                .await
-                .context("Failed to get new crates")
-            {
-                Ok(n) => debug!("{} crates added to queue", n),
-                Err(e) => report_error(&e),
-            }
-
-            if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
-                index.run_git_gc().await;
-                last_gc = Instant::now();
-            }
-        }
-        tokio::time::sleep(config.delay_between_registry_fetches).await;
-    }
-}
-
-fn start_registry_watcher(context: &Context) -> Result<(), Error> {
-    let build_queue = context.async_build_queue.clone();
-    let config = context.config.clone();
-
-    context.runtime.spawn(async move {
-        // space this out to prevent it from clashing against the queue-builder thread on launch
-        tokio::time::sleep(Duration::from_secs(30)).await;
-
-        watch_registry(&build_queue, &config).await
-    });
-
-    Ok(())
-}
-
-pub fn start_background_repository_stats_updater(context: &Context) -> Result<(), Error> {
-    // This call will still skip github repositories updates and continue if no token is provided
-    // (gitlab doesn't require to have a token). The only time this can return an error is when
-    // creating a pool or if config fails, which shouldn't happen here because this is run right at
-    // startup.
-    let updater = context.repository_stats_updater.clone();
-    let runtime = context.runtime.clone();
-    async_cron(
-        &runtime,
-        "repository stats updater",
-        Duration::from_secs(60 * 60),
-        move || {
-            let updater = updater.clone();
-            async move {
-                updater.update_all_crates().await?;
-                Ok(())
-            }
-        },
-    );
-    Ok(())
-}
-
-pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
-    let runtime = context.runtime.clone();
-    let pool = context.pool.clone();
-    let config = context.config.clone();
-    let build_queue = context.async_build_queue.clone();
-
-    if config.max_queued_rebuilds.is_none() {
-        info!("rebuild config incomplete, skipping rebuild queueing");
-        return Ok(());
-    }
-
-    async_cron(
-        &runtime,
-        "background queue rebuilder",
-        Duration::from_secs(60 * 60),
-        move || {
-            let pool = pool.clone();
-            let build_queue = build_queue.clone();
-            let config = config.clone();
-            async move {
-                let mut conn = pool.get_async().await?;
-                queue_rebuilds(&mut conn, &config, &build_queue).await?;
-                Ok(())
-            }
-        },
-    );
-    Ok(())
-}
+use tokio::runtime;
+use tracing::{info, trace};
 
 pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
     let runtime = context.runtime.clone();

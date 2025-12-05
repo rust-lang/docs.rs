@@ -9,124 +9,126 @@ build = "build.rs"
 edition = "2024"
 
 [workspace]
-exclude = [
-    "ignored",
-    "tests",
-    ".workspace",
-    ".rustwide-docker",
-]
+members = ["crates/*"]
 
-[dependencies]
-sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
-log = "0.4"
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
-tracing-log = "0.2.0"
-regex = "1"
-clap = { version = "4.0.22", features = [ "derive" ] }
-crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
-rayon = "1.6.1"
-num_cpus = "1.15.0"
-crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
-reqwest = { version = "0.12", features = ["json", "gzip"] }
-semver = { version = "1.0.4", features = ["serde"] }
-slug = "0.1.1"
-sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
-url = { version = "2.1.1", features = ["serde"] }
-docsrs-metadata = { path = "crates/metadata" }
+[workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
-thiserror = "2.0.3"
-comrak = { version = "0.48.0", default-features = false }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
-toml = "0.9.2"
+bincode = "2.0.1"
+chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
+derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
+futures-util = "0.3.5"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
-rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
-mime_guess = "2"
-zstd = "0.13.0"
-flate2 = "1.1.1"
-hostname = "0.4.0"
-path-slash = "0.2.0"
-base64 = "0.22"
-strum = { version = "0.27.0", features = ["derive"] }
-lol_html = "2.0.0"
-font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
-dashmap = "6.0.0"
-zip = {version = "6.0.0", default-features = false, features = ["bzip2"]}
-bzip2 = "0.6.0"
-getrandom = "0.3.1"
-itertools = { version = "0.14.0" }
-hex = "0.4.3"
-derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
-sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
-derive_builder = "0.20.2"
-
-# Async
-async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
-tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
-tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
-tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
-futures-util = "0.3.5"
-async-stream = "0.3.5"
-aws-config = { version = "1.0.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
-aws-sdk-s3 = "1.3.0"
-aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
-http = "1.0.0"
-
-# Data serialization and deserialization
+semver = { version = "1.0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.4.0"
-bincode = "2.0.1"
+sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
+strum = { version = "0.27.0", features = ["derive"] }
+thiserror = "2.0.3"
+tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
+tracing = "0.1.37"
+url = { version = "2.1.1", features = ["serde"] }
 
-# axum dependencies
+[dependencies]
+anyhow = { workspace = true }
+askama = "0.14.0"
+async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
+async-stream = "0.3.5"
 async-trait = "0.1.83"
+aws-config = { version = "1.0.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
+aws-sdk-s3 = "1.3.0"
+aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 axum = { version = "0.8.1", features = ["macros"] }
 axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
+base64 = "0.22"
+bincode = { workspace = true }
+bzip2 = "0.6.0"
+chrono = { workspace = true }
+clap = { version = "4.0.22", features = [ "derive" ] }
+comrak = { version = "0.48.0", default-features = false }
+constant_time_eq = "0.4.2"
+dashmap = "6.0.0"
+derive_builder = "0.20.2"
+derive_more = { workspace = true }
+docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
+docsrs-metadata = { path = "crates/metadata" }
+flate2 = "1.1.1"
+fn-error-context = "0.2.0"
+font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
+futures-util = { workspace = true }
+getrandom = "0.3.1"
+hex = "0.4.3"
+hostname = "0.4.0"
+http = "1.0.0"
+itertools = { version = "0.14.0" }
+log = "0.4"
+lol_html = "2.0.0"
+md5 = "0.8.0"
+mime = "0.3.16"
+mime_guess = "2"
+num_cpus = "1.15.0"
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-resource-detectors = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+path-slash = "0.2.0"
+percent-encoding = "2.2.0"
+phf = "0.13.1"
+rayon = "1.6.1"
+regex = "1"
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
+semver = { workspace = true }
+sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+slug = "0.1.1"
+sqlx = { workspace = true }
+strum = { workspace = true }
+syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
+sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
+tempfile = "3.1.0"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
+toml = "0.9.2"
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
-mime = "0.3.16"
-percent-encoding = "2.2.0"
-
-tempfile = "3.1.0"
-fn-error-context = "0.2.0"
-
-# Templating
-askama = "0.14.0"
+tracing = { workspace = true }
+tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
+url = { workspace = true }
 walkdir = "2"
-phf = "0.13.1"
-
-# Date and Time utilities
-chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
-
-# Transitive dependencies we don't use directly but need to have specific versions of
-constant_time_eq = "0.4.2"
-md5 = "0.8.0"
+zip = {version = "6.0.0", default-features = false, features = ["bzip2"]}
+zstd = "0.13.0"
 
 [dev-dependencies]
+aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
+aws-smithy-types = "1.0.1"
 criterion = "0.8.0"
-kuchikiki = "0.8"
 http-body-util = "0.1.0"
-rand = "0.9"
+indoc = "2.0.0"
+kuchikiki = "0.8"
 mockito = "1.0.2"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
+pretty_assertions = "1.4.0"
+rand = "0.9"
 test-case = "3.0.0"
 tower = { version = "0.5.1", features = ["util"] }
-opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
-aws-smithy-types = "1.0.1"
-aws-smithy-runtime = {version = "1.0.1", features = ["client", "test-util"]}
-indoc = "2.0.0"
-pretty_assertions = "1.4.0"
 
 [build-dependencies]
-time = "0.3"
-md5 = "0.8.0"
-phf_codegen = "0.13"
-walkdir = "2"
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
+md5 = "0.8.0"
+phf_codegen = "0.13"
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
+time = "0.3"
+walkdir = "2"
 
 [package.metadata.cargo-machete]
 ignored = ["phf"]
