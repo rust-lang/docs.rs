@@ -1,6 +1,14 @@
 # just commands for CI & local development
 
 [group('testing')]
+bench-rustdoc-page host="http://127.0.0.1:8888":
+  rm -rf ignored/cratesfyi-prefix/archive_cache/*
+  ab \
+    -n 10000 \
+    -c 500 \
+    {{ host }}/rayon/1.11.0/rayon/
+
+[group('testing')]
 [group('sqlx')]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
   cargo sqlx prepare \
