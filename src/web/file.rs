@@ -87,7 +87,7 @@ impl StreamingFile {
         // is only the `no-store` part.
         //
         // Future optimization could be:
-        // * only forbid fastly to storstore, and browsers still could.
+        // * only forbid fastly to store, and browsers still could.
         // * implement segmented caching for large files somehow.
         if self.0.content_length > FASTLY_CACHE_MAX_OBJECT_SIZE
             && !matches!(cache_policy, CachePolicy::NoStoreMustRevalidate)
