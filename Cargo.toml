@@ -41,6 +41,7 @@ async-stream = "0.3.5"
 tempfile = "3.1.0"
 http = "1.0.0"
 reqwest = { version = "0.12", features = ["json", "gzip"] }
+rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
 
 # dev dependencies
 test-case = "3.0.0"
@@ -87,7 +88,7 @@ phf = "0.13.1"
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
-rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { workspace = true }
 semver = { workspace = true }
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 serde = { workspace = true }

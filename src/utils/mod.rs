@@ -1,7 +1,6 @@
 //! Various utilities for docs.rs
 
 pub(crate) use self::{
-    cargo_metadata::{CargoMetadata, Dependency, Package as MetadataPackage},
     copy::copy_dir_all,
     html::rewrite_rustdoc_html_stream,
     rustc_version::{get_correct_docsrs_style_file, parse_rustc_version},
@@ -15,14 +14,12 @@ pub use self::{
     queue_builder::queue_builder,
 };
 
-pub(crate) mod cargo_metadata;
 mod copy;
 pub mod daemon;
 mod html;
 mod queue;
 pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;
-pub(crate) mod sized_buffer;
 
 use tracing::error;
 

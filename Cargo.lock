@@ -2038,6 +2038,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_cargo_metadata"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode 2.0.1",
+ "docs_rs_database",
+ "rustwide",
+ "semver",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "docs_rs_database"
 version = "0.1.0"
 dependencies = [
@@ -2150,6 +2163,7 @@ dependencies = [
  "crates-index",
  "crates-index-diff",
  "docs_rs_build_queue",
+ "docs_rs_cargo_metadata",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_utils",

@@ -5,6 +5,7 @@ use crate::{
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use docs_rs_cargo_metadata::Package as MetadataPackage;
 use docs_rs_database::Pool;
 use futures_util::stream::TryStreamExt;
 use regex::Regex;
