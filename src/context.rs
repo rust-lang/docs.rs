@@ -1,24 +1,17 @@
-use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, RegistryApi, Storage,
-    cdn::CdnMetrics,
-    db::Pool,
-    metrics::otel::{AnyMeterProvider, get_meter_provider},
-    repositories::RepositoryStatsUpdater,
-};
+use crate::{AsyncStorage, Config, RegistryApi, Storage, cdn::CdnMetrics};
 use anyhow::Result;
+use docs_rs_database::Pool;
+use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use std::sync::Arc;
 use tokio::runtime;
 
 pub struct Context {
     pub config: Arc<Config>,
-    pub async_build_queue: Arc<AsyncBuildQueue>,
-    pub build_queue: Arc<BuildQueue>,
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
     pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
     pub registry_api: Arc<RegistryApi>,
-    pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
     pub meter_provider: AnyMeterProvider,
 }

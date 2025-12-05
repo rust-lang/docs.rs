@@ -1,4 +1,4 @@
-use crate::db::types::version::Version;
+use docs_rs_database::types::version::Version;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(super) struct Crate {

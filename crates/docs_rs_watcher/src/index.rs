@@ -1,15 +1,12 @@
-use crate::{
-    Config,
-    error::Result,
-    utils::{report_error, run_blocking},
-};
-use anyhow::Context as _;
+use crate::{config::Config, utils::run_blocking};
+use anyhow::{Context as _, Result};
 use crates_index_diff::{Change, gix, index::diff::Order};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, atomic::AtomicBool},
 };
 use tokio::process::Command;
+use tracing::error;
 
 const THREAD_NAME: &str = "crates-index-diff";
 
@@ -79,7 +76,12 @@ impl Index {
             .with_context(|| format!("failed to run `git gc --auto`\npath: {:#?}", &self.path));
 
         if let Err(err) = gc {
-            report_error(&err);
+            // FIXME: before we had `report_error` here. Is it worth keeping?
+            error!(
+                ?err,
+                path = %self.path.display(),
+                "failed to run `git gc --auto`"
+            );
         }
     }
 

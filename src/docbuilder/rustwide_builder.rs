@@ -1,17 +1,16 @@
 use crate::{
     AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
     db::{
-        BuildId, CrateId, Pool, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
+        BuildId, CrateId, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
         file::{add_path_into_database, file_list_to_json},
         finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-        types::{BuildStatus, version::Version},
+        types::BuildStatus,
         update_build_with_error, update_crate_data_in_database,
     },
     docbuilder::Limits,
     error::Result,
-    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS, otel::AnyMeterProvider},
-    repositories::RepositoryStatsUpdater,
+    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -22,6 +21,8 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Error, anyhow, bail};
+use docs_rs_database::{Pool, types::version::Version};
+use docs_rs_opentelemetry::AnyMeterProvider;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};

@@ -1,6 +1,7 @@
 use super::data::{Crate, Crates, Release, Releases};
-use crate::{Config, db::types::version::Version, utils::run_blocking};
+use crate::{config::Config, utils::run_blocking};
 use anyhow::Result;
+use docs_rs_database::types::version::Version;
 use rayon::iter::ParallelIterator;
 use tracing::debug;
 

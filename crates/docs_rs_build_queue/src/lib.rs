@@ -2,9 +2,10 @@ mod config;
 mod metrics;
 mod rebuilds;
 
+pub use config::Config;
+
 use anyhow::Result;
 use chrono::NaiveDate;
-use config::Config;
 use docs_rs_database::{
     Pool,
     service_config::{ConfigName, get_config, set_config},

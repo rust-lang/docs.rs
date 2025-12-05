@@ -1,5 +1,7 @@
 mod config;
+mod consistency;
 mod index;
+mod utils;
 
 use anyhow::Error;
 use docs_rs_build_queue::AsyncBuildQueue;
