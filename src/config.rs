@@ -102,6 +102,8 @@ pub struct Config {
     // So we can preallocate the DashMap with this number to avoid resizes.
     pub(crate) local_archive_cache_expected_count: usize,
 
+    pub(crate) local_archive_cache_download_wait_ms: u64,
+
     // Where to collect metrics for the metrics initiative.
     // When empty, we won't collect metrics.
     pub(crate) compiler_metrics_collection_path: Option<PathBuf>,
@@ -232,6 +234,10 @@ impl Config {
             .local_archive_cache_expected_count(env(
                 "DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT",
                 100_000usize,
+            )?)
+            .local_archive_cache_download_wait_ms(env(
+                "DOCSRS_ARCHIVE_INDEX_DOWNLOAD_WAIT_MS",
+                1000,
             )?)
             .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
             .temp_dir(temp_dir)
