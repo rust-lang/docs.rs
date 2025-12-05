@@ -1,5 +1,4 @@
 use crate::{
-    APP_USER_AGENT,
     cdn::CdnMetrics,
     config::Config,
     web::headers::{SURROGATE_KEY, SurrogateKey, SurrogateKeys},

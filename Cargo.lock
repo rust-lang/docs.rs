@@ -1962,6 +1962,7 @@ dependencies = [
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
+ "docs_rs_utils",
  "docsrs-metadata",
  "fn-error-context",
  "font-awesome-as-a-crate",

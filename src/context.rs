@@ -1,4 +1,4 @@
-use crate::{AsyncStorage, Config, RegistryApi, Storage, cdn::CdnMetrics};
+use crate::{Config, RegistryApi, cdn::CdnMetrics};
 use anyhow::Result;
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};

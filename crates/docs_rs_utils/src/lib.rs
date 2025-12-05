@@ -2,6 +2,17 @@ use anyhow::Result;
 use std::{panic, thread, time::Duration};
 use tracing::{Span, warn};
 
+/// Version string generated at build time contains last git
+/// commit hash and build date
+pub const BUILD_VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("GIT_SHA"),
+    " ",
+    env!("BUILD_DATE"),
+    " )"
+);
+
 pub const APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
     " ",

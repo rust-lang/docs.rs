@@ -7,7 +7,6 @@ pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
 pub use self::registry_api::RegistryApi;
-pub use self::storage::{AsyncStorage, Storage};
 pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
@@ -20,7 +19,6 @@ mod docbuilder;
 mod error;
 pub mod metrics;
 mod registry_api;
-pub mod storage;
 #[cfg(test)]
 mod test;
 pub mod utils;
@@ -38,17 +36,6 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
     fa_icon: "exclamation-triangle",
 });
 */
-
-/// Version string generated at build time contains last git
-/// commit hash and build date
-pub const BUILD_VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("GIT_SHA"),
-    " ",
-    env!("BUILD_DATE"),
-    " )"
-);
 
 /// Where rustdoc's static files are stored in S3.
 /// Since the prefix starts with `/`, it needs to be referenced with a double slash in
