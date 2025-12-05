@@ -582,12 +582,11 @@ impl AsyncStorage {
         // Someone else is already downloading/repairing. Don't queue on write(); just wait
         // a bit and poll the fast path until it becomes readable or we give up.
         const STEP_MS: u64 = 10;
-        const ATTEMPTS: u64 = 50; // = 500ms total wait
-        const TOTAL_WAIT_MS: u64 = STEP_MS * ATTEMPTS;
+        let attempts = self.config.local_archive_cache_download_wait_ms / STEP_MS;
 
         let mut last_err = None;
 
-        for _ in 0..ATTEMPTS {
+        for _ in 0..attempts {
             sleep(Duration::from_millis(STEP_MS)).await;
 
             match archive_index::find_in_file(local_index_path.clone(), path_in_archive).await {
@@ -603,7 +602,8 @@ impl AsyncStorage {
         Err(last_err
             .unwrap_or_else(|| anyhow!("archive index unavailable after repair wait"))
             .context(format!(
-                "no archive index after waiting for {TOTAL_WAIT_MS}ms"
+                "no archive index after waiting for {} ms",
+                self.config.local_archive_cache_download_wait_ms
             )))
     }
 
