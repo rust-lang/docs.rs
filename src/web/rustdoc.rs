@@ -11,7 +11,7 @@ use crate::{
     utils::{self, Dependency},
     web::{
         MetaData, ReqVersion, axum_cached_redirect,
-        cache::CachePolicy,
+        cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
         crate_details::CrateDetails,
         csp::Csp,
         error::{AxumNope, AxumResult},
@@ -228,7 +228,7 @@ async fn try_serve_legacy_toolchain_asset(
     // which is reached via the new handler.
     Ok(StreamingFile::from_path(&storage, &path)
         .await?
-        .into_response(if_none_match))
+        .into_response(if_none_match, STATIC_ASSET_CACHE_POLICY))
 }
 
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
@@ -344,7 +344,8 @@ pub(crate) async fn rustdoc_redirector_handler(
                 )
                 .await
             {
-                Ok(blob) => Ok(StreamingFile(blob).into_response(if_none_match.as_deref())),
+                Ok(blob) => Ok(StreamingFile(blob)
+                    .into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY)),
                 Err(err) => {
                     if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
                         && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
@@ -763,7 +764,9 @@ pub(crate) async fn rustdoc_html_server_handler(
         // default asset caching behaviour is `Cache::ForeverInCdnAndBrowser`.
         // This is an edge-case when we serve invocation specific static assets under `/latest/`:
         // https://github.com/rust-lang/docs.rs/issues/1593
-        return Ok(StreamingFile(blob).into_response(if_none_match.as_deref()));
+        return Ok(
+            StreamingFile(blob).into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY)
+        );
     }
 
     let latest_release = krate.latest_release()?;
@@ -982,9 +985,11 @@ pub(crate) async fn json_download_handler(
         Some(wanted_compression),
     );
 
+    let cache_policy = CachePolicy::ForeverInCdn(krate.name.clone().into());
+
     let (mut response, updated_storage_path) = match storage.get_raw_stream(&storage_path).await {
         Ok(file) => (
-            StreamingFile(file).into_response(if_none_match.as_deref()),
+            StreamingFile(file).into_response(if_none_match.as_deref(), cache_policy),
             None,
         ),
         Err(err) if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) => {
@@ -1003,7 +1008,7 @@ pub(crate) async fn json_download_handler(
                 // redirect to that as fallback
                 (
                     StreamingFile(storage.get_raw_stream(&storage_path).await?)
-                        .into_response(if_none_match.as_deref()),
+                        .into_response(if_none_match.as_deref(), cache_policy),
                     Some(storage_path),
                 )
             } else {
@@ -1012,13 +1017,6 @@ pub(crate) async fn json_download_handler(
         }
         Err(err) => return Err(err.into()),
     };
-
-    // StreamingFile::into_response automatically set the default cache-policy for
-    // static assets (ForeverInCdnAndBrowser).
-    // Here we override it with the standard policy for build output.
-    response
-        .extensions_mut()
-        .insert(CachePolicy::ForeverInCdn(krate.name.clone().into()));
 
     // set content-disposition to attachment to trigger download in browsers
     // For the attachment filename we can use just the filename without the path,
@@ -1059,15 +1057,10 @@ pub(crate) async fn download_handler(
     let version = &matched_release.release.version;
     let archive_path = rustdoc_archive_path(params.name(), version);
 
-    let mut response = StreamingFile(storage.get_raw_stream(&archive_path).await?)
-        .into_response(if_none_match.as_deref());
-
-    // StreamingFile::into_response automatically set the default cache-policy for
-    // static assets (ForeverInCdnAndBrowser).
-    // Here we override it with the standard policy for build output.
-    response
-        .extensions_mut()
-        .insert(CachePolicy::ForeverInCdn(matched_release.name.into()));
+    let mut response = StreamingFile(storage.get_raw_stream(&archive_path).await?).into_response(
+        if_none_match.as_deref(),
+        CachePolicy::ForeverInCdn(matched_release.name.into()),
+    );
 
     // set content-disposition to attachment to trigger download in browsers
     response.headers_mut().insert(
@@ -1092,7 +1085,7 @@ pub(crate) async fn static_asset_handler(
 
     Ok(StreamingFile::from_path(&storage, &storage_path)
         .await?
-        .into_response(if_none_match.as_deref()))
+        .into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY))
 }
 
 #[cfg(test)]

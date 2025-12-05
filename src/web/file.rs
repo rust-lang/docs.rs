@@ -18,6 +18,12 @@ use axum_extra::{
 };
 use std::time::SystemTime;
 use tokio_util::io::ReaderStream;
+use tracing::warn;
+
+// https://docs.fastly.com/products/compute-resource-limits#default-limits
+// https://www.fastly.com/documentation/guides/full-site-delivery/performance/failure-modes-with-large-objects/
+// https://www.fastly.com/documentation/guides/full-site-delivery/caching/segmented-caching/
+const FASTLY_CACHE_MAX_OBJECT_SIZE: usize = 100 * 1024 * 1024; // 100 MB
 
 #[derive(Debug)]
 pub(crate) struct File(pub(crate) Blob);
@@ -41,9 +47,13 @@ impl File {
 
 #[cfg(test)]
 impl File {
-    pub fn into_response(self, if_none_match: Option<&IfNoneMatch>) -> AxumResponse {
+    pub fn into_response(
+        self,
+        if_none_match: Option<&IfNoneMatch>,
+        cache_policy: CachePolicy,
+    ) -> AxumResponse {
         let streaming_blob: StreamingBlob = self.0.into();
-        StreamingFile(streaming_blob).into_response(if_none_match)
+        StreamingFile(streaming_blob).into_response(if_none_match, cache_policy)
     }
 }
 
@@ -56,8 +66,40 @@ impl StreamingFile {
         Ok(StreamingFile(storage.get_stream(path).await?))
     }
 
-    pub fn into_response(self, if_none_match: Option<&IfNoneMatch>) -> AxumResponse {
-        const CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
+    pub fn into_response(
+        self,
+        if_none_match: Option<&IfNoneMatch>,
+        mut cache_policy: CachePolicy,
+    ) -> AxumResponse {
+        // by default Fastly can only cache objects up to 100 MiB.
+        // Since we're streaming the response via chunked encoding, fastly itself doesn't know
+        // the object size until the streamed data size is > 100 MiB. In this case fastly just
+        // cuts the connection.
+        // To avoid issues with caching large files, we disable CDN caching for files that are too
+        // big.
+        //
+        // See:
+        //   https://docs.fastly.com/products/compute-resource-limits#default-limits
+        //   https://www.fastly.com/documentation/guides/full-site-delivery/performance/failure-modes-with-large-objects/
+        //   https://www.fastly.com/documentation/guides/full-site-delivery/caching/segmented-caching/
+        //
+        // For now I use the `NoStoreMustRevalidate` policy, the important cache-control statement
+        // is only the `no-store` part.
+        //
+        // Future optimization could be:
+        // * only forbid fastly to storstore, and browsers still could.
+        // * implement segmented caching for large files somehow.
+        if self.0.content_length > FASTLY_CACHE_MAX_OBJECT_SIZE
+            && !matches!(cache_policy, CachePolicy::NoStoreMustRevalidate)
+        {
+            warn!(
+                storage_path = self.0.path,
+                content_length = self.0.content_length,
+                "Disabling CDN caching for large file"
+            );
+            cache_policy = CachePolicy::NoStoreMustRevalidate;
+        }
+
         let last_modified = LastModified::from(SystemTime::from(self.0.date_updated));
 
         if let Some(if_none_match) = if_none_match
@@ -69,7 +111,7 @@ impl StreamingFile {
                 // it's generally recommended to repeat caching headers on 304 responses
                 TypedHeader(etag.clone()),
                 TypedHeader(last_modified),
-                Extension(CACHE_POLICY),
+                Extension(cache_policy),
             )
                 .into_response()
         } else {
@@ -81,7 +123,7 @@ impl StreamingFile {
                 TypedHeader(ContentType::from(self.0.mime)),
                 TypedHeader(last_modified),
                 self.0.etag.map(TypedHeader),
-                Extension(CACHE_POLICY),
+                Extension(cache_policy),
                 Body::from_stream(stream),
             )
                 .into_response()
@@ -92,11 +134,17 @@ impl StreamingFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{storage::CompressionAlgorithm, test::TestEnvironment, web::headers::compute_etag};
+    use crate::{
+        storage::CompressionAlgorithm,
+        test::TestEnvironment,
+        web::{cache::STATIC_ASSET_CACHE_POLICY, headers::compute_etag},
+    };
     use axum_extra::headers::{ETag, HeaderMapExt as _};
     use chrono::Utc;
     use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
+
+    const CONTENT: &[u8] = b"Hello, world!";
 
     fn streaming_blob(
         content: impl Into<Vec<u8>>,
@@ -114,13 +162,28 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_big_file_stream_drops_cache_policy() {
+        let mut stream = streaming_blob(CONTENT, None);
+        stream.content_length = FASTLY_CACHE_MAX_OBJECT_SIZE + 1;
+
+        let response =
+            StreamingFile(stream).into_response(None, CachePolicy::ForeverInCdnAndBrowser);
+        // even though we passed a cache policy in `into_response`, it should be overridden to
+        // `NoCaching` due to the large size of the file.
+        let cache = response
+            .extensions()
+            .get::<CachePolicy>()
+            .expect("missing cache response extension");
+        assert!(matches!(cache, CachePolicy::NoStoreMustRevalidate));
+    }
+
     #[tokio::test]
     async fn test_stream_into_response() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
         let etag: ETag = {
             // first request normal
             let stream = StreamingFile(streaming_blob(CONTENT, None));
-            let resp = stream.into_response(None);
+            let resp = stream.into_response(None, STATIC_ASSET_CACHE_POLICY);
             assert!(resp.status().is_success());
             assert!(resp.headers().get(CACHE_CONTROL).is_none());
             let cache = resp
@@ -138,7 +201,7 @@ mod tests {
         {
             // cached request
             let stream = StreamingFile(streaming_blob(CONTENT, None));
-            let resp = stream.into_response(Some(&if_none_match));
+            let resp = stream.into_response(Some(&if_none_match), STATIC_ASSET_CACHE_POLICY);
             assert_eq!(resp.status(), StatusCode::NOT_MODIFIED);
 
             // cache related headers are repeated on the not-modified response
@@ -172,7 +235,7 @@ mod tests {
 
         file.0.date_updated = now;
 
-        let resp = file.into_response(None);
+        let resp = file.into_response(None, STATIC_ASSET_CACHE_POLICY);
         assert!(resp.status().is_success());
         assert!(resp.headers().get(CACHE_CONTROL).is_none());
         let cache = resp

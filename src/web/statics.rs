@@ -1,7 +1,7 @@
 use super::{
     cache::CachePolicy, headers::IfNoneMatch, metrics::request_recorder, routes::get_static,
 };
-use crate::db::mimes::APPLICATION_OPENSEARCH_XML;
+use crate::{db::mimes::APPLICATION_OPENSEARCH_XML, web::cache::STATIC_ASSET_CACHE_POLICY};
 use axum::{
     Router as AxumRouter,
     extract::{Extension, Request},
@@ -24,13 +24,11 @@ const RUSTDOC_2021_12_05_CSS: &str =
 const RUSTDOC_2025_08_20_CSS: &str =
     include_str!(concat!(env!("OUT_DIR"), "/rustdoc-2025-08-20.css"));
 
-const STATIC_CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
-
 include!(concat!(env!("OUT_DIR"), "/static_etag_map.rs"));
 
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
     (
-        Extension(STATIC_CACHE_POLICY),
+        Extension(STATIC_ASSET_CACHE_POLICY),
         TypedHeader(ContentType::from(mime::TEXT_CSS)),
         content,
     )
@@ -43,7 +41,7 @@ async fn set_needed_static_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
 
     if response.status().is_success() {
-        response.extensions_mut().insert(STATIC_CACHE_POLICY);
+        response.extensions_mut().insert(STATIC_ASSET_CACHE_POLICY);
     }
 
     if is_opensearch_xml {
