@@ -87,6 +87,21 @@ pub struct Config {
     // for the remote archives?
     pub(crate) local_archive_cache_path: PathBuf,
 
+    // expected number of entries in the local archive cache.
+    // Makes server restarts faster by preallocating some data structures.
+    // General numbers (as of 2025-12):
+    // * we have ~1.5 mio releases with archive storage (and 400k without)
+    // * each release has on average 2 archive files (rustdoc, source)
+    // so, over all, 3 mio archive index files in S3.
+    //
+    // While due to crawlers we will download _all_ of them over time, the old
+    // metric "releases accessed in the last 10 minutes" was around 50k, if I
+    // recall correctly.
+    // We're using a local DashMap to store some locks for these indexes,
+    // and we already know in advance we need these 50k entries.
+    // So we can preallocate the DashMap with this number to avoid resizes.
+    pub(crate) local_archive_cache_expected_count: usize,
+
     // Where to collect metrics for the metrics initiative.
     // When empty, we won't collect metrics.
     pub(crate) compiler_metrics_collection_path: Option<PathBuf>,
@@ -214,6 +229,10 @@ impl Config {
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
             )?)?)
+            .local_archive_cache_expected_count(env(
+                "DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT",
+                100_000usize,
+            )?)
             .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
             .temp_dir(temp_dir)
             .rustwide_workspace(env(
