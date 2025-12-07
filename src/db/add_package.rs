@@ -1,16 +1,15 @@
 use crate::{
-    db::types::{
-        BuildId, BuildStatus, CrateId, Feature, ReleaseId, dependencies::ReleaseDependencyList,
-        version::Version,
-    },
+    db::types::{BuildStatus, Feature, dependencies::ReleaseDependencyList},
     docbuilder::DocCoverage,
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
-    storage::CompressionAlgorithm,
-    utils::{MetadataPackage, rustc_version::parse_rustc_date},
+    utils::rustc_version::parse_rustc_date,
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
+use docs_rs_cargo_metadata::Package as MetadataPackage;
+use docs_rs_database::types::{BuildId, CrateId, ReleaseId, version::Version};
+use docs_rs_storage::CompressionAlgorithm;
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
 use slug::slugify;

@@ -10,9 +10,7 @@ pub(crate) use self::add_package::{
 pub use self::{
     add_package::{update_build_status, update_crate_data_in_database},
     delete::{delete_crate, delete_version},
-    file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,
-    types::{BuildId, CrateId, ReleaseId},
 };
 
 mod add_package;

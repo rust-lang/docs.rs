@@ -3,10 +3,7 @@
 pub mod page;
 
 use crate::{
-    db::{
-        CrateId,
-        types::{BuildStatus, krate_name::KrateName, version::Version},
-    },
+    db::types::{BuildStatus, krate_name::KrateName},
     utils::get_correct_docsrs_style_file,
     web::{
         metrics::WebMetrics,
@@ -16,6 +13,7 @@ use crate::{
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
+use docs_rs_database::types::{CrateId, version::Version};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, instrument};
@@ -499,7 +497,7 @@ async fn apply_middleware(
                 TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to)
             })))
             .layer(Extension(context.pool.clone()))
-            .layer(Extension(context.async_build_queue.clone()))
+            // .layer(Extension(context.async_build_queue.clone()))
             .layer(Extension(web_metrics))
             .layer(Extension(context.config.clone()))
             .layer(Extension(context.registry_api.clone()))

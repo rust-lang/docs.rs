@@ -1,14 +1,11 @@
-use crate::{
-    Config,
-    db::types::version::Version,
-    error::Result,
-    storage::{AsyncStorage, rustdoc_archive_path, source_archive_path},
-};
+use crate::{Config, error::Result};
 use anyhow::Context as _;
+use docs_rs_database::types::{CrateId, version::Version};
+use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use fn_error_context::context;
 use sqlx::Connection;
 
-use super::{CrateId, update_latest_version_id};
+use super::update_latest_version_id;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.

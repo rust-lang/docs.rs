@@ -1,8 +1,7 @@
 //! special rustdoc extractors
 
 use crate::{
-    db::{BuildId, types::krate_name::KrateName},
-    storage::CompressionAlgorithm,
+    db::types::krate_name::KrateName,
     web::{
         MatchedRelease, MetaData, ReqVersion, error::AxumNope, escaped_uri::EscapedURI,
         extractors::Path, url_decode,
@@ -14,6 +13,8 @@ use axum::{
     extract::{FromRequestParts, MatchedPath},
     http::{Uri, request::Parts},
 };
+use docs_rs_database::types::BuildId;
+use docs_rs_storage::CompressionAlgorithm;
 use itertools::Itertools as _;
 use serde::Deserialize;
 

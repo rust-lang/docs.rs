@@ -1,16 +1,8 @@
 use crate::{
-    AsyncStorage,
-    db::{
-        BuildId, CrateId, ReleaseId,
-        types::{
-            BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName,
-            version::Version,
-        },
-    },
+    db::types::{BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName},
     impl_axum_webpage,
     registry_api::OwnerKind,
-    storage::PathNotFoundError,
-    utils::{Dependency, get_correct_docsrs_style_file},
+    utils::get_correct_docsrs_style_file,
     web::{
         MatchedRelease, MetaData, ReqVersion,
         cache::CachePolicy,
@@ -31,6 +23,9 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
+use docs_rs_cargo_metadata::Dependency;
+use docs_rs_database::types::{BuildId, CrateId, ReleaseId, version::Version};
+use docs_rs_storage::{AsyncStorage, errors::PathNotFoundError};
 use futures_util::stream::TryStreamExt;
 use log::warn;
 use serde_json::Value;

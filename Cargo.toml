@@ -66,6 +66,9 @@ docs_rs_utils = { path = "crates/docs_rs_utils" }
 docs_rs_database = { path = "crates/docs_rs_database" }
 docs_rs_build_queue = { path = "crates/docs_rs_build_queue" }
 docs_rs_opentelemetry = { path = "crates/docs_rs_opentelemetry" }
+docs_rs_cargo_metadata = { path = "crates/docs_rs_cargo_metadata" }
+docs_rs_storage = { path = "crates/docs_rs_storage" }
+docs_rs_headers = { path = "crates/docs_rs_headers" }
 docsrs-metadata = { path = "crates/metadata" }
 fn-error-context = "0.2.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }

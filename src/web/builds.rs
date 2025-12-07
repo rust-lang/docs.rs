@@ -1,10 +1,6 @@
-use crate::build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use crate::{
-    AsyncBuildQueue, Config,
-    db::{
-        BuildId,
-        types::{BuildStatus, version::Version},
-    },
+    Config,
+    db::types::BuildStatus,
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
@@ -27,6 +23,8 @@ use axum_extra::{
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
+use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
+use docs_rs_database::types::{BuildId, version::Version};
 use http::StatusCode;
 use std::sync::Arc;
 

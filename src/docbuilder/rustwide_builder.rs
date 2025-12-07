@@ -1,28 +1,30 @@
 use crate::{
-    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
+    Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi,
     db::{
-        BuildId, CrateId, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
-        blacklist::is_blacklisted,
-        file::{add_path_into_database, file_list_to_json},
-        finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-        types::BuildStatus,
+        add_doc_coverage, blacklist::is_blacklisted, finish_build, finish_release,
+        initialize_build, initialize_crate, initialize_release, types::BuildStatus,
         update_build_with_error, update_crate_data_in_database,
     },
     docbuilder::Limits,
     error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
-    storage::{
-        CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
-        rustdoc_archive_path, rustdoc_json_path, source_archive_path,
-    },
-    utils::{
-        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, parse_rustc_version,
-        report_error, retry, set_config,
-    },
+    utils::{copy_dir_all, parse_rustc_version, report_error},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
-use docs_rs_database::{Pool, types::version::Version};
+use docs_rs_cargo_metadata::{CargoMetadata, Package as MetadataPackage};
+use docs_rs_database::{
+    Pool,
+    service_config::{ConfigName, get_config, set_config},
+    types::{BuildId, CrateId, ReleaseId, version::Version},
+};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_storage::{
+    AsyncStorage, RustdocJsonFormatVersion, Storage, compress,
+    compression::CompressionAlgorithm,
+    file::{add_path_into_database, add_path_into_remote_archive, file_list_to_json},
+    get_file_list, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+};
+use docs_rs_utils::{BUILD_VERSION, retry};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};
@@ -191,9 +193,9 @@ impl RustwideBuilder {
             storage: context.storage.clone(),
             async_storage: context.async_storage.clone(),
             registry_api: context.registry_api.clone(),
-            repository_stats_updater: context.repository_stats_updater.clone(),
+            // repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
-            builder_metrics: context.async_build_queue.builder_metrics(),
+            // builder_metrics: context.async_build_queue.builder_metrics(),
         })
     }
 
@@ -1248,7 +1250,7 @@ impl RustwideBuilder {
         Ok(FullBuildResult {
             result: BuildResult {
                 rustc_version: self.rustc_version()?,
-                docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
+                docsrs_version: format!("docsrs {}", BUILD_VERSION),
                 successful,
             },
             doc_coverage,

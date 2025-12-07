@@ -5,6 +5,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone as _, Utc};
+use docs_rs_utils::APP_USER_AGENT;
 use http::{
     HeaderMap, HeaderName, HeaderValue,
     header::{ACCEPT, USER_AGENT},

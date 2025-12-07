@@ -51,13 +51,13 @@ where
                 if let Some(err_code) = err.code()
                     && NOT_FOUND_ERROR_CODES.contains(&err_code)
                 {
-                    return Err(super::PathNotFoundError.into());
+                    return Err(super::errors::PathNotFoundError.into());
                 }
 
                 if let SdkError::ServiceError(err) = &err
                     && err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
                 {
-                    return Err(super::PathNotFoundError.into());
+                    return Err(super::errors::PathNotFoundError.into());
                 }
 
                 Err(err.into())
@@ -123,7 +123,7 @@ impl S3Backend {
             .convert_errors()
         {
             Ok(_) => Ok(true),
-            Err(err) if err.is::<super::PathNotFoundError>() => Ok(false),
+            Err(err) if err.is::<super::errors::PathNotFoundError>() => Ok(false),
             Err(other) => Err(other),
         }
     }

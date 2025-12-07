@@ -1,6 +1,7 @@
-use crate::{APP_USER_AGENT, db::types::version::Version, error::Result, utils::retry_async};
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
+use docs_rs_database::types::version::Version;
+use docs_rs_utils::{APP_USER_AGENT, retry_async};
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use std::fmt;

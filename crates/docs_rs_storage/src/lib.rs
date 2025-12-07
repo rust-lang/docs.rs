@@ -2,8 +2,8 @@ mod archive_index;
 pub mod compression;
 mod config;
 mod database;
-mod errors;
-mod file;
+pub mod errors;
+pub mod file;
 mod s3;
 mod utils;
 
@@ -53,10 +53,6 @@ use walkdir::WalkDir;
 const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 type FileRange = RangeInclusive<u64>;
-
-#[derive(Debug, thiserror::Error)]
-#[error("path not found")]
-pub struct PathNotFoundError;
 
 /// represents a blob to be uploaded to storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -387,7 +383,7 @@ impl AsyncStorage {
         {
             Ok(file_info) => Ok(file_info.is_some()),
             Err(err) => {
-                if err.downcast_ref::<PathNotFoundError>().is_some() {
+                if err.downcast_ref::<errors::PathNotFoundError>().is_some() {
                     Ok(false)
                 } else {
                     Err(err)
@@ -630,7 +626,7 @@ impl AsyncStorage {
             let info = self
                 .find_in_archive_index(archive_path, latest_build_id, path)
                 .await?
-                .ok_or(PathNotFoundError)?;
+                .ok_or(errors::PathNotFoundError)?;
 
             match self
                 .get_range_stream(archive_path, info.range(), Some(info.compression()))

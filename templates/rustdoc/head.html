@@ -3,7 +3,7 @@
         {%- if build_slug is defined -%}
           {% let build_slug2 = build_slug -%}
         {%- else -%}
-          {%- let build_slug2 =  slug::slugify(crate::BUILD_VERSION) -%}
+          {%- let build_slug2 =  slug::slugify(docs_rs_utils::BUILD_VERSION) -%}
         {%- endif -%}
 
         {%- if let Some(css_file) = rustdoc_css_file -%}

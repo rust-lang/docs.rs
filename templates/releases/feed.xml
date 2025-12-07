@@ -8,7 +8,7 @@
     <link href="https://pubsubhubbub.appspot.com" rel="hub" />
     <link href="https://pubsubhubbub.superfeedr.com" rel="hub" />
 
-    <id>urn:docs-rs:{{ crate::BUILD_VERSION }}</id>
+    <id>urn:docs-rs:{{ docs_rs_utils::BUILD_VERSION }}</id>
     <updated>
     {%- if let Some(first_release) = recent_releases.get(0) -%}
         {%- if let Some(build_time) = first_release.build_time -%}

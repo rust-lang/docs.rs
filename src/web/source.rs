@@ -1,8 +1,5 @@
 use crate::{
-    AsyncStorage, Config,
-    db::{BuildId, types::version::Version},
-    impl_axum_webpage,
-    storage::PathNotFoundError,
+    Config, impl_axum_webpage,
     web::{
         MetaData, ReqVersion,
         cache::CachePolicy,
@@ -22,6 +19,11 @@ use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
+use docs_rs_database::types::{BuildId, version::Version};
+use docs_rs_storage::{
+    AsyncStorage,
+    errors::{PathNotFoundError, SizeLimitReached},
+};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -303,7 +305,7 @@ pub(crate) async fn source_browser_handler(
                     // if file is too large, set is_file_too_large to true
                     if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
                         err.get_ref()
-                            .map(|err| err.is::<crate::error::SizeLimitReached>())
+                            .map(|err| err.is::<SizeLimitReached>())
                             .unwrap_or(false)
                     }) =>
                 {

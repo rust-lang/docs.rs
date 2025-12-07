@@ -1,7 +1,9 @@
 use crate::{Config, RegistryApi, cdn::CdnMetrics};
 use anyhow::Result;
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
+use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime;
 

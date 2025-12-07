@@ -136,6 +136,6 @@
 
 {%- block javascript -%}
     {% if file_content.is_some() %}
-        <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ slug::slugify(crate::BUILD_VERSION) }}"></script>
+        <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/source.js?{{ slug::slugify(docs_rs_utils::BUILD_VERSION) }}"></script>
     {% endif %}
 {%- endblock javascript -%}

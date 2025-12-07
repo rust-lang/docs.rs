@@ -4,11 +4,11 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="generator" content="docs.rs {{ crate::BUILD_VERSION }}">
+        <meta name="generator" content="docs.rs {{ docs_rs_utils::BUILD_VERSION }}">
         {%- block meta -%}{%- endblock meta -%}
 
         {#- Docs.rs styles -#}
-        {%- set build_slug = slug::slugify(crate::BUILD_VERSION) -%}
+        {%- set build_slug = slug::slugify(docs_rs_utils::BUILD_VERSION) -%}
         <link rel="stylesheet" href="/-/static/vendored.css?{{ build_slug }}" media="all" />
         <link rel="stylesheet" href="/-/static/style.css?{{ build_slug }}" media="all" />
         <link rel="stylesheet" href="/-/static/font-awesome.css?{{ build_slug }}" media="all" />

@@ -55,7 +55,7 @@ impl DatabaseBackend {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or(super::PathNotFoundError)?
+            .ok_or(super::errors::PathNotFoundError)?
         } else {
             // The size limit is checked at the database level, to avoid receiving data altogether if
             // the limit is exceeded.
@@ -73,7 +73,7 @@ impl DatabaseBackend {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or(super::PathNotFoundError)?
+            .ok_or(super::errors::PathNotFoundError)?
         };
 
         let compression = result.compression.map(|i| {
