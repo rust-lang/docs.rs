@@ -44,6 +44,7 @@ reqwest = { version = "0.12", features = ["json", "gzip"] }
 rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 clap = { version = "4.0.22", features = [ "derive" ] }
+askama = "0.14.0"
 
 # dev dependencies
 test-case = "3.0.0"
@@ -51,7 +52,7 @@ mockito = "1.0.2"
 
 [dependencies]
 anyhow = { workspace = true }
-askama = "0.14.0"
+askama = { workspace = true }
 async-stream = { workspace = true }
 axum = { version = "0.8.1", features = ["macros"] }
 axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
@@ -90,7 +91,6 @@ opentelemetry-otlp = { workspace = true }
 opentelemetry-resource-detectors = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 path-slash = "0.2.0"
-percent-encoding = "2.2.0"
 phf = "0.13.1"
 rayon = { workspace = true }
 regex = { workspace = true }

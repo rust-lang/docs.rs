@@ -81,6 +81,8 @@ impl AsyncBuildQueue {
         .execute(&mut *conn)
         .await?;
 
+        self.queue_metrics.queued_builds.add(1, &[]);
+
         Ok(())
     }
 

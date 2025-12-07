@@ -1925,7 +1925,6 @@ dependencies = [
  "opentelemetry-resource-detectors",
  "opentelemetry_sdk",
  "path-slash",
- "percent-encoding",
  "phf 0.13.1",
  "phf_codegen 0.13.1",
  "pretty_assertions",
@@ -2032,11 +2031,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_fastly"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_headers",
+ "docs_rs_opentelemetry",
+ "docs_rs_utils",
+ "http 1.4.0",
+ "itertools 0.14.0",
+ "opentelemetry",
+ "reqwest",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "docs_rs_headers"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "askama",
+ "derive_more 2.0.1",
+ "docs_rs_database",
+ "docs_rs_utils",
+ "docs_rs_web_utils",
  "headers",
+ "http 1.4.0",
+ "itertools 0.14.0",
  "md5",
+ "serde",
 ]
 
 [[package]]
@@ -2144,6 +2171,18 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "url",
+]
+
+[[package]]
+name = "docs_rs_web_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "bincode 2.0.1",
+ "http 1.4.0",
+ "percent-encoding",
  "url",
 ]
 

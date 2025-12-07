@@ -3,13 +3,12 @@
 //! https://www.fastly.com/documentation/reference/http/http-headers/Surrogate-Key/haeders.surrogate keys
 
 use anyhow::{Context as _, bail};
-use axum_extra::headers::{self, Header};
 use derive_more::Deref;
+use docs_rs_database::types::krate_name::KrateName;
+use headers::{self, Header};
 use http::{HeaderName, HeaderValue};
 use itertools::Itertools as _;
 use std::{fmt::Display, iter, str::FromStr};
-
-use crate::db::types::krate_name::KrateName;
 
 pub static SURROGATE_KEY: HeaderName = HeaderName::from_static("surrogate-key");
 

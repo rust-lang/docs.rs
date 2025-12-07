@@ -1,6 +1,8 @@
+mod build_queue;
 mod config;
 mod consistency;
 mod index;
+mod priorities;
 pub mod repositories;
 pub mod service_metrics;
 mod utils;

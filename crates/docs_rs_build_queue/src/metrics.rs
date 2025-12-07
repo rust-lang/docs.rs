@@ -3,7 +3,7 @@ use opentelemetry::metrics::Counter;
 
 #[derive(Debug)]
 pub struct BuildQueueMetrics {
-    queued_builds: Counter<u64>,
+    pub(crate) queued_builds: Counter<u64>,
 }
 
 impl BuildQueueMetrics {

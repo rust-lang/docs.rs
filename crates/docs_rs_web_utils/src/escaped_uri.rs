@@ -1,4 +1,4 @@
-use crate::web::{encode_url_path, url_decode};
+use super::{encode_url_path, url_decode};
 use askama::filters::HtmlSafe;
 use http::{Uri, uri::PathAndQuery};
 use std::{borrow::Borrow, fmt::Display, iter, str::FromStr};

@@ -55,15 +55,6 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    /// Fastly API host, typically only overwritten for testing
-    pub fastly_api_host: Url,
-
-    /// Fastly API token for purging the services below.
-    pub fastly_api_token: Option<String>,
-
-    /// fastly service SID for the main domain
-    pub fastly_service_sid: Option<String>,
-
     pub(crate) build_workspace_reinitialization_interval: Duration,
 
     // Build params
@@ -113,12 +104,6 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?,
             cache_invalidatable_responses: env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?,
-            fastly_api_host: env(
-                "DOCSRS_FASTLY_API_HOST",
-                "https://api.fastly.com".parse().unwrap(),
-            )?,
-            fastly_api_token: maybe_env("DOCSRS_FASTLY_API_TOKEN")?,
-            fastly_service_sid: maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?,
             compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
             temp_dir: temp_dir,
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,

@@ -24,11 +24,9 @@ pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
-mod escaped_uri;
 mod extractors;
 mod features;
 mod file;
-pub(crate) mod headers;
 mod highlight;
 mod licenses;
 mod markdown;
@@ -54,7 +52,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use error::AxumNope;
 use page::TemplateData;
-use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use semver::VersionReq;
 use sentry::integrations::tower as sentry_tower;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -69,19 +66,6 @@ use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
 use self::crate_details::Release;
-
-// from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
-// and https://github.com/tokio-rs/axum/blob/main/axum-extra/src/lib.rs
-const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
-const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-
-pub(crate) fn encode_url_path(path: &str) -> String {
-    utf8_percent_encode(path, PATH).to_string()
-}
-
-pub(crate) fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
-    Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
-}
 
 const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
 

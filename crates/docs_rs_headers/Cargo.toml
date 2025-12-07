@@ -6,3 +6,12 @@ edition = "2024"
 [dependencies]
 md5 = "0.8.0"
 headers = "0.4.1"  # not sure if we want this in this crate
+http = { workspace = true }
+derive_more = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+itertools = { workspace = true }
+docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_utils = { path = "../docs_rs_utils" }
+docs_rs_web_utils = { path = "../docs_rs_web_utils" }
+askama = { workspace = true }
