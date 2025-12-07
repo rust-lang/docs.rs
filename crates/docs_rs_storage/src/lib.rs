@@ -7,14 +7,15 @@ pub mod file;
 mod s3;
 mod utils;
 
-use crate::{config::Config, file::FileEntry};
-
 pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
+pub use config::Config;
+
 use self::{
     compression::{compress_async, wrap_reader_for_decompression},
     database::DatabaseBackend,
     s3::S3Backend,
 };
+use crate::file::FileEntry;
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;

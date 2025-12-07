@@ -1,6 +1,7 @@
 use docs_rs_env_vars::maybe_env;
 use url::Url;
 
+#[derive(Debug)]
 pub struct Config {
     // opentelemetry endpoint to send OTLP to
     pub endpoint: Option<Url>,

@@ -38,7 +38,7 @@ pub async fn delete_crate(
         storage.delete_prefix(&remote_folder).await?;
 
         // remove existing local archive index files.
-        let local_index_folder = config.local_archive_cache_path.join(&remote_folder);
+        let local_index_folder = config.storage.local_archive_cache_path.join(&remote_folder);
         if local_index_folder.exists() {
             tokio::fs::remove_dir_all(&local_index_folder)
                 .await
@@ -79,7 +79,7 @@ pub async fn delete_version(
             .await?;
     }
 
-    let local_archive_cache = &config.local_archive_cache_path;
+    let local_archive_cache = &config.storage.local_archive_cache_path;
     let mut paths = vec![source_archive_path(name, version)];
     if is_library {
         paths.push(rustdoc_archive_path(name, version));

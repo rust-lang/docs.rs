@@ -25,6 +25,7 @@ use docs_rs_storage::{
     get_file_list, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_utils::{BUILD_VERSION, retry};
+use docs_rs_watcher::repositories::RepositoryStatsUpdater;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};
@@ -193,9 +194,9 @@ impl RustwideBuilder {
             storage: context.storage.clone(),
             async_storage: context.async_storage.clone(),
             registry_api: context.registry_api.clone(),
-            // repository_stats_updater: context.repository_stats_updater.clone(),
+            repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
-            // builder_metrics: context.async_build_queue.builder_metrics(),
+            builder_metrics: BuilderMetrics::new(&context.meter_provider).into(),
         })
     }
 

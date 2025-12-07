@@ -3,6 +3,8 @@ pub mod mimes;
 pub mod service_config;
 pub mod types;
 
+pub use config::Config;
+
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{future::BoxFuture, stream::BoxStream};
 use opentelemetry::metrics::{Counter, ObservableGauge};

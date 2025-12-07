@@ -8,88 +8,20 @@ use docs_rs::{
     utils::{
         ConfigName, daemon::start_background_service_metric_collector, get_config,
         get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-        remove_crate_priority, set_config, set_crate_priority,
+        remove_crate_priority, set_crate_priority,
     },
 };
+use docs_rs_database::service_config::set_config;
 use futures_util::StreamExt;
-use sentry::{
-    TransactionContext, integrations::panic as sentry_panic,
-    integrations::tracing as sentry_tracing,
-};
-use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
 use tracing_log::LogTracer;
-use tracing_subscriber::{EnvFilter, filter::Directive, prelude::*};
 
 fn main() {
     // set the global log::logger for backwards compatibility
     // through rustwide.
-    rustwide::logging::init_with(LogTracer::new());
-
-    let log_formatter = {
-        let log_format = env::var("DOCSRS_LOG_FORMAT").unwrap_or_default();
-
-        if log_format == "json" {
-            tracing_subscriber::fmt::layer().json().boxed()
-        } else {
-            tracing_subscriber::fmt::layer().boxed()
-        }
-    };
-
-    let tracing_registry = tracing_subscriber::registry().with(log_formatter).with(
-        EnvFilter::builder()
-            .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
-            .with_env_var("DOCSRS_LOG")
-            .from_env_lossy(),
-    );
-
-    let _sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        tracing::subscriber::set_global_default(tracing_registry.with(
-            sentry_tracing::layer().event_filter(|md| {
-                if md.fields().field("reported_to_sentry").is_some() {
-                    sentry_tracing::EventFilter::Ignore
-                } else {
-                    sentry_tracing::default_event_filter(md)
-                }
-            }),
-        ))
-        .unwrap();
-
-        let traces_sample_rate = env::var("SENTRY_TRACES_SAMPLE_RATE")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0.0);
-
-        let traces_sampler = move |ctx: &TransactionContext| -> f32 {
-            if let Some(sampled) = ctx.sampled() {
-                // if the transaction was already marked as "to be sampled" by
-                // the JS/frontend SDK, we want to sample it in the backend too.
-                return if sampled { 1.0 } else { 0.0 };
-            }
-
-            let op = ctx.operation();
-            if op == "docbuilder.build_package" {
-                // record all transactions for builds
-                1.
-            } else {
-                traces_sample_rate
-            }
-        };
-
-        Some(sentry::init((
-            sentry_dsn,
-            sentry::ClientOptions {
-                release: Some(docs_rs::BUILD_VERSION.into()),
-                attach_stacktrace: true,
-                traces_sampler: Some(Arc::new(traces_sampler)),
-                ..Default::default()
-            }
-            .add_integration(sentry_panic::PanicIntegration::default()),
-        )))
-    } else {
-        tracing::subscriber::set_global_default(tracing_registry).unwrap();
-        None
-    };
+    let _logging_guard = rustwide::logging::init_with(LogTracer::new());
+    docs_rs_logging::init();
 
     if let Err(err) = CommandLine::parse().handle_args() {
         let mut msg = format!("Error: {err}");
@@ -106,7 +38,7 @@ fn main() {
         // we need to drop the sentry guard here so all unsent
         // errors are sent to sentry before
         // process::exit kills everything.
-        drop(_sentry_guard);
+        drop(_logging_guard);
         std::process::exit(1);
     }
 }
@@ -121,7 +53,7 @@ enum Toggle {
 #[derive(Debug, Clone, PartialEq, Eq, Parser)]
 #[command(
     about = env!("CARGO_PKG_DESCRIPTION"),
-    version = docs_rs::BUILD_VERSION,
+    version = docs_rs_utils::BUILD_VERSION,
     rename_all = "kebab-case",
 )]
 enum CommandLine {
@@ -134,18 +66,6 @@ enum CommandLine {
     StartWebServer {
         #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
         socket_addr: SocketAddr,
-    },
-
-    StartRegistryWatcher {
-        /// Enable or disable the repository stats updater
-        #[arg(
-            long = "repository-stats-updater",
-            default_value = "disabled",
-            value_enum
-        )]
-        repository_stats_updater: Toggle,
-        #[arg(long = "queue-rebuilds", default_value = "enabled", value_enum)]
-        queue_rebuilds: Toggle,
     },
 
     StartBuildServer,
@@ -172,32 +92,12 @@ enum CommandLine {
 
 impl CommandLine {
     fn handle_args(self) -> Result<()> {
-        let config = Config::from_env()?.build()?;
+        let config = Config::from_env()?;
         let runtime = Arc::new(runtime::Builder::new_multi_thread().enable_all().build()?);
         let ctx = runtime.block_on(Context::from_config(config))?;
 
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx)?,
-            Self::StartRegistryWatcher {
-                repository_stats_updater,
-                queue_rebuilds,
-            } => {
-                if repository_stats_updater == Toggle::Enabled {
-                    docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
-                }
-                if queue_rebuilds == Toggle::Enabled {
-                    docs_rs::utils::daemon::start_background_queue_rebuild(&ctx)?;
-                }
-
-                // When people run the services separately, we assume that we can collect service
-                // metrics from the registry watcher, which should only run once, and all the time.
-                start_background_service_metric_collector(&ctx)?;
-
-                ctx.runtime.block_on(docs_rs::utils::watch_registry(
-                    &ctx.async_build_queue,
-                    &ctx.config,
-                ))?;
-            }
             Self::StartBuildServer => {
                 queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
             }

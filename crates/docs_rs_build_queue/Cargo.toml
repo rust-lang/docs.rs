@@ -14,3 +14,4 @@ serde = { workspace = true }
 sqlx = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }

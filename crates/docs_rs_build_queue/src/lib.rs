@@ -1,20 +1,19 @@
 mod config;
 mod metrics;
-mod rebuilds;
+pub mod rebuilds;
 
 pub use config::Config;
 
 use anyhow::Result;
-use chrono::NaiveDate;
 use docs_rs_database::{
     Pool,
     service_config::{ConfigName, get_config, set_config},
     types::version::Version,
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
-use futures_util::{StreamExt as _, TryStreamExt as _};
+use futures_util::TryStreamExt as _;
 use std::{collections::HashMap, sync::Arc};
-use tracing::{info, instrument};
+use tokio::runtime;
 
 pub const PRIORITY_DEFAULT: i32 = 0;
 /// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
@@ -44,8 +43,6 @@ pub struct QueuedCrate {
 pub struct AsyncBuildQueue {
     pub db: Pool,
     queue_metrics: metrics::BuildQueueMetrics,
-    // builder_metrics: Arc<BuilderMetrics>,
-    // cdn_metrics: Arc<CdnMetrics>,
     max_attempts: i32,
 }
 
@@ -228,6 +225,61 @@ impl AsyncBuildQueue {
         let mut conn = self.db.get_async().await?;
         set_config(&mut conn, ConfigName::QueueLocked, false).await
     }
+}
+
+#[derive(Debug)]
+pub struct BuildQueue {
+    runtime: runtime::Handle,
+    inner: Arc<AsyncBuildQueue>,
+}
+
+/// sync versions of async methods
+impl BuildQueue {
+    pub fn new(runtime: runtime::Handle, inner: Arc<AsyncBuildQueue>) -> Self {
+        Self { runtime, inner }
+    }
+
+    pub fn add_crate(
+        &self,
+        name: &str,
+        version: &Version,
+        priority: i32,
+        registry: Option<&str>,
+    ) -> Result<()> {
+        self.runtime
+            .block_on(self.inner.add_crate(name, version, priority, registry))
+    }
+
+    pub fn is_locked(&self) -> Result<bool> {
+        self.runtime.block_on(self.inner.is_locked())
+    }
+    pub fn lock(&self) -> Result<()> {
+        self.runtime.block_on(self.inner.lock())
+    }
+    pub fn unlock(&self) -> Result<()> {
+        self.runtime.block_on(self.inner.unlock())
+    }
+    // #[cfg(test)]
+    // pub(crate) fn pending_count(&self) -> Result<usize> {
+    //     self.runtime.block_on(self.inner.pending_count())
+    // }
+    // #[cfg(test)]
+    // pub(crate) fn prioritized_count(&self) -> Result<usize> {
+    //     self.runtime.block_on(self.inner.prioritized_count())
+    // }
+    // #[cfg(test)]
+    // pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
+    //     self.runtime
+    //         .block_on(self.inner.pending_count_by_priority())
+    // }
+    // #[cfg(test)]
+    // pub(crate) fn failed_count(&self) -> Result<usize> {
+    //     self.runtime.block_on(self.inner.failed_count())
+    // }
+    // #[cfg(test)]
+    // pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
+    //     self.runtime.block_on(self.inner.queued_crates())
+    // }
 }
 
 // #[cfg(test)]

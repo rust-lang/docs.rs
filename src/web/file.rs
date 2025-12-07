@@ -26,13 +26,11 @@ impl File {
         path: &str,
         config: &Config,
     ) -> Result<File> {
-        let max_size = if path.ends_with(".html") {
-            config.max_file_size_html
-        } else {
-            config.max_file_size
-        };
-
-        Ok(File(storage.get(path, max_size).await?))
+        Ok(File(
+            storage
+                .get(path, config.storage.max_file_size_for(path))
+                .await?,
+        ))
     }
 }
 

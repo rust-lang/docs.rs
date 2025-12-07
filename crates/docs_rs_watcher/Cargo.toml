@@ -14,6 +14,7 @@ docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_utils = { path = "../docs_rs_utils" }
+docs_rs_logging = { path = "../docs_rs_logging" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 rayon = { workspace = true }
@@ -26,6 +27,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+clap = { workspace = true }
+
 
 [dev-dependencies]
 mockito = { workspace = true }

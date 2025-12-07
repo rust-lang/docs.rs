@@ -1,4 +1,5 @@
 mod config;
+pub use config::Config;
 
 use anyhow::Result;
 use opentelemetry::{

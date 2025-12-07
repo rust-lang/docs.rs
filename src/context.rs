@@ -1,19 +1,23 @@
 use crate::{Config, RegistryApi, cdn::CdnMetrics};
 use anyhow::Result;
-use docs_rs_build_queue::AsyncBuildQueue;
+use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_storage::{AsyncStorage, Storage};
+use docs_rs_watcher::repositories::RepositoryStatsUpdater;
 use std::sync::Arc;
 use tokio::runtime;
 
 pub struct Context {
     pub config: Arc<Config>,
+    pub async_build_queue: Arc<AsyncBuildQueue>,
+    pub build_queue: Arc<BuildQueue>,
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
     pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
     pub registry_api: Arc<RegistryApi>,
+    pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
     pub meter_provider: AnyMeterProvider,
 }
@@ -21,8 +25,8 @@ pub struct Context {
 impl Context {
     /// Create a new context environment from the given configuration.
     pub async fn from_config(config: Config) -> Result<Self> {
-        let meter_provider = get_meter_provider(&config)?;
-        let pool = Pool::new(&config, &meter_provider).await?;
+        let meter_provider = get_meter_provider(&config.opentelemetry)?;
+        let pool = Pool::new(&config.database, &meter_provider).await?;
         Self::from_config_with_metrics_and_pool(config, meter_provider, pool).await
     }
 
@@ -46,15 +50,14 @@ impl Context {
     ) -> Result<Self> {
         let config = Arc::new(config);
 
-        let async_storage =
-            Arc::new(AsyncStorage::new(pool.clone(), config.clone(), &meter_provider).await?);
+        let async_storage = Arc::new(
+            AsyncStorage::new(pool.clone(), config.storage.clone(), &meter_provider).await?,
+        );
 
         let cdn_metrics = Arc::new(CdnMetrics::new(&meter_provider));
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
-            config.clone(),
-            async_storage.clone(),
-            cdn_metrics.clone(),
+            config.build_queue.clone(),
             &meter_provider,
         ));
 
@@ -65,17 +68,17 @@ impl Context {
         let storage = Arc::new(Storage::new(async_storage.clone(), runtime.clone()));
 
         Ok(Self {
-            // async_build_queue,
-            // build_queue,
+            async_build_queue,
+            build_queue,
             storage,
             async_storage,
             cdn_metrics,
             pool: pool.clone(),
             registry_api: Arc::new(RegistryApi::new(
-                config.registry_api_host.clone(),
+                config.watcher.registry_api_host.clone(),
                 config.crates_io_api_call_retries,
             )?),
-            // repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
+            repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config.watcher, pool)),
             runtime,
             config,
             meter_provider,

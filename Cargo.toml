@@ -42,6 +42,8 @@ tempfile = "3.1.0"
 http = "1.0.0"
 reqwest = { version = "0.12", features = ["json", "gzip"] }
 rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
+sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+clap = { version = "4.0.22", features = [ "derive" ] }
 
 # dev dependencies
 test-case = "3.0.0"
@@ -56,10 +58,9 @@ axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middl
 base64 = "0.22"
 bincode = { workspace = true }
 chrono = { workspace = true }
-clap = { version = "4.0.22", features = [ "derive" ] }
+clap = { workspace = true }
 comrak = { version = "0.48.0", default-features = false }
 constant_time_eq = "0.4.2"
-derive_builder = "0.20.2"
 derive_more = { workspace = true }
 docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
 docs_rs_utils = { path = "crates/docs_rs_utils" }
@@ -69,6 +70,8 @@ docs_rs_opentelemetry = { path = "crates/docs_rs_opentelemetry" }
 docs_rs_cargo_metadata = { path = "crates/docs_rs_cargo_metadata" }
 docs_rs_storage = { path = "crates/docs_rs_storage" }
 docs_rs_headers = { path = "crates/docs_rs_headers" }
+docs_rs_watcher = { path = "crates/docs_rs_watcher" }
+docs_rs_logging = { path = "crates/docs_rs_logging" }
 docsrs-metadata = { path = "crates/metadata" }
 fn-error-context = "0.2.0"
 font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
@@ -94,7 +97,7 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 rustwide = { workspace = true }
 semver = { workspace = true }
-sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+sentry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
@@ -111,9 +114,8 @@ toml = "0.9.2"
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 tracing = { workspace = true }
-tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 tracing-log = "0.2.0"
-tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
+tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 url = { workspace = true }
 walkdir = { workspace = true }
 
