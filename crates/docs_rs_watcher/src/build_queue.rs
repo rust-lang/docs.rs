@@ -66,7 +66,7 @@ pub async fn get_new_crates(
                 }
             };
 
-            queue_crate_invalidation(krate).await;
+            docs_rs_fastly::queue_crate_invalidation(krate).await;
             build_queue.remove_crate_from_queue(krate).await?;
             continue;
         }

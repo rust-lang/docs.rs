@@ -2155,6 +2155,7 @@ dependencies = [
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",
+ "docs_rs_fastly",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_utils",
