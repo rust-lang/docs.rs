@@ -581,7 +581,7 @@ impl AsyncStorage {
         drop(write_guard);
 
         // Final attempt: if this still fails, bubble the error.
-        return archive_index::find_in_file(local_index_path, path_in_archive).await;
+        archive_index::find_in_file(local_index_path, path_in_archive).await
     }
 
     #[instrument]
