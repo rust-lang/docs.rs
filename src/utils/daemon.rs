@@ -2,43 +2,15 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-use crate::{
-    Context, RustwideBuilder,
-    metrics::service::OtelServiceMetrics,
-    utils::{queue_builder, report_error},
-    web::start_web_server,
-};
-use anyhow::{Context as _, Error, anyhow};
+use crate::{Context, RustwideBuilder, utils::queue_builder, web::start_web_server};
+use anyhow::{Error, anyhow};
 use docs_rs_build_queue::rebuilds::queue_rebuilds;
-use std::future::Future;
+use docs_rs_utils::start_async_cron_in_runtime;
+use docs_rs_watcher::service_metrics::OtelServiceMetrics;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tokio::runtime;
 use tracing::{info, trace};
-
-pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
-    let runtime = context.runtime.clone();
-    let build_queue = context.async_build_queue.clone();
-    let service_metrics = Arc::new(OtelServiceMetrics::new(&context.meter_provider));
-
-    async_cron(
-        &runtime,
-        "background service metric collector",
-        // old prometheus scrape interval seems to have been ~5s, but IMO that's far too frequent
-        // for these service metrics.
-        Duration::from_secs(30),
-        move || {
-            let build_queue = build_queue.clone();
-            let service_metrics = service_metrics.clone();
-            async move {
-                trace!("collecting service metrics");
-                service_metrics.gather(&build_queue).await
-            }
-        },
-    );
-    Ok(())
-}
 
 fn start_registry_watcher(context: &Context) -> Result<(), Error> {
     let build_queue = context.async_build_queue.clone();
@@ -65,7 +37,7 @@ pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
         return Ok(());
     }
 
-    async_cron(
+    start_async_cron_in_runtime(
         &runtime,
         "background queue rebuilder",
         Duration::from_secs(60 * 60),
@@ -90,7 +62,7 @@ pub fn start_background_repository_stats_updater(context: &Context) -> Result<()
     // startup.
     let updater = context.repository_stats_updater.clone();
     let runtime = context.runtime.clone();
-    async_cron(
+    start_async_cron_in_runtime(
         &runtime,
         "repository stats updater",
         Duration::from_secs(60 * 60),
@@ -145,25 +117,25 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
         .map_err(|err| anyhow!("web server panicked: {:?}", err))?
 }
 
-pub(crate) fn async_cron<F, Fut>(
-    runtime: &runtime::Handle,
-    name: &'static str,
-    interval: Duration,
-    exec: F,
-) where
-    Fut: Future<Output = Result<(), Error>> + Send,
-    F: Fn() -> Fut + Send + 'static,
-{
-    runtime.spawn(async move {
-        let mut interval = tokio::time::interval(interval);
-        loop {
-            interval.tick().await;
-            if let Err(err) = exec()
-                .await
-                .with_context(|| format!("failed to run scheduled task '{name}'"))
-            {
-                report_error(&err);
+pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    let build_queue = context.async_build_queue.clone();
+    let service_metrics = Arc::new(OtelServiceMetrics::new(&context.meter_provider));
+
+    start_async_cron_in_runtime(
+        &runtime,
+        "background service metric collector",
+        // old prometheus scrape interval seems to have been ~5s, but IMO that's far too frequent
+        // for these service metrics.
+        Duration::from_secs(30),
+        move || {
+            let build_queue = build_queue.clone();
+            let service_metrics = service_metrics.clone();
+            async move {
+                trace!("collecting service metrics");
+                service_metrics.gather(&build_queue).await
             }
-        }
-    });
+        },
+    );
+    Ok(())
 }

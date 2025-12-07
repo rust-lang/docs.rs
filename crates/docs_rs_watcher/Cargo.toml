@@ -7,16 +7,20 @@ edition = "2024"
 anyhow = { workspace = true }
 async-trait = "0.1.83"
 chrono = { workspace = true }
+clap = { workspace = true }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
 crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
 docs_rs_build_queue = { path = "../docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_context = { path = "../docs_rs_context" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
-docs_rs_utils = { path = "../docs_rs_utils" }
 docs_rs_logging = { path = "../docs_rs_logging" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
+opentelemetry = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
@@ -27,7 +31,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-clap = { workspace = true }
 
 
 [dev-dependencies]

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::{panic, thread, time::Duration};
-use tracing::{Span, warn};
+use tokio::runtime;
+use tracing::{Span, error, warn};
 
 /// Version string generated at build time contains last git
 /// commit hash and build date
@@ -110,4 +111,33 @@ where
         }
     }
     unreachable!();
+}
+
+pub fn start_async_cron<F, Fut>(name: &'static str, interval: Duration, exec: F)
+where
+    Fut: Future<Output = Result<()>> + Send,
+    F: Fn() -> Fut + Send + 'static,
+{
+    start_async_cron_in_runtime(&runtime::Handle::current(), name, interval, exec)
+}
+
+pub fn start_async_cron_in_runtime<F, Fut>(
+    runtime: &runtime::Handle,
+    name: &'static str,
+    interval: Duration,
+    exec: F,
+) where
+    Fut: Future<Output = Result<()>> + Send,
+    F: Fn() -> Fut + Send + 'static,
+{
+    runtime.spawn(async move {
+        let mut interval = tokio::time::interval(interval);
+        loop {
+            interval.tick().await;
+            if let Err(err) = exec().await {
+                // FIXME: is there value in report_error over tracing::error!?
+                error!(?err, name, "failed to run scheduled task");
+            }
+        }
+    });
 }

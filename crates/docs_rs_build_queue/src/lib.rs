@@ -47,7 +47,7 @@ pub struct AsyncBuildQueue {
 }
 
 impl AsyncBuildQueue {
-    pub fn new(db: Pool, config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Self {
+    pub fn new(db: Pool, config: &Config, otel_meter_provider: &AnyMeterProvider) -> Self {
         AsyncBuildQueue {
             max_attempts: config.build_attempts.into(),
             db,

@@ -1990,6 +1990,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_context"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_build_queue",
+ "docs_rs_database",
+ "docs_rs_opentelemetry",
+]
+
+[[package]]
 name = "docs_rs_database"
 version = "0.1.0"
 dependencies = [
@@ -2115,13 +2125,16 @@ dependencies = [
  "crates-index-diff",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
+ "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_logging",
+ "docs_rs_opentelemetry",
  "docs_rs_utils",
  "futures-util",
  "itertools 0.14.0",
  "mockito",
+ "opentelemetry",
  "rayon",
  "regex",
  "reqwest",

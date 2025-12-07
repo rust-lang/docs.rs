@@ -1,0 +1,10 @@
+[package]
+name = "docs_rs_context"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_build_queue = { path = "../docs_rs_build_queue" }

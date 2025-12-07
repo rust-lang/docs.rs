@@ -2,6 +2,7 @@ mod config;
 mod consistency;
 mod index;
 pub mod repositories;
+pub mod service_metrics;
 mod utils;
 
 pub use config::Config;

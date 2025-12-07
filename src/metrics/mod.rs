@@ -1,5 +1,3 @@
-pub(crate) mod service;
-
 /// the measured times from cdn invalidations, meaning:
 /// * how long an invalidation took, or
 /// * how long the invalidation was queued

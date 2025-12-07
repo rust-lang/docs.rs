@@ -41,7 +41,7 @@ impl OtelServiceMetrics {
         }
     }
 
-    pub(crate) async fn gather(&self, queue: &AsyncBuildQueue) -> Result<(), Error> {
+    pub async fn gather(&self, queue: &AsyncBuildQueue) -> Result<(), Error> {
         self.queue_is_locked
             .record(queue.is_locked().await? as u64, &[]);
         self.queued_crates_count

@@ -12,4 +12,5 @@ tracing = { workspace = true }
 [build-dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }
 time = "0.3"
