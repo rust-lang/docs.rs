@@ -3,7 +3,7 @@
 pub mod page;
 
 use crate::{
-    db::types::{BuildStatus, krate_name::KrateName},
+    db::types::BuildStatus,
     utils::get_correct_docsrs_style_file,
     web::{
         metrics::WebMetrics,
@@ -13,7 +13,7 @@ use crate::{
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
-use docs_rs_database::types::{CrateId, version::Version};
+use docs_rs_database::types::{CrateId, krate_name::KrateName, version::Version};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, instrument};

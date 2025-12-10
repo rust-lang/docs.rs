@@ -9,8 +9,6 @@ use crate::{
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        headers::CanonicalUrl,
-        headers::IfNoneMatch,
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -20,6 +18,7 @@ use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use docs_rs_database::types::{BuildId, version::Version};
+use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
 use docs_rs_storage::{
     AsyncStorage,
     errors::{PathNotFoundError, SizeLimitReached},

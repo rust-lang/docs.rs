@@ -1,6 +1,6 @@
 //! Database based file handler
 
-use super::{cache::CachePolicy, headers::IfNoneMatch};
+use super::cache::CachePolicy;
 use crate::{Config, error::Result};
 use axum::{
     body::Body,
@@ -12,6 +12,7 @@ use axum_extra::{
     TypedHeader,
     headers::{ContentType, LastModified},
 };
+use docs_rs_headers::IfNoneMatch;
 use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
 use std::time::SystemTime;
 use tokio_util::io::ReaderStream;

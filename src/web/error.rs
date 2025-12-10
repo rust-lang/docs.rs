@@ -1,4 +1,4 @@
-use crate::web::{AxumErrorPage, cache::CachePolicy, escaped_uri::EscapedURI, releases::Search};
+use crate::web::{AxumErrorPage, cache::CachePolicy, releases::Search};
 use anyhow::{Result, anyhow};
 use axum::{
     Json,
@@ -7,6 +7,7 @@ use axum::{
 };
 use docs_rs_database::PoolError;
 use docs_rs_storage::errors::PathNotFoundError;
+use docs_rs_web_utils::escaped_uri::EscapedURI;
 use std::borrow::Cow;
 use tracing::error;
 

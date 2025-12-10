@@ -1,11 +1,4 @@
-use crate::{
-    config::Config,
-    db::types::krate_name::KrateName,
-    web::{
-        extractors::Path,
-        headers::{SURROGATE_CONTROL, SURROGATE_KEY, SurrogateKeys},
-    },
-};
+use crate::{config::Config, web::extractors::Path};
 use axum::{
     Extension,
     extract::{MatchedPath, Request as AxumHttpRequest},
@@ -13,6 +6,8 @@ use axum::{
     response::Response as AxumResponse,
 };
 use axum_extra::headers::HeaderMapExt as _;
+use docs_rs_database::types::krate_name::KrateName;
+use docs_rs_headers::{SURROGATE_CONTROL, SURROGATE_KEY, SurrogateKeys};
 use http::{
     HeaderMap, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, ETAG},

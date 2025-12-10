@@ -1,5 +1,5 @@
 use crate::{
-    db::types::{BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName},
+    db::types::{BuildStatus, dependencies::ReleaseDependencyList},
     impl_axum_webpage,
     registry_api::OwnerKind,
     utils::get_correct_docsrs_style_file,
@@ -11,7 +11,6 @@ use crate::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
-        headers::CanonicalUrl,
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -24,7 +23,9 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::Dependency;
+use docs_rs_database::types::krate_name::KrateName;
 use docs_rs_database::types::{BuildId, CrateId, ReleaseId, version::Version};
+use docs_rs_headers::CanonicalUrl;
 use docs_rs_storage::{AsyncStorage, errors::PathNotFoundError};
 use futures_util::stream::TryStreamExt;
 use log::warn;

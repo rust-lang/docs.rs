@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use docs_rs_database::types::version::Version;
-use rustwide::{Toolchain, Workspace, cmd::Command};
+// use rustwide::{Toolchain, Workspace, cmd::Command};
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,21 +11,21 @@ pub struct CargoMetadata {
 }
 
 impl CargoMetadata {
-    pub fn load_from_rustwide(
-        workspace: &Workspace,
-        toolchain: &Toolchain,
-        source_dir: &Path,
-    ) -> Result<Self> {
-        let res = Command::new(workspace, toolchain.cargo())
-            .args(&["metadata", "--format-version", "1"])
-            .cd(source_dir)
-            .log_output(false)
-            .run_capture()?;
-        let [metadata] = res.stdout_lines() else {
-            bail!("invalid output returned by `cargo metadata`")
-        };
-        Self::load_from_metadata(metadata)
-    }
+    // pub fn load_from_rustwide(
+    //     workspace: &Workspace,
+    //     toolchain: &Toolchain,
+    //     source_dir: &Path,
+    // ) -> Result<Self> {
+    //     let res = Command::new(workspace, toolchain.cargo())
+    //         .args(&["metadata", "--format-version", "1"])
+    //         .cd(source_dir)
+    //         .log_output(false)
+    //         .run_capture()?;
+    //     let [metadata] = res.stdout_lines() else {
+    //         bail!("invalid output returned by `cargo metadata`")
+    //     };
+    //     Self::load_from_metadata(metadata)
+    // }
 
     #[cfg(test)]
     pub fn load_from_host_path(source_dir: &Path) -> Result<Self> {

@@ -11,7 +11,6 @@ pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
 
-pub mod cdn;
 mod config;
 mod context;
 pub mod db;

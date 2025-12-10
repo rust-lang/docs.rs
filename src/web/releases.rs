@@ -5,7 +5,7 @@ use crate::{
     Config, RegistryApi, impl_axum_webpage,
     utils::report_error,
     web::{
-        ReqVersion, axum_redirect, encode_url_path,
+        ReqVersion, axum_redirect,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
@@ -24,6 +24,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_database::types::version::Version;
+use docs_rs_web_utils::encode_url_path;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};

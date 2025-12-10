@@ -10,13 +10,11 @@ use crate::{
         crate_details::CrateDetails,
         csp::Csp,
         error::{AxumNope, AxumResult},
-        escaped_uri::EscapedURI,
         extractors::{
             DbConnection, Path, WantedCompression,
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        headers::{IfNoneMatch, X_ROBOTS_TAG},
         licenses, match_version,
         metrics::WebMetrics,
         page::{
@@ -41,11 +39,13 @@ use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_database::types::version::Version;
 use docs_rs_headers::etag::ETagComputer;
+use docs_rs_headers::{IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_storage::{
     AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob,
     errors::PathNotFoundError, rustdoc_archive_path, rustdoc_json_path,
 };
 use docs_rs_utils::BUILD_VERSION;
+use docs_rs_web_utils::escaped_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{

@@ -1,4 +1,4 @@
-use crate::{Config, RegistryApi, cdn::CdnMetrics};
+use crate::{Config, RegistryApi};
 use anyhow::Result;
 use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::Pool;
@@ -14,7 +14,7 @@ pub struct Context {
     pub build_queue: Arc<BuildQueue>,
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
-    pub cdn_metrics: Arc<CdnMetrics>,
+    // pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
     pub registry_api: Arc<RegistryApi>,
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,

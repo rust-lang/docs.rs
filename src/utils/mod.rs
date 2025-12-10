@@ -7,17 +7,16 @@ pub(crate) use self::{
 };
 pub use self::{
     daemon::start_daemon,
-    queue::{
-        get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
-        remove_crate_priority, set_crate_priority,
-    },
+    // queue::{
+    //     get_crate_pattern_and_priority, get_crate_priority, list_crate_priorities,
+    //     remove_crate_priority, set_crate_priority,
+    // },
     queue_builder::queue_builder,
 };
 
 mod copy;
 pub mod daemon;
 mod html;
-mod queue;
 pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;
 
