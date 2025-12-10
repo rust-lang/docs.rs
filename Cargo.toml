@@ -43,7 +43,7 @@ opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
-rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { version = "0.21.0", features = ["unstable-toolchain-ci", "unstable"] }
 mime_guess = "2"
 zstd = "0.13.0"
 flate2 = "1.1.1"
