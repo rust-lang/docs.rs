@@ -2158,6 +2158,7 @@ dependencies = [
  "docs_rs_fastly",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
+ "docs_rs_storage",
  "docs_rs_utils",
  "futures-util",
  "itertools 0.14.0",

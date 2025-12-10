@@ -18,6 +18,7 @@ docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_logging = { path = "../docs_rs_logging" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_storage = { path = "../docs_rs_storage" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }

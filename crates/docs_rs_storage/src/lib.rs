@@ -16,7 +16,7 @@ use self::{
     s3::S3Backend,
 };
 use crate::file::FileEntry;
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use docs_rs_database::{
@@ -919,9 +919,39 @@ impl AsyncStorage {
 
     pub async fn delete_prefix(&self, prefix: &str) -> Result<()> {
         match &self.backend {
-            StorageBackend::Database(db) => db.delete_prefix(prefix).await,
-            StorageBackend::S3(s3) => s3.delete_prefix(prefix).await,
+            StorageBackend::Database(db) => db.delete_prefix(prefix).await?,
+            StorageBackend::S3(s3) => s3.delete_prefix(prefix).await?,
         }
+
+        // remove existing local archive index files.
+        let local_index_folder = self.config.local_archive_cache_path.join(&prefix);
+        if local_index_folder.exists() {
+            // FIXME: make this work when prefix is not a folder?
+            tokio::fs::remove_dir_all(&local_index_folder)
+                .await
+                .with_context(|| {
+                    format!(
+                        "error when trying to remove local index: {:?}",
+                        &local_index_folder
+                    )
+                })?;
+        }
+
+        // for archive_filename in paths {
+        //     // delete remove archive and remote index
+        //     storage.delete_prefix(&archive_filename).await?;
+
+        //     // delete eventually existing local indexes
+        //     let local_index_file = local_archive_cache.join(format!("{archive_filename}.index"));
+        //     if local_index_file.exists() {
+        //         tokio::fs::remove_file(&local_index_file)
+        //             .await
+        //             .with_context(|| {
+        //                 format!("error when trying to remove local index: {local_index_file:?}")
+        //             })?;
+        //     }
+        // }
+        Ok(())
     }
 
     // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests

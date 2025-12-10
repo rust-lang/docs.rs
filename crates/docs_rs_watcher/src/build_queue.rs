@@ -1,12 +1,16 @@
-use std::sync::Arc;
-
-use crate::{index::Index, priorities::get_crate_priority};
+use crate::{
+    db::delete::{delete_crate, delete_version},
+    index::Index,
+    priorities::get_crate_priority,
+};
 use anyhow::{Context as _, Result};
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
-    types::version::Version,
+    types::{krate_name::KrateName, version::Version},
 };
+use docs_rs_fastly::Cdn;
+use docs_rs_storage::AsyncStorage;
 use tracing::{debug, error, info, warn};
 
 pub async fn last_seen_reference(
@@ -31,7 +35,9 @@ pub async fn set_last_seen_reference(
 pub async fn get_new_crates(
     conn: &mut sqlx::PgConnection,
     index: &Index,
-    build_queue: Arc<AsyncBuildQueue>,
+    build_queue: &AsyncBuildQueue,
+    storage: &AsyncStorage,
+    cdn: &Cdn,
 ) -> Result<usize> {
     let last_seen_reference = last_seen_reference(conn).await?;
     let last_seen_reference = if let Some(oid) = last_seen_reference {
@@ -55,7 +61,7 @@ pub async fn get_new_crates(
 
     for change in &changes {
         if let Some((ref krate, ..)) = change.crate_deleted() {
-            match delete_crate(&mut conn, &storage, &config, krate).await {
+            match delete_crate(&mut conn, &storage, krate).await {
                 Ok(_) => info!(
                     "crate {} was deleted from the index and the database",
                     krate
@@ -66,8 +72,10 @@ pub async fn get_new_crates(
                 }
             };
 
-            docs_rs_fastly::queue_crate_invalidation(krate).await;
-            build_queue.remove_crate_from_queue(krate).await?;
+            let krate: KrateName = krate.parse().unwrap();
+
+            cdn.queue_crate_invalidation(&krate).await;
+            build_queue.remove_crate_from_queue(&krate).await?;
             continue;
         }
 
@@ -77,7 +85,7 @@ pub async fn get_new_crates(
                 .parse()
                 .context("couldn't parse release version as semver")?;
 
-            match delete_version(&mut conn, &storage, &config, &release.name, &version).await {
+            match delete_version(&mut conn, &storage, &release.name, &version).await {
                 Ok(_) => info!(
                     "release {}-{} was deleted from the index and the database",
                     release.name, release.version
@@ -87,7 +95,8 @@ pub async fn get_new_crates(
                 }
             }
 
-            queue_crate_invalidation(&release.name).await;
+            let krate: KrateName = release.name.parse().unwrap();
+            cdn.queue_crate_invalidation(&krate).await;
             build_queue
                 .remove_version_from_queue(&release.name, &version)
                 .await?;
@@ -139,7 +148,7 @@ pub async fn get_new_crates(
                 error!(?err, %release.name, %release.version, "error setting yanked status");
             }
 
-            queue_crate_invalidation(&release.name).await;
+            cdn.queue_crate_invalidation(&release.name).await;
         }
     }
 

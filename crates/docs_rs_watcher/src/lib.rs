@@ -1,6 +1,7 @@
 mod build_queue;
 mod config;
 mod consistency;
+pub(crate) mod db;
 mod index;
 mod priorities;
 pub mod repositories;

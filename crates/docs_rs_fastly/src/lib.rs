@@ -13,14 +13,14 @@ use http::{
 use itertools::Itertools as _;
 use opentelemetry::KeyValue;
 use std::sync::OnceLock;
-use tracing::{error, info, instrument};
+use tracing::error;
 
 const FASTLY_KEY: HeaderName = HeaderName::from_static("fastly-key");
 
 // https://www.fastly.com/documentation/reference/api/#rate-limiting
 const FASTLY_RATELIMIT_REMAINING: HeaderName =
     HeaderName::from_static("fastly-ratelimit-remaining");
-const FASTLY_RATELIMIT_RESET: HeaderName = HeaderName::from_static("fastyly-ratelimit-reset");
+const FASTLY_RATELIMIT_RESET: HeaderName = HeaderName::from_static("fastly-ratelimit-reset");
 
 static CLIENT: OnceLock<Result<reqwest::Client>> = OnceLock::new();
 
@@ -55,137 +55,140 @@ fn fetch_rate_limit_state(headers: &HeaderMap) -> (Option<u64>, Option<DateTime<
     )
 }
 
-/// Purge the given surrogate keys from all configured fastly services.
-///
-/// Accepts any number of surrogate keys, and splits them into appropriately sized
-/// batches for the Fastly API.
-pub(crate) async fn purge_surrogate_keys<I>(
-    config: &config::Config,
-    metrics: &metrics::CdnMetrics,
-    keys: I,
-) -> Result<()>
-where
-    I: IntoIterator<Item = SurrogateKey>,
-{
-    let Some(api_token) = &config.api_token else {
-        bail!("Fastly API token not configured");
-    };
-
-    let client = fastly_client(api_token)?;
-
-    let record_rate_limit_metrics =
-        |limit_remaining: Option<u64>, limit_reset: Option<DateTime<Utc>>| {
-            if let Some(limit_remaining) = limit_remaining {
-                metrics.rate_limit_remaining.record(limit_remaining, &[]);
-            }
-
-            if let Some(limit_reset) = limit_reset {
-                metrics
-                    .time_until_rate_limit_reset
-                    .record((limit_reset - Utc::now()).num_seconds() as u64, &[]);
-            }
-        };
-
-    // the `bulk_purge_tag` supports up to 256 surrogate keys in its list,
-    // but I believe we also have to respect the length limits for the full
-    // surrogate key header we send in this purge request.
-    // see https://www.fastly.com/documentation/reference/api/purging/
-    for encoded_surrogate_keys in keys.into_iter().batching(|it| {
-        const MAX_SURROGATE_KEYS_IN_BATCH_PURGE: usize = 256;
-
-        // SurrogateKeys::from_iter::until_full only consumes as many elements as will fit into
-        // the header.
-        // The rest is up to the next `batching` iteration.
-        let keys = SurrogateKeys::from_iter_until_full(it.take(MAX_SURROGATE_KEYS_IN_BATCH_PURGE));
-
-        if keys.key_count() > 0 {
-            Some(keys)
-        } else {
-            None
-        }
-    }) {
-        if let Some(ref sid) = config.service_sid {
-            // NOTE: we start with just calling the API, and logging an error if they happen.
-            // We can then see if we need retries or escalation to full purges.
-
-            let kv = [KeyValue::new("service_sid", sid.clone())];
-
-            // https://www.fastly.com/documentation/reference/api/purging/
-            // TODO: investigate how they could help & test
-            // soft purge. But later, after the initial migration.
-            match client
-                .post(config.api_host.join(&format!("/service/{}/purge", sid))?)
-                .header(&SURROGATE_KEY, encoded_surrogate_keys.to_string())
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    metrics.batch_purges_with_surrogate.add(1, &kv);
-                    metrics
-                        .purge_surrogate_keys
-                        .add(encoded_surrogate_keys.key_count() as u64, &kv);
-
-                    let (limit_remaining, limit_reset) = fetch_rate_limit_state(response.headers());
-                    record_rate_limit_metrics(limit_remaining, limit_reset);
-                }
-                Ok(error_response) => {
-                    metrics.batch_purge_errors.add(1, &kv);
-
-                    let (limit_remaining, limit_reset) =
-                        fetch_rate_limit_state(error_response.headers());
-                    record_rate_limit_metrics(limit_remaining, limit_reset);
-
-                    let limit_reset = limit_reset.map(|dt| dt.to_rfc3339());
-
-                    let status = error_response.status();
-                    let content = error_response.text().await.unwrap_or_default();
-                    error!(
-                        sid,
-                        %status,
-                        content,
-                        %encoded_surrogate_keys,
-                        rate_limit_remaining=limit_remaining,
-                        rate_limit_reset=limit_reset,
-                        "Failed to purge Fastly surrogate keys for service"
-                    );
-                }
-                Err(err) => {
-                    // connection errors or similar, where we don't have a response
-                    metrics.batch_purge_errors.add(1, &kv);
-                    error!(
-                        sid,
-                        ?err,
-                        %encoded_surrogate_keys,
-                        "Failed to purge Fastly surrogate keys for service"
-                    );
-                }
-            };
-        }
-    }
-
-    Ok(())
+pub struct Cdn {
+    config: config::Config,
+    metrics: metrics::CdnMetrics,
 }
 
-#[instrument(skip(config))]
-pub async fn queue_crate_invalidation(
-    config: &config::Config,
-    metrics: &metrics::CdnMetrics,
-    krate_name: &KrateName,
-) -> Result<()> {
-    if config.api_token.is_some()
-        && let Err(err) = purge_surrogate_keys(
-            config,
-            metrics,
-            std::iter::once(SurrogateKey::from(krate_name.clone())),
-        )
-        .await
+impl Cdn {
+    /// Purge the given surrogate keys from all configured fastly services.
+    ///
+    /// Accepts any number of surrogate keys, and splits them into appropriately sized
+    /// batches for the Fastly API.
+    pub(crate) async fn purge_surrogate_keys<I>(&self, keys: I) -> Result<()>
+    where
+        I: IntoIterator<Item = SurrogateKey>,
     {
-        // TODO: for now just consume & report the error, I want to see how often that happens.
-        // We can then decide if we need more protection mechanisms (like retries or queuing).
-        error!(%krate_name, ?err, "error purging Fastly surrogate keys");
+        let Some(api_token) = &self.config.api_token else {
+            bail!("Fastly API token not configured");
+        };
+
+        let client = fastly_client(api_token)?;
+
+        let record_rate_limit_metrics =
+            |limit_remaining: Option<u64>, limit_reset: Option<DateTime<Utc>>| {
+                if let Some(limit_remaining) = limit_remaining {
+                    self.metrics
+                        .rate_limit_remaining
+                        .record(limit_remaining, &[]);
+                }
+
+                if let Some(limit_reset) = limit_reset {
+                    self.metrics
+                        .time_until_rate_limit_reset
+                        .record((limit_reset - Utc::now()).num_seconds() as u64, &[]);
+                }
+            };
+
+        // the `bulk_purge_tag` supports up to 256 surrogate keys in its list,
+        // but I believe we also have to respect the length limits for the full
+        // surrogate key header we send in this purge request.
+        // see https://www.fastly.com/documentation/reference/api/purging/
+        for encoded_surrogate_keys in keys.into_iter().batching(|it| {
+            const MAX_SURROGATE_KEYS_IN_BATCH_PURGE: usize = 256;
+
+            // SurrogateKeys::from_iter::until_full only consumes as many elements as will fit into
+            // the header.
+            // The rest is up to the next `batching` iteration.
+            let keys =
+                SurrogateKeys::from_iter_until_full(it.take(MAX_SURROGATE_KEYS_IN_BATCH_PURGE));
+
+            if keys.key_count() > 0 {
+                Some(keys)
+            } else {
+                None
+            }
+        }) {
+            if let Some(ref sid) = self.config.service_sid {
+                // NOTE: we start with just calling the API, and logging an error if they happen.
+                // We can then see if we need retries or escalation to full purges.
+
+                let kv = [KeyValue::new("service_sid", sid.clone())];
+
+                // https://www.fastly.com/documentation/reference/api/purging/
+                // TODO: investigate how they could help & test
+                // soft purge. But later, after the initial migration.
+                match client
+                    .post(
+                        self.config
+                            .api_host
+                            .join(&format!("/service/{}/purge", sid))?,
+                    )
+                    .header(&SURROGATE_KEY, encoded_surrogate_keys.to_string())
+                    .send()
+                    .await
+                {
+                    Ok(response) if response.status().is_success() => {
+                        self.metrics.batch_purges_with_surrogate.add(1, &kv);
+                        self.metrics
+                            .purge_surrogate_keys
+                            .add(encoded_surrogate_keys.key_count() as u64, &kv);
+
+                        let (limit_remaining, limit_reset) =
+                            fetch_rate_limit_state(response.headers());
+                        record_rate_limit_metrics(limit_remaining, limit_reset);
+                    }
+                    Ok(error_response) => {
+                        self.metrics.batch_purge_errors.add(1, &kv);
+
+                        let (limit_remaining, limit_reset) =
+                            fetch_rate_limit_state(error_response.headers());
+                        record_rate_limit_metrics(limit_remaining, limit_reset);
+
+                        let limit_reset = limit_reset.map(|dt| dt.to_rfc3339());
+
+                        let status = error_response.status();
+                        let content = error_response.text().await.unwrap_or_default();
+                        error!(
+                            sid,
+                            %status,
+                            content,
+                            %encoded_surrogate_keys,
+                            rate_limit_remaining=limit_remaining,
+                            rate_limit_reset=limit_reset,
+                            "Failed to purge Fastly surrogate keys for service"
+                        );
+                    }
+                    Err(err) => {
+                        // connection errors or similar, where we don't have a response
+                        self.metrics.batch_purge_errors.add(1, &kv);
+                        error!(
+                            sid,
+                            ?err,
+                            %encoded_surrogate_keys,
+                            "Failed to purge Fastly surrogate keys for service"
+                        );
+                    }
+                };
+            }
+        }
+
+        Ok(())
     }
 
-    Ok(())
+    pub async fn queue_crate_invalidation(&self, krate_name: &KrateName) -> Result<()> {
+        if self.config.api_token.is_some()
+            && let Err(err) = self
+                .purge_surrogate_keys(std::iter::once(SurrogateKey::from(krate_name.clone())))
+                .await
+        {
+            // TODO: for now just consume & report the error, I want to see how often that happens.
+            // We can then decide if we need more protection mechanisms (like retries or queuing).
+            error!(%krate_name, ?err, "error purging Fastly surrogate keys");
+        }
+
+        Ok(())
+    }
 }
 
 // #[cfg(test)]
