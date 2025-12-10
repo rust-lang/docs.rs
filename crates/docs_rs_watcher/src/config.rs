@@ -20,6 +20,9 @@ pub struct Config {
 
     // GitLab authentication
     pub gitlab_accesstoken: Option<String>,
+
+    // automatic rebuild configuration
+    pub max_queued_rebuilds: Option<u16>,
 }
 
 impl Config {
@@ -40,6 +43,7 @@ impl Config {
             github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?,
             gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
+            max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
         })
     }
 }

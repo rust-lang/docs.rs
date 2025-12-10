@@ -1,12 +1,12 @@
 use anyhow::{Context as _, Result};
 use clap::Parser;
-use docs_rs_build_queue::{AsyncBuildQueue, rebuilds::queue_rebuilds};
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_utils::start_async_cron;
 use docs_rs_watcher::{
-    Config, repositories::RepositoryStatsUpdater, service_metrics::OtelServiceMetrics,
-    watch_registry,
+    Config, rebuilds::queue_rebuilds, repositories::RepositoryStatsUpdater,
+    service_metrics::OtelServiceMetrics, watch_registry,
 };
 use std::{sync::Arc, time::Duration};
 use tracing::{info, trace};
@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         .with_build_queue()
         .await?;
 
-    let config = Config::from_environment()?;
+    let config = Arc::new(Config::from_environment()?);
 
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         start_background_repository_stats_updater(&config, pool.clone());
     }
     if args.queue_rebuilds {
-        start_background_queue_rebuild(pool.clone(), build_queue.clone())?;
+        start_background_queue_rebuild(config.clone(), pool.clone(), build_queue.clone())?;
     }
 
     // When people run the services separately, we assume that we can collect service
@@ -81,10 +81,11 @@ fn start_background_repository_stats_updater(config: &Config, pool: Pool) {
     );
 }
 
-fn start_background_queue_rebuild(pool: Pool, build_queue: Arc<AsyncBuildQueue>) -> Result<()> {
-    // TODO: is refetching th config ok here? or should we store it globally somewhere?
-    let config = Arc::new(docs_rs_build_queue::Config::from_environment()?);
-
+fn start_background_queue_rebuild(
+    config: Arc<Config>,
+    pool: Pool,
+    build_queue: Arc<AsyncBuildQueue>,
+) -> Result<()> {
     if config.max_queued_rebuilds.is_none() {
         info!("rebuild config incomplete, skipping rebuild queueing");
         return Ok(());
