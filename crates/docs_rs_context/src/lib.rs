@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use docs_rs_build_queue::{AsyncBuildQueue, Config};
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use std::sync::Arc;

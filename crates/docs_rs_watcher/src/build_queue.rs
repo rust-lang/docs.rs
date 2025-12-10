@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
-    types::{krate_name::KrateName, version::Version},
+    types::{CrateId, krate_name::KrateName, version::Version},
 };
 use docs_rs_fastly::Cdn;
 use docs_rs_storage::AsyncStorage;
@@ -61,7 +61,7 @@ pub async fn get_new_crates(
 
     for change in &changes {
         if let Some((ref krate, ..)) = change.crate_deleted() {
-            match delete_crate(&mut conn, &storage, krate).await {
+            match delete_crate(&mut *conn, &storage, krate).await {
                 Ok(_) => info!(
                     "crate {} was deleted from the index and the database",
                     krate
@@ -85,7 +85,7 @@ pub async fn get_new_crates(
                 .parse()
                 .context("couldn't parse release version as semver")?;
 
-            match delete_version(&mut conn, &storage, &release.name, &version).await {
+            match delete_version(&mut *conn, &storage, &release.name, &version).await {
                 Ok(_) => info!(
                     "release {}-{} was deleted from the index and the database",
                     release.name, release.version
@@ -104,7 +104,7 @@ pub async fn get_new_crates(
         }
 
         if let Some(release) = change.added() {
-            let priority = get_crate_priority(&mut conn, &release.name).await?;
+            let priority = get_crate_priority(&mut *conn, &release.name).await?;
 
             match build_queue
                 .add_crate(
@@ -138,7 +138,8 @@ pub async fn get_new_crates(
             // https://github.com/rust-lang/docs.rs/issues/1934
             if let Ok(release_version) = Version::parse(&release.version)
                 && let Err(err) = set_yanked_inner(
-                    &mut conn,
+                    &mut *conn,
+                    build_queue,
                     release.name.as_str(),
                     &release_version,
                     yanked.is_some(),
@@ -148,7 +149,8 @@ pub async fn get_new_crates(
                 error!(?err, %release.name, %release.version, "error setting yanked status");
             }
 
-            cdn.queue_crate_invalidation(&release.name).await;
+            let krate: KrateName = release.name.parse().unwrap();
+            cdn.queue_crate_invalidation(&krate).await;
         }
     }
 
@@ -158,4 +160,60 @@ pub async fn get_new_crates(
     set_last_seen_reference(conn, new_reference).await?;
 
     Ok(crates_added)
+}
+
+async fn set_yanked_inner(
+    conn: &mut sqlx::PgConnection,
+    build_queue: &AsyncBuildQueue,
+    name: &str,
+    version: &Version,
+    yanked: bool,
+) -> Result<()> {
+    let activity = if yanked { "yanked" } else { "unyanked" };
+
+    if let Some(crate_id) = sqlx::query_scalar!(
+        r#"UPDATE releases
+         SET yanked = $3
+         FROM crates
+         WHERE crates.id = releases.crate_id
+             AND name = $1
+             AND version = $2
+        RETURNING crates.id as "id: CrateId"
+        "#,
+        name,
+        version as _,
+        yanked,
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    {
+        debug!(
+            %name,
+            %version,
+            %activity,
+            "updating latest version id"
+        );
+        // FIXME: update_latest_version_id(&mut *conn, crate_id).await?;
+    } else {
+        match build_queue.has_build_queued(name, version).await {
+            Ok(false) => {
+                error!(
+                    %name,
+                    %version,
+                    "tried to yank or unyank non-existing release",
+                );
+            }
+            Ok(true) => {
+                // the rustwide builder will fetch the current yank state from
+                // crates.io, so and missed update here will be fixed after the
+                // build is finished.
+            }
+            Err(err) => {
+                // FIXME: add back report_error?
+                error!(?err, "error trying to fetch build queue");
+            }
+        }
+    }
+
+    Ok(())
 }

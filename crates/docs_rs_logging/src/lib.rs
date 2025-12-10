@@ -6,6 +6,7 @@ use std::{env, str::FromStr as _, sync::Arc};
 use tracing_subscriber::{EnvFilter, filter::Directive, prelude::*};
 
 pub struct Guard {
+    #[allow(dead_code)]
     sentry_guard: Option<sentry::ClientInitGuard>,
 }
 
