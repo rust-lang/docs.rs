@@ -56,6 +56,22 @@ const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
 pub const RUSTDOC_JSON_COMPRESSION_ALGORITHMS: &[CompressionAlgorithm] =
     &[CompressionAlgorithm::Zstd, CompressionAlgorithm::Gzip];
 
+pub fn load_metadata_from_rustwide(
+    workspace: &Workspace,
+    toolchain: &Toolchain,
+    source_dir: &Path,
+) -> Result<CargoMetadata> {
+    let res = Command::new(workspace, toolchain.cargo())
+        .args(&["metadata", "--format-version", "1"])
+        .cd(source_dir)
+        .log_output(false)
+        .run_capture()?;
+    let [metadata] = res.stdout_lines() else {
+        bail!("invalid output returned by `cargo metadata`")
+    };
+    CargoMetadata::load_from_metadata(metadata)
+}
+
 /// read the format version from a rustdoc JSON file.
 pub fn read_format_version_from_rustdoc_json(
     reader: impl std::io::Read,
@@ -530,7 +546,7 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
+        let metadata = load_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
             .map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
@@ -1147,7 +1163,7 @@ impl RustwideBuilder {
         create_essential_files: bool,
         collect_metrics: bool,
     ) -> Result<FullBuildResult> {
-        let cargo_metadata = CargoMetadata::load_from_rustwide(
+        let cargo_metadata = load_metadata_from_rustwide(
             &self.workspace,
             &self.toolchain,
             &build.host_source_dir(),

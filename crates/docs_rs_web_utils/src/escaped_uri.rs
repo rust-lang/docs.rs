@@ -200,7 +200,7 @@ impl EscapedURI {
         self.uri
     }
 
-    pub(crate) fn with_fragment(mut self, fragment: impl AsRef<str>) -> Self {
+    pub fn with_fragment(mut self, fragment: impl AsRef<str>) -> Self {
         self.fragment = Some(encode_url_path(fragment.as_ref()));
         self
     }

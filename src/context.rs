@@ -14,7 +14,6 @@ pub struct Context {
     pub build_queue: Arc<BuildQueue>,
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
-    // pub cdn_metrics: Arc<CdnMetrics>,
     pub pool: Pool,
     pub registry_api: Arc<RegistryApi>,
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
@@ -54,10 +53,9 @@ impl Context {
             AsyncStorage::new(pool.clone(), config.storage.clone(), &meter_provider).await?,
         );
 
-        let cdn_metrics = Arc::new(CdnMetrics::new(&meter_provider));
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
-            config.build_queue.clone(),
+            &config.build_queue,
             &meter_provider,
         ));
 
@@ -72,7 +70,6 @@ impl Context {
             build_queue,
             storage,
             async_storage,
-            cdn_metrics,
             pool: pool.clone(),
             registry_api: Arc::new(RegistryApi::new(
                 config.watcher.registry_api_host.clone(),

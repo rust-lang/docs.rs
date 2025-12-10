@@ -1,4 +1,4 @@
-use crate::{AsyncBuildQueue, Config, PRIORITY_BROKEN_RUSTDOC, PRIORITY_CONTINUOUS};
+use crate::{AsyncBuildQueue, PRIORITY_BROKEN_RUSTDOC};
 use anyhow::Result;
 use chrono::NaiveDate;
 use docs_rs_database::types::version::Version;

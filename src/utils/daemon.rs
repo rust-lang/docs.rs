@@ -4,8 +4,8 @@
 
 use crate::{Context, RustwideBuilder, utils::queue_builder, web::start_web_server};
 use anyhow::{Error, anyhow};
-use docs_rs_utils::start_async_cron_in_runtime;
-use docs_rs_watcher::service_metrics::OtelServiceMetrics;
+use docs_rs_utils::{start_async_cron, start_async_cron_in_runtime};
+use docs_rs_watcher::{rebuilds::queue_rebuilds, service_metrics::OtelServiceMetrics};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -63,6 +63,57 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     webserver_thread
         .join()
         .map_err(|err| anyhow!("web server panicked: {:?}", err))?
+}
+
+pub fn start_background_queue_rebuild(context: &Context) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    let pool = context.pool.clone();
+    let config = context.config.clone();
+    let build_queue = context.async_build_queue.clone();
+
+    if config.watcher.max_queued_rebuilds.is_none() {
+        info!("rebuild config incomplete, skipping rebuild queueing");
+        return Ok(());
+    }
+
+    start_async_cron_in_runtime(
+        &runtime,
+        "background queue rebuilder",
+        Duration::from_secs(60 * 60),
+        move || {
+            let pool = pool.clone();
+            let build_queue = build_queue.clone();
+            let config = config.clone();
+            async move {
+                let mut conn = pool.get_async().await?;
+                queue_rebuilds(&mut conn, &config.watcher, &build_queue).await?;
+                Ok(())
+            }
+        },
+    );
+    Ok(())
+}
+
+pub fn start_background_repository_stats_updater(context: &Context) -> Result<(), Error> {
+    // This call will still skip github repositories updates and continue if no token is provided
+    // (gitlab doesn't require to have a token). The only time this can return an error is when
+    // creating a pool or if config fails, which shouldn't happen here because this is run right at
+    // startup.
+    let updater = context.repository_stats_updater.clone();
+    let runtime = context.runtime.clone();
+    start_async_cron_in_runtime(
+        &runtime,
+        "repository stats updater",
+        Duration::from_secs(60 * 60),
+        move || {
+            let updater = updater.clone();
+            async move {
+                updater.update_all_crates().await?;
+                Ok(())
+            }
+        },
+    );
+    Ok(())
 }
 
 pub fn start_background_service_metric_collector(context: &Context) -> Result<(), Error> {

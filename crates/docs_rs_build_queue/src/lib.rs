@@ -1,6 +1,6 @@
 mod config;
 mod metrics;
-mod rebuilds;
+pub mod rebuilds;
 
 pub use config::Config;
 

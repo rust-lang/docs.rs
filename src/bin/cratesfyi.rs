@@ -2,16 +2,16 @@ use anyhow::{Context as _, Result, anyhow};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
-    Config, Context, Index, PackageKind, RustwideBuilder,
-    db::{self, CrateId, Overrides, add_path_into_database, types::version::Version},
-    queue_rebuilds_faulty_rustdoc, start_web_server,
-    utils::{
-        ConfigName, daemon::start_background_service_metric_collector, get_config,
-        get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-        remove_crate_priority, set_crate_priority,
-    },
+    Config, Context, PackageKind, RustwideBuilder,
+    db::{self, Overrides},
+    start_web_server,
+    utils::queue_builder,
 };
-use docs_rs_database::service_config::set_config;
+use docs_rs_build_queue::rebuilds::queue_rebuilds_faulty_rustdoc;
+use docs_rs_database::{
+    service_config::{ConfigName, set_config},
+    types::{CrateId, version::Version},
+};
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
@@ -137,27 +137,6 @@ enum QueueSubcommand {
         build_priority: i32,
     },
 
-    /// Interactions with build queue priorities
-    DefaultPriority {
-        #[command(subcommand)]
-        subcommand: PrioritySubcommand,
-    },
-
-    /// Get the registry watcher's last seen reference
-    GetLastSeenReference,
-
-    /// Set the registry watcher's last seen reference
-    #[command(arg_required_else_help(true))]
-    SetLastSeenReference {
-        /// The reference to set to, required unless flag used
-        #[arg(conflicts_with("head"))]
-        reference: Option<crates_index_diff::gix::ObjectId>,
-
-        /// Fetch the current HEAD of the remote index and use it
-        #[arg(long, conflicts_with("reference"))]
-        head: bool,
-    },
-
     /// Queue rebuilds for broken nightly versions of rustdoc, either for a single date (start) or a range (start inclusive, end exclusive)
     RebuildBrokenNightly {
         /// Start date of nightly builds to rebuild (inclusive)
@@ -181,35 +160,9 @@ impl QueueSubcommand {
                 &crate_name,
                 &crate_version,
                 build_priority,
-                ctx.config.registry_url.as_deref(),
+                ctx.config.watcher.registry_url.as_deref(),
             )?,
 
-            Self::GetLastSeenReference => {
-                if let Some(reference) = ctx.build_queue.last_seen_reference()? {
-                    println!("Last seen reference: {reference}");
-                } else {
-                    println!("No last seen reference available");
-                }
-            }
-
-            Self::SetLastSeenReference { reference, head } => {
-                let reference = match (reference, head) {
-                    (Some(reference), false) => reference,
-                    (None, true) => {
-                        println!("Fetching changes to set reference to HEAD");
-                        ctx.runtime.block_on(async move {
-                            let index = Index::from_config(&ctx.config).await?;
-                            index.latest_commit_reference().await
-                        })?
-                    }
-                    (_, _) => unreachable!(),
-                };
-
-                ctx.build_queue.set_last_seen_reference(reference)?;
-                println!("Set last seen reference: {reference}");
-            }
-
-            Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
 
             Self::RebuildBrokenNightly { start_nightly_date, end_nightly_date } => {
                 ctx.runtime.block_on(async move {
@@ -252,50 +205,6 @@ enum PrioritySubcommand {
     },
 }
 
-impl PrioritySubcommand {
-    fn handle_args(self, ctx: Context) -> Result<()> {
-        ctx.runtime.block_on(async move {
-            let mut conn = ctx.pool.get_async().await?;
-            match self {
-                Self::List => {
-                    for (pattern, priority) in list_crate_priorities(&mut conn).await? {
-                        println!("{pattern:>20} : {priority:>3}");
-                    }
-                }
-
-                Self::Get { crate_name } => {
-                    if let Some((pattern, priority)) =
-                        get_crate_pattern_and_priority(&mut conn, &crate_name).await?
-                    {
-                        println!("{pattern} : {priority}");
-                    } else {
-                        println!("No priority found for {crate_name}");
-                    }
-                }
-
-                Self::Set { pattern, priority } => {
-                    set_crate_priority(&mut conn, &pattern, priority)
-                        .await
-                        .context("Could not set pattern's priority")?;
-                    println!("Set pattern '{pattern}' to priority {priority}");
-                }
-
-                Self::Remove { pattern } => {
-                    if let Some(priority) = remove_crate_priority(&mut conn, &pattern)
-                        .await
-                        .context("Could not remove pattern's priority")?
-                    {
-                        println!("Removed pattern '{pattern}' with priority {priority}");
-                    } else {
-                        println!("Pattern '{pattern}' did not exist and so was not removed");
-                    }
-                }
-            }
-            Ok(())
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum BuildSubcommand {
     /// Builds documentation for a crate
@@ -312,16 +221,6 @@ enum BuildSubcommand {
         #[arg(short = 'l', long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
         local: Option<PathBuf>,
     },
-
-    /// update the currently installed rustup toolchain
-    UpdateToolchain {
-        /// Update the toolchain only if no toolchain is currently installed
-        #[arg(name = "ONLY_FIRST_TIME", long = "only-first-time")]
-        only_first_time: bool,
-    },
-
-    /// Adds essential files for the installed version of rustc
-    AddEssentialFiles,
 
     SetToolchain {
         toolchain_name: String,
@@ -353,7 +252,7 @@ impl BuildSubcommand {
                         .build_local_package(&path)
                         .context("Building documentation failed")?;
                 } else {
-                    let registry_url = ctx.config.registry_url.as_ref();
+                    let registry_url = ctx.config.watcher.registry_url.as_ref();
                     builder
                         .build_package(
                             &crate_name
@@ -367,32 +266,6 @@ impl BuildSubcommand {
                         )
                         .context("Building documentation failed")?;
                 }
-            }
-
-            Self::UpdateToolchain { only_first_time } => {
-                let rustc_version = ctx.runtime.block_on({
-                    let pool = ctx.pool.clone();
-                    async move {
-                        let mut conn = pool
-                            .get_async()
-                            .await
-                            .context("failed to get a database connection")?;
-
-                        get_config::<String>(&mut conn, ConfigName::RustcVersion).await
-                    }
-                })?;
-                if only_first_time && rustc_version.is_some() {
-                    println!("update-toolchain was already called in the past, exiting");
-                    return Ok(());
-                }
-
-                rustwide_builder()?.update_toolchain_and_add_essential_files()?;
-            }
-
-            Self::AddEssentialFiles => {
-                rustwide_builder()?
-                    .add_essential_files()
-                    .context("failed to add essential files")?;
             }
 
             Self::SetToolchain { toolchain_name } => {
@@ -440,35 +313,10 @@ enum DatabaseSubcommand {
         name: String,
     },
 
-    AddDirectory {
-        /// Path of file or directory
-        #[arg(name = "DIRECTORY")]
-        directory: PathBuf,
-    },
-
-    /// Remove documentation from the database
-    Delete {
-        #[command(subcommand)]
-        command: DeleteSubcommand,
-    },
-
-    /// Blacklist operations
-    Blacklist {
-        #[command(subcommand)]
-        command: BlacklistSubcommand,
-    },
-
     /// Limit overrides operations
     Limits {
         #[command(subcommand)]
         command: LimitsSubcommand,
-    },
-
-    /// Compares the database with the index and resolves inconsistencies
-    Synchronize {
-        /// Don't actually resolve the inconsistencies, just log them
-        #[arg(long)]
-        dry_run: bool,
     },
 }
 
@@ -522,43 +370,7 @@ impl DatabaseSubcommand {
                 db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
             })?,
 
-            Self::AddDirectory { directory } => {
-                ctx.runtime
-                    .block_on(add_path_into_database(
-                        &ctx.async_storage,
-                        &ctx.config.prefix,
-                        directory,
-                    ))
-                    .context("Failed to add directory into database")?;
-            }
-
-            Self::Delete {
-                command: DeleteSubcommand::Version { name, version },
-            } => ctx
-                .runtime
-                .block_on(async move {
-                    let mut conn = ctx.pool.get_async().await?;
-                    db::delete_version(&mut conn, &ctx.async_storage, &ctx.config, &name, &version)
-                        .await
-                })
-                .context("failed to delete the version")?,
-            Self::Delete {
-                command: DeleteSubcommand::Crate { name },
-            } => ctx
-                .runtime
-                .block_on(async move {
-                    let mut conn = ctx.pool.get_async().await?;
-                    db::delete_crate(&mut conn, &ctx.async_storage, &ctx.config, &name).await
-                })
-                .context("failed to delete the crate")?,
-            Self::Blacklist { command } => command.handle_args(ctx)?,
-
             Self::Limits { command } => command.handle_args(ctx)?,
-
-            Self::Synchronize { dry_run } => {
-                ctx.runtime
-                    .block_on(docs_rs::utils::consistency::run_check(&ctx, dry_run))?;
-            }
         }
         Ok(())
     }
@@ -678,24 +490,4 @@ impl BlacklistSubcommand {
             Ok(())
         })
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
-enum DeleteSubcommand {
-    /// Delete a whole crate
-    Crate {
-        /// Name of the crate to delete
-        #[arg(name = "CRATE_NAME")]
-        name: String,
-    },
-    /// Delete a single version of a crate (which may include multiple builds)
-    Version {
-        /// Name of the crate to delete
-        #[arg(name = "CRATE_NAME")]
-        name: String,
-
-        /// The version of the crate to delete
-        #[arg(name = "VERSION")]
-        version: Version,
-    },
 }
