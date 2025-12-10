@@ -75,7 +75,7 @@ jobs:
 
       - name: Open pull request
         if: ${{ steps.sqlx_check.outputs.need_pr == '1' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Update SQLX files
           committer: Docs.rs developers <docs.rs@users.noreply.github.com>
