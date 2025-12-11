@@ -1,4 +1,5 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
+use crates_io_validation::{InvalidCrateName, validate_crate_name};
 use derive_more::{Deref, Display, Into};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sqlx::{
@@ -39,10 +40,10 @@ impl From<&KrateName> for KrateName {
 }
 
 impl FromStr for KrateName {
-    type Err = anyhow::Error;
+    type Err = InvalidCrateName;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        validate_crate_name(s)?;
+        validate_crate_name("crate", s)?;
         Ok(KrateName(s.to_string()))
     }
 }
@@ -80,59 +81,10 @@ where
     }
 }
 
-/// validate if a string is a valid crate name.
-/// Based on the crates.io implementation in their publish-endpoint:
-/// https://github.com/rust-lang/crates.io/blob/9651eaab14887e0442849d5e81c1f2bbf10a73a2/crates/crates_io_database/src/models/krate.rs#L218-L252
-fn validate_crate_name(name: &str) -> Result<()> {
-    if name.is_empty() {
-        bail!("empty crate name");
-    }
-    if name.len() > 64 {
-        bail!("crate name too long (maximum is 64 characters)");
-    }
-
-    let mut chars = name.chars();
-    if let Some(ch) = chars.next() {
-        if ch.is_ascii_digit() {
-            bail!("crate name cannot start with a digit");
-        }
-        if !ch.is_ascii_alphabetic() {
-            bail!("crate name must start with an alphabetic character");
-        }
-    }
-
-    for ch in chars {
-        if !(ch.is_ascii_alphanumeric() || ch == '-' || ch == '_') {
-            bail!("invalid character '{}' in crate name", ch);
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::test::TestEnvironment;
-
     use super::*;
-    use test_case::test_case;
-
-    #[test_case("valid_crate_name")]
-    #[test_case("with-dash")]
-    #[test_case("CapitalLetter")]
-    fn test_valid_crate_name(name: &str) {
-        assert!(validate_crate_name(name).is_ok());
-        assert_eq!(name.parse::<KrateName>().unwrap(), name);
-    }
-
-    #[test_case("with space")]
-    #[test_case("line break\n")]
-    #[test_case("non ascii äöü")]
-    #[test_case("0123456789101112131415161718192021222324252627282930313233343536373839"; "too long")]
-    fn test_invalid_crate_name(name: &str) {
-        assert!(validate_crate_name(name).is_err());
-        assert!(name.parse::<KrateName>().is_err());
-    }
+    use crate::test::TestEnvironment;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_sqlx_encode_decode() -> Result<()> {
