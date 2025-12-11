@@ -18,7 +18,7 @@ use crate::{
         escaped_uri::EscapedURI,
         extractors::{
             DbConnection, Path, WantedCompression,
-            rustdoc::{PageKind, RustdocParams},
+            rustdoc::{PageKind, RustdocParams, UrlParams},
         },
         file::StreamingFile,
         headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG},
@@ -34,7 +34,7 @@ use anyhow::{Context as _, anyhow};
 use askama::Template;
 use axum::{
     body::Body,
-    extract::{Extension, Query, RawQuery},
+    extract::{Extension, MatchedPath, Query, RawQuery},
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
@@ -46,6 +46,7 @@ use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Author
 use serde::Deserialize;
 use std::{
     collections::HashMap,
+    iter,
     sync::{Arc, LazyLock},
 };
 use tracing::{Instrument, error, info_span, instrument, trace};
@@ -67,140 +68,78 @@ fn generate_content_disposition_header(storage_path: &str) -> anyhow::Result<Hea
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfficialCrateDescription {
-    pub(crate) name: &'static str,
+    pub(crate) name: KrateName,
+    pub(crate) aliases: Vec<KrateName>,
     pub(crate) href: Uri,
     pub(crate) description: &'static str,
 }
 
-pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: LazyLock<HashMap<&str, OfficialCrateDescription>> =
-    LazyLock::new(|| {
-        HashMap::from([
-            (
-                "alloc",
-                OfficialCrateDescription {
-                    name: "alloc",
-                    href: "https://doc.rust-lang.org/stable/alloc/".parse().unwrap(),
-                    description: "Rust alloc library",
-                },
-            ),
-            (
-                "liballoc",
-                OfficialCrateDescription {
-                    name: "alloc",
-                    href: "https://doc.rust-lang.org/stable/alloc/".parse().unwrap(),
-                    description: "Rust alloc library",
-                },
-            ),
-            (
-                "core",
-                OfficialCrateDescription {
-                    name: "core",
-                    href: "https://doc.rust-lang.org/stable/core/".parse().unwrap(),
-                    description: "Rust core library",
-                },
-            ),
-            (
-                "libcore",
-                OfficialCrateDescription {
-                    name: "core",
-                    href: "https://doc.rust-lang.org/stable/core/".parse().unwrap(),
-                    description: "Rust core library",
-                },
-            ),
-            (
-                "proc_macro",
-                OfficialCrateDescription {
-                    name: "proc_macro",
-                    href: "https://doc.rust-lang.org/stable/proc_macro/"
-                        .parse()
-                        .unwrap(),
-                    description: "Rust proc_macro library",
-                },
-            ),
-            (
-                "libproc_macro",
-                OfficialCrateDescription {
-                    name: "proc_macro",
-                    href: "https://doc.rust-lang.org/stable/proc_macro/"
-                        .parse()
-                        .unwrap(),
-                    description: "Rust proc_macro library",
-                },
-            ),
-            (
-                "proc-macro",
-                OfficialCrateDescription {
-                    name: "proc_macro",
-                    href: "https://doc.rust-lang.org/stable/proc_macro/"
-                        .parse()
-                        .unwrap(),
-                    description: "Rust proc_macro library",
-                },
-            ),
-            (
-                "libproc-macro",
-                OfficialCrateDescription {
-                    name: "proc_macro",
-                    href: "https://doc.rust-lang.org/stable/proc_macro/"
-                        .parse()
-                        .unwrap(),
-                    description: "Rust proc_macro library",
-                },
-            ),
-            (
-                "std",
-                OfficialCrateDescription {
-                    name: "std",
-                    href: "https://doc.rust-lang.org/stable/std/".parse().unwrap(),
-                    description: "Rust standard library",
-                },
-            ),
-            (
-                "libstd",
-                OfficialCrateDescription {
-                    name: "std",
-                    href: "https://doc.rust-lang.org/stable/std/".parse().unwrap(),
-                    description: "Rust standard library",
-                },
-            ),
-            (
-                "test",
-                OfficialCrateDescription {
-                    name: "test",
-                    href: "https://doc.rust-lang.org/stable/test/".parse().unwrap(),
-                    description: "Rust test library",
-                },
-            ),
-            (
-                "libtest",
-                OfficialCrateDescription {
-                    name: "test",
-                    href: "https://doc.rust-lang.org/stable/test/".parse().unwrap(),
-                    description: "Rust test library",
-                },
-            ),
-            (
-                "rustc",
-                OfficialCrateDescription {
-                    name: "rustc",
-                    href: "https://doc.rust-lang.org/nightly/nightly-rustc/"
-                        .parse()
-                        .unwrap(),
-                    description: "rustc API",
-                },
-            ),
-            (
-                "rustdoc",
-                OfficialCrateDescription {
-                    name: "rustdoc",
-                    href: "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/"
-                        .parse()
-                        .unwrap(),
-                    description: "rustdoc API",
-                },
-            ),
-        ])
-    });
+pub(crate) static DOC_RUST_LANG_ORG_REDIRECTS: LazyLock<
+    HashMap<KrateName, OfficialCrateDescription>,
+> = LazyLock::new(|| {
+    HashMap::from_iter(
+        [
+            OfficialCrateDescription {
+                name: "alloc".parse().unwrap(),
+                aliases: vec!["liballoc".parse().unwrap()],
+                href: "https://doc.rust-lang.org/stable/alloc/".parse().unwrap(),
+                description: "Rust alloc library",
+            },
+            OfficialCrateDescription {
+                name: "core".parse().unwrap(),
+                aliases: vec!["libcore".parse().unwrap()],
+                href: "https://doc.rust-lang.org/stable/core/".parse().unwrap(),
+                description: "Rust core library",
+            },
+            OfficialCrateDescription {
+                name: "proc_macro".parse().unwrap(),
+                aliases: vec![
+                    "libproc_macro".parse().unwrap(),
+                    "proc-macro".parse().unwrap(),
+                    "libproc-macro".parse().unwrap(),
+                ],
+                href: "https://doc.rust-lang.org/stable/proc_macro/"
+                    .parse()
+                    .unwrap(),
+                description: "Rust proc_macro library",
+            },
+            OfficialCrateDescription {
+                name: "std".parse().unwrap(),
+                aliases: vec!["libstd".parse().unwrap()],
+                href: "https://doc.rust-lang.org/stable/std/".parse().unwrap(),
+                description: "Rust standard library",
+            },
+            OfficialCrateDescription {
+                name: "test".parse().unwrap(),
+                aliases: vec!["libtest".parse().unwrap()],
+                href: "https://doc.rust-lang.org/stable/test/".parse().unwrap(),
+                description: "Rust test library",
+            },
+            OfficialCrateDescription {
+                name: "rustc".parse().unwrap(),
+                aliases: vec![],
+                href: "https://doc.rust-lang.org/nightly/nightly-rustc/"
+                    .parse()
+                    .unwrap(),
+                description: "rustc API",
+            },
+            OfficialCrateDescription {
+                name: "rustdoc".parse().unwrap(),
+                aliases: vec![],
+                href: "https://doc.rust-lang.org/nightly/nightly-rustc/rustdoc/"
+                    .parse()
+                    .unwrap(),
+                description: "rustdoc API",
+            },
+        ]
+        .into_iter()
+        .flat_map(|desc| {
+            iter::once(desc.name.clone())
+                .chain(desc.aliases.clone())
+                .map(move |name| (name, desc.clone()))
+        }),
+    )
+});
 
 /// try to serve a toolchain specific asset from the legacy location.
 ///
@@ -231,18 +170,32 @@ async fn try_serve_legacy_toolchain_asset(
         .into_response(if_none_match, STATIC_ASSET_CACHE_POLICY))
 }
 
+/// Intermediate struct to accept more variants than
+/// `RustdocParams` would accept.
+///
+/// After we handled the edge cases we convert this struct
+/// into `RustdocParams`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RustdocRedirectorParams {
+    name: String,
+    #[serde(default)]
+    version: ReqVersion,
+    target: Option<String>,
+}
+
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip(storage, conn))]
 pub(crate) async fn rustdoc_redirector_handler(
-    params: RustdocParams,
+    Path(params): Path<RustdocRedirectorParams>,
+    original_uri: Uri,
+    matched_path: MatchedPath,
     Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
-    let params = params.with_page_kind(PageKind::Rustdoc);
-
     fn redirect_to_doc(
         original_uri: Option<&EscapedURI>,
         url: EscapedURI,
@@ -272,21 +225,22 @@ pub(crate) async fn rustdoc_redirector_handler(
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
 
+    // edge case 1:
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
-    if let Some((_, extension)) = params.name().rsplit_once('.')
+    if let Some((_, extension)) = params.name.rsplit_once('.')
         && ["css", "js", "png", "svg", "woff", "woff2"]
             .binary_search(&extension)
             .is_ok()
     {
-        return try_serve_legacy_toolchain_asset(storage, params.name(), if_none_match.as_deref())
+        return try_serve_legacy_toolchain_asset(storage, &params.name, if_none_match.as_deref())
             .instrument(info_span!("serve static asset"))
             .await;
     }
 
-    if let Some(extension) = params.file_extension()
-        && extension == "ico"
-    {
+    // edge case 2:
+    // Redirect all `.ico` requests to the global favicon location.
+    if original_uri.path().to_lowercase().ends_with(".ico") {
         // redirect all ico requests
         // originally from:
         // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
@@ -296,22 +250,46 @@ pub(crate) async fn rustdoc_redirector_handler(
         )?);
     }
 
-    let (crate_name, path_in_crate) = match params.name().split_once("::") {
+    // edge case 3:
+    // we split `{krate}::{what_to_search}` here from the `{name}` param.
+    let (crate_name, path_in_crate) = match params.name.split_once("::") {
         Some((krate, path)) => (krate.to_owned(), Some(path.to_owned())),
-        None => (params.name().to_owned(), None),
+        None => (params.name.clone(), None),
     };
 
-    if let Some(description) = DOC_RUST_LANG_ORG_REDIRECTS.get(&*crate_name) {
+    // If we're here, we only should have valid crate names.
+    let crate_name: KrateName = crate_name
+        .parse()
+        .context("couldn't parse crate name")
+        .map_err(AxumNope::BadRequest)?;
+
+    // edge case 4:
+    // official rust crates redirect to doc.rust-lang.org
+    if let Some(description) = DOC_RUST_LANG_ORG_REDIRECTS.get(&crate_name) {
         let target_uri =
             EscapedURI::from_uri(description.href.clone()).append_raw_query(original_query);
-        let krate_name: KrateName = crate_name.parse().expect("we know these are valid");
         return redirect_to_doc(
-            params.original_uri(),
+            Some(&original_uri.into()),
             target_uri,
-            CachePolicy::ForeverInCdnAndStaleInBrowser(krate_name.into()),
+            CachePolicy::ForeverInCdnAndStaleInBrowser(crate_name.into()),
             path_in_crate.as_deref(),
         );
     }
+
+    // after we handled the edge cases above we can generate our "normal"
+    // `RustdocParam`.
+    let params = RustdocParams::from_parts(
+        UrlParams {
+            name: crate_name.clone(),
+            version: params.version,
+            target: params.target,
+            path: None,
+        },
+        original_uri,
+        matched_path,
+    )
+    .map_err(AxumNope::BadRequest)?
+    .with_page_kind(PageKind::Rustdoc);
 
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
@@ -319,13 +297,17 @@ pub(crate) async fn rustdoc_redirector_handler(
         .await?
         .into_exactly_named()
         .into_canonical_req_version();
+
+    // after `match_version` we should only use `matched_release.name()` and not the initial
+    // crate_name, because `.into_exactly_named` above might give us a corrected name.
+    drop(crate_name);
+
     let params = params.apply_matched_release(&matched_release);
     trace!(
         ?matched_release,
         ?params,
         "parsed params with matched version"
     );
-    let crate_name = matched_release.name.clone();
 
     // we might get requests to crate-specific JS/CSS files here.
     if params.inner_path().ends_with(".js") || params.inner_path().ends_with(".css") {
@@ -336,7 +318,7 @@ pub(crate) async fn rustdoc_redirector_handler(
 
             match storage
                 .stream_rustdoc_file(
-                    &crate_name,
+                    params.name(),
                     &krate.version,
                     krate.latest_build_id,
                     inner_path,
@@ -379,9 +361,9 @@ pub(crate) async fn rustdoc_redirector_handler(
             params.original_uri(),
             params.rustdoc_url().append_raw_query(original_query),
             if matched_release.is_latest_url() {
-                CachePolicy::ForeverInCdn(crate_name.into())
+                CachePolicy::ForeverInCdn(params.name().into())
             } else {
-                CachePolicy::ForeverInCdnAndStaleInBrowser(crate_name.into())
+                CachePolicy::ForeverInCdnAndStaleInBrowser(params.name().into())
             },
             path_in_crate.as_deref(),
         )?
@@ -389,7 +371,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     } else {
         Ok(axum_cached_redirect(
             params.crate_details_url().append_raw_query(original_query),
-            CachePolicy::ForeverInCdn(crate_name.into()),
+            CachePolicy::ForeverInCdn(params.name().into()),
         )?
         .into_response())
     }
@@ -619,7 +601,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             AxumNope::Redirect(
                 params
                     .clone()
-                    .with_confirmed_name(Some(corrected_name))
+                    .with_name(corrected_name)
                     .with_req_version(req_version)
                     .rustdoc_url()
                     .append_raw_query(original_query.as_deref()),
@@ -627,10 +609,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             )
         })?
         .into_canonical_req_version_or_else(|confirmed_name, version| {
-            let params = params
-                .clone()
-                .with_confirmed_name(Some(confirmed_name))
-                .with_req_version(version);
+            let params = params.clone().with_req_version(version);
             AxumNope::Redirect(
                 params.rustdoc_url(),
                 CachePolicy::ForeverInCdn(confirmed_name.into()),
@@ -744,7 +723,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )
             {
                 error!(
-                    krate = params.name(),
+                    krate = %params.name(),
                     version = %krate.version,
                     original_path = params.original_path(),
                     storage_path,
@@ -880,7 +859,7 @@ pub(crate) struct BadgeQueryParams {
 
 #[instrument(skip_all)]
 pub(crate) async fn badge_handler(
-    Path(name): Path<String>,
+    Path(name): Path<KrateName>,
     Query(query): Query<BadgeQueryParams>,
 ) -> AxumResult<impl IntoResponse> {
     let url = url::Url::parse(&format!(
@@ -916,7 +895,7 @@ pub(crate) async fn json_download_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
 
             AxumNope::Redirect(
@@ -1045,7 +1024,7 @@ pub(crate) async fn download_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.zip_download_url(),

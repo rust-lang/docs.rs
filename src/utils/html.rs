@@ -18,7 +18,7 @@ use lol_html::{element, errors::RewritingError};
 use std::sync::Arc;
 use tokio::{io::AsyncRead, task::JoinHandle};
 use tokio_util::io::ReaderStream;
-use tracing::{Span, error, instrument};
+use tracing::{Span, instrument};
 use tracing_futures::Instrument as _;
 
 const CHANNEL_SIZE: usize = 64;

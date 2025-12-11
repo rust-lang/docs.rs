@@ -80,19 +80,28 @@
                                                     </a>
                                                 {% when SubFeature::Dependency with (dependency) %}
                                                     {%- let version = dependency_version(dependency) -%}
-                                                        dep:<a href="{{ RustdocParams::new(dependency.to_owned()).with_req_version(version.to_owned()).rustdoc_url() }}">
-                                                        {{- dependency -}}
-                                                    </a>
+                                                    {%- if let Some(params) = dependency_params(dependency) -%}
+                                                        dep:<a href="{{ params.rustdoc_url() }}">
+                                                            {{- dependency -}}
+                                                        </a>
+                                                    {%- else -%}
+                                                        dep:{{- dependency -}}
+                                                    {%- endif -%}
                                                 {% when SubFeature::DependencyFeature with {dependency, feature, optional} %}
                                                     {%- let version = dependency_version(dependency) -%}
-                                                    {%- set dependency_params = RustdocParams::new(dependency.to_owned()).with_req_version(version.to_owned()) -%}
-                                                    <a href="{{ dependency_params.crate_details_url() }}">
+                                                    {%- if let Some(params) = dependency_params(dependency) -%}
+                                                        <a href="{{ params.crate_details_url() }}">
+                                                            {{- dependency -}}
+                                                        </a>
+                                                        {%- if optional -%}?{%- endif -%}
+                                                        /<a href="{{ params.features_url().with_fragment(*feature) }}">
+                                                            {{- feature -}}
+                                                        </a>
+                                                    {%- else -%}
                                                         {{- dependency -}}
-                                                    </a>
-                                                    {%- if optional -%}?{%- endif -%}
-                                                    /<a href="{{ dependency_params.features_url().with_fragment(*feature) }}">
-                                                        {{- feature -}}
-                                                    </a>
+                                                        {%- if optional -%}?{%- endif -%}
+                                                        /{{- feature -}}
+                                                    {%- endif -%}
                                             {%- endmatch %}
                                             {%- if is_default %} <span class="is-default-feature">(default)</span>{%- endif -%}
                                         </li>

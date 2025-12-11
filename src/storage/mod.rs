@@ -45,7 +45,7 @@ use tokio::{
     runtime,
     sync::Mutex,
 };
-use tracing::{debug, error, info_span, instrument, trace, warn};
+use tracing::{debug, info_span, instrument, trace, warn};
 use walkdir::WalkDir;
 
 const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";

@@ -203,7 +203,7 @@ pub(crate) async fn source_browser_handler(
             AxumNope::Redirect(
                 params
                     .clone()
-                    .with_confirmed_name(Some(corrected_name))
+                    .with_name(corrected_name)
                     .with_req_version(req_version)
                     .source_url(),
                 CachePolicy::NoCaching,
@@ -212,7 +212,7 @@ pub(crate) async fn source_browser_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.source_url(),

@@ -49,8 +49,7 @@ pub(crate) struct RustdocParams {
     page_kind: Option<PageKind>,
 
     original_uri: Option<EscapedURI>,
-    name: String,
-    confirmed_name: Option<KrateName>,
+    name: KrateName,
     req_version: ReqVersion,
     doc_target: Option<String>,
     inner_path: Option<String>,
@@ -69,7 +68,6 @@ impl std::fmt::Debug for RustdocParams {
             .field("page_kind", &self.page_kind)
             .field("original_uri", &self.original_uri)
             .field("name", &self.name)
-            .field("confirmed_name", &self.confirmed_name)
             .field("req_version", &self.req_version)
             .field("doc_target", &self.doc_target)
             .field("inner_path", &self.inner_path)
@@ -109,8 +107,8 @@ impl std::fmt::Debug for RustdocParams {
 /// so this extractor can be used in many handlers with a variety of
 /// specificity of the route.
 #[derive(Deserialize, Debug)]
-struct UrlParams {
-    pub name: String,
+pub(crate) struct UrlParams {
+    pub name: KrateName,
     #[serde(default)]
     pub version: ReqVersion,
     pub target: Option<String>,
@@ -141,34 +139,21 @@ where
 
         let original_uri = parts.extract::<Uri>().await.expect("infallible extractor");
 
-        let static_route_suffix = {
-            let uri_path = url_decode(original_uri.path()).map_err(AxumNope::BadRequest)?;
+        let matched_path = parts
+            .extract::<MatchedPath>()
+            .await
+            .map_err(|err| AxumNope::BadRequest(err.into()))?;
 
-            let matched_path = parts
-                .extract::<MatchedPath>()
-                .await
-                .map_err(|err| AxumNope::BadRequest(err.into()))?;
-            let matched_route = url_decode(matched_path.as_str()).map_err(AxumNope::BadRequest)?;
-
-            find_static_route_suffix(&matched_route, &uri_path)
-        };
-
-        Ok(RustdocParams::new(params.name)
-            .with_req_version(params.version)
-            .with_maybe_doc_target(params.target)
-            .with_maybe_inner_path(params.path)
-            .with_original_uri(original_uri)
-            .with_maybe_static_route_suffix(static_route_suffix))
+        Ok(Self::from_parts(params, original_uri, matched_path)?)
     }
 }
 
 /// Builder-style methods to create & update the parameters.
 #[allow(dead_code)]
 impl RustdocParams {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<KrateName>) -> Self {
         Self {
-            name: name.into().trim().into(),
-            confirmed_name: None,
+            name: name.into(),
             req_version: ReqVersion::default(),
             original_uri: None,
             doc_target: None,
@@ -180,6 +165,30 @@ impl RustdocParams {
             target_name: None,
             merged_inner_path: None,
         }
+    }
+
+    /// create RustdocParams with the given parts.
+    ///
+    /// Useful when you don't want to use struct as extractor directly,
+    /// for example when you manually change things.
+    pub(crate) fn from_parts(
+        params: UrlParams,
+        original_uri: Uri,
+        matched_path: MatchedPath,
+    ) -> Result<Self> {
+        let static_route_suffix = {
+            let uri_path = url_decode(original_uri.path())?;
+            let matched_route = url_decode(matched_path.as_str())?;
+
+            find_static_route_suffix(&matched_route, &uri_path)
+        };
+
+        Ok(RustdocParams::new(params.name)
+            .with_req_version(params.version)
+            .with_maybe_doc_target(params.target)
+            .with_maybe_inner_path(params.path)
+            .with_original_uri(original_uri)
+            .with_maybe_static_route_suffix(static_route_suffix))
     }
 
     fn try_update<F>(self, f: F) -> Result<Self>
@@ -203,12 +212,11 @@ impl RustdocParams {
     }
 
     pub(crate) fn from_metadata(metadata: &MetaData) -> Self {
-        RustdocParams::new(metadata.name.to_string()).apply_metadata(metadata)
+        RustdocParams::new(metadata.name.clone()).apply_metadata(metadata)
     }
 
     pub(crate) fn apply_metadata(self, metadata: &MetaData) -> RustdocParams {
-        self.with_name(metadata.name.to_string())
-            .with_confirmed_name(Some(metadata.name.clone()))
+        self.with_name(metadata.name.clone())
             .with_req_version(&metadata.req_version)
             // first set the doc-target list
             .with_maybe_doc_targets(metadata.doc_targets.clone())
@@ -218,41 +226,24 @@ impl RustdocParams {
     }
 
     pub(crate) fn from_matched_release(matched_release: &MatchedRelease) -> Self {
-        RustdocParams::new(matched_release.name.to_string()).apply_matched_release(matched_release)
+        RustdocParams::new(matched_release.name.clone()).apply_matched_release(matched_release)
     }
 
     pub(crate) fn apply_matched_release(self, matched_release: &MatchedRelease) -> RustdocParams {
         let release = &matched_release.release;
-        self.with_name(matched_release.name.to_string())
-            .with_confirmed_name(Some(matched_release.name.clone()))
+        self.with_name(matched_release.name.clone())
             .with_req_version(&matched_release.req_version)
             .with_maybe_doc_targets(release.doc_targets.as_deref())
             .with_maybe_default_target(release.default_target.as_deref())
             .with_maybe_target_name(release.target_name.as_deref())
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &KrateName {
         &self.name
     }
-    pub(crate) fn with_name(self, name: impl Into<String>) -> Self {
+    pub(crate) fn with_name(self, name: impl Into<KrateName>) -> Self {
         self.update(|mut params| {
-            params.name = name.into().trim().into();
-            params
-        })
-    }
-
-    pub(crate) fn confirmed_name(&self) -> Option<&KrateName> {
-        self.confirmed_name.as_ref()
-    }
-    pub(crate) fn with_confirmed_name(self, confirmed_name: Option<impl Into<KrateName>>) -> Self {
-        self.update(|mut params| {
-            let confirmed_name = confirmed_name.map(Into::into);
-
-            if let Some(ref confirmed_name) = confirmed_name {
-                params.name = confirmed_name.to_string();
-            }
-
-            params.confirmed_name = confirmed_name;
+            params.name = name.into();
             params
         })
     }
@@ -921,7 +912,9 @@ mod tests {
     use axum::{Router, routing::get};
     use test_case::test_case;
 
-    static KRATE: &str = "krate";
+    const KRATE: KrateName = KrateName::from_static("krate");
+    const DUMMY: KrateName = KrateName::from_static("dummy");
+    const CLAP: KrateName = KrateName::from_static("clap");
     const VERSION: Version = Version::new(0, 1, 0);
     static DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
     static OTHER_TARGET: &str = "x86_64-pc-windows-msvc";
@@ -987,7 +980,7 @@ mod tests {
     )]
     #[test_case(
         "/{name}/{version}/clapproc%20%60macro.html",
-        RustdocParams::new("clap")
+        RustdocParams::new(CLAP)
             .try_with_original_uri("/clap/latest/clapproc%20%60macro.html").unwrap()
             .with_static_route_suffix("clapproc `macro.html");
         "name, version, static suffix with some urlencoding"
@@ -1217,10 +1210,10 @@ mod tests {
             .try_with_original_uri(&dummy_path[..])
             .unwrap()
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
-        assert_eq!(parsed.name(), KRATE);
+        assert_eq!(parsed.name(), &KRATE);
         assert_eq!(parsed.req_version(), &ReqVersion::Latest);
         assert_eq!(parsed.doc_target(), expected_target);
         assert_eq!(parsed.inner_path(), expected_path);
@@ -1241,7 +1234,7 @@ mod tests {
     #[test_case("something.html", Some("html"); "plain file")]
     #[test_case("", None)]
     fn test_generate_fallback_search(path: &str, search: Option<&str>) {
-        let mut params = RustdocParams::new("dummy")
+        let mut params = RustdocParams::new(DUMMY)
             .try_with_req_version("0.4.0")
             .unwrap()
             // non-default target, target stays in the url
@@ -1275,7 +1268,7 @@ mod tests {
 
     #[test]
     fn test_parse_source() {
-        let params = RustdocParams::new("dummy")
+        let params = RustdocParams::new(DUMMY)
             .try_with_req_version("0.4.0")
             .unwrap()
             .with_inner_path("README.md")
@@ -1366,7 +1359,7 @@ mod tests {
 
     #[test]
     fn test_case_1() {
-        let params = RustdocParams::new("dummy")
+        let params = RustdocParams::new(DUMMY)
             .try_with_req_version("0.2.0")
             .unwrap()
             .with_doc_target("dummy")
@@ -1485,36 +1478,41 @@ mod tests {
         "just other target"
     )]
     #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
+        Some(&KRATE), Some(DEFAULT_TARGET),
         Some(DEFAULT_TARGET), None
         => format!("{KRATE}/");
         "full with default target, target name is used"
     )]
     #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
+        Some(&KRATE), Some(DEFAULT_TARGET),
         Some(OTHER_TARGET), None
         => format!("{OTHER_TARGET}/{KRATE}/");
         "full with other target, target name is used"
     )]
     #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
+        Some(&KRATE), Some(DEFAULT_TARGET),
         Some(DEFAULT_TARGET), Some("inner/something.html")
         => "inner/something.html";
         "full with default target, target name is ignored"
     )]
     #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
+        Some(&KRATE), Some(DEFAULT_TARGET),
         Some(OTHER_TARGET), Some("inner/something.html")
         => format!("{OTHER_TARGET}/inner/something.html");
         "full with other target, target name is ignored"
     )]
     fn test_rustdoc_path_for_url(
-        target_name: Option<&str>,
+        target_name: Option<&KrateName>,
         default_target: Option<&str>,
         doc_target: Option<&str>,
         inner_path: Option<&str>,
     ) -> String {
-        generate_rustdoc_path_for_url(target_name, default_target, doc_target, inner_path)
+        generate_rustdoc_path_for_url(
+            target_name.map(|n| n.to_string()).as_deref(),
+            default_target,
+            doc_target,
+            inner_path,
+        )
     }
 
     #[test]
@@ -1525,7 +1523,7 @@ mod tests {
             .with_inner_path("path_add")
             .with_static_route_suffix("static.html")
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
@@ -1563,7 +1561,7 @@ mod tests {
             .with_static_route_suffix("static.html")
             .with_doc_target(OTHER_TARGET)
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
@@ -1605,7 +1603,7 @@ mod tests {
 
     #[test]
     fn test_debug_output() {
-        let params = RustdocParams::new("dummy")
+        let params = RustdocParams::new(&DUMMY)
             .try_with_req_version("0.2.0")
             .unwrap()
             .with_inner_path("struct.Dummy.html")
@@ -1646,7 +1644,7 @@ mod tests {
         // it to the inner_path.
         let params = params
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         dbg!(&params);
@@ -1672,7 +1670,7 @@ mod tests {
             .unwrap()
             .with_inner_path("dummy/struct.Dummy.html")
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         assert_eq!(params.doc_target(), None);
@@ -1693,7 +1691,7 @@ mod tests {
             .unwrap()
             .with_inner_path(format!("{OTHER_TARGET}/dummy/struct.Dummy.html"))
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
@@ -1713,14 +1711,14 @@ mod tests {
                 .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
                 .unwrap()
                 .with_req_version(ReqVersion::Latest)
-                .with_doc_target(KRATE)
+                .with_doc_target(KRATE.to_string())
         );
 
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
 
         let params = dbg!(
             params
-                .with_target_name(KRATE)
+                .with_target_name(KRATE.to_string())
                 .with_default_target(DEFAULT_TARGET)
                 .with_doc_targets(TARGETS.iter().cloned())
         );
@@ -1732,7 +1730,7 @@ mod tests {
     #[test_case("other_path", "/krate/latest/krate/other_path"; "without .html")]
     #[test_case("other_path.html", "/krate/latest/krate/other_path.html"; "with .html")]
     #[test_case("settings.html", "/krate/latest/settings.html"; "static routes")]
-    #[test_case(KRATE, "/krate/latest/krate/"; "same as target name, without slash")]
+    #[test_case("krate", "/krate/latest/krate/"; "same as target name, without slash")]
     fn test_redirect_some_odd_paths_we_saw(inner_path: &str, expected_url: &str) {
         // test for https://github.com/rust-lang/docs.rs/issues/2989
         let params = RustdocParams::new(KRATE)
@@ -1743,7 +1741,7 @@ mod tests {
             .with_maybe_doc_target(None::<String>)
             .with_inner_path(inner_path)
             .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
+            .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
         dbg!(&params);
@@ -1762,7 +1760,7 @@ mod tests {
         let params = RustdocParams::new(KRATE)
             .with_page_kind(PageKind::Rustdoc)
             .with_req_version(ReqVersion::Exact(ver))
-            .with_doc_target(KRATE)
+            .with_doc_target(KRATE.to_string())
             .with_inner_path("trait.Itertools.html");
 
         dbg!(&params);

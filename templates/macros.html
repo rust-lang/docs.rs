@@ -159,7 +159,7 @@
 {% macro dependencies_list(dependencies, use_crate_details, if_empty) %}
     {%- for dep in dependencies -%}
         <li class="pure-menu-item">
-    {%- set dependency_params = RustdocParams::new(dep.name.to_owned()).with_req_version(ReqVersion::Semver(dep.req.clone())) -%}
+            {%- set dependency_params = dep.rustdoc_params() -%}
             {%- set href -%}
             {%- if use_crate_details -%}
                 {%- set href = dependency_params.crate_details_url() -%}
