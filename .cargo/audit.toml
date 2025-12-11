@@ -13,6 +13,9 @@ ignore = [
 
     "RUSTSEC-2025-0057", # fxhash - no longer maintained. Not much we can do about it.
     # https://github.com/rust-lang/docs.rs/issues/2914
+
+    "RUSTSEC-2025-0134", # rustls-pemfile is unmaintained 
+    # https://github.com/rust-lang/docs.rs/issues/3070
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
