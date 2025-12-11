@@ -27,7 +27,7 @@ pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
 mod escaped_uri;
-mod extractors;
+pub(crate) mod extractors;
 mod features;
 mod file;
 pub(crate) mod headers;

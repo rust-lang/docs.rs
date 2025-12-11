@@ -1,4 +1,6 @@
-use crate::{db::types::version::Version, error::Result};
+use crate::db::types::krate_name::KrateName;
+use crate::web::ReqVersion;
+use crate::{db::types::version::Version, error::Result, web::extractors::rustdoc::RustdocParams};
 use anyhow::{Context, bail};
 use rustwide::{Toolchain, Workspace, cmd::Command};
 use semver::VersionReq;
@@ -133,6 +135,19 @@ pub(crate) struct Dependency {
     pub(crate) kind: Option<String>,
     pub(crate) rename: Option<String>,
     pub(crate) optional: bool,
+}
+
+impl Dependency {
+    pub(crate) fn rustdoc_params(&self) -> RustdocParams {
+        RustdocParams::new(
+            // I validated in the database, which makes me assume that renames are
+            // handled before storing the deps into the column.
+            self.name
+                .parse::<KrateName>()
+                .expect("we validated that the dep name is always a valid KrateName"),
+        )
+        .with_req_version(ReqVersion::Semver(self.req.clone()))
+    }
 }
 
 impl bincode::Encode for Dependency {

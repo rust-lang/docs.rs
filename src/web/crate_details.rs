@@ -489,7 +489,7 @@ pub(crate) async fn crate_details_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.crate_details_url(),
@@ -660,7 +660,7 @@ pub(crate) async fn get_all_platforms_inner(
             AxumNope::Redirect(
                 params
                     .clone()
-                    .with_confirmed_name(Some(corrected_name))
+                    .with_name(corrected_name)
                     .with_req_version(req_version)
                     .platforms_partial_url(),
                 CachePolicy::NoCaching,
@@ -669,7 +669,7 @@ pub(crate) async fn get_all_platforms_inner(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.platforms_partial_url(),
@@ -2254,7 +2254,7 @@ path = "src/lib.rs"
                 .await?;
 
             let resp = env.web_app().await.get("/crate/dummy%3E").await?;
-            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
             Ok(())
         })

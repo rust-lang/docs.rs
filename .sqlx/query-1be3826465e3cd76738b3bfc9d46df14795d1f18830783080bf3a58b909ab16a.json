@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH params AS (\n            -- get maximum possible id-value in crates-table\n            SELECT last_value AS max_id FROM crates_id_seq\n        )\n        SELECT\n            crates.name as \"name: KrateName\",\n            releases.version as \"version: Version\",\n            releases.target_name\n        FROM (\n            -- generate random numbers in the ID-range.\n            SELECT DISTINCT 1 + trunc(random() * params.max_id)::INTEGER AS id\n            FROM params, generate_series(1, $1)\n        ) AS r\n        INNER JOIN crates ON r.id = crates.id\n        INNER JOIN releases ON crates.latest_version_id = releases.id\n        INNER JOIN repositories ON releases.repository_id = repositories.id\n        WHERE\n            releases.rustdoc_status = TRUE AND\n            repositories.stars >= 100\n        LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "target_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1be3826465e3cd76738b3bfc9d46df14795d1f18830783080bf3a58b909ab16a"
+}

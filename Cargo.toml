@@ -10,6 +10,12 @@ edition = "2024"
 
 [workspace]
 members = ["crates/*"]
+exclude = [
+    "ignored",
+    "tests",
+    ".workspace",
+    ".rustwide-docker",
+]
 
 [dependencies]
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }

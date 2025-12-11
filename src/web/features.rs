@@ -1,5 +1,5 @@
 use crate::{
-    db::types::Feature as DbFeature,
+    db::types::{Feature as DbFeature, krate_name::KrateName},
     impl_axum_webpage,
     web::{
         MetaData, ReqVersion,
@@ -104,6 +104,12 @@ impl FeaturesPage {
             .get(dependency)
             .unwrap_or(&ReqVersion::Latest)
     }
+    fn dependency_params(&self, dependency: &str) -> Option<RustdocParams> {
+        let version = self.dependency_version(dependency);
+        let dependency: KrateName = dependency.parse().ok()?;
+
+        Some(RustdocParams::new(dependency).with_req_version(version))
+    }
 }
 
 impl_axum_webpage! {
@@ -152,7 +158,7 @@ pub(crate) async fn build_features_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.features_url(),

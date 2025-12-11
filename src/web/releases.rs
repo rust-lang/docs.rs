@@ -2,6 +2,7 @@
 
 use super::cache::CachePolicy;
 use crate::build_queue::PRIORITY_CONTINUOUS;
+use crate::db::types::krate_name::KrateName;
 use crate::{
     AsyncBuildQueue, Config, RegistryApi,
     build_queue::QueuedCrate,
@@ -47,7 +48,7 @@ const RELEASES_IN_FEED: i64 = 150;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Release {
-    pub(crate) name: String,
+    pub(crate) name: KrateName,
     pub(crate) version: Version,
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
@@ -59,7 +60,7 @@ pub struct Release {
 
 impl Release {
     pub fn rustdoc_params(&self) -> RustdocParams {
-        RustdocParams::new(&self.name)
+        RustdocParams::new(self.name.clone())
             .with_req_version(self.version.clone())
             .with_maybe_target_name(self.target_name.clone())
     }
@@ -142,7 +143,7 @@ pub(crate) enum ReleaseStatus {
     Available(Release),
     External(&'static OfficialCrateDescription),
     /// Only contains the crate name.
-    NotAvailable(String),
+    NotAvailable(KrateName),
 }
 
 struct SearchResult {
@@ -165,7 +166,12 @@ async fn get_search_results(
     let names = Arc::new(
         crates
             .into_iter()
-            .map(|krate| krate.name)
+            .map(|krate| {
+                krate
+                    .name
+                    .parse::<KrateName>()
+                    .expect("results from crates.io always pass the check")
+            })
             .collect::<Vec<_>>(),
     );
 
@@ -176,9 +182,9 @@ async fn get_search_results(
     // So for now we are using the version with the youngest release_time.
     // This is different from all other release-list views where we show
     // our latest build.
-    let mut crates: HashMap<String, Release> = sqlx::query!(
+    let mut crates: HashMap<KrateName, Release> = sqlx::query!(
         r#"SELECT
-               crates.name,
+               crates.name as "name: KrateName",
                releases.version as "version: Version",
                releases.description,
                release_build_status.last_build_time,
@@ -201,7 +207,7 @@ async fn get_search_results(
            WHERE
                crates.name = ANY($1) AND
                release_build_status.build_status <> 'in_progress'"#,
-        &names[..],
+        &names[..] as _,
     )
     .fetch(&mut *conn)
     .map_ok(|row| {
@@ -226,11 +232,13 @@ async fn get_search_results(
     // extend with the release/build information from docs.rs
     // Crates that are not on docs.rs yet will not be returned.
     let mut results = Vec::new();
-    if let Some(desc) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(query) {
+    if let Ok(krate) = query.parse::<KrateName>()
+        && let Some(desc) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(&krate)
+    {
         results.push(ReleaseStatus::External(desc));
     }
 
-    let names: Vec<String> =
+    let names: Vec<KrateName> =
         Arc::into_inner(names).expect("Arc still borrowed in `get_search_results`");
     results.extend(names.into_iter().map(|name| {
         if let Some(release) = crates.remove(&name) {
@@ -464,13 +472,13 @@ async fn redirect_to_random_crate(
     //
     // If random-crate-searches end up being empty, increase that value.
     let row = sqlx::query!(
-        "WITH params AS (
+        r#"WITH params AS (
             -- get maximum possible id-value in crates-table
             SELECT last_value AS max_id FROM crates_id_seq
         )
         SELECT
-            crates.name,
-            releases.version,
+            crates.name as "name: KrateName",
+            releases.version as "version: Version",
             releases.target_name
         FROM (
             -- generate random numbers in the ID-range.
@@ -483,7 +491,7 @@ async fn redirect_to_random_crate(
         WHERE
             releases.rustdoc_status = TRUE AND
             repositories.stars >= 100
-        LIMIT 1",
+        LIMIT 1"#,
         config.random_crate_search_view_size as i32,
     )
     .fetch_optional(&mut *conn)
@@ -493,12 +501,8 @@ async fn redirect_to_random_crate(
     if let Some(row) = row {
         otel_metrics.im_feeling_lucky_searches.add(1, &[]);
 
-        let params = RustdocParams::new(&row.name)
-            .with_req_version(ReqVersion::Exact(
-                row.version
-                    .parse()
-                    .context("could not parse version releases table")?,
-            ))
+        let params = RustdocParams::new(row.name.clone())
+            .with_req_version(ReqVersion::Exact(row.version.clone()))
             .with_maybe_target_name(row.target_name.as_deref());
 
         trace!(?row, ?params, "redirecting to random crate result");
@@ -712,7 +716,7 @@ struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
-    in_progress_builds: Vec<(String, Version)>,
+    in_progress_builds: Vec<(KrateName, Version)>,
     expand_rebuild_queue: bool,
 }
 
@@ -728,9 +732,9 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let in_progress_builds: Vec<(String, Version)> = sqlx::query!(
+    let in_progress_builds: Vec<(KrateName, Version)> = sqlx::query!(
         r#"SELECT
-            crates.name,
+            crates.name as "name: KrateName",
             releases.version as "version: Version"
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -826,7 +830,7 @@ mod tests {
                 vec!["foo"],
                 releases
                     .iter()
-                    .map(|release| release.name.as_str())
+                    .map(|release| release.name.to_string())
                     .collect::<Vec<_>>(),
             );
 
@@ -893,7 +897,7 @@ mod tests {
                 ],
                 releases
                     .iter()
-                    .map(|release| release.name.as_str())
+                    .map(|release| release.name.to_string())
                     .collect::<Vec<_>>(),
             );
 

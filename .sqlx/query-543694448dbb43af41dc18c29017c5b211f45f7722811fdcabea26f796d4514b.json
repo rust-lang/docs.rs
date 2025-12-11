@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n               crates.name as \"name: KrateName\",\n               releases.version as \"version: Version\",\n               releases.description,\n               release_build_status.last_build_time,\n               releases.target_name,\n               releases.rustdoc_status,\n               repositories.stars as \"stars?\",\n               EXISTS (\n                   SELECT 1\n                   FROM releases AS all_releases\n                   WHERE\n                       all_releases.crate_id = crates.id AND\n                       all_releases.yanked = false\n               ) AS has_unyanked_releases\n\n           FROM crates\n           INNER JOIN releases ON crates.latest_version_id = releases.id\n           INNER JOIN release_build_status ON releases.id = release_build_status.rid\n           LEFT JOIN repositories ON releases.repository_id = repositories.id\n\n           WHERE\n               crates.name = ANY($1) AND\n               release_build_status.build_status <> 'in_progress'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_build_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "target_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "stars?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "has_unyanked_releases",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "543694448dbb43af41dc18c29017c5b211f45f7722811fdcabea26f796d4514b"
+}

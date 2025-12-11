@@ -1,4 +1,5 @@
 use crate::build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
+use crate::db::types::krate_name::KrateName;
 use crate::{
     AsyncBuildQueue, Config,
     db::{
@@ -70,7 +71,7 @@ pub(crate) async fn build_list_handler(
         .into_canonical_req_version_or_else(|confirmed_name, version| {
             let params = params
                 .clone()
-                .with_confirmed_name(Some(confirmed_name))
+                .with_name(confirmed_name)
                 .with_req_version(version);
             AxumNope::Redirect(
                 params.builds_url(),
@@ -105,7 +106,7 @@ pub(crate) async fn build_list_handler(
 
 async fn crate_version_exists(
     conn: &mut sqlx::PgConnection,
-    name: &String,
+    name: &KrateName,
     version: &Version,
 ) -> Result<bool, anyhow::Error> {
     let row = sqlx::query!(
@@ -125,7 +126,7 @@ async fn crate_version_exists(
 
 async fn build_trigger_check(
     conn: &mut sqlx::PgConnection,
-    name: &String,
+    name: &KrateName,
     version: &Version,
     build_queue: &Arc<AsyncBuildQueue>,
 ) -> AxumResult<impl IntoResponse> {
@@ -145,7 +146,7 @@ async fn build_trigger_check(
 }
 
 pub(crate) async fn build_trigger_rebuild_handler(
-    Path((name, version)): Path<(String, Version)>,
+    Path((name, version)): Path<(KrateName, Version)>,
     mut conn: DbConnection,
     Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
     Extension(config): Extension<Arc<Config>>,

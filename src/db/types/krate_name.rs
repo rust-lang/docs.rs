@@ -6,10 +6,10 @@ use sqlx::{
     Decode, Encode, Postgres,
     encode::IsNull,
     error::BoxDynError,
-    postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef},
+    postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueRef},
     prelude::*,
 };
-use std::{io::Write, str::FromStr};
+use std::{borrow::Cow, io::Write, str::FromStr};
 
 /// validated crate name
 ///
@@ -31,7 +31,14 @@ use std::{io::Write, str::FromStr};
     SerializeDisplay,
     bincode::Encode,
 )]
-pub struct KrateName(String);
+pub struct KrateName(Cow<'static, str>);
+
+impl KrateName {
+    #[cfg(test)]
+    pub(crate) const fn from_static(s: &'static str) -> Self {
+        KrateName(Cow::Borrowed(s))
+    }
+}
 
 impl From<&KrateName> for KrateName {
     fn from(krate_name: &KrateName) -> Self {
@@ -44,7 +51,7 @@ impl FromStr for KrateName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         validate_crate_name("crate", s)?;
-        Ok(KrateName(s.to_string()))
+        Ok(KrateName(Cow::Owned(s.to_string())))
     }
 }
 
@@ -67,8 +74,21 @@ impl<'q> Encode<'q, Postgres> for KrateName {
 
 impl<'r> Decode<'r, Postgres> for KrateName {
     fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        // future improvement: we could also avoid the allocation here
+        // and return a Cow::Borrowed while reading from the DB.
+        // But this would mean the lifetime leaks into the whole codebase.
         let s: &str = Decode::<Postgres>::decode(value)?;
-        Ok(Self(s.parse()?))
+        Ok(Self(Cow::Owned(s.parse()?)))
+    }
+}
+
+impl PgHasArrayType for KrateName {
+    fn array_type_info() -> PgTypeInfo {
+        <&str as PgHasArrayType>::array_type_info()
+    }
+
+    fn array_compatible(ty: &PgTypeInfo) -> bool {
+        <&str as PgHasArrayType>::array_compatible(ty)
     }
 }
 

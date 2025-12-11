@@ -29,7 +29,7 @@ pub(crate) async fn status_handler(
                     AxumNope::Redirect(
                         params
                             .clone()
-                            .with_confirmed_name(Some(confirmed_name))
+                            .with_name(confirmed_name)
                             .with_req_version(version)
                             .build_status_url(),
                         CachePolicy::NoCaching,
