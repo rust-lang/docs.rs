@@ -1244,6 +1244,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "claims"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bba18ee93d577a8428902687bcc2b6b45a56b1981a1f6d779731c86cc4c5db18"
+
+[[package]]
 name = "clap"
 version = "4.5.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1461,6 +1467,15 @@ dependencies = [
  "serde_json",
  "smartstring",
  "thiserror 2.0.17",
+]
+
+[[package]]
+name = "crates_io_validation"
+version = "0.0.0"
+dependencies = [
+ "claims",
+ "thiserror 2.0.17",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -1974,6 +1989,7 @@ dependencies = [
  "constant_time_eq",
  "crates-index",
  "crates-index-diff",
+ "crates_io_validation",
  "criterion",
  "dashmap",
  "derive_builder",

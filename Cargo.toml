@@ -9,12 +9,7 @@ build = "build.rs"
 edition = "2024"
 
 [workspace]
-exclude = [
-    "ignored",
-    "tests",
-    ".workspace",
-    ".rustwide-docker",
-]
+members = ["crates/*"]
 
 [dependencies]
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
@@ -104,6 +99,8 @@ chrono = { version = "0.4.11", default-features = false, features = ["clock", "s
 # Transitive dependencies we don't use directly but need to have specific versions of
 constant_time_eq = "0.4.2"
 md5 = "0.8.0"
+
+crates_io_validation = { path = "crates/crates_io_validation" }
 
 [dev-dependencies]
 criterion = "0.8.0"
