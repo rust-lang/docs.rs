@@ -12,7 +12,7 @@
 #  Build stage  #
 #################
 
-FROM rust:1.91-slim-trixie AS build
+FROM rust:1.92-slim-trixie AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
