@@ -10,7 +10,6 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use std::borrow::Cow;
-use tracing::error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AxumNope {
