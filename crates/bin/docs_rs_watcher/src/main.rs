@@ -36,6 +36,10 @@ async fn main() -> anyhow::Result<()> {
     let context = docs_rs_context::Context::new()?
         .with_pool()
         .await?
+        .with_storage()
+        .await?
+        .with_cdn()
+        .await?
         .with_build_queue()
         .await?;
 
@@ -55,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     // metrics from the registry watcher, which should only run once, and all the time.
     start_background_service_metric_collector(build_queue.clone(), context.meter_provider())?;
 
-    watch_registry(&build_queue, &config).await?;
+    watch_registry(&build_queue, &config, &context).await?;
 
     Ok(())
 }

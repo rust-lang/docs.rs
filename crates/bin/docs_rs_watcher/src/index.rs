@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, atomic::AtomicBool},
 };
-use tokio::process::Command;
+use tokio::{fs, process::Command};
 use tracing::error;
 
 const THREAD_NAME: &str = "crates-index-diff";
@@ -31,6 +31,16 @@ impl Index {
         repository_url: Option<impl AsRef<str>>,
     ) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await.with_context(|| {
+                format!(
+                    "failed to create parent directories for registry index path: {:#?}",
+                    parent
+                )
+            })?;
+        }
+
         let repository_url = repository_url.map(|url| url.as_ref().to_owned());
 
         let clone_options = repository_url
