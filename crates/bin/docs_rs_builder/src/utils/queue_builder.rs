@@ -1,10 +1,8 @@
 use crate::config::Config;
 use crate::docbuilder::rustwide_builder::{PackageKind, RustwideBuilder};
 use anyhow::{Context as _, Result};
-use docs_rs_build_queue::BuildQueue;
 use docs_rs_context::Context;
 use docs_rs_database::types::krate_name::KrateName;
-use docs_rs_fastly::Cdn;
 use docs_rs_utils::retry;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
@@ -46,7 +44,7 @@ pub fn queue_builder(
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
         debug!("Checking build queue");
         let res = catch_unwind(AssertUnwindSafe(|| {
-            match build_next_queue_package(&build_queue, &mut builder) {
+            match build_next_queue_package(context, &mut builder) {
                 Ok(true) => {}
                 Ok(false) => {
                     debug!("Queue is empty, going back to sleep");
@@ -106,16 +104,16 @@ fn build_next_queue_package(context: &Context, builder: &mut RustwideBuilder) ->
         builder.builder_metrics.total_builds.add(1, &[]);
 
         if let Ok(name) = krate.name.parse::<KrateName>() {
-            runtime.block_on(cdn.queue_crate_invalidation(&name));
+            runtime.block_on(cdn.queue_crate_invalidation(&name))?;
         }
 
         res
     })?;
 
-    if let Some(attempt) = next_attempt {
-        if attempt >= build_queue.config().build_attempts as i32 {
-            builder.builder_metrics.failed_builds.add(1, &[]);
-        }
+    if let Some(attempt) = next_attempt
+        && attempt >= build_queue.config().build_attempts as i32
+    {
+        builder.builder_metrics.failed_builds.add(1, &[]);
     }
 
     Ok(processed)

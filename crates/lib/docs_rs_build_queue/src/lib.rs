@@ -11,10 +11,9 @@ use docs_rs_database::{
     types::version::Version,
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_utils::run_blocking;
 use futures_util::TryStreamExt as _;
 use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc};
 use tokio::runtime;
 use tracing::error;
 
