@@ -260,6 +260,10 @@ impl BuildQueue {
         Self { runtime, inner }
     }
 
+    pub fn config(&self) -> &Config {
+        &self.inner.config
+    }
+
     pub fn add_crate(
         &self,
         name: &str,
@@ -305,7 +309,7 @@ impl BuildQueue {
     pub fn process_next_crate(
         &self,
         f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
-    ) -> Result<()> {
+    ) -> Result<Option<i32>> {
         let mut conn = self.runtime.block_on(self.inner.db.get_async())?;
         let mut transaction = self.runtime.block_on(conn.begin())?;
 
@@ -338,7 +342,7 @@ impl BuildQueue {
             .fetch_optional(&mut *transaction),
         )? {
             Some(krate) => krate,
-            None => return Ok(()),
+            None => return Ok(None),
         };
 
         let res = f(&to_process);
@@ -360,6 +364,8 @@ impl BuildQueue {
             Ok(next_attempt)
         };
 
+        let mut next_attempt: Option<i32> = None;
+
         match res {
             Ok(BuildPackageSummary {
                 should_reattempt: false,
@@ -369,15 +375,16 @@ impl BuildQueue {
                     sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
                         .execute(&mut *transaction),
                 )?;
+                next_attempt = None;
             }
             Ok(BuildPackageSummary {
                 should_reattempt: true,
                 successful: _,
             }) => {
-                increase_attempt_count()?;
+                next_attempt = Some(increase_attempt_count()?);
             }
             Err(e) => {
-                increase_attempt_count()?;
+                next_attempt = Some(increase_attempt_count()?);
                 error!(
                     ?e,
                     name = %to_process.name,
@@ -388,7 +395,7 @@ impl BuildQueue {
         }
 
         self.runtime.block_on(transaction.commit())?;
-        Ok(())
+        Ok(next_attempt)
     }
 }
 

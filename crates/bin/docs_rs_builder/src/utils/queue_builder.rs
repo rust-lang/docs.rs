@@ -3,6 +3,8 @@ use crate::docbuilder::rustwide_builder::{PackageKind, RustwideBuilder};
 use anyhow::{Context as _, Result};
 use docs_rs_build_queue::BuildQueue;
 use docs_rs_context::Context;
+use docs_rs_database::types::krate_name::KrateName;
+use docs_rs_fastly::Cdn;
 use docs_rs_utils::retry;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
@@ -67,13 +69,13 @@ pub fn queue_builder(
 /// Builds the top package from the queue. Returns whether there was a package in the queue.
 ///
 /// Note that this will return `Ok(true)` even if the package failed to build.
-fn build_next_queue_package(
-    build_queue: &BuildQueue,
-    builder: &mut RustwideBuilder,
-) -> Result<bool> {
+fn build_next_queue_package(context: &Context, builder: &mut RustwideBuilder) -> Result<bool> {
+    let build_queue = context.blocking_build_queue()?;
+    let runtime = context.runtime();
+    let cdn = context.cdn()?;
     let mut processed = false;
 
-    build_queue.process_next_crate(|krate| {
+    let next_attempt = build_queue.process_next_crate(|krate| {
         processed = true;
 
         let kind = krate
@@ -95,22 +97,26 @@ fn build_next_queue_package(
         }
 
         let instant = Instant::now();
-
         let res = builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0);
 
-        let elapsed = instant.elapsed().as_secs_f64();
-        builder.builder_metrics.build_time.record(elapsed, &[]);
+        builder
+            .builder_metrics
+            .build_time
+            .record(instant.elapsed().as_secs_f64(), &[]);
         builder.builder_metrics.total_builds.add(1, &[]);
-        // self.runtime
-        //     .block_on(self.inner.queue_crate_invalidation(&to_process.name));
+
+        if let Ok(name) = krate.name.parse::<KrateName>() {
+            runtime.block_on(cdn.queue_crate_invalidation(&name));
+        }
 
         res
     })?;
 
-    // in case of errors?
-    // if attempt >= self.inner.config.build_attempts as i32 {
-    //     self.inner.builder_metrics.failed_builds.add(1, &[]);
-    // }
+    if let Some(attempt) = next_attempt {
+        if attempt >= build_queue.config().build_attempts as i32 {
+            builder.builder_metrics.failed_builds.add(1, &[]);
+        }
+    }
 
     Ok(processed)
 }
