@@ -1,6 +1,7 @@
-use crate::error::Result;
+use anyhow::Result;
 use futures_util::stream::TryStreamExt;
 use std::time::Duration;
+use tracing::warn;
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Overrides {
@@ -40,7 +41,7 @@ impl Overrides {
 
     pub async fn save(conn: &mut sqlx::PgConnection, krate: &str, overrides: Self) -> Result<()> {
         if overrides.timeout.is_some() && overrides.targets.is_none() {
-            tracing::warn!(
+            warn!(
                 "setting `Overrides::timeout` implies a default `Overrides::targets = 1`, prefer setting this explicitly"
             );
         }
@@ -50,7 +51,7 @@ impl Overrides {
             .await?
             .is_none()
         {
-            tracing::warn!("setting overrides for unknown crate `{krate}`");
+            warn!("setting overrides for unknown crate `{krate}`");
         }
 
         sqlx::query!(

@@ -1,0 +1,15 @@
+[package]
+name = "docs_rs_build_utils"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+docs_rs_database = { path = "../docs_rs_database" }
+serde = { workspace = true}
+docs_rs_utils = { path = "../docs_rs_utils" }
+sqlx = { workspace = true }
+anyhow = { workspace = true }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+futures-util = { workspace = true }
+tracing = { workspace = true }
+

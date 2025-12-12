@@ -1961,6 +1961,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_build_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_utils",
+ "futures-util",
+ "serde",
+ "sqlx",
+ "tracing",
+]
+
+[[package]]
+name = "docs_rs_builder"
+version = "0.1.0"
+dependencies = [
+ "docs_rs_database",
+ "serde",
+]
+
+[[package]]
 name = "docs_rs_cargo_metadata"
 version = "0.1.0"
 dependencies = [
@@ -2193,6 +2215,7 @@ dependencies = [
  "constant_time_eq",
  "derive_more 2.0.1",
  "docs_rs_build_queue",
+ "docs_rs_build_utils",
  "docs_rs_cargo_metadata",
  "docs_rs_database",
  "docs_rs_env_vars",
