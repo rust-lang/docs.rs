@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Arc::new(Config::from_environment()?);
 
-    run_web_server(args.socket_addr, config, &context).await?;
+    run_web_server(Some(args.socket_addr), config, &context).await?;
 
     Ok(())
 }
