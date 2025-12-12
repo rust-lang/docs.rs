@@ -1,4 +1,4 @@
-use docs_rs_env_vars::{env, maybe_env};
+use docs_rs_env_vars::maybe_env;
 
 #[derive(Debug)]
 pub struct Config {

@@ -21,7 +21,7 @@ use docs_rs_database::{
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
-use docs_rs_repository_stast::RepositoryStatsUpdater;
+use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_storage::{
     AsyncStorage, RustdocJsonFormatVersion, Storage, compress,
     compression::CompressionAlgorithm,
@@ -214,7 +214,10 @@ impl RustwideBuilder {
             storage: context.blocking_storage()?,
             async_storage: context.storage()?,
             registry_api: RegistryApi::from_environment()?.into(),
-            repository_stats_updater: RepositoryStatsUpdater::new()?.into(),
+            repository_stats_updater: RepositoryStatsUpdater::from_environment(
+                context.pool()?.clone(),
+            )?
+            .into(),
             workspace_initialize_time: Instant::now(),
             builder_metrics: BuilderMetrics::new(context.meter_provider()).into(),
         })
@@ -454,9 +457,9 @@ impl RustwideBuilder {
 
     #[instrument(skip(self))]
     fn get_limits(&self, krate: &str) -> Result<Limits> {
+        let config = docs_rs_build_utils::Config::from_environment()?;
         self.runtime.block_on({
             let db = self.db.clone();
-            let config = self.config.clone();
             async move {
                 let mut conn = db.get_async().await?;
                 Limits::for_crate(&config, &mut conn, krate).await
@@ -526,13 +529,13 @@ impl RustwideBuilder {
                 let static_files = dest.as_ref().join("static.files");
                 if static_files.try_exists()? {
                     self.runtime.block_on(add_path_into_database(
-                        &self.storage,
+                        &self.async_storage,
                         RUSTDOC_STATIC_STORAGE_PREFIX,
                         &static_files,
                     ))?;
                 } else {
                     self.runtime.block_on(add_path_into_database(
-                        &self.storage,
+                        &self.async_storage,
                         RUSTDOC_STATIC_STORAGE_PREFIX,
                         &dest,
                     ))?;
@@ -698,7 +701,7 @@ impl RustwideBuilder {
                 let files_list = {
                     let (files_list, new_alg) =
                         self.runtime.block_on(add_path_into_remote_archive(
-                            &self.storage,
+                            &self.async_storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
                         ))?;
@@ -793,7 +796,7 @@ impl RustwideBuilder {
                     }
                     let (file_list, new_alg) =
                         self.runtime.block_on(add_path_into_remote_archive(
-                            &self.storage,
+                            &self.async_storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;
@@ -848,7 +851,7 @@ impl RustwideBuilder {
                         }) {
                         Ok(data) => Some(data),
                         Err(err) => {
-                            report_error(&err);
+                            error!(%name, %version, ?err, "could not fetch releases-data");
                             None
                         }
                     }
