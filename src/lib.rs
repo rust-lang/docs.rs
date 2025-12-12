@@ -6,7 +6,6 @@ pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
-pub use self::registry_api::RegistryApi;
 pub use self::web::start_web_server;
 
 pub use font_awesome_as_a_crate::icons;
@@ -15,9 +14,7 @@ mod config;
 mod context;
 pub mod db;
 mod docbuilder;
-mod error;
 pub mod metrics;
-mod registry_api;
 #[cfg(test)]
 mod test;
 pub mod utils;

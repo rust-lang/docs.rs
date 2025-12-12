@@ -2092,6 +2092,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_registry_api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "docs_rs_database",
+ "docs_rs_utils",
+ "reqwest",
+ "serde",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "docs_rs_storage"
 version = "0.1.0"
 dependencies = [

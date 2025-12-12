@@ -148,8 +148,3 @@ ignored = ["phf"]
 [[bench]]
 name = "compression"
 harness = false
-
-[[bin]]
-name = "cratesfyi"
-test = false
-doc = false
