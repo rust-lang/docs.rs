@@ -1,6 +1,6 @@
 use super::Dependency;
 use derive_more::Deref;
-use semver::VersionReq;
+use docs_rs_database::types::version::VersionReq;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_KIND: &str = "normal";

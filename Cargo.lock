@@ -1844,7 +1844,6 @@ dependencies = [
  "bincode 2.0.1",
  "derive_more",
  "docs_rs_database",
- "semver",
  "serde",
  "serde_json",
 ]
@@ -2118,7 +2117,6 @@ dependencies = [
  "phf_codegen 0.13.1",
  "rayon",
  "regex",
- "semver",
  "sentry",
  "serde",
  "serde_json",

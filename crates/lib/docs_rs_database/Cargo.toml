@@ -14,8 +14,8 @@ futures-util = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2"
 opentelemetry = { workspace = true }
-semver = { workspace = true }
 serde = { workspace = true }
+semver = { version = "1.0.4", features = ["serde"] }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 sqlx = { workspace = true }

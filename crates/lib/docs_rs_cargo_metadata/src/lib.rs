@@ -1,8 +1,7 @@
 pub mod db;
 
 use anyhow::{Context, Result};
-use docs_rs_database::types::version::Version;
-use semver::VersionReq;
+use docs_rs_database::types::version::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 #[cfg(test)]

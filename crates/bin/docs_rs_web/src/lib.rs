@@ -16,7 +16,11 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
 use docs_rs_context::Context;
-use docs_rs_database::types::{CrateId, krate_name::KrateName, version::Version};
+use docs_rs_database::types::{
+    CrateId,
+    krate_name::KrateName,
+    version::{Error as VersionError, Version, VersionReq},
+};
 use serde::Serialize;
 use tracing::{info, instrument};
 
@@ -55,7 +59,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use error::AxumNope;
 use page::TemplateData;
-use semver::VersionReq;
 use sentry::integrations::tower as sentry_tower;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{
@@ -137,7 +140,7 @@ impl Display for ReqVersion {
 }
 
 impl FromStr for ReqVersion {
-    type Err = semver::Error;
+    type Err = VersionError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "latest" {
             Ok(ReqVersion::Latest)
@@ -182,7 +185,7 @@ impl From<&VersionReq> for ReqVersion {
 }
 
 impl TryFrom<String> for ReqVersion {
-    type Error = semver::Error;
+    type Error = VersionError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         value.parse()
@@ -190,7 +193,7 @@ impl TryFrom<String> for ReqVersion {
 }
 
 impl TryFrom<&str> for ReqVersion {
-    type Error = semver::Error;
+    type Error = VersionError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         value.parse()

@@ -12,10 +12,6 @@ reason = """
 """
 
 [[disallowed-types]]
-path = "semver::Version"
-reason = "use our own custom db::types::version::Version so you can use it with sqlx"
-
-[[disallowed-types]]
 path = "axum_extra::headers::IfNoneMatch"
 reason = "use our own custom web::headers::IfNoneMatch for sane behaviour with missing headers"
 
