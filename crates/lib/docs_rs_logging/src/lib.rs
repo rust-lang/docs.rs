@@ -10,7 +10,6 @@ pub struct Guard {
     sentry_guard: Option<sentry::ClientInitGuard>,
 }
 
-#[must_use]
 pub fn init() -> anyhow::Result<Guard> {
     let log_formatter = {
         let log_format = env::var("DOCSRS_LOG_FORMAT").unwrap_or_default();

@@ -16,6 +16,12 @@ pub fn compute_etag<T: AsRef<[u8]>>(content: T) -> ETag {
 /// but produces an `ETag` when finalized.
 pub struct ETagComputer(md5::Context);
 
+impl Default for ETagComputer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ETagComputer {
     pub fn new() -> Self {
         Self(md5::Context::new())

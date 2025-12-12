@@ -4,34 +4,33 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde = { workspace = true }
-docs_rs_database = { path = "../docs_rs_database" }
-docs_rs_env_vars = { path = "../docs_rs_env_vars" }
-docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
-docs_rs_storage = { path = "../docs_rs_storage" }
-docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
-docs_rs_watcher = { path = "../docs_rs_watcher" }
-docs_rs_registry_api = { path = "../docs_rs_registry_api" }
-docs_rs_build_utils = { path = "../docs_rs_build_utils" }
-docs_rs_context = { path = "../docs_rs_context" }
-docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
-url = { workspace = true }
 anyhow = { workspace = true }
-serde_json = { workspace = true }
-slug = { workspace = true }
+docs_rs_build_utils = { path = "../../lib/docs_rs_build_utils" }
+docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
+docs_rs_database = { path = "../../lib/docs_rs_database" }
+docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
+docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
+docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
+docs_rs_storage = { path = "../../lib/docs_rs_storage" }
+docs_rs_utils = { path = "../../lib/docs_rs_utils" }
+docsrs-metadata = { path = "../../lib/metadata" }
 futures-util = { workspace = true }
-docs_rs_utils = { path = "../docs_rs_utils" }
-docsrs-metadata = { path = "../metadata" }
-opentelemetry = { workspace = true }
+hostname = "0.4.0"
 itertools = { workspace = true }
+log = "0.4"
+opentelemetry = { workspace = true }
 regex = { workspace = true }
 rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
-tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slug = { workspace = true }
 sqlx = { workspace = true }
+sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
-log = "0.4"
-tempfile = { workspace = true }
 toml = { workspace = true }
-hostname = "0.4.0"
+tracing = { workspace = true }
+url = { workspace = true }

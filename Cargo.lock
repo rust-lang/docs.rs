@@ -1984,7 +1984,6 @@ dependencies = [
  "docs_rs_repository_stats",
  "docs_rs_storage",
  "docs_rs_utils",
- "docs_rs_watcher",
  "docsrs-metadata",
  "futures-util",
  "hostname",

@@ -58,19 +58,19 @@ bincode = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 derive_more = { workspace = true }
-docs_rs_build_queue = { path = "crates/docs_rs_build_queue" }
-docs_rs_cargo_metadata = { path = "crates/docs_rs_cargo_metadata" }
-docs_rs_database = { path = "crates/docs_rs_database" }
-docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
-docs_rs_headers = { path = "crates/docs_rs_headers" }
-docs_rs_logging = { path = "crates/docs_rs_logging" }
-docs_rs_opentelemetry = { path = "crates/docs_rs_opentelemetry" }
-docs_rs_registry_api = { path = "crates/docs_rs_registry_api" }
-docs_rs_storage = { path = "crates/docs_rs_storage" }
-docs_rs_utils = { path = "crates/docs_rs_utils" }
-docs_rs_watcher = { path = "crates/docs_rs_watcher" }
-docs_rs_web_utils = { path = "crates/docs_rs_web_utils" }
-docsrs-metadata = { path = "crates/metadata" }
+docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue" }
+docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata" }
+docs_rs_database = { path = "crates/lib/docs_rs_database" }
+docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
+docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
+docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
+docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
+docs_rs_registry_api = { path = "crates/lib/docs_rs_registry_api" }
+docs_rs_storage = { path = "crates/lib/docs_rs_storage" }
+docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
+docs_rs_watcher = { path = "crates/bin/docs_rs_watcher" }
+docs_rs_web_utils = { path = "crates/lib/docs_rs_web_utils" }
+docsrs-metadata = { path = "crates/lib/metadata" }
 fn-error-context = "0.2.0"
 futures-util = { workspace = true }
 getrandom = "0.3.1"
