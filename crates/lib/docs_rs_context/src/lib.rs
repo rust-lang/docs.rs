@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::Pool;
+use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_storage::{AsyncStorage, Storage};
@@ -14,6 +15,7 @@ pub struct Config {
     database: Option<Arc<docs_rs_database::Config>>,
     storage: Option<Arc<docs_rs_storage::Config>>,
     registry_api: Option<Arc<docs_rs_registry_api::Config>>,
+    cdn: Option<Arc<docs_rs_fastly::Config>>,
 }
 
 pub struct Context {
@@ -28,6 +30,8 @@ pub struct Context {
     blocking_storage: Option<Arc<docs_rs_storage::Storage>>,
 
     registry_api: Option<Arc<RegistryApi>>,
+
+    cdn: Option<Arc<Cdn>>,
 
     runtime: Handle,
     config: Config,
@@ -54,6 +58,7 @@ impl Context {
             storage: None,
             blocking_storage: None,
             registry_api: None,
+            cdn: None,
         })
     }
 
@@ -117,6 +122,19 @@ impl Context {
         self.config.registry_api = Some(Arc::new(config));
         Ok(self)
     }
+
+    pub async fn with_cdn(mut self) -> Result<Self> {
+        if self.cdn.is_some() {
+            return Ok(self);
+        }
+
+        let config = Arc::new(docs_rs_fastly::Config::from_environment()?);
+        let cdn = Cdn::from_config(config.clone(), &self.meter_provider)?;
+
+        self.cdn = Some(Arc::new(cdn));
+        self.config.cdn = Some(config);
+        Ok(self)
+    }
 }
 
 // accessors
@@ -174,6 +192,14 @@ impl Context {
             Ok(registry_api.clone())
         } else {
             Err(anyhow!("Registry API is not initialized"))
+        }
+    }
+
+    pub fn cdn(&self) -> Result<Arc<Cdn>> {
+        if let Some(ref cdn) = self.cdn {
+            Ok(cdn.clone())
+        } else {
+            Err(anyhow!("CDN is not initialized"))
         }
     }
 }

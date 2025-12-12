@@ -1,10 +1,15 @@
 mod config;
 mod metrics;
 
-use anyhow::{Result, anyhow, bail};
+use std::sync::Arc;
+
+pub use config::Config;
+
+use anyhow::{Result, bail};
 use chrono::{DateTime, TimeZone as _, Utc};
 use docs_rs_database::types::krate_name::KrateName;
 use docs_rs_headers::{SURROGATE_KEY, SurrogateKey, SurrogateKeys};
+use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_utils::APP_USER_AGENT;
 use http::{
     HeaderMap, HeaderName, HeaderValue,
@@ -12,7 +17,6 @@ use http::{
 };
 use itertools::Itertools as _;
 use opentelemetry::KeyValue;
-use std::sync::OnceLock;
 use tracing::error;
 
 const FASTLY_KEY: HeaderName = HeaderName::from_static("fastly-key");
@@ -21,24 +25,6 @@ const FASTLY_KEY: HeaderName = HeaderName::from_static("fastly-key");
 const FASTLY_RATELIMIT_REMAINING: HeaderName =
     HeaderName::from_static("fastly-ratelimit-remaining");
 const FASTLY_RATELIMIT_RESET: HeaderName = HeaderName::from_static("fastly-ratelimit-reset");
-
-static CLIENT: OnceLock<Result<reqwest::Client>> = OnceLock::new();
-
-fn fastly_client(api_token: impl AsRef<str>) -> anyhow::Result<&'static reqwest::Client> {
-    CLIENT
-        .get_or_init(|| -> Result<_> {
-            let mut headers = HeaderMap::new();
-            headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
-            headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-            headers.insert(FASTLY_KEY, HeaderValue::from_str(api_token.as_ref())?);
-
-            Ok(reqwest::Client::builder()
-                .default_headers(headers)
-                .build()?)
-        })
-        .as_ref()
-        .map_err(|err| anyhow!("reqwest Client init failed: {}", err))
-}
 
 fn fetch_rate_limit_state(headers: &HeaderMap) -> (Option<u64>, Option<DateTime<Utc>>) {
     // https://www.fastly.com/documentation/reference/api/#rate-limiting
@@ -56,11 +42,34 @@ fn fetch_rate_limit_state(headers: &HeaderMap) -> (Option<u64>, Option<DateTime<
 }
 
 pub struct Cdn {
-    config: config::Config,
+    client: reqwest::Client,
+    config: Arc<config::Config>,
     metrics: metrics::CdnMetrics,
 }
 
 impl Cdn {
+    pub fn from_config(
+        config: Arc<config::Config>,
+        meter_provider: &AnyMeterProvider,
+    ) -> Result<Cdn> {
+        let Some(ref api_token) = config.api_token else {
+            bail!("Fastly API token not configured");
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        headers.insert(FASTLY_KEY, HeaderValue::from_str(api_token)?);
+
+        Ok(Self {
+            client: reqwest::Client::builder()
+                .default_headers(headers)
+                .build()?,
+            config,
+            metrics: metrics::CdnMetrics::new(&meter_provider),
+        })
+    }
+
     /// Purge the given surrogate keys from all configured fastly services.
     ///
     /// Accepts any number of surrogate keys, and splits them into appropriately sized
@@ -69,12 +78,6 @@ impl Cdn {
     where
         I: IntoIterator<Item = SurrogateKey>,
     {
-        let Some(api_token) = &self.config.api_token else {
-            bail!("Fastly API token not configured");
-        };
-
-        let client = fastly_client(api_token)?;
-
         let record_rate_limit_metrics =
             |limit_remaining: Option<u64>, limit_reset: Option<DateTime<Utc>>| {
                 if let Some(limit_remaining) = limit_remaining {
@@ -118,7 +121,8 @@ impl Cdn {
                 // https://www.fastly.com/documentation/reference/api/purging/
                 // TODO: investigate how they could help & test
                 // soft purge. But later, after the initial migration.
-                match client
+                match self
+                    .client
                     .post(
                         self.config
                             .api_host
@@ -177,10 +181,9 @@ impl Cdn {
     }
 
     pub async fn queue_crate_invalidation(&self, krate_name: &KrateName) -> Result<()> {
-        if self.config.api_token.is_some()
-            && let Err(err) = self
-                .purge_surrogate_keys(std::iter::once(SurrogateKey::from(krate_name.clone())))
-                .await
+        if let Err(err) = self
+            .purge_surrogate_keys(std::iter::once(SurrogateKey::from(krate_name.clone())))
+            .await
         {
             // TODO: for now just consume & report the error, I want to see how often that happens.
             // We can then decide if we need more protection mechanisms (like retries or queuing).

@@ -1853,6 +1853,7 @@ dependencies = [
  "anyhow",
  "docs_rs_build_queue",
  "docs_rs_database",
+ "docs_rs_fastly",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_storage",

@@ -9,11 +9,13 @@ pub mod service_metrics;
 mod utils;
 
 pub use config::Config;
+use docs_rs_context::Context;
 
+use crate::build_queue::get_new_crates;
 use anyhow::Error;
 use docs_rs_build_queue::AsyncBuildQueue;
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, error};
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
@@ -21,6 +23,7 @@ use tracing::debug;
 pub async fn watch_registry(
     build_queue: &AsyncBuildQueue,
     config: &config::Config,
+    context: &Context,
 ) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
@@ -30,15 +33,15 @@ pub async fn watch_registry(
         } else {
             debug!("Checking new crates");
             let index = index::Index::from_config(config).await?;
-            // TODO:
-            // match build_queue
-            //     .get_new_crates(&index)
-            //     .await
-            //     .context("Failed to get new crates")
-            // {
-            //     Ok(n) => debug!("{} crates added to queue", n),
-            //     Err(e) => report_error(&e),
-            // }
+
+            let mut conn = context.pool()?.get_async().await?;
+            let storage = context.storage()?;
+
+            match get_new_crates(&mut conn, &index, &build_queue, &storage, &*context.cdn()?).await
+            {
+                Ok(n) => debug!("{} crates added to queue", n),
+                Err(e) => error!(?e, "Failed to get new crates"),
+            }
 
             if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
                 index.run_git_gc().await;
