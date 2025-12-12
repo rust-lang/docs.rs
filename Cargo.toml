@@ -5,7 +5,6 @@ authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
-build = "build.rs"
 edition = "2024"
 
 [workspace]
@@ -52,15 +51,11 @@ mockito = "1.0.2"
 
 [dependencies]
 anyhow = { workspace = true }
-askama = { workspace = true }
 async-stream = { workspace = true }
-axum = { version = "0.8.1", features = ["macros"] }
-axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 base64 = "0.22"
 bincode = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-comrak = { version = "0.48.0", default-features = false }
 constant_time_eq = "0.4.2"
 derive_more = { workspace = true }
 docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
@@ -92,7 +87,6 @@ opentelemetry-otlp = { workspace = true }
 opentelemetry-resource-detectors = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 path-slash = "0.2.0"
-phf = "0.13.1"
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
@@ -105,7 +99,6 @@ serde_with = { workspace = true }
 slug = "0.1.1"
 sqlx = { workspace = true }
 strum = { workspace = true }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -133,18 +126,3 @@ pretty_assertions = "1.4.0"
 rand = "0.9"
 test-case = { workspace = true }
 tower = { version = "0.5.1", features = ["util"] }
-
-[build-dependencies]
-anyhow = { version = "1.0.42", features = ["backtrace"] }
-grass = { version = "0.13.1", default-features = false }
-md5 = "0.8.0"
-phf_codegen = "0.13"
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
-walkdir = "2"
-
-[package.metadata.cargo-machete]
-ignored = ["phf"]
-
-[[bench]]
-name = "compression"
-harness = false

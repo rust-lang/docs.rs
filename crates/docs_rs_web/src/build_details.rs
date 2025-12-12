@@ -1,23 +1,18 @@
 use crate::{
-    Config,
-    db::types::BuildStatus,
-    impl_axum_webpage,
-    web::{
-        MetaData,
-        cache::CachePolicy,
-        error::{AxumNope, AxumResult},
-        extractors::{DbConnection, Path, rustdoc::RustdocParams},
-        file::File,
-        filters, match_version,
-        page::templates::{RenderBrands, RenderRegular, RenderSolid},
-    },
+    Config, MetaData,
+    cache::CachePolicy,
+    error::{AxumNope, AxumResult},
+    extractors::{DbConnection, Path, rustdoc::RustdocParams},
+    file::File,
+    filters, match_version,
+    page::templates::{RenderBrands, RenderRegular, RenderSolid},
 };
 use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
-use docs_rs_database::types::{BuildId, version::Version};
+use docs_rs_database::types::{BuildId, BuildStatus, version::Version};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_utils::BUILD_VERSION;
 use futures_util::TryStreamExt;

@@ -2,6 +2,7 @@
 name = "docs_rs_database"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -11,6 +12,7 @@ docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 futures-util = { workspace = true }
 mime = { workspace = true }
+mime_guess = "2"
 opentelemetry = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
@@ -21,7 +23,6 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-mime_guess = "2"
 
 [features]
 testing = []

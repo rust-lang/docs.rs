@@ -2,14 +2,14 @@
 
 pub mod page;
 
-use crate::{
-    db::types::BuildStatus,
-    utils::get_correct_docsrs_style_file,
-    web::{
-        metrics::WebMetrics,
-        page::templates::{RenderBrands, RenderSolid, filters},
-    },
-};
+use docs_rs_database::types::BuildStatus;
+// use crate::{
+//     utils::get_correct_docsrs_style_file,
+//     web::{
+//         metrics::WebMetrics,
+//         page::templates::{RenderBrands, RenderSolid, filters},
+//     },
+// };
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;

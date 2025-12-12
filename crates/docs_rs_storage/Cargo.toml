@@ -38,3 +38,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }
+
+[[bench]]
+name = "compression"
+harness = false

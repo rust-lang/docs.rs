@@ -1,0 +1,38 @@
+[package]
+name = "docs_rs_web"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+
+[dependencies]
+anyhow = { workspace = true }
+docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_utils = { path = "../docs_rs_utils" }
+docs_rs_build_queue = { path = "../docs_rs_build_queue" }
+docs_rs_storage = { path = "../docs_rs_storage" }
+axum = { version = "0.8.1", features = ["macros"] }
+askama = { workspace = true }
+chrono = { workspace = true }
+axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
+comrak = { version = "0.48.0", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures-util = { workspace = true }
+http = { workspace = true }
+syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
+phf = "0.13.1"
+
+[build-dependencies] 
+anyhow = { workspace = true }
+syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
+walkdir = { workspace = true }
+grass = { version = "0.13.1", default-features = false }
+md5 = "0.8.0"
+phf_codegen = "0.13"
+
+[package.metadata.cargo-machete]
+ignored = ["phf"]
+

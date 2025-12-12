@@ -1,5 +1,4 @@
-use crate::error::Result;
-use crate::web::rustdoc::RustdocPage;
+use crate::rustdoc::RustdocPage;
 use anyhow::Context;
 use askama::Template;
 use std::sync::Arc;

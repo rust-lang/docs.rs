@@ -1,4 +1,4 @@
-use crate::web::{TemplateData, csp::Csp, error::AxumNope};
+use crate::{TemplateData, csp::Csp, error::AxumNope};
 use axum::{
     body::Body,
     extract::Request as AxumRequest,
@@ -13,7 +13,6 @@ pub(crate) trait AddCspNonce: IntoResponse {
     fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String>;
 }
 
-#[macro_export]
 macro_rules! impl_axum_webpage {
     (
         $page:ty

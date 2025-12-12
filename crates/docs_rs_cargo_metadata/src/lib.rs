@@ -1,3 +1,5 @@
+mod db;
+
 use anyhow::{Context, Result, bail};
 use docs_rs_database::types::version::Version;
 // use rustwide::{Toolchain, Workspace, cmd::Command};
