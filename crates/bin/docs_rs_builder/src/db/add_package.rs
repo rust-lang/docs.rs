@@ -2,8 +2,9 @@ use crate::docbuilder::rustwide_builder::DocCoverage;
 use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::Package as MetadataPackage;
 use docs_rs_cargo_metadata::db::ReleaseDependencyList;
-use docs_rs_database::types::{
-    BuildId, BuildStatus, CrateId, Feature, ReleaseId, version::Version,
+use docs_rs_database::{
+    crate_details::{latest_release, releases_for_crate},
+    types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, version::Version},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_storage::CompressionAlgorithm;
@@ -133,17 +134,17 @@ pub async fn update_latest_version_id(
     crate_id: CrateId,
 ) -> Result<()> {
     todo!();
-    // let releases = releases_for_crate(conn, crate_id).await?;
+    let releases = releases_for_crate(conn, crate_id).await?;
 
-    // sqlx::query!(
-    //     "UPDATE crates
-    //      SET latest_version_id = $2
-    //      WHERE id = $1",
-    //     crate_id.0,
-    //     latest_release(&releases).map(|release| release.id.0),
-    // )
-    // .execute(&mut *conn)
-    // .await?;
+    sqlx::query!(
+        "UPDATE crates
+         SET latest_version_id = $2
+         WHERE id = $1",
+        crate_id.0,
+        latest_release(&releases).map(|release| release.id.0),
+    )
+    .execute(&mut *conn)
+    .await?;
 
     Ok(())
 }
