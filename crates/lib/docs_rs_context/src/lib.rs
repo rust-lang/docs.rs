@@ -83,12 +83,16 @@ impl Context {
 
         let pool = self.pool()?;
 
-        let config = docs_rs_build_queue::Config::from_environment()?;
-        let build_queue = Arc::new(AsyncBuildQueue::new(pool, &config, &self.meter_provider));
+        let config = Arc::new(docs_rs_build_queue::Config::from_environment()?);
+        let build_queue = Arc::new(AsyncBuildQueue::new(
+            pool,
+            config.clone(),
+            &self.meter_provider,
+        ));
         let blocking_build_queue =
             Arc::new(BuildQueue::new(self.runtime.clone(), build_queue.clone()));
 
-        self.config.build_queue = Some(Arc::new(config));
+        self.config.build_queue = Some(config);
         self.build_queue = Some(build_queue);
         self.blocking_build_queue = Some(blocking_build_queue);
         Ok(self)

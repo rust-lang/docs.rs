@@ -1,8 +1,9 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt as _;
 use serde_json::Value;
 
-use crate::types::{BuildStatus, ReleaseId, version::Version};
+use crate::types::{BuildStatus, CrateId, ReleaseId, version::Version};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Release {
@@ -94,4 +95,24 @@ pub fn latest_release(releases: &[Release]) -> Option<&Release> {
             .iter()
             .find(|release| release.build_status != BuildStatus::InProgress)
     }
+}
+
+pub async fn update_latest_version_id(
+    conn: &mut sqlx::PgConnection,
+    crate_id: CrateId,
+) -> Result<()> {
+    todo!();
+    let releases = releases_for_crate(conn, crate_id).await?;
+
+    sqlx::query!(
+        "UPDATE crates
+         SET latest_version_id = $2
+         WHERE id = $1",
+        crate_id.0,
+        latest_release(&releases).map(|release| release.id.0),
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }

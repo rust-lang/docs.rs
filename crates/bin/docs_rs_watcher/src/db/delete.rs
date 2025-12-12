@@ -1,5 +1,8 @@
 use anyhow::Result;
-use docs_rs_database::types::{CrateId, version::Version};
+use docs_rs_database::{
+    crate_details::update_latest_version_id,
+    types::{CrateId, version::Version},
+};
 use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use sqlx::Connection;
 
@@ -114,7 +117,7 @@ async fn delete_version_from_database(
     .await?
     .unwrap_or(false);
 
-    // FIXME: update_latest_version_id(&mut transaction, crate_id).await?;
+    update_latest_version_id(&mut transaction, crate_id).await?;
 
     transaction.commit().await?;
     Ok(is_library)

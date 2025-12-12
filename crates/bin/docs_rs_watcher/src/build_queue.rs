@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::{
+    crate_details::update_latest_version_id,
     service_config::{ConfigName, get_config, set_config},
     types::{CrateId, krate_name::KrateName, version::Version},
 };
@@ -193,7 +194,7 @@ async fn set_yanked_inner(
             %activity,
             "updating latest version id"
         );
-        // FIXME: update_latest_version_id(&mut *conn, crate_id).await?;
+        update_latest_version_id(&mut *conn, crate_id).await?;
     } else {
         match build_queue.has_build_queued(name, version).await {
             Ok(false) => {

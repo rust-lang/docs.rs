@@ -3,7 +3,7 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::Package as MetadataPackage;
 use docs_rs_cargo_metadata::db::ReleaseDependencyList;
 use docs_rs_database::{
-    crate_details::{latest_release, releases_for_crate},
+    crate_details::{latest_release, releases_for_crate, update_latest_version_id},
     types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, version::Version},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
@@ -125,26 +125,6 @@ pub(crate) async fn finish_release(
         .context("couldn't update latest version id")?;
 
     update_build_status(conn, release_id).await?;
-
-    Ok(())
-}
-
-pub async fn update_latest_version_id(
-    conn: &mut sqlx::PgConnection,
-    crate_id: CrateId,
-) -> Result<()> {
-    todo!();
-    let releases = releases_for_crate(conn, crate_id).await?;
-
-    sqlx::query!(
-        "UPDATE crates
-         SET latest_version_id = $2
-         WHERE id = $1",
-        crate_id.0,
-        latest_release(&releases).map(|release| release.id.0),
-    )
-    .execute(&mut *conn)
-    .await?;
 
     Ok(())
 }

@@ -9,10 +9,6 @@ pub struct Config {
     // request timeout in seconds
     pub(crate) request_timeout: Option<Duration>,
     pub(crate) report_request_timeouts: bool,
-    //
-    // Max size of the files served by the docs.rs frontend
-    pub(crate) max_file_size: usize,
-    pub(crate) max_file_size_html: usize,
     // The most memory that can be used to parse an HTML file
     pub(crate) max_parse_memory: usize,
     /// amount of threads for CPU intensive rendering
@@ -48,8 +44,6 @@ impl Config {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         Ok(Self {
             cratesio_token: maybe_env("DOCSRS_CRATESIO_TOKEN")?,
-            max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
-            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
             // LOL HTML only uses as much memory as the size of the start tag!
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             max_parse_memory: env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?,
