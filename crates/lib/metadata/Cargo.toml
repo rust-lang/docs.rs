@@ -7,12 +7,10 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 description = "Document crates the same way docs.rs would"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 path = "lib.rs"
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.9"
-thiserror = "2"
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }

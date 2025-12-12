@@ -3,7 +3,7 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::Package as MetadataPackage;
 use docs_rs_cargo_metadata::db::ReleaseDependencyList;
 use docs_rs_database::{
-    crate_details::{latest_release, releases_for_crate, update_latest_version_id},
+    crate_details::update_latest_version_id,
     types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, version::Version},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};

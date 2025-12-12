@@ -5,14 +5,14 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
+docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
-docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_utils = { path = "../docs_rs_utils" }
-opentelemetry = { workspace = true }
 futures-util = { workspace = true }
+opentelemetry = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }
-tracing = { workspace = true }
-chrono = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }

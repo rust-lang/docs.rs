@@ -208,7 +208,7 @@ impl RustwideBuilder {
         Ok(RustwideBuilder {
             workspace: build_workspace(&config)?,
             toolchain,
-            config: config.into(),
+            config,
             db: context.pool()?.clone(),
             runtime: context.runtime().clone(),
             storage: context.blocking_storage()?,

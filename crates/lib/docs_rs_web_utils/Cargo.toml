@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-percent-encoding = "2.2.0"
 anyhow = { workspace = true }
 askama = { workspace = true }
-http = { workspace = true }
-url = { workspace = true }
 bincode = { workspace = true }
+http = { workspace = true }
+percent-encoding = "2.2.0"
+url = { workspace = true }

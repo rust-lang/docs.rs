@@ -7,6 +7,7 @@ build = "build.rs"
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+chrono = { workspace = true }
 derive_more = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
@@ -14,8 +15,8 @@ futures-util = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2"
 opentelemetry = { workspace = true }
-serde = { workspace = true }
 semver = { version = "1.0.4", features = ["serde"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 sqlx = { workspace = true }
@@ -23,7 +24,6 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-chrono = { workspace = true }
 
 [features]
 testing = []

@@ -37,7 +37,7 @@ pub async fn watch_registry(
             let mut conn = context.pool()?.get_async().await?;
             let storage = context.storage()?;
 
-            match get_new_crates(&mut conn, &index, &build_queue, &storage, &*context.cdn()?).await
+            match get_new_crates(&mut conn, &index, build_queue, &storage, &*context.cdn()?).await
             {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => error!(?e, "Failed to get new crates"),

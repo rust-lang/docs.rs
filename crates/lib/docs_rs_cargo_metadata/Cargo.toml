@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+derive_more = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-derive_more = { workspace = true }

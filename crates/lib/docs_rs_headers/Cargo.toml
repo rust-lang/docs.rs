@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-md5 = "0.8.0"
-headers = "0.4.1"  # not sure if we want this in this crate
-http = { workspace = true }
-derive_more = { workspace = true }
-serde = { workspace = true }
 anyhow = { workspace = true }
-itertools = { workspace = true }
+askama = { workspace = true }
+derive_more = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_web_utils = { path = "../docs_rs_web_utils" }
-askama = { workspace = true }
+headers = "0.4.1"  # not sure if we want this in this crate
+http = { workspace = true }
+itertools = { workspace = true }
+md5 = "0.8.0"
+serde = { workspace = true }

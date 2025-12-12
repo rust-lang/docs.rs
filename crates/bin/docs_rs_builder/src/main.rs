@@ -20,8 +20,7 @@ fn main() -> anyhow::Result<()> {
     let context = runtime.block_on(async {
         // handle for the current runtime from above.
         let handle = runtime::Handle::current();
-        Ok::<_, anyhow::Error>(
-            docs_rs_context::Context::new_with_runtime(handle)?
+        docs_rs_context::Context::new_with_runtime(handle)?
                 .with_pool()
                 .await?
                 .with_storage()
@@ -29,8 +28,7 @@ fn main() -> anyhow::Result<()> {
                 .with_cdn()
                 .await?
                 .with_build_queue()
-                .await?,
-        )
+                .await
     })?;
 
     let config = Arc::new(Config::from_environment()?);
