@@ -9,7 +9,10 @@ edition = "2024"
 
 [workspace]
 resolver = "2" 
-members = ["crates/*"]
+members = [
+    "crates/lib/*",
+    "crates/bin/*"
+]
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
