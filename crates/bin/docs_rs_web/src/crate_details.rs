@@ -8,7 +8,6 @@ use crate::{
     },
     impl_axum_webpage, match_version,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
-    utils::rustc_version::get_correct_docsrs_style_file,
 };
 use anyhow::{Context, Result, anyhow};
 use askama::Template;
@@ -23,6 +22,7 @@ use docs_rs_database::types::{BuildId, BuildStatus, CrateId, ReleaseId, version:
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, errors::PathNotFoundError};
+use docs_rs_utils::rustc_version::get_correct_docsrs_style_file;
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
 use std::sync::Arc;

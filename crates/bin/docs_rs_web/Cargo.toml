@@ -20,6 +20,7 @@ derive_more = { workspace = true }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_build_utils = { path = "../../lib/docs_rs_build_utils" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
 docs_rs_headers = { path = "../../lib/docs_rs_headers" }
@@ -34,6 +35,7 @@ http = { workspace = true }
 itertools = { workspace = true }
 lol_html = "2.0.0"
 mime = { workspace = true }
+num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 phf = "0.13.1"
@@ -56,6 +58,8 @@ tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-p
 tracing = { workspace = true }
 tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 url = { workspace = true }
+slug = { workspace = true }
+getrandom = "0.3.1"
 
 [build-dependencies] 
 anyhow = { workspace = true }

@@ -213,7 +213,7 @@ impl RustwideBuilder {
             runtime: context.runtime().clone(),
             storage: context.blocking_storage()?,
             async_storage: context.storage()?,
-            registry_api: RegistryApi::from_environment()?.into(),
+            registry_api: context.registry_api()?,
             repository_stats_updater: RepositoryStatsUpdater::from_environment(
                 context.pool()?.clone(),
             )?

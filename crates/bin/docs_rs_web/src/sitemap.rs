@@ -98,11 +98,11 @@ pub(crate) async fn sitemap_handler(
 
         pin_mut!(result);
         while let Some(row) = result.next().await {
-            let row = match row.context("error fetching row from database") {
+            let row = match row {
                 Ok(row) => row,
                 Err(err) => {
-                    report_error(&err);
-                    yield Err(AxumNope::InternalError(err));
+                    error!(?err, "error fetching row from database");
+                    yield Err(AxumNope::InternalError(err.into()));
                     break;
                 }
             };
@@ -119,9 +119,8 @@ pub(crate) async fn sitemap_handler(
                     .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
                     .format("%+")
                     .to_string(),
-            }
+            })
             .render()
-            .context("error when rendering sitemap item xml"))
             {
                 Ok(item) => {
                     let bytes = Bytes::from(item);
@@ -130,8 +129,8 @@ pub(crate) async fn sitemap_handler(
                     yield Ok(bytes);
                 }
                 Err(err) => {
-                    report_error(&err);
-                    yield Err(AxumNope::InternalError(err));
+                    error!(?err, "error when rendering sitemap item xml");
+                    yield Err(AxumNope::InternalError(err.into()));
                     break;
                 }
             };
@@ -175,7 +174,7 @@ pub(crate) async fn about_builds_handler(
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutBuilds {
         rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
-        limits: Limits::new(&config),
+        limits: Limits::new(&config.build_utils_config),
         active_tab: "builds",
     })
 }

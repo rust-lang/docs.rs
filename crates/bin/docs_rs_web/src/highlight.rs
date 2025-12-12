@@ -1,10 +1,11 @@
+use anyhow::Result;
 use std::sync::LazyLock;
 use syntect::{
     html::{ClassStyle, ClassedHTMLGenerator},
     parsing::{SyntaxReference, SyntaxSet},
     util::LinesWithEndings,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 2 * 1024 * 1024;
 const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;

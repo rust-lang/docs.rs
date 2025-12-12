@@ -73,11 +73,9 @@ docs_rs_web_utils = { path = "crates/lib/docs_rs_web_utils" }
 docsrs-metadata = { path = "crates/lib/metadata" }
 fn-error-context = "0.2.0"
 futures-util = { workspace = true }
-getrandom = "0.3.1"
 http = { workspace = true }
 itertools = { workspace = true }
 mime = { workspace = true }
-num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry-resource-detectors = { workspace = true }

@@ -32,7 +32,7 @@ use std::{
     str,
     sync::Arc,
 };
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 use url::form_urlencoded;
 
 /// Number of release in home page
@@ -502,7 +502,7 @@ async fn redirect_to_random_crate(
 
         Ok(axum_redirect(params.rustdoc_url())?)
     } else {
-        report_error(&anyhow!("found no result in random crate search"));
+        error!("found no result in random crate search");
         Err(AxumNope::NoResults)
     }
 }

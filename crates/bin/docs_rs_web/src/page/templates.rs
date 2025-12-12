@@ -1,5 +1,5 @@
 use crate::rustdoc::RustdocPage;
-use anyhow::Context;
+use anyhow::{Context as _, Result};
 use askama::Template;
 use std::sync::Arc;
 use tracing::trace;

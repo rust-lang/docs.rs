@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
+use docs_rs_registry_api::RegistryApi;
 use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -12,6 +13,7 @@ pub struct Config {
     build_queue: Option<Arc<docs_rs_build_queue::Config>>,
     database: Option<Arc<docs_rs_database::Config>>,
     storage: Option<Arc<docs_rs_storage::Config>>,
+    registry_api: Option<Arc<docs_rs_registry_api::Config>>,
 }
 
 pub struct Context {
@@ -24,6 +26,8 @@ pub struct Context {
 
     storage: Option<Arc<AsyncStorage>>,
     blocking_storage: Option<Arc<docs_rs_storage::Storage>>,
+
+    registry_api: Option<Arc<RegistryApi>>,
 
     runtime: Handle,
     config: Config,
@@ -49,6 +53,7 @@ impl Context {
             blocking_build_queue: None,
             storage: None,
             blocking_storage: None,
+            registry_api: None,
         })
     }
 
@@ -97,6 +102,19 @@ impl Context {
             Arc::new(AsyncStorage::new(pool, config.clone(), &self.meter_provider).await?);
         self.config.storage = Some(config);
         self.storage = Some(storage);
+        Ok(self)
+    }
+
+    pub async fn with_registry_api(mut self) -> Result<Self> {
+        if self.registry_api.is_some() {
+            return Ok(self);
+        }
+
+        let config = docs_rs_registry_api::Config::from_environment()?;
+        let api = RegistryApi::from_config(&config)?;
+
+        self.registry_api = Some(Arc::new(api));
+        self.config.registry_api = Some(Arc::new(config));
         Ok(self)
     }
 }
@@ -148,6 +166,14 @@ impl Context {
             Ok(build_queue.clone())
         } else {
             Err(anyhow!("blocking Build queue is not initialized"))
+        }
+    }
+
+    pub fn registry_api(&self) -> Result<Arc<RegistryApi>> {
+        if let Some(ref registry_api) = self.registry_api {
+            Ok(registry_api.clone())
+        } else {
+            Err(anyhow!("Registry API is not initialized"))
         }
     }
 }

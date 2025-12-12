@@ -6,13 +6,8 @@ use docs_rs_database::types::BuildStatus;
 pub use docs_rs_utils::{BUILD_VERSION, DEFAULT_MAX_TARGETS};
 pub use font_awesome_as_a_crate::icons;
 
-// use crate::{
-//     utils::get_correct_docsrs_style_file,
-//     web::{
-//         metrics::WebMetrics,
-//         page::templates::{RenderBrands, RenderSolid, filters},
-//     },
-// };
+use crate::page::templates::{RenderBrands, RenderSolid};
+
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
@@ -70,7 +65,8 @@ use std::{
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::metrics::WebMetrics;
+use crate::{config::Config, metrics::WebMetrics};
+use docs_rs_utils::rustc_version::get_correct_docsrs_style_file;
 
 use self::crate_details::Release;
 use page::GlobalAlert;
@@ -474,12 +470,13 @@ async fn set_sentry_transaction_name_from_axum_route(
 
 async fn apply_middleware(
     router: AxumRouter,
+    config: Arc<Config>,
     context: &Context,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
 
-    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
+    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider()));
 
     Ok(router.layer(
         ServiceBuilder::new()
@@ -491,20 +488,19 @@ async fn apply_middleware(
             ))
             .layer(CatchPanicLayer::new())
             .layer(option_layer(
-                context
-                    .config
+                config
                     .report_request_timeouts
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
-            .layer(option_layer(context.config.request_timeout.map(|to| {
+            .layer(option_layer(config.request_timeout.map(|to| {
                 TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to)
             })))
-            .layer(Extension(context.pool.clone()))
+            .layer(Extension(context.pool()?.clone()))
             // .layer(Extension(context.async_build_queue.clone()))
             .layer(Extension(web_metrics))
-            .layer(Extension(context.config.clone()))
-            .layer(Extension(context.registry_api.clone()))
-            .layer(Extension(context.async_storage.clone()))
+            .layer(Extension(config.clone()))
+            .layer(Extension(context.registry_api()?.clone()))
+            .layer(Extension(context.storage()?.clone()))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(
@@ -515,15 +511,26 @@ async fn apply_middleware(
 }
 
 pub(crate) async fn build_axum_app(
+    config: Arc<Config>,
     context: &Context,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
-    apply_middleware(routes::build_axum_routes(), context, Some(template_data)).await
+    apply_middleware(
+        routes::build_axum_routes(),
+        config,
+        context,
+        Some(template_data),
+    )
+    .await
 }
 
 #[instrument(skip_all)]
-pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(), Error> {
-    let template_data = Arc::new(TemplateData::new(context.config.render_threads)?);
+pub fn start_web_server(
+    addr: Option<SocketAddr>,
+    config: Arc<Config>,
+    context: &Context,
+) -> Result<(), Error> {
+    let template_data = Arc::new(TemplateData::new(config.render_threads)?);
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
@@ -533,8 +540,8 @@ pub fn start_web_server(addr: Option<SocketAddr>, context: &Context) -> Result<(
         axum_addr.port()
     );
 
-    context.runtime.block_on(async {
-        let app = build_axum_app(context, template_data)
+    context.runtime().block_on(async {
+        let app = build_axum_app(config, context, template_data)
             .await?
             .into_make_service();
         let listener = tokio::net::TcpListener::bind(axum_addr)

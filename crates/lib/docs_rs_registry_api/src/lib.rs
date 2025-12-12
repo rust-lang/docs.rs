@@ -1,6 +1,6 @@
 mod config;
 
-use crate::config::Config;
+pub use crate::config::Config;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_database::types::version::Version;

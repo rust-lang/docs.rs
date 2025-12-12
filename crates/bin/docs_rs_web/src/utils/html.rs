@@ -174,20 +174,17 @@ where
 
         let mut reader_stream = ReaderStream::new(&mut reader);
         while let Some(chunk) = reader_stream.next().await {
-            let chunk = chunk
-                .context("error while reading from rustdoc HTML reader")
-                .map_err(|err| {
-                    report_error(&err);
-                    RustdocRewritingError::Other(err)
-                })?;
+            let chunk = chunk.map_err(|err| {
+                error!(?err, "error while reading from rustdoc HTML reader");
+                RustdocRewritingError::Other(err.into())
+            })?;
 
-            if let Err(err) = input_sender
-                .send(Some(chunk))
-                .await
-                .context("error when trying to send chunk to html rewriter thread")
-            {
-                report_error(&err);
-                yield Err(RustdocRewritingError::Other(err));
+            if let Err(err) = input_sender.send(Some(chunk)).await {
+                error!(
+                    ?err,
+                    "error when trying to send chunk to html rewriter thread"
+                );
+                yield Err(RustdocRewritingError::Other(err.into()));
                 break;
             }
 
@@ -196,13 +193,12 @@ where
             }
         }
         // This signals the renderer thread to finalize & exit.
-        if let Err(err) = input_sender
-            .send(None)
-            .await
-            .context("error when trying to send end signal to html rewriter thread")
-        {
-            report_error(&err);
-            yield Err(RustdocRewritingError::Other(err));
+        if let Err(err) = input_sender.send(None).await {
+            error!(
+                ?err,
+                "error when trying to send end signal to html rewriter thread"
+            );
+            yield Err(RustdocRewritingError::Other(err.into()));
         }
         while let Some(bytes) = result_receiver.recv().await {
             yield Ok(bytes);
@@ -211,9 +207,8 @@ where
         join_handle
             .await
             .context("task join failed")?
-            .context("error while rewriting rustdoc HTML")
             .map_err(|e| {
-                report_error(&e);
+                error!(?e, "error while rewriting rustdoc HTML");
                 // our `render_in_threadpool` and so the async tokio task return an `anyhow::Result`.
                 // In most cases this will be an error from the `HtmlRewriter`, which we'll get as a
                 // `RewritingError` which we extract here again. The other cases remain an

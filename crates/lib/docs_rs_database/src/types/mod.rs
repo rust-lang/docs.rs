@@ -19,8 +19,8 @@ pub struct BuildId(pub i32);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::Type)]
 #[sqlx(type_name = "feature")]
 pub struct Feature {
-    pub(crate) name: String,
-    pub(crate) subfeatures: Vec<String>,
+    pub name: String,
+    pub subfeatures: Vec<String>,
 }
 
 impl Feature {
