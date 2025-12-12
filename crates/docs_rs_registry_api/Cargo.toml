@@ -12,3 +12,5 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+sqlx = { workspace = true }
+bincode = { workspace = true }

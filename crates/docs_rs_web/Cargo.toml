@@ -12,6 +12,17 @@ docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 docs_rs_build_queue = { path = "../docs_rs_build_queue" }
 docs_rs_storage = { path = "../docs_rs_storage" }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_headers = { path = "../docs_rs_headers" }
+docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_registry_api = { path = "../docs_rs_registry_api" }
+docs_rs_web_utils = { path = "../docs_rs_web_utils" }
+semver = { workspace = true }
+sentry = { workspace = true }
+serde_with = { workspace = true }
+derive_more = { workspace = true }
+constant_time_eq = "0.4.2"
+url = { workspace = true }
 axum = { version = "0.8.1", features = ["macros"] }
 askama = { workspace = true }
 chrono = { workspace = true }
@@ -24,6 +35,26 @@ futures-util = { workspace = true }
 http = { workspace = true }
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
 phf = "0.13.1"
+base64 = "0.22"
+thiserror = { workspace = true }
+itertools = { workspace = true }
+bincode = { workspace = true }
+tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
+sqlx = { workspace = true }
+async-stream = { workspace = true }
+lol_html = "2.0.0"
+opentelemetry = { workspace = true }
+regex = { workspace = true }
+tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
+mime = { workspace = true }
+tokio = { workspace = true }
+tower = "0.5.1"
+tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
+rayon = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+strum = { workspace = true }
+font-awesome-as-a-crate = { path = "../font-awesome-as-a-crate" }
+
 
 [build-dependencies] 
 anyhow = { workspace = true }

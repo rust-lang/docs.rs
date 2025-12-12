@@ -193,11 +193,11 @@
 
                 {# If there's a readme, display it #}
                 {%- if let Some(readme) = readme -%}
-                    {{ crate::web::markdown::render(readme)|safe }}
+                    {{ crate::markdown::render(readme)|safe }}
 
                 {# If there's not a readme then attempt to display the long description #}
                 {%- elif let Some(rustdoc) = rustdoc -%}
-                    {{ crate::web::markdown::render_with_default(rustdoc, "rust")|safe }}
+                    {{ crate::markdown::render_with_default(rustdoc, "rust")|safe }}
                 {%- endif -%}
             </div>
         </div>

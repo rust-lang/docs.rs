@@ -24,6 +24,16 @@ pub const APP_USER_AGENT: &str = concat!(
     " )"
 );
 
+/// Where rustdoc's static files are stored in S3.
+/// Since the prefix starts with `/`, it needs to be referenced with a double slash in
+/// API & AWS CLI.
+/// Example:
+/// `s3://rust-docs-rs//rustdoc-static/something.css`
+pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
+
+/// Maximum number of targets allowed for a crate to be documented on.
+pub const DEFAULT_MAX_TARGETS: usize = 10;
+
 /// a wrapper around tokio's `spawn_blocking` that
 /// enables us to write nicer code when the closure
 /// returns an `anyhow::Result`.

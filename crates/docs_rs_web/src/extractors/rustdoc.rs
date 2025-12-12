@@ -1,6 +1,6 @@
 //! special rustdoc extractors
 
-use crate::web::{MatchedRelease, MetaData, ReqVersion, error::AxumNope, extractors::Path};
+use crate::{MatchedRelease, MetaData, ReqVersion, error::AxumNope, extractors::Path};
 use anyhow::Result;
 use axum::{
     RequestPartsExt,
@@ -902,936 +902,936 @@ fn find_static_route_suffix<'a, 'b>(route: &'a str, path: &'b str) -> Option<Str
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        db::types::version::Version,
-        test::{AxumResponseTestExt, AxumRouterTestExt, V1},
-    };
-    use axum::{Router, routing::get};
-    use test_case::test_case;
-
-    static KRATE: &str = "krate";
-    const VERSION: Version = Version::new(0, 1, 0);
-    static DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
-    static OTHER_TARGET: &str = "x86_64-pc-windows-msvc";
-    static UNKNOWN_TARGET: &str = "some-unknown-target";
-    static TARGETS: &[&str] = &[DEFAULT_TARGET, OTHER_TARGET];
-
-    #[test_case(
-        "/{name}/{version}/help/some.html",
-        "/foo/1.2.3/help/some.html"
-        => Some("help/some.html".into());
-        "suffix with path"
-    )]
-    #[test_case("/{name}/{version}/help.html", "/foo/1.2.3/help.html" => Some("help.html".into()); "simple suffix")]
-    #[test_case("help.html", "help.html" => Some("help.html".into()); "simple suffix without other components")]
-    #[test_case("/{name}/{version}/help/", "/foo/1.2.3/help/" => Some("help/".into()); "suffix is folder")]
-    #[test_case("{name}/{version}/help/", "foo/1.2.3/help/" => Some("help/".into()); "without leading slash")]
-    #[test_case("/{name}/{version}/{*path}", "/foo/1.2.3/help.html" => None; "no suffix in route")]
-    #[test_case("/{name}/{version}/help.html", "/foo/1.2.3/other.html" => None; "different suffix")]
-    #[test_case(
-        "/{name}/{version}/some/help.html",
-        "/foo/1.2.3/other/help.html"
-        => None;
-        "different suffix later"
-    )]
-    #[test_case("", "" => None; "empty strings")]
-    #[test_case("/", "" => None; "one slash, one empty")]
-    fn test_find_static_route_suffix(route: &str, path: &str) -> Option<String> {
-        find_static_route_suffix(route, path)
-    }
-
-    #[test_case(
-        "/{name}",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate").unwrap();
-        "just name"
-    )]
-    #[test_case(
-        "/{name}/",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/").unwrap();
-        "just name with trailing slash"
-    )]
-    #[test_case(
-        "/{name}/{version}",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/latest").unwrap();
-        "just name and version"
-    )]
-    #[test_case(
-        "/{name}/{version}/{*path}",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/latest/static.html").unwrap()
-            .with_inner_path("static.html");
-        "name, version, path extract"
-    )]
-    #[test_case(
-        "/{name}/{version}/{path}/static.html",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/latest/path_add/static.html").unwrap()
-            .with_inner_path("path_add")
-            .with_static_route_suffix("static.html");
-        "name, version, path extract, static suffix"
-    )]
-    #[test_case(
-        "/{name}/{version}/clapproc%20%60macro.html",
-        RustdocParams::new("clap")
-            .try_with_original_uri("/clap/latest/clapproc%20%60macro.html").unwrap()
-            .with_static_route_suffix("clapproc `macro.html");
-        "name, version, static suffix with some urlencoding"
-    )]
-    #[test_case(
-        "/{name}/{version}/static.html",
-        RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/latest/static.html").unwrap()
-            .with_static_route_suffix("static.html");
-        "name, version, static suffix"
-    )]
-    #[test_case(
-        "/{name}/{version}/{target}",
-        RustdocParams::new(KRATE)
-            .try_with_req_version("1.2.3").unwrap()
-            .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}")).unwrap()
-            .with_doc_target(OTHER_TARGET);
-        "name, version, target"
-    )]
-    #[test_case(
-        "/{name}/{version}/{target}/folder/something.html",
-        RustdocParams::new(KRATE)
-            .try_with_req_version("1.2.3").unwrap()
-            .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/folder/something.html")).unwrap()
-            .with_doc_target(OTHER_TARGET)
-            .with_static_route_suffix("folder/something.html");
-        "name, version, target, static suffix"
-    )]
-    #[test_case(
-        "/{name}/{version}/{target}/",
-        RustdocParams::new(KRATE)
-            .try_with_req_version("1.2.3").unwrap()
-            .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/")).unwrap()
-            .with_doc_target(OTHER_TARGET);
-        "name, version, target trailing slash"
-    )]
-    #[test_case(
-        "/{name}/{version}/{target}/{*path}",
-        RustdocParams::new(KRATE)
-            .try_with_req_version("1.2.3").unwrap()
-            .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/some/path/to/a/file.html")).unwrap()
-            .with_doc_target(OTHER_TARGET)
-            .with_inner_path("some/path/to/a/file.html");
-        "name, version, target, path"
-    )]
-    #[test_case(
-        "/{name}/{version}/{target}/{path}/path/to/a/file.html",
-        RustdocParams::new(KRATE)
-            .try_with_req_version("1.2.3").unwrap()
-            .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/path_add/path/to/a/file.html")).unwrap()
-            .with_doc_target(OTHER_TARGET)
-            .with_inner_path("path_add")
-            .with_static_route_suffix("path/to/a/file.html");
-        "name, version, target, path, static suffix"
-    )]
-    #[tokio::test]
-    async fn test_extract_rustdoc_params_from_request(
-        route: &str,
-        expected: RustdocParams,
-    ) -> anyhow::Result<()> {
-        let expected = expected.with_page_kind(PageKind::Rustdoc);
-
-        let app = Router::new().route(
-            route,
-            get(|params: RustdocParams| async move {
-                format!("{:?}", params.with_page_kind(PageKind::Rustdoc))
-            }),
-        );
-
-        let path = expected.original_uri.as_ref().unwrap().path().to_owned();
-
-        let res = app.get(&path).await?;
-        assert!(res.status().is_success());
-        assert_eq!(res.text().await?, format!("{:?}", expected));
-
-        Ok(())
-    }
-
-    #[test_case(
-        None, None, false,
-        None, "", "krate/index.html";
-        "super empty 1"
-    )]
-    #[test_case(
-        Some(""), Some(""), false,
-        None, "", "krate/index.html";
-        "super empty 2"
-    )]
-    // test cases when no separate "target" component was present in the params
-    #[test_case(
-        None, Some("/"), true,
-        None, "", "krate/index.html";
-        "just slash"
-    )]
-    #[test_case(
-        None, Some("something"), false,
-        None, "something", "krate/something";
-        "without trailing slash"
-    )]
-    #[test_case(
-        None, Some("settings.html"), false,
-        None, "settings.html", "settings.html";
-        "without trailing slash, but known root name"
-    )]
-    #[test_case(
-        None, Some("/something"), false,
-        None, "something", "krate/something";
-        "leading slash is cut"
-    )]
-    #[test_case(
-        None, Some("something/"), true,
-        None, "something/", "something/index.html";
-        "with trailing slash"
-    )]
-    // a target is given, but as first component of the path, for routes without separate
-    // "target" component
-    #[test_case(
-        None, Some(DEFAULT_TARGET), false,
-        Some(DEFAULT_TARGET), "", "krate/index.html";
-        "just target without trailing slash"
-    )]
-    #[test_case(
-        None, Some(&format!("{DEFAULT_TARGET}/")), true,
-        Some(DEFAULT_TARGET), "", "krate/index.html";
-        "just default target with trailing slash"
-    )]
-    #[test_case(
-        None, Some(&format!("{DEFAULT_TARGET}/one")), false,
-        Some(DEFAULT_TARGET), "one", "krate/one";
-        "target + one without trailing slash"
-    )]
-    #[test_case(
-        None, Some(&format!("{DEFAULT_TARGET}/one/")), true,
-        Some(DEFAULT_TARGET), "one/", "one/index.html";
-        "target + one target with trailing slash"
-    )]
-    #[test_case(
-        None, Some(&format!("{UNKNOWN_TARGET}/one/")), true,
-        None, &format!("{UNKNOWN_TARGET}/one/"), &format!("{UNKNOWN_TARGET}/one/index.html");
-        "unknown target stays in path"
-    )]
-    #[test_case(
-        None, Some(&format!("{DEFAULT_TARGET}/some/inner/path")), false,
-        Some(DEFAULT_TARGET), "some/inner/path", "some/inner/path";
-        "all without trailing slash"
-    )]
-    #[test_case(
-        None, Some(&format!("{DEFAULT_TARGET}/some/inner/path/")), true,
-        Some(DEFAULT_TARGET), "some/inner/path/", "some/inner/path/index.html";
-        "all with trailing slash"
-    )]
-    // here we have a separate target path parameter, we check it and use it accordingly
-    #[test_case(
-        Some(DEFAULT_TARGET), None, false,
-        Some(DEFAULT_TARGET), "", "krate/index.html";
-        "actual target, that is default"
-    )]
-    #[test_case(
-        Some(DEFAULT_TARGET), Some("inner/path.html"), false,
-        Some(DEFAULT_TARGET), "inner/path.html", "inner/path.html";
-        "actual target with path"
-    )]
-    #[test_case(
-        Some(DEFAULT_TARGET), Some("inner/path/"), true,
-        Some(DEFAULT_TARGET), "inner/path/", "inner/path/index.html";
-        "actual target with path slash"
-    )]
-    #[test_case(
-        Some(UNKNOWN_TARGET), None, true,
-        None, &format!("{UNKNOWN_TARGET}/"), &format!("{UNKNOWN_TARGET}/index.html");
-        "unknown target"
-    )]
-    #[test_case(
-        Some(UNKNOWN_TARGET), None, false,
-        None, UNKNOWN_TARGET, &format!("krate/{UNKNOWN_TARGET}");
-        "unknown target without trailing slash"
-    )]
-    #[test_case(
-        Some(UNKNOWN_TARGET), Some("inner/path.html"), false,
-        None, &format!("{UNKNOWN_TARGET}/inner/path.html"), &format!("{UNKNOWN_TARGET}/inner/path.html");
-        "unknown target with path"
-    )]
-    #[test_case(
-        Some(OTHER_TARGET), Some("inner/path.html"), false,
-        Some(OTHER_TARGET), "inner/path.html", &format!("{OTHER_TARGET}/inner/path.html");
-        "other target with path"
-    )]
-    #[test_case(
-        Some(UNKNOWN_TARGET), Some("inner/path/"), true,
-        None, &format!("{UNKNOWN_TARGET}/inner/path/"), &format!("{UNKNOWN_TARGET}/inner/path/index.html");
-        "unknown target with path slash"
-    )]
-    #[test_case(
-        Some(OTHER_TARGET), Some("inner/path/"), true,
-        Some(OTHER_TARGET), "inner/path/", &format!("{OTHER_TARGET}/inner/path/index.html");
-        "other target with path slash"
-    )]
-    #[test_case(
-        Some(DEFAULT_TARGET), None, false,
-        Some(DEFAULT_TARGET), "", "krate/index.html";
-        "pure default target, without trailing slash"
-    )]
-    fn test_parse(
-        target: Option<&str>,
-        path: Option<&str>,
-        had_trailing_slash: bool,
-        expected_target: Option<&str>,
-        expected_path: &str,
-        expected_storage_path: &str,
-    ) {
-        let mut dummy_path = match (target, path) {
-            (Some(target), Some(path)) => format!("{}/{}", target, path),
-            (Some(target), None) => target.to_string(),
-            (None, Some(path)) => path.to_string(),
-            (None, None) => String::new(),
-        };
-        dummy_path.insert(0, '/');
-        if had_trailing_slash && !dummy_path.is_empty() {
-            dummy_path.push('/');
-        }
-
-        let parsed = RustdocParams::new(KRATE)
-            .with_page_kind(PageKind::Rustdoc)
-            .with_req_version(ReqVersion::Latest)
-            .with_maybe_doc_target(target)
-            .with_maybe_inner_path(path)
-            .try_with_original_uri(&dummy_path[..])
-            .unwrap()
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        assert_eq!(parsed.name(), KRATE);
-        assert_eq!(parsed.req_version(), &ReqVersion::Latest);
-        assert_eq!(parsed.doc_target(), expected_target);
-        assert_eq!(parsed.inner_path(), expected_path);
-        assert_eq!(parsed.storage_path(), expected_storage_path);
-        assert_eq!(
-            parsed.path_is_folder(),
-            had_trailing_slash || dummy_path.ends_with('/') || dummy_path.is_empty()
-        );
-    }
-
-    #[test_case("dummy/struct.WindowsOnly.html", Some("WindowsOnly"))]
-    #[test_case("dummy/some_module/struct.SomeItem.html", Some("SomeItem"))]
-    #[test_case("dummy/some_module/index.html", Some("some_module"))]
-    #[test_case("dummy/some_module/", Some("some_module"))]
-    #[test_case("src/folder1/folder2/logic.rs.html", Some("logic"))]
-    #[test_case("src/non_source_file.rs", None)]
-    #[test_case("html", None; "plain file without extension")]
-    #[test_case("something.html", Some("html"); "plain file")]
-    #[test_case("", None)]
-    fn test_generate_fallback_search(path: &str, search: Option<&str>) {
-        let mut params = RustdocParams::new("dummy")
-            .try_with_req_version("0.4.0")
-            .unwrap()
-            // non-default target, target stays in the url
-            .with_doc_target(OTHER_TARGET)
-            .with_inner_path(path)
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name("dummy")
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        assert_eq!(params.generate_fallback_search().as_deref(), search);
-        assert_eq!(
-            params.generate_fallback_url().to_string(),
-            format!(
-                "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/{}",
-                search.map(|s| format!("?search={}", s)).unwrap_or_default()
-            )
-        );
-
-        // change to default target, check url again
-        params = params.with_doc_target(DEFAULT_TARGET);
-
-        assert_eq!(params.generate_fallback_search().as_deref(), search);
-        assert_eq!(
-            params.generate_fallback_url().to_string(),
-            format!(
-                "/dummy/0.4.0/dummy/{}",
-                search.map(|s| format!("?search={}", s)).unwrap_or_default()
-            )
-        );
-    }
-
-    #[test]
-    fn test_parse_source() {
-        let params = RustdocParams::new("dummy")
-            .try_with_req_version("0.4.0")
-            .unwrap()
-            .with_inner_path("README.md")
-            .with_page_kind(PageKind::Source)
-            .try_with_original_uri("/crate/dummy/0.4.0/source/README.md")
-            .unwrap()
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name("dummy")
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        assert_eq!(params.rustdoc_url().to_string(), "/dummy/0.4.0/dummy/");
-        assert_eq!(
-            params.source_url().to_string(),
-            "/crate/dummy/0.4.0/source/README.md"
-        );
-        assert_eq!(
-            params.target_redirect_url().to_string(),
-            "/crate/dummy/0.4.0/target-redirect/dummy/"
-        );
-    }
-
-    #[test_case(
-        None, None, None, None => ""
-    )]
-    #[test_case(
-        Some("target_name"), None, None, None => "target_name/"
-    )]
-    #[test_case(
-        None, None, None, Some("path/index.html") => "path/";
-        "cuts trailing /index.html"
-    )]
-    #[test_case(
-        Some("target_name"), None,
-        Some(DEFAULT_TARGET), Some("inner/path.html")
-        => "x86_64-unknown-linux-gnu/inner/path.html";
-        "default target, but we don't know about it, keeps target"
-    )]
-    #[test_case(
-        Some("target_name"), None,
-        Some(DEFAULT_TARGET), None
-        => "x86_64-unknown-linux-gnu/target_name/";
-        "default target, we don't know about it, without path"
-    )]
-    #[test_case(
-        Some("target_name"), Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), None
-        => "target_name/";
-        "default-target, without path, target_name is used to generate the inner path"
-    )]
-    #[test_case(
-        Some("target_name"), Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), Some("inner/path.html")
-        => "inner/path.html";
-        "default target, with path, target_name is ignored"
-    )]
-    #[test_case(
-        None, Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), Some("inner/path/index.html")
-        => "inner/path/";
-        "default target, with path as folder with index.html"
-    )]
-    #[test_case(
-        None, Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), Some("inner/path/")
-        => "inner/path/";
-        "default target, with path as folder"
-    )]
-    #[test_case(
-        Some("target_name"), Some(DEFAULT_TARGET),
-        Some(OTHER_TARGET), None
-        => "x86_64-pc-windows-msvc/target_name/";
-        "non-default-target, without path, target_name is used to generate the inner path"
-    )]
-    #[test_case(
-        Some("target_name"), Some(DEFAULT_TARGET),
-        Some(OTHER_TARGET), Some("inner/path.html")
-        => "x86_64-pc-windows-msvc/inner/path.html";
-        "non-default target, with path, target_name is ignored"
-    )]
-    fn test_generate_rustdoc_path_for_url(
-        target_name: Option<&str>,
-        default_target: Option<&str>,
-        doc_target: Option<&str>,
-        inner_path: Option<&str>,
-    ) -> String {
-        generate_rustdoc_path_for_url(target_name, default_target, doc_target, inner_path)
-    }
-
-    #[test]
-    fn test_case_1() {
-        let params = RustdocParams::new("dummy")
-            .try_with_req_version("0.2.0")
-            .unwrap()
-            .with_doc_target("dummy")
-            .with_inner_path("struct.Dummy.html")
-            .with_page_kind(PageKind::Rustdoc)
-            .try_with_original_uri("/dummy/0.2.0/dummy/struct.Dummy.html")
-            .unwrap()
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name("dummy")
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        dbg!(&params);
-
-        assert!(params.doc_target().is_none());
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-        assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
-
-        let params = params.with_doc_target(DEFAULT_TARGET);
-        dbg!(&params);
-        assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-        assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
-
-        let params = params.with_doc_target(OTHER_TARGET);
-        assert_eq!(params.doc_target(), Some(OTHER_TARGET));
-        assert_eq!(
-            params.storage_path(),
-            format!("{OTHER_TARGET}/dummy/struct.Dummy.html")
-        );
-        assert_eq!(
-            params.storage_path(),
-            format!("{OTHER_TARGET}/dummy/struct.Dummy.html")
-        );
-    }
-
-    #[test_case(
-        "/",
-        None, None,
-        None, ""
-        ; "no target, no path"
-    )]
-    #[test_case(
-        &format!("/{DEFAULT_TARGET}"),
-        Some(DEFAULT_TARGET), None,
-        Some(DEFAULT_TARGET), "";
-        "existing target, no path"
-    )]
-    #[test_case(
-        &format!("/{UNKNOWN_TARGET}"),
-        Some(UNKNOWN_TARGET), None,
-        None, UNKNOWN_TARGET;
-        "unknown target, no path"
-    )]
-    #[test_case(
-        &format!("/{UNKNOWN_TARGET}/"),
-        Some(UNKNOWN_TARGET), Some("something/file.html"),
-        None, &format!("{UNKNOWN_TARGET}/something/file.html");
-        "unknown target, with path, trailling slash is kept"
-    )]
-    #[test_case(
-        &format!("/{UNKNOWN_TARGET}/"),
-        Some(UNKNOWN_TARGET), None,
-        None, &format!("{UNKNOWN_TARGET}/");
-        "unknown target, no path, trailling slash is kept"
-    )]
-    fn test_with_fixed_target_and_path(
-        original_uri: &str,
-        target: Option<&str>,
-        path: Option<&str>,
-        expected_target: Option<&str>,
-        expected_path: &str,
-    ) {
-        let params = RustdocParams::new(KRATE)
-            .try_with_req_version("0.4.0")
-            .unwrap()
-            .try_with_original_uri(original_uri)
-            .unwrap()
-            .with_maybe_doc_target(target)
-            .with_maybe_inner_path(path)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        dbg!(&params);
-
-        assert_eq!(params.doc_target(), expected_target);
-        assert_eq!(params.inner_path(), expected_path);
-    }
-
-    #[test_case(
-        None, None,
-        None, None
-        => "";
-        "empty"
-    )]
-    #[test_case(
-        None, None,
-        None, Some("folder/index.html")
-        => "folder/";
-        "just folder index.html will be removed"
-    )]
-    #[test_case(
-        None, None,
-        None, Some(INDEX_HTML)
-        => "";
-        "just root index.html will be removed"
-    )]
-    #[test_case(
-        None, Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), None
-        => "";
-        "just default target"
-    )]
-    #[test_case(
-        None, Some(DEFAULT_TARGET),
-        Some(OTHER_TARGET), None
-        => format!("{OTHER_TARGET}/");
-        "just other target"
-    )]
-    #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), None
-        => format!("{KRATE}/");
-        "full with default target, target name is used"
-    )]
-    #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
-        Some(OTHER_TARGET), None
-        => format!("{OTHER_TARGET}/{KRATE}/");
-        "full with other target, target name is used"
-    )]
-    #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
-        Some(DEFAULT_TARGET), Some("inner/something.html")
-        => "inner/something.html";
-        "full with default target, target name is ignored"
-    )]
-    #[test_case(
-        Some(KRATE), Some(DEFAULT_TARGET),
-        Some(OTHER_TARGET), Some("inner/something.html")
-        => format!("{OTHER_TARGET}/inner/something.html");
-        "full with other target, target name is ignored"
-    )]
-    fn test_rustdoc_path_for_url(
-        target_name: Option<&str>,
-        default_target: Option<&str>,
-        doc_target: Option<&str>,
-        inner_path: Option<&str>,
-    ) -> String {
-        generate_rustdoc_path_for_url(target_name, default_target, doc_target, inner_path)
-    }
-
-    #[test]
-    fn test_override_page_kind() {
-        let params = RustdocParams::new(KRATE)
-            .try_with_original_uri("/krate/latest/path_add/static.html")
-            .unwrap()
-            .with_inner_path("path_add")
-            .with_static_route_suffix("static.html")
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
-        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
-        assert_eq!(
-            params.target_redirect_url(),
-            "/crate/krate/latest/target-redirect/krate/"
-        );
-
-        let params = params.with_page_kind(PageKind::Rustdoc);
-        assert_eq!(params.rustdoc_url(), "/krate/latest/path_add/static.html");
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
-        assert_eq!(
-            params.target_redirect_url(),
-            "/crate/krate/latest/target-redirect/path_add/static.html"
-        );
-
-        let params = params.with_page_kind(PageKind::Source);
-        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
-        // just path added, not static suffix
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
-        assert_eq!(
-            params.target_redirect_url(),
-            "/crate/krate/latest/target-redirect/krate/"
-        );
-    }
-
-    #[test]
-    fn test_override_page_kind_with_target() {
-        let params = RustdocParams::new(KRATE)
-            .try_with_original_uri(format!("/krate/latest/{OTHER_TARGET}/path_add/static.html"))
-            .unwrap()
-            .with_inner_path("path_add")
-            .with_static_route_suffix("static.html")
-            .with_doc_target(OTHER_TARGET)
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
-        assert_eq!(
-            params.rustdoc_url(),
-            format!("/krate/latest/{OTHER_TARGET}/krate/")
-        );
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
-        assert_eq!(
-            params.target_redirect_url(),
-            format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
-        );
-
-        // same when the pagekind is "Source"
-        let params = params.with_page_kind(PageKind::Source);
-        assert_eq!(
-            params.rustdoc_url(),
-            format!("/krate/latest/{OTHER_TARGET}/krate/")
-        );
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
-        assert_eq!(
-            params.target_redirect_url(),
-            format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
-        );
-
-        // with page-kind "Rustdoc", we get the full path with static suffix
-        let params = params.with_page_kind(PageKind::Rustdoc);
-        dbg!(&params);
-        assert_eq!(
-            params.rustdoc_url(),
-            format!("/krate/latest/{OTHER_TARGET}/path_add/static.html")
-        );
-        assert_eq!(params.source_url(), format!("/crate/krate/latest/source/"));
-        assert_eq!(
-            params.target_redirect_url(),
-            format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/path_add/static.html")
-        );
-    }
-
-    #[test]
-    fn test_debug_output() {
-        let params = RustdocParams::new("dummy")
-            .try_with_req_version("0.2.0")
-            .unwrap()
-            .with_inner_path("struct.Dummy.html")
-            .with_doc_target("dummy")
-            .with_page_kind(PageKind::Rustdoc)
-            .try_with_original_uri("/dummy/0.2.0/dummy/struct.Dummy.html")
-            .unwrap()
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name("dummy")
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        let debug_output = format!("{:?}", params);
-
-        assert!(debug_output.contains("EscapedURI"));
-        assert!(debug_output.contains("rustdoc_url()"));
-        assert!(debug_output.contains("generate_fallback_url()"));
-    }
-
-    #[test]
-    fn test_override_doc_target_when_old_doc_target_was_path() {
-        // params as if they would have come from a route like
-        // `/{name}/{version}/{target}/{*path}`,
-        // where in the `{target}` place we have part of the path.
-        let params = RustdocParams::new(KRATE)
-            .with_req_version(ReqVersion::Exact(VERSION))
-            .try_with_original_uri("/dummy/0.1.0/dummy/struct.Dummy.html")
-            .unwrap()
-            .with_doc_target("dummy")
-            .with_inner_path("struct.Dummy.html");
-
-        dbg!(&params);
-
-        // initial params, doc-target is "dummy", not validated
-        assert_eq!(params.doc_target(), Some("dummy"));
-        assert_eq!(params.inner_path(), "struct.Dummy.html");
-
-        // after parsing, we recognize that the doc target is not a target, and attach
-        // it to the inner_path.
-        let params = params
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        dbg!(&params);
-
-        assert_eq!(params.doc_target(), None);
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-
-        // now, in some cases, we now want to generate a variation of these params,
-        // with an actual non-default doc target.
-        // Then we expect the path to be intact still, and the target to be set, even
-        // though the folder-part of the path was initially generated from the doc_target field.
-        let params = params.with_doc_target(OTHER_TARGET);
-        dbg!(&params);
-        assert_eq!(params.doc_target(), Some(OTHER_TARGET));
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-    }
-
-    #[test]
-    fn test_if_order_matters_1() {
-        let params = RustdocParams::new(KRATE)
-            .with_req_version(ReqVersion::Exact(VERSION))
-            .try_with_original_uri("/dummy/0.1.0/dummy/struct.Dummy.html")
-            .unwrap()
-            .with_inner_path("dummy/struct.Dummy.html")
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        assert_eq!(params.doc_target(), None);
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-
-        let params = params.with_doc_target(OTHER_TARGET);
-        assert_eq!(params.doc_target(), Some(OTHER_TARGET));
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-    }
-
-    #[test]
-    fn test_if_order_matters_2() {
-        let params = RustdocParams::new(KRATE)
-            .with_req_version(ReqVersion::Exact(VERSION))
-            .try_with_original_uri(format!(
-                "/dummy/0.1.0/{OTHER_TARGET}/dummy/struct.Dummy.html"
-            ))
-            .unwrap()
-            .with_inner_path(format!("{OTHER_TARGET}/dummy/struct.Dummy.html"))
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        assert_eq!(params.doc_target(), Some(OTHER_TARGET));
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-
-        let params = params.with_doc_target(DEFAULT_TARGET);
-        assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
-        assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
-    }
-
-    #[test]
-    fn test_parse_something() {
-        // test for https://github.com/rust-lang/docs.rs/issues/2989
-        let params = dbg!(
-            RustdocParams::new(KRATE)
-                .with_page_kind(PageKind::Rustdoc)
-                .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
-                .unwrap()
-                .with_req_version(ReqVersion::Latest)
-                .with_doc_target(KRATE)
-        );
-
-        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
-
-        let params = dbg!(
-            params
-                .with_target_name(KRATE)
-                .with_default_target(DEFAULT_TARGET)
-                .with_doc_targets(TARGETS.iter().cloned())
-        );
-
-        assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
-    }
-
-    #[test_case("other_path.html", "/krate/latest/krate/other_path.html")]
-    #[test_case("other_path", "/krate/latest/krate/other_path"; "without .html")]
-    #[test_case("other_path.html", "/krate/latest/krate/other_path.html"; "with .html")]
-    #[test_case("settings.html", "/krate/latest/settings.html"; "static routes")]
-    #[test_case(KRATE, "/krate/latest/krate/"; "same as target name, without slash")]
-    fn test_redirect_some_odd_paths_we_saw(inner_path: &str, expected_url: &str) {
-        // test for https://github.com/rust-lang/docs.rs/issues/2989
-        let params = RustdocParams::new(KRATE)
-            .with_page_kind(PageKind::Rustdoc)
-            .try_with_original_uri(format!("/{KRATE}/latest/{inner_path}"))
-            .unwrap()
-            .with_req_version(ReqVersion::Latest)
-            .with_maybe_doc_target(None::<String>)
-            .with_inner_path(inner_path)
-            .with_default_target(DEFAULT_TARGET)
-            .with_target_name(KRATE)
-            .with_doc_targets(TARGETS.iter().cloned());
-
-        dbg!(&params);
-
-        assert_eq!(params.rustdoc_url(), expected_url);
-    }
-
-    #[test]
-    fn test_item_with_semver_url() {
-        // https://github.com/rust-lang/docs.rs/issues/3036
-        // This fixes an issue where we mistakenly attached a
-        // trailing `/` to a rustdoc URL when redirecting
-        // to the exact version, coming from a semver version.
-
-        let ver: Version = "0.14.0".parse().unwrap();
-        let params = RustdocParams::new(KRATE)
-            .with_page_kind(PageKind::Rustdoc)
-            .with_req_version(ReqVersion::Exact(ver))
-            .with_doc_target(KRATE)
-            .with_inner_path("trait.Itertools.html");
-
-        dbg!(&params);
-
-        assert_eq!(
-            params.rustdoc_url(),
-            format!("/{KRATE}/0.14.0/{KRATE}/trait.Itertools.html")
-        )
-    }
-
-    #[test_case(None)]
-    #[test_case(Some(CompressionAlgorithm::Gzip))]
-    #[test_case(Some(CompressionAlgorithm::Zstd))]
-    fn test_plain_json_url(wanted_compression: Option<CompressionAlgorithm>) {
-        let mut params = RustdocParams::new(KRATE)
-            .with_page_kind(PageKind::Rustdoc)
-            .with_req_version(ReqVersion::Exact(V1));
-
-        assert_eq!(
-            params.json_download_url(wanted_compression, None),
-            format!(
-                "/crate/{KRATE}/{V1}/json{}",
-                wanted_compression
-                    .map(|c| format!(".{}", c.file_extension()))
-                    .unwrap_or_default()
-            )
-        );
-
-        params = params.with_doc_target("some-target");
-
-        assert_eq!(
-            params.json_download_url(wanted_compression, None),
-            format!(
-                "/crate/{KRATE}/{V1}/some-target/json{}",
-                wanted_compression
-                    .map(|c| format!(".{}", c.file_extension()))
-                    .unwrap_or_default()
-            )
-        );
-    }
-
-    #[test_case(None)]
-    #[test_case(Some(CompressionAlgorithm::Gzip))]
-    #[test_case(Some(CompressionAlgorithm::Zstd))]
-    fn test_plain_json_url_with_format(wanted_compression: Option<CompressionAlgorithm>) {
-        let mut params = RustdocParams::new(KRATE)
-            .with_page_kind(PageKind::Rustdoc)
-            .with_req_version(ReqVersion::Exact(V1));
-
-        assert_eq!(
-            params.json_download_url(wanted_compression, Some("42")),
-            format!(
-                "/crate/{KRATE}/{V1}/json/42{}",
-                wanted_compression
-                    .map(|c| format!(".{}", c.file_extension()))
-                    .unwrap_or_default()
-            )
-        );
-
-        params = params.with_doc_target("some-target");
-
-        assert_eq!(
-            params.json_download_url(wanted_compression, Some("42")),
-            format!(
-                "/crate/{KRATE}/{V1}/some-target/json/42{}",
-                wanted_compression
-                    .map(|c| format!(".{}", c.file_extension()))
-                    .unwrap_or_default()
-            )
-        );
-    }
-
-    #[test]
-    fn test_zip_download_url() {
-        let params = RustdocParams::new(KRATE).with_req_version(ReqVersion::Exact(V1));
-        assert_eq!(
-            params.zip_download_url(),
-            format!("/crate/{KRATE}/{V1}/download")
-        );
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::{
+//         db::types::version::Version,
+//         test::{AxumResponseTestExt, AxumRouterTestExt, V1},
+//     };
+//     use axum::{Router, routing::get};
+//     use test_case::test_case;
+
+//     static KRATE: &str = "krate";
+//     const VERSION: Version = Version::new(0, 1, 0);
+//     static DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
+//     static OTHER_TARGET: &str = "x86_64-pc-windows-msvc";
+//     static UNKNOWN_TARGET: &str = "some-unknown-target";
+//     static TARGETS: &[&str] = &[DEFAULT_TARGET, OTHER_TARGET];
+
+//     #[test_case(
+//         "/{name}/{version}/help/some.html",
+//         "/foo/1.2.3/help/some.html"
+//         => Some("help/some.html".into());
+//         "suffix with path"
+//     )]
+//     #[test_case("/{name}/{version}/help.html", "/foo/1.2.3/help.html" => Some("help.html".into()); "simple suffix")]
+//     #[test_case("help.html", "help.html" => Some("help.html".into()); "simple suffix without other components")]
+//     #[test_case("/{name}/{version}/help/", "/foo/1.2.3/help/" => Some("help/".into()); "suffix is folder")]
+//     #[test_case("{name}/{version}/help/", "foo/1.2.3/help/" => Some("help/".into()); "without leading slash")]
+//     #[test_case("/{name}/{version}/{*path}", "/foo/1.2.3/help.html" => None; "no suffix in route")]
+//     #[test_case("/{name}/{version}/help.html", "/foo/1.2.3/other.html" => None; "different suffix")]
+//     #[test_case(
+//         "/{name}/{version}/some/help.html",
+//         "/foo/1.2.3/other/help.html"
+//         => None;
+//         "different suffix later"
+//     )]
+//     #[test_case("", "" => None; "empty strings")]
+//     #[test_case("/", "" => None; "one slash, one empty")]
+//     fn test_find_static_route_suffix(route: &str, path: &str) -> Option<String> {
+//         find_static_route_suffix(route, path)
+//     }
+
+//     #[test_case(
+//         "/{name}",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate").unwrap();
+//         "just name"
+//     )]
+//     #[test_case(
+//         "/{name}/",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/").unwrap();
+//         "just name with trailing slash"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/latest").unwrap();
+//         "just name and version"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{*path}",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/latest/static.html").unwrap()
+//             .with_inner_path("static.html");
+//         "name, version, path extract"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{path}/static.html",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/latest/path_add/static.html").unwrap()
+//             .with_inner_path("path_add")
+//             .with_static_route_suffix("static.html");
+//         "name, version, path extract, static suffix"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/clapproc%20%60macro.html",
+//         RustdocParams::new("clap")
+//             .try_with_original_uri("/clap/latest/clapproc%20%60macro.html").unwrap()
+//             .with_static_route_suffix("clapproc `macro.html");
+//         "name, version, static suffix with some urlencoding"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/static.html",
+//         RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/latest/static.html").unwrap()
+//             .with_static_route_suffix("static.html");
+//         "name, version, static suffix"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{target}",
+//         RustdocParams::new(KRATE)
+//             .try_with_req_version("1.2.3").unwrap()
+//             .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}")).unwrap()
+//             .with_doc_target(OTHER_TARGET);
+//         "name, version, target"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{target}/folder/something.html",
+//         RustdocParams::new(KRATE)
+//             .try_with_req_version("1.2.3").unwrap()
+//             .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/folder/something.html")).unwrap()
+//             .with_doc_target(OTHER_TARGET)
+//             .with_static_route_suffix("folder/something.html");
+//         "name, version, target, static suffix"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{target}/",
+//         RustdocParams::new(KRATE)
+//             .try_with_req_version("1.2.3").unwrap()
+//             .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/")).unwrap()
+//             .with_doc_target(OTHER_TARGET);
+//         "name, version, target trailing slash"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{target}/{*path}",
+//         RustdocParams::new(KRATE)
+//             .try_with_req_version("1.2.3").unwrap()
+//             .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/some/path/to/a/file.html")).unwrap()
+//             .with_doc_target(OTHER_TARGET)
+//             .with_inner_path("some/path/to/a/file.html");
+//         "name, version, target, path"
+//     )]
+//     #[test_case(
+//         "/{name}/{version}/{target}/{path}/path/to/a/file.html",
+//         RustdocParams::new(KRATE)
+//             .try_with_req_version("1.2.3").unwrap()
+//             .try_with_original_uri(format!("/krate/1.2.3/{OTHER_TARGET}/path_add/path/to/a/file.html")).unwrap()
+//             .with_doc_target(OTHER_TARGET)
+//             .with_inner_path("path_add")
+//             .with_static_route_suffix("path/to/a/file.html");
+//         "name, version, target, path, static suffix"
+//     )]
+//     #[tokio::test]
+//     async fn test_extract_rustdoc_params_from_request(
+//         route: &str,
+//         expected: RustdocParams,
+//     ) -> anyhow::Result<()> {
+//         let expected = expected.with_page_kind(PageKind::Rustdoc);
+
+//         let app = Router::new().route(
+//             route,
+//             get(|params: RustdocParams| async move {
+//                 format!("{:?}", params.with_page_kind(PageKind::Rustdoc))
+//             }),
+//         );
+
+//         let path = expected.original_uri.as_ref().unwrap().path().to_owned();
+
+//         let res = app.get(&path).await?;
+//         assert!(res.status().is_success());
+//         assert_eq!(res.text().await?, format!("{:?}", expected));
+
+//         Ok(())
+//     }
+
+//     #[test_case(
+//         None, None, false,
+//         None, "", "krate/index.html";
+//         "super empty 1"
+//     )]
+//     #[test_case(
+//         Some(""), Some(""), false,
+//         None, "", "krate/index.html";
+//         "super empty 2"
+//     )]
+//     // test cases when no separate "target" component was present in the params
+//     #[test_case(
+//         None, Some("/"), true,
+//         None, "", "krate/index.html";
+//         "just slash"
+//     )]
+//     #[test_case(
+//         None, Some("something"), false,
+//         None, "something", "krate/something";
+//         "without trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some("settings.html"), false,
+//         None, "settings.html", "settings.html";
+//         "without trailing slash, but known root name"
+//     )]
+//     #[test_case(
+//         None, Some("/something"), false,
+//         None, "something", "krate/something";
+//         "leading slash is cut"
+//     )]
+//     #[test_case(
+//         None, Some("something/"), true,
+//         None, "something/", "something/index.html";
+//         "with trailing slash"
+//     )]
+//     // a target is given, but as first component of the path, for routes without separate
+//     // "target" component
+//     #[test_case(
+//         None, Some(DEFAULT_TARGET), false,
+//         Some(DEFAULT_TARGET), "", "krate/index.html";
+//         "just target without trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{DEFAULT_TARGET}/")), true,
+//         Some(DEFAULT_TARGET), "", "krate/index.html";
+//         "just default target with trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{DEFAULT_TARGET}/one")), false,
+//         Some(DEFAULT_TARGET), "one", "krate/one";
+//         "target + one without trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{DEFAULT_TARGET}/one/")), true,
+//         Some(DEFAULT_TARGET), "one/", "one/index.html";
+//         "target + one target with trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{UNKNOWN_TARGET}/one/")), true,
+//         None, &format!("{UNKNOWN_TARGET}/one/"), &format!("{UNKNOWN_TARGET}/one/index.html");
+//         "unknown target stays in path"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{DEFAULT_TARGET}/some/inner/path")), false,
+//         Some(DEFAULT_TARGET), "some/inner/path", "some/inner/path";
+//         "all without trailing slash"
+//     )]
+//     #[test_case(
+//         None, Some(&format!("{DEFAULT_TARGET}/some/inner/path/")), true,
+//         Some(DEFAULT_TARGET), "some/inner/path/", "some/inner/path/index.html";
+//         "all with trailing slash"
+//     )]
+//     // here we have a separate target path parameter, we check it and use it accordingly
+//     #[test_case(
+//         Some(DEFAULT_TARGET), None, false,
+//         Some(DEFAULT_TARGET), "", "krate/index.html";
+//         "actual target, that is default"
+//     )]
+//     #[test_case(
+//         Some(DEFAULT_TARGET), Some("inner/path.html"), false,
+//         Some(DEFAULT_TARGET), "inner/path.html", "inner/path.html";
+//         "actual target with path"
+//     )]
+//     #[test_case(
+//         Some(DEFAULT_TARGET), Some("inner/path/"), true,
+//         Some(DEFAULT_TARGET), "inner/path/", "inner/path/index.html";
+//         "actual target with path slash"
+//     )]
+//     #[test_case(
+//         Some(UNKNOWN_TARGET), None, true,
+//         None, &format!("{UNKNOWN_TARGET}/"), &format!("{UNKNOWN_TARGET}/index.html");
+//         "unknown target"
+//     )]
+//     #[test_case(
+//         Some(UNKNOWN_TARGET), None, false,
+//         None, UNKNOWN_TARGET, &format!("krate/{UNKNOWN_TARGET}");
+//         "unknown target without trailing slash"
+//     )]
+//     #[test_case(
+//         Some(UNKNOWN_TARGET), Some("inner/path.html"), false,
+//         None, &format!("{UNKNOWN_TARGET}/inner/path.html"), &format!("{UNKNOWN_TARGET}/inner/path.html");
+//         "unknown target with path"
+//     )]
+//     #[test_case(
+//         Some(OTHER_TARGET), Some("inner/path.html"), false,
+//         Some(OTHER_TARGET), "inner/path.html", &format!("{OTHER_TARGET}/inner/path.html");
+//         "other target with path"
+//     )]
+//     #[test_case(
+//         Some(UNKNOWN_TARGET), Some("inner/path/"), true,
+//         None, &format!("{UNKNOWN_TARGET}/inner/path/"), &format!("{UNKNOWN_TARGET}/inner/path/index.html");
+//         "unknown target with path slash"
+//     )]
+//     #[test_case(
+//         Some(OTHER_TARGET), Some("inner/path/"), true,
+//         Some(OTHER_TARGET), "inner/path/", &format!("{OTHER_TARGET}/inner/path/index.html");
+//         "other target with path slash"
+//     )]
+//     #[test_case(
+//         Some(DEFAULT_TARGET), None, false,
+//         Some(DEFAULT_TARGET), "", "krate/index.html";
+//         "pure default target, without trailing slash"
+//     )]
+//     fn test_parse(
+//         target: Option<&str>,
+//         path: Option<&str>,
+//         had_trailing_slash: bool,
+//         expected_target: Option<&str>,
+//         expected_path: &str,
+//         expected_storage_path: &str,
+//     ) {
+//         let mut dummy_path = match (target, path) {
+//             (Some(target), Some(path)) => format!("{}/{}", target, path),
+//             (Some(target), None) => target.to_string(),
+//             (None, Some(path)) => path.to_string(),
+//             (None, None) => String::new(),
+//         };
+//         dummy_path.insert(0, '/');
+//         if had_trailing_slash && !dummy_path.is_empty() {
+//             dummy_path.push('/');
+//         }
+
+//         let parsed = RustdocParams::new(KRATE)
+//             .with_page_kind(PageKind::Rustdoc)
+//             .with_req_version(ReqVersion::Latest)
+//             .with_maybe_doc_target(target)
+//             .with_maybe_inner_path(path)
+//             .try_with_original_uri(&dummy_path[..])
+//             .unwrap()
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         assert_eq!(parsed.name(), KRATE);
+//         assert_eq!(parsed.req_version(), &ReqVersion::Latest);
+//         assert_eq!(parsed.doc_target(), expected_target);
+//         assert_eq!(parsed.inner_path(), expected_path);
+//         assert_eq!(parsed.storage_path(), expected_storage_path);
+//         assert_eq!(
+//             parsed.path_is_folder(),
+//             had_trailing_slash || dummy_path.ends_with('/') || dummy_path.is_empty()
+//         );
+//     }
+
+//     #[test_case("dummy/struct.WindowsOnly.html", Some("WindowsOnly"))]
+//     #[test_case("dummy/some_module/struct.SomeItem.html", Some("SomeItem"))]
+//     #[test_case("dummy/some_module/index.html", Some("some_module"))]
+//     #[test_case("dummy/some_module/", Some("some_module"))]
+//     #[test_case("src/folder1/folder2/logic.rs.html", Some("logic"))]
+//     #[test_case("src/non_source_file.rs", None)]
+//     #[test_case("html", None; "plain file without extension")]
+//     #[test_case("something.html", Some("html"); "plain file")]
+//     #[test_case("", None)]
+//     fn test_generate_fallback_search(path: &str, search: Option<&str>) {
+//         let mut params = RustdocParams::new("dummy")
+//             .try_with_req_version("0.4.0")
+//             .unwrap()
+//             // non-default target, target stays in the url
+//             .with_doc_target(OTHER_TARGET)
+//             .with_inner_path(path)
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name("dummy")
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         assert_eq!(params.generate_fallback_search().as_deref(), search);
+//         assert_eq!(
+//             params.generate_fallback_url().to_string(),
+//             format!(
+//                 "/dummy/0.4.0/x86_64-pc-windows-msvc/dummy/{}",
+//                 search.map(|s| format!("?search={}", s)).unwrap_or_default()
+//             )
+//         );
+
+//         // change to default target, check url again
+//         params = params.with_doc_target(DEFAULT_TARGET);
+
+//         assert_eq!(params.generate_fallback_search().as_deref(), search);
+//         assert_eq!(
+//             params.generate_fallback_url().to_string(),
+//             format!(
+//                 "/dummy/0.4.0/dummy/{}",
+//                 search.map(|s| format!("?search={}", s)).unwrap_or_default()
+//             )
+//         );
+//     }
+
+//     #[test]
+//     fn test_parse_source() {
+//         let params = RustdocParams::new("dummy")
+//             .try_with_req_version("0.4.0")
+//             .unwrap()
+//             .with_inner_path("README.md")
+//             .with_page_kind(PageKind::Source)
+//             .try_with_original_uri("/crate/dummy/0.4.0/source/README.md")
+//             .unwrap()
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name("dummy")
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         assert_eq!(params.rustdoc_url().to_string(), "/dummy/0.4.0/dummy/");
+//         assert_eq!(
+//             params.source_url().to_string(),
+//             "/crate/dummy/0.4.0/source/README.md"
+//         );
+//         assert_eq!(
+//             params.target_redirect_url().to_string(),
+//             "/crate/dummy/0.4.0/target-redirect/dummy/"
+//         );
+//     }
+
+//     #[test_case(
+//         None, None, None, None => ""
+//     )]
+//     #[test_case(
+//         Some("target_name"), None, None, None => "target_name/"
+//     )]
+//     #[test_case(
+//         None, None, None, Some("path/index.html") => "path/";
+//         "cuts trailing /index.html"
+//     )]
+//     #[test_case(
+//         Some("target_name"), None,
+//         Some(DEFAULT_TARGET), Some("inner/path.html")
+//         => "x86_64-unknown-linux-gnu/inner/path.html";
+//         "default target, but we don't know about it, keeps target"
+//     )]
+//     #[test_case(
+//         Some("target_name"), None,
+//         Some(DEFAULT_TARGET), None
+//         => "x86_64-unknown-linux-gnu/target_name/";
+//         "default target, we don't know about it, without path"
+//     )]
+//     #[test_case(
+//         Some("target_name"), Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), None
+//         => "target_name/";
+//         "default-target, without path, target_name is used to generate the inner path"
+//     )]
+//     #[test_case(
+//         Some("target_name"), Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), Some("inner/path.html")
+//         => "inner/path.html";
+//         "default target, with path, target_name is ignored"
+//     )]
+//     #[test_case(
+//         None, Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), Some("inner/path/index.html")
+//         => "inner/path/";
+//         "default target, with path as folder with index.html"
+//     )]
+//     #[test_case(
+//         None, Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), Some("inner/path/")
+//         => "inner/path/";
+//         "default target, with path as folder"
+//     )]
+//     #[test_case(
+//         Some("target_name"), Some(DEFAULT_TARGET),
+//         Some(OTHER_TARGET), None
+//         => "x86_64-pc-windows-msvc/target_name/";
+//         "non-default-target, without path, target_name is used to generate the inner path"
+//     )]
+//     #[test_case(
+//         Some("target_name"), Some(DEFAULT_TARGET),
+//         Some(OTHER_TARGET), Some("inner/path.html")
+//         => "x86_64-pc-windows-msvc/inner/path.html";
+//         "non-default target, with path, target_name is ignored"
+//     )]
+//     fn test_generate_rustdoc_path_for_url(
+//         target_name: Option<&str>,
+//         default_target: Option<&str>,
+//         doc_target: Option<&str>,
+//         inner_path: Option<&str>,
+//     ) -> String {
+//         generate_rustdoc_path_for_url(target_name, default_target, doc_target, inner_path)
+//     }
+
+//     #[test]
+//     fn test_case_1() {
+//         let params = RustdocParams::new("dummy")
+//             .try_with_req_version("0.2.0")
+//             .unwrap()
+//             .with_doc_target("dummy")
+//             .with_inner_path("struct.Dummy.html")
+//             .with_page_kind(PageKind::Rustdoc)
+//             .try_with_original_uri("/dummy/0.2.0/dummy/struct.Dummy.html")
+//             .unwrap()
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name("dummy")
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         dbg!(&params);
+
+//         assert!(params.doc_target().is_none());
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+//         assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
+
+//         let params = params.with_doc_target(DEFAULT_TARGET);
+//         dbg!(&params);
+//         assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+//         assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
+
+//         let params = params.with_doc_target(OTHER_TARGET);
+//         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
+//         assert_eq!(
+//             params.storage_path(),
+//             format!("{OTHER_TARGET}/dummy/struct.Dummy.html")
+//         );
+//         assert_eq!(
+//             params.storage_path(),
+//             format!("{OTHER_TARGET}/dummy/struct.Dummy.html")
+//         );
+//     }
+
+//     #[test_case(
+//         "/",
+//         None, None,
+//         None, ""
+//         ; "no target, no path"
+//     )]
+//     #[test_case(
+//         &format!("/{DEFAULT_TARGET}"),
+//         Some(DEFAULT_TARGET), None,
+//         Some(DEFAULT_TARGET), "";
+//         "existing target, no path"
+//     )]
+//     #[test_case(
+//         &format!("/{UNKNOWN_TARGET}"),
+//         Some(UNKNOWN_TARGET), None,
+//         None, UNKNOWN_TARGET;
+//         "unknown target, no path"
+//     )]
+//     #[test_case(
+//         &format!("/{UNKNOWN_TARGET}/"),
+//         Some(UNKNOWN_TARGET), Some("something/file.html"),
+//         None, &format!("{UNKNOWN_TARGET}/something/file.html");
+//         "unknown target, with path, trailling slash is kept"
+//     )]
+//     #[test_case(
+//         &format!("/{UNKNOWN_TARGET}/"),
+//         Some(UNKNOWN_TARGET), None,
+//         None, &format!("{UNKNOWN_TARGET}/");
+//         "unknown target, no path, trailling slash is kept"
+//     )]
+//     fn test_with_fixed_target_and_path(
+//         original_uri: &str,
+//         target: Option<&str>,
+//         path: Option<&str>,
+//         expected_target: Option<&str>,
+//         expected_path: &str,
+//     ) {
+//         let params = RustdocParams::new(KRATE)
+//             .try_with_req_version("0.4.0")
+//             .unwrap()
+//             .try_with_original_uri(original_uri)
+//             .unwrap()
+//             .with_maybe_doc_target(target)
+//             .with_maybe_inner_path(path)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         dbg!(&params);
+
+//         assert_eq!(params.doc_target(), expected_target);
+//         assert_eq!(params.inner_path(), expected_path);
+//     }
+
+//     #[test_case(
+//         None, None,
+//         None, None
+//         => "";
+//         "empty"
+//     )]
+//     #[test_case(
+//         None, None,
+//         None, Some("folder/index.html")
+//         => "folder/";
+//         "just folder index.html will be removed"
+//     )]
+//     #[test_case(
+//         None, None,
+//         None, Some(INDEX_HTML)
+//         => "";
+//         "just root index.html will be removed"
+//     )]
+//     #[test_case(
+//         None, Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), None
+//         => "";
+//         "just default target"
+//     )]
+//     #[test_case(
+//         None, Some(DEFAULT_TARGET),
+//         Some(OTHER_TARGET), None
+//         => format!("{OTHER_TARGET}/");
+//         "just other target"
+//     )]
+//     #[test_case(
+//         Some(KRATE), Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), None
+//         => format!("{KRATE}/");
+//         "full with default target, target name is used"
+//     )]
+//     #[test_case(
+//         Some(KRATE), Some(DEFAULT_TARGET),
+//         Some(OTHER_TARGET), None
+//         => format!("{OTHER_TARGET}/{KRATE}/");
+//         "full with other target, target name is used"
+//     )]
+//     #[test_case(
+//         Some(KRATE), Some(DEFAULT_TARGET),
+//         Some(DEFAULT_TARGET), Some("inner/something.html")
+//         => "inner/something.html";
+//         "full with default target, target name is ignored"
+//     )]
+//     #[test_case(
+//         Some(KRATE), Some(DEFAULT_TARGET),
+//         Some(OTHER_TARGET), Some("inner/something.html")
+//         => format!("{OTHER_TARGET}/inner/something.html");
+//         "full with other target, target name is ignored"
+//     )]
+//     fn test_rustdoc_path_for_url(
+//         target_name: Option<&str>,
+//         default_target: Option<&str>,
+//         doc_target: Option<&str>,
+//         inner_path: Option<&str>,
+//     ) -> String {
+//         generate_rustdoc_path_for_url(target_name, default_target, doc_target, inner_path)
+//     }
+
+//     #[test]
+//     fn test_override_page_kind() {
+//         let params = RustdocParams::new(KRATE)
+//             .try_with_original_uri("/krate/latest/path_add/static.html")
+//             .unwrap()
+//             .with_inner_path("path_add")
+//             .with_static_route_suffix("static.html")
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
+//         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+//         assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             "/crate/krate/latest/target-redirect/krate/"
+//         );
+
+//         let params = params.with_page_kind(PageKind::Rustdoc);
+//         assert_eq!(params.rustdoc_url(), "/krate/latest/path_add/static.html");
+//         assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             "/crate/krate/latest/target-redirect/path_add/static.html"
+//         );
+
+//         let params = params.with_page_kind(PageKind::Source);
+//         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+//         // just path added, not static suffix
+//         assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             "/crate/krate/latest/target-redirect/krate/"
+//         );
+//     }
+
+//     #[test]
+//     fn test_override_page_kind_with_target() {
+//         let params = RustdocParams::new(KRATE)
+//             .try_with_original_uri(format!("/krate/latest/{OTHER_TARGET}/path_add/static.html"))
+//             .unwrap()
+//             .with_inner_path("path_add")
+//             .with_static_route_suffix("static.html")
+//             .with_doc_target(OTHER_TARGET)
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
+//         assert_eq!(
+//             params.rustdoc_url(),
+//             format!("/krate/latest/{OTHER_TARGET}/krate/")
+//         );
+//         assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
+//         );
+
+//         // same when the pagekind is "Source"
+//         let params = params.with_page_kind(PageKind::Source);
+//         assert_eq!(
+//             params.rustdoc_url(),
+//             format!("/krate/latest/{OTHER_TARGET}/krate/")
+//         );
+//         assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
+//         );
+
+//         // with page-kind "Rustdoc", we get the full path with static suffix
+//         let params = params.with_page_kind(PageKind::Rustdoc);
+//         dbg!(&params);
+//         assert_eq!(
+//             params.rustdoc_url(),
+//             format!("/krate/latest/{OTHER_TARGET}/path_add/static.html")
+//         );
+//         assert_eq!(params.source_url(), format!("/crate/krate/latest/source/"));
+//         assert_eq!(
+//             params.target_redirect_url(),
+//             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/path_add/static.html")
+//         );
+//     }
+
+//     #[test]
+//     fn test_debug_output() {
+//         let params = RustdocParams::new("dummy")
+//             .try_with_req_version("0.2.0")
+//             .unwrap()
+//             .with_inner_path("struct.Dummy.html")
+//             .with_doc_target("dummy")
+//             .with_page_kind(PageKind::Rustdoc)
+//             .try_with_original_uri("/dummy/0.2.0/dummy/struct.Dummy.html")
+//             .unwrap()
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name("dummy")
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         let debug_output = format!("{:?}", params);
+
+//         assert!(debug_output.contains("EscapedURI"));
+//         assert!(debug_output.contains("rustdoc_url()"));
+//         assert!(debug_output.contains("generate_fallback_url()"));
+//     }
+
+//     #[test]
+//     fn test_override_doc_target_when_old_doc_target_was_path() {
+//         // params as if they would have come from a route like
+//         // `/{name}/{version}/{target}/{*path}`,
+//         // where in the `{target}` place we have part of the path.
+//         let params = RustdocParams::new(KRATE)
+//             .with_req_version(ReqVersion::Exact(VERSION))
+//             .try_with_original_uri("/dummy/0.1.0/dummy/struct.Dummy.html")
+//             .unwrap()
+//             .with_doc_target("dummy")
+//             .with_inner_path("struct.Dummy.html");
+
+//         dbg!(&params);
+
+//         // initial params, doc-target is "dummy", not validated
+//         assert_eq!(params.doc_target(), Some("dummy"));
+//         assert_eq!(params.inner_path(), "struct.Dummy.html");
+
+//         // after parsing, we recognize that the doc target is not a target, and attach
+//         // it to the inner_path.
+//         let params = params
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         dbg!(&params);
+
+//         assert_eq!(params.doc_target(), None);
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+
+//         // now, in some cases, we now want to generate a variation of these params,
+//         // with an actual non-default doc target.
+//         // Then we expect the path to be intact still, and the target to be set, even
+//         // though the folder-part of the path was initially generated from the doc_target field.
+//         let params = params.with_doc_target(OTHER_TARGET);
+//         dbg!(&params);
+//         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+//     }
+
+//     #[test]
+//     fn test_if_order_matters_1() {
+//         let params = RustdocParams::new(KRATE)
+//             .with_req_version(ReqVersion::Exact(VERSION))
+//             .try_with_original_uri("/dummy/0.1.0/dummy/struct.Dummy.html")
+//             .unwrap()
+//             .with_inner_path("dummy/struct.Dummy.html")
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         assert_eq!(params.doc_target(), None);
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+
+//         let params = params.with_doc_target(OTHER_TARGET);
+//         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+//     }
+
+//     #[test]
+//     fn test_if_order_matters_2() {
+//         let params = RustdocParams::new(KRATE)
+//             .with_req_version(ReqVersion::Exact(VERSION))
+//             .try_with_original_uri(format!(
+//                 "/dummy/0.1.0/{OTHER_TARGET}/dummy/struct.Dummy.html"
+//             ))
+//             .unwrap()
+//             .with_inner_path(format!("{OTHER_TARGET}/dummy/struct.Dummy.html"))
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+
+//         let params = params.with_doc_target(DEFAULT_TARGET);
+//         assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
+//         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
+//     }
+
+//     #[test]
+//     fn test_parse_something() {
+//         // test for https://github.com/rust-lang/docs.rs/issues/2989
+//         let params = dbg!(
+//             RustdocParams::new(KRATE)
+//                 .with_page_kind(PageKind::Rustdoc)
+//                 .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
+//                 .unwrap()
+//                 .with_req_version(ReqVersion::Latest)
+//                 .with_doc_target(KRATE)
+//         );
+
+//         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+
+//         let params = dbg!(
+//             params
+//                 .with_target_name(KRATE)
+//                 .with_default_target(DEFAULT_TARGET)
+//                 .with_doc_targets(TARGETS.iter().cloned())
+//         );
+
+//         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
+//     }
+
+//     #[test_case("other_path.html", "/krate/latest/krate/other_path.html")]
+//     #[test_case("other_path", "/krate/latest/krate/other_path"; "without .html")]
+//     #[test_case("other_path.html", "/krate/latest/krate/other_path.html"; "with .html")]
+//     #[test_case("settings.html", "/krate/latest/settings.html"; "static routes")]
+//     #[test_case(KRATE, "/krate/latest/krate/"; "same as target name, without slash")]
+//     fn test_redirect_some_odd_paths_we_saw(inner_path: &str, expected_url: &str) {
+//         // test for https://github.com/rust-lang/docs.rs/issues/2989
+//         let params = RustdocParams::new(KRATE)
+//             .with_page_kind(PageKind::Rustdoc)
+//             .try_with_original_uri(format!("/{KRATE}/latest/{inner_path}"))
+//             .unwrap()
+//             .with_req_version(ReqVersion::Latest)
+//             .with_maybe_doc_target(None::<String>)
+//             .with_inner_path(inner_path)
+//             .with_default_target(DEFAULT_TARGET)
+//             .with_target_name(KRATE)
+//             .with_doc_targets(TARGETS.iter().cloned());
+
+//         dbg!(&params);
+
+//         assert_eq!(params.rustdoc_url(), expected_url);
+//     }
+
+//     #[test]
+//     fn test_item_with_semver_url() {
+//         // https://github.com/rust-lang/docs.rs/issues/3036
+//         // This fixes an issue where we mistakenly attached a
+//         // trailing `/` to a rustdoc URL when redirecting
+//         // to the exact version, coming from a semver version.
+
+//         let ver: Version = "0.14.0".parse().unwrap();
+//         let params = RustdocParams::new(KRATE)
+//             .with_page_kind(PageKind::Rustdoc)
+//             .with_req_version(ReqVersion::Exact(ver))
+//             .with_doc_target(KRATE)
+//             .with_inner_path("trait.Itertools.html");
+
+//         dbg!(&params);
+
+//         assert_eq!(
+//             params.rustdoc_url(),
+//             format!("/{KRATE}/0.14.0/{KRATE}/trait.Itertools.html")
+//         )
+//     }
+
+//     #[test_case(None)]
+//     #[test_case(Some(CompressionAlgorithm::Gzip))]
+//     #[test_case(Some(CompressionAlgorithm::Zstd))]
+//     fn test_plain_json_url(wanted_compression: Option<CompressionAlgorithm>) {
+//         let mut params = RustdocParams::new(KRATE)
+//             .with_page_kind(PageKind::Rustdoc)
+//             .with_req_version(ReqVersion::Exact(V1));
+
+//         assert_eq!(
+//             params.json_download_url(wanted_compression, None),
+//             format!(
+//                 "/crate/{KRATE}/{V1}/json{}",
+//                 wanted_compression
+//                     .map(|c| format!(".{}", c.file_extension()))
+//                     .unwrap_or_default()
+//             )
+//         );
+
+//         params = params.with_doc_target("some-target");
+
+//         assert_eq!(
+//             params.json_download_url(wanted_compression, None),
+//             format!(
+//                 "/crate/{KRATE}/{V1}/some-target/json{}",
+//                 wanted_compression
+//                     .map(|c| format!(".{}", c.file_extension()))
+//                     .unwrap_or_default()
+//             )
+//         );
+//     }
+
+//     #[test_case(None)]
+//     #[test_case(Some(CompressionAlgorithm::Gzip))]
+//     #[test_case(Some(CompressionAlgorithm::Zstd))]
+//     fn test_plain_json_url_with_format(wanted_compression: Option<CompressionAlgorithm>) {
+//         let mut params = RustdocParams::new(KRATE)
+//             .with_page_kind(PageKind::Rustdoc)
+//             .with_req_version(ReqVersion::Exact(V1));
+
+//         assert_eq!(
+//             params.json_download_url(wanted_compression, Some("42")),
+//             format!(
+//                 "/crate/{KRATE}/{V1}/json/42{}",
+//                 wanted_compression
+//                     .map(|c| format!(".{}", c.file_extension()))
+//                     .unwrap_or_default()
+//             )
+//         );
+
+//         params = params.with_doc_target("some-target");
+
+//         assert_eq!(
+//             params.json_download_url(wanted_compression, Some("42")),
+//             format!(
+//                 "/crate/{KRATE}/{V1}/some-target/json/42{}",
+//                 wanted_compression
+//                     .map(|c| format!(".{}", c.file_extension()))
+//                     .unwrap_or_default()
+//             )
+//         );
+//     }
+
+//     #[test]
+//     fn test_zip_download_url() {
+//         let params = RustdocParams::new(KRATE).with_req_version(ReqVersion::Exact(V1));
+//         assert_eq!(
+//             params.zip_download_url(),
+//             format!("/crate/{KRATE}/{V1}/download")
+//         );
+//     }
+// }

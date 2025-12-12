@@ -52,11 +52,9 @@ mockito = "1.0.2"
 [dependencies]
 anyhow = { workspace = true }
 async-stream = { workspace = true }
-base64 = "0.22"
 bincode = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-constant_time_eq = "0.4.2"
 derive_more = { workspace = true }
 docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
 docs_rs_utils = { path = "crates/docs_rs_utils" }
@@ -71,7 +69,6 @@ docs_rs_logging = { path = "crates/docs_rs_logging" }
 docs_rs_web_utils = { path = "crates/docs_rs_web_utils" }
 docsrs-metadata = { path = "crates/metadata" }
 fn-error-context = "0.2.0"
-font-awesome-as-a-crate = { path = "crates/font-awesome-as-a-crate" }
 futures-util = { workspace = true }
 getrandom = "0.3.1"
 hex = "0.4.3"
@@ -79,7 +76,6 @@ hostname = "0.4.0"
 http = { workspace = true }
 itertools = { workspace = true }
 log = "0.4"
-lol_html = "2.0.0"
 mime = { workspace = true }
 num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
@@ -103,13 +99,9 @@ sysinfo = { version = "0.37.2", default-features = false, features = ["system"] 
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 toml = "0.9.2"
-tower = "0.5.1"
-tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 tracing = { workspace = true }
 tracing-log = "0.2.0"
-tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 url = { workspace = true }
 walkdir = { workspace = true }
 

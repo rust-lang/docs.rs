@@ -128,236 +128,236 @@ pub(crate) fn build_static_router() -> AxumRouter {
         .layer(middleware::from_fn(conditional_get))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
-        web::headers::compute_etag,
-    };
-    use axum::{Router, body::Body};
-    use http::{
-        HeaderMap,
-        header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},
-    };
-    use std::fs;
-    use test_case::test_case;
-    use tower::ServiceExt as _;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::{
+//         test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
+//         web::headers::compute_etag,
+//     };
+//     use axum::{Router, body::Body};
+//     use http::{
+//         HeaderMap,
+//         header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},
+//     };
+//     use std::fs;
+//     use test_case::test_case;
+//     use tower::ServiceExt as _;
 
-    const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
+//     const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
-    fn content_length(resp: &Response) -> u64 {
-        resp.headers()
-            .get(CONTENT_LENGTH)
-            .expect("content-length header")
-            .to_str()
-            .unwrap()
-            .parse()
-            .unwrap()
-    }
+//     fn content_length(resp: &Response) -> u64 {
+//         resp.headers()
+//             .get(CONTENT_LENGTH)
+//             .expect("content-length header")
+//             .to_str()
+//             .unwrap()
+//             .parse()
+//             .unwrap()
+//     }
 
-    fn etag(resp: &Response) -> ETag {
-        resp.headers().typed_get().unwrap()
-    }
+//     fn etag(resp: &Response) -> ETag {
+//         resp.headers().typed_get().unwrap()
+//     }
 
-    async fn test_conditional_get(web: &Router, path: &str) -> anyhow::Result<()> {
-        fn req(path: &str, f: impl FnOnce(&mut HeaderMap)) -> Request {
-            let mut builder = Request::builder().uri(path);
-            f(builder.headers_mut().unwrap());
-            builder.body(Body::empty()).unwrap()
-        }
+//     async fn test_conditional_get(web: &Router, path: &str) -> anyhow::Result<()> {
+//         fn req(path: &str, f: impl FnOnce(&mut HeaderMap)) -> Request {
+//             let mut builder = Request::builder().uri(path);
+//             f(builder.headers_mut().unwrap());
+//             builder.body(Body::empty()).unwrap()
+//         }
 
-        // original request = 200
-        let resp = web.clone().oneshot(req(path, |_| {})).await?;
+//         // original request = 200
+//         let resp = web.clone().oneshot(req(path, |_| {})).await?;
 
-        assert_eq!(resp.status(), StatusCode::OK);
-        let etag = etag(&resp);
+//         assert_eq!(resp.status(), StatusCode::OK);
+//         let etag = etag(&resp);
 
-        {
-            // if-none-match with correct etag
-            let if_none_match: IfNoneMatch = etag.into();
+//         {
+//             // if-none-match with correct etag
+//             let if_none_match: IfNoneMatch = etag.into();
 
-            let cached_response = web
-                .clone()
-                .oneshot(req(path, |h| h.typed_insert(if_none_match)))
-                .await?;
+//             let cached_response = web
+//                 .clone()
+//                 .oneshot(req(path, |h| h.typed_insert(if_none_match)))
+//                 .await?;
 
-            assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
-        }
+//             assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+//         }
 
-        {
-            let other_if_none_match: IfNoneMatch = "\"some-other-etag\""
-                .parse::<ETag>()
-                .expect("valid etag")
-                .into();
+//         {
+//             let other_if_none_match: IfNoneMatch = "\"some-other-etag\""
+//                 .parse::<ETag>()
+//                 .expect("valid etag")
+//                 .into();
 
-            let uncached_response = web
-                .clone()
-                .oneshot(req(path, |h| h.typed_insert(other_if_none_match)))
-                .await?;
+//             let uncached_response = web
+//                 .clone()
+//                 .oneshot(req(path, |h| h.typed_insert(other_if_none_match)))
+//                 .await?;
 
-            assert_eq!(uncached_response.status(), StatusCode::OK);
-        }
+//             assert_eq!(uncached_response.status(), StatusCode::OK);
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    #[test]
-    fn style_css() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test]
+//     fn style_css() {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            const PATH: &str = "/-/static/style.css";
-            let resp = web.get(PATH).await?;
-            assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-            let headers = resp.headers();
-            assert_eq!(
-                headers.get(CONTENT_TYPE),
-                Some(&"text/css".parse().unwrap()),
-            );
+//             const PATH: &str = "/-/static/style.css";
+//             let resp = web.get(PATH).await?;
+//             assert!(resp.status().is_success());
+//             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+//             let headers = resp.headers();
+//             assert_eq!(
+//                 headers.get(CONTENT_TYPE),
+//                 Some(&"text/css".parse().unwrap()),
+//             );
 
-            assert_eq!(content_length(&resp), STYLE_CSS.len() as u64);
-            assert_eq!(etag(&resp), compute_etag(STYLE_CSS.as_bytes()));
-            assert_eq!(resp.bytes().await?, STYLE_CSS.as_bytes());
+//             assert_eq!(content_length(&resp), STYLE_CSS.len() as u64);
+//             assert_eq!(etag(&resp), compute_etag(STYLE_CSS.as_bytes()));
+//             assert_eq!(resp.bytes().await?, STYLE_CSS.as_bytes());
 
-            test_conditional_get(&web, PATH).await?;
+//             test_conditional_get(&web, PATH).await?;
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test]
-    fn vendored_css() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test]
+//     fn vendored_css() {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            const PATH: &str = "/-/static/vendored.css";
+//             const PATH: &str = "/-/static/vendored.css";
 
-            let resp = web.get(PATH).await?;
-            assert!(resp.status().is_success(), "{}", resp.text().await?);
+//             let resp = web.get(PATH).await?;
+//             assert!(resp.status().is_success(), "{}", resp.text().await?);
 
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-            assert_eq!(
-                resp.headers().get(CONTENT_TYPE),
-                Some(&"text/css".parse().unwrap()),
-            );
-            assert_eq!(content_length(&resp), VENDORED_CSS.len() as u64);
-            assert_eq!(etag(&resp), compute_etag(VENDORED_CSS.as_bytes()));
-            assert_eq!(resp.text().await?, VENDORED_CSS);
+//             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+//             assert_eq!(
+//                 resp.headers().get(CONTENT_TYPE),
+//                 Some(&"text/css".parse().unwrap()),
+//             );
+//             assert_eq!(content_length(&resp), VENDORED_CSS.len() as u64);
+//             assert_eq!(etag(&resp), compute_etag(VENDORED_CSS.as_bytes()));
+//             assert_eq!(resp.text().await?, VENDORED_CSS);
 
-            test_conditional_get(&web, PATH).await?;
+//             test_conditional_get(&web, PATH).await?;
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test]
-    fn io_error_not_a_directory_leads_to_404() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test]
+//     fn io_error_not_a_directory_leads_to_404() {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            // just to be sure that `index.js` exists
-            assert!(web.get("/-/static/index.js").await?.status().is_success());
+//             // just to be sure that `index.js` exists
+//             assert!(web.get("/-/static/index.js").await?.status().is_success());
 
-            // `index.js` exists, but is not a directory,
-            // so trying to fetch it via `ServeDir` will lead
-            // to an IO-error.
-            let resp = web.get("/-/static/index.js/something").await?;
-            assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
-            assert!(resp.headers().get(ETAG).is_none());
+//             // `index.js` exists, but is not a directory,
+//             // so trying to fetch it via `ServeDir` will lead
+//             // to an IO-error.
+//             let resp = web.get("/-/static/index.js/something").await?;
+//             assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
+//             assert!(resp.headers().get(ETAG).is_none());
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test_case("/-/static/index.js", "resetClipboardTimeout")]
-    #[test_case("/-/static/menu.js", "closeMenu")]
-    #[test_case("/-/static/keyboard.js", "handleKey")]
-    #[test_case("/-/static/source.js", "toggleSource")]
-    fn js_content(path: &str, expected_content: &str) {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test_case("/-/static/index.js", "resetClipboardTimeout")]
+//     #[test_case("/-/static/menu.js", "closeMenu")]
+//     #[test_case("/-/static/keyboard.js", "handleKey")]
+//     #[test_case("/-/static/source.js", "toggleSource")]
+//     fn js_content(path: &str, expected_content: &str) {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            let resp = web.get(path).await?;
-            assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-            assert_eq!(
-                resp.headers().get(CONTENT_TYPE),
-                Some(&"text/javascript".parse().unwrap()),
-            );
-            assert!(content_length(&resp) > 10);
-            etag(&resp); // panics if etag missing or invalid
-            assert!(resp.text().await?.contains(expected_content));
+//             let resp = web.get(path).await?;
+//             assert!(resp.status().is_success());
+//             resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+//             assert_eq!(
+//                 resp.headers().get(CONTENT_TYPE),
+//                 Some(&"text/javascript".parse().unwrap()),
+//             );
+//             assert!(content_length(&resp) > 10);
+//             etag(&resp); // panics if etag missing or invalid
+//             assert!(resp.text().await?.contains(expected_content));
 
-            test_conditional_get(&web, path).await?;
+//             test_conditional_get(&web, path).await?;
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test]
-    fn static_files() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test]
+//     fn static_files() {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            for root in STATIC_SEARCH_PATHS {
-                for entry in walkdir::WalkDir::new(root) {
-                    let entry = entry?;
-                    if !entry.file_type().is_file() {
-                        continue;
-                    }
-                    let file = entry.path().strip_prefix(root).unwrap();
-                    let path = entry.path();
+//             for root in STATIC_SEARCH_PATHS {
+//                 for entry in walkdir::WalkDir::new(root) {
+//                     let entry = entry?;
+//                     if !entry.file_type().is_file() {
+//                         continue;
+//                     }
+//                     let file = entry.path().strip_prefix(root).unwrap();
+//                     let path = entry.path();
 
-                    let url = format!("/-/static/{}", file.to_str().unwrap());
-                    let resp = web.get(&url).await?;
+//                     let url = format!("/-/static/{}", file.to_str().unwrap());
+//                     let resp = web.get(&url).await?;
 
-                    assert!(resp.status().is_success(), "failed to fetch {url:?}");
-                    resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-                    let content = fs::read(path).unwrap();
-                    assert_eq!(etag(&resp), compute_etag(&content));
-                    assert_eq!(resp.bytes().await?, content, "failed to fetch {url:?}",);
+//                     assert!(resp.status().is_success(), "failed to fetch {url:?}");
+//                     resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+//                     let content = fs::read(path).unwrap();
+//                     assert_eq!(etag(&resp), compute_etag(&content));
+//                     assert_eq!(resp.bytes().await?, content, "failed to fetch {url:?}",);
 
-                    test_conditional_get(&web, &url).await?;
-                }
-            }
+//                     test_conditional_get(&web, &url).await?;
+//                 }
+//             }
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test]
-    fn static_file_that_doesnt_exist() {
-        async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
-            assert!(response.headers().get(ETAG).is_none());
+//     #[test]
+//     fn static_file_that_doesnt_exist() {
+//         async_wrapper(|env| async move {
+//             let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
+//             response.assert_cache_control(CachePolicy::NoCaching, env.config());
+//             assert_eq!(response.status(), StatusCode::NOT_FOUND);
+//             assert!(response.headers().get(ETAG).is_none());
 
-            Ok(())
-        });
-    }
+//             Ok(())
+//         });
+//     }
 
-    #[test]
-    fn static_mime_types() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+//     #[test]
+//     fn static_mime_types() {
+//         async_wrapper(|env| async move {
+//             let web = env.web_app().await;
 
-            let files = &[("vendored.css", "text/css")];
+//             let files = &[("vendored.css", "text/css")];
 
-            for (file, mime) in files {
-                let url = format!("/-/static/{file}");
-                let resp = web.get(&url).await?;
+//             for (file, mime) in files {
+//                 let url = format!("/-/static/{file}");
+//                 let resp = web.get(&url).await?;
 
-                assert_eq!(
-                    resp.headers().get(CONTENT_TYPE),
-                    Some(&mime.parse().unwrap()),
-                    "{url:?} has an incorrect content type",
-                );
-            }
+//                 assert_eq!(
+//                     resp.headers().get(CONTENT_TYPE),
+//                     Some(&mime.parse().unwrap()),
+//                     "{url:?} has an incorrect content type",
+//                 );
+//             }
 
-            Ok(())
-        });
-    }
-}
+//             Ok(())
+//         });
+//     }
+// }

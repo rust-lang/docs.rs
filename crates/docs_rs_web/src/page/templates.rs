@@ -138,7 +138,7 @@ pub mod filters {
     /// Prettily format a timestamp
     // TODO: This can be replaced by chrono
     pub fn timeformat(value: &DateTime<Utc>, _: &dyn Values) -> askama::Result<String> {
-        Ok(crate::web::duration_to_str(*value))
+        Ok(crate::duration_to_str(*value))
     }
 
     pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
@@ -208,8 +208,7 @@ pub mod filters {
         _: &dyn Values,
         lang: &str,
     ) -> askama::Result<Safe<String>> {
-        let highlighted_code =
-            crate::web::highlight::with_lang(Some(lang), &code.to_string(), None);
+        let highlighted_code = crate::highlight::with_lang(Some(lang), &code.to_string(), None);
         Ok(Safe(format!("<pre><code>{highlighted_code}</code></pre>")))
     }
 

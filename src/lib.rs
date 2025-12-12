@@ -19,26 +19,3 @@ pub mod metrics;
 mod test;
 pub mod utils;
 mod web;
-
-use web::page::GlobalAlert;
-
-// Warning message shown in the navigation bar of every page. Set to `None` to hide it.
-pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;
-/*
-pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
-    url: "https://blog.rust-lang.org/2019/09/18/upcoming-docsrs-changes.html",
-    text: "Upcoming docs.rs breaking changes!",
-    css_class: "error",
-    fa_icon: "exclamation-triangle",
-});
-*/
-
-/// Where rustdoc's static files are stored in S3.
-/// Since the prefix starts with `/`, it needs to be referenced with a double slash in
-/// API & AWS CLI.
-/// Example:
-/// `s3://rust-docs-rs//rustdoc-static/something.css`
-pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
-
-/// Maximum number of targets allowed for a crate to be documented on.
-pub const DEFAULT_MAX_TARGETS: usize = 10;

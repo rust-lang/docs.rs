@@ -47,11 +47,11 @@
                             {{- crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
                             {%+ for item in parsed_licenses -%}
                                 {%- match item -%}
-                                    {%- when crate::web::licenses::LicenseSegment::Spdx(license) -%}
+                                    {%- when crate::licenses::LicenseSegment::Spdx(license) -%}
                                         <a href="https://spdx.org/licenses/{{ license|safe }}" class="pure-menu-sublink">{{ license }}</a>
-                                    {%- when crate::web::licenses::LicenseSegment::UnknownLicense(license) -%}
+                                    {%- when crate::licenses::LicenseSegment::UnknownLicense(license) -%}
                                         {{ license }}
-                                    {%- when crate::web::licenses::LicenseSegment::GlueTokens(tokens) -%}
+                                    {%- when crate::licenses::LicenseSegment::GlueTokens(tokens) -%}
                                         {{ tokens }}
                                 {%- endmatch -%}
                             {%- endfor -%}

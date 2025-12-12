@@ -1,5 +1,5 @@
+use super::Dependency;
 use derive_more::Deref;
-use docs_rs_cargo_metadata::Dependency;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 

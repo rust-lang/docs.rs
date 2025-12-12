@@ -1,10 +1,10 @@
-use crate::error::Result;
 use std::sync::LazyLock;
 use syntect::{
     html::{ClassStyle, ClassedHTMLGenerator},
     parsing::{SyntaxReference, SyntaxSet},
     util::LinesWithEndings,
 };
+use tracing::{debug, error, info};
 
 const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 2 * 1024 * 1024;
 const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;
@@ -23,7 +23,7 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
         .iter()
         .map(|s| &s.name)
         .collect::<Vec<_>>();
-    log::debug!("known syntaxes {names:?}");
+    debug!("known syntaxes {names:?}");
 
     syntaxes
 });
@@ -78,11 +78,11 @@ pub fn with_lang(lang: Option<&str>, code: &str, default: Option<&str>) -> Strin
         Ok(highlighted) => highlighted,
         Err(err) => {
             if err.is::<LimitsExceeded>() {
-                log::debug!("hit limit while highlighting code");
+                debug!("hit limit while highlighting code");
             } else {
-                log::error!("failed while highlighting code: {err:?}");
+                error!("failed while highlighting code: {err:?}");
             }
-            crate::web::page::templates::filters::escape_html(code, &())
+            crate::page::templates::filters::escape_html(code, &())
                 .map(|s| s.to_string())
                 .unwrap_or_default()
         }

@@ -15,7 +15,6 @@ pub use self::{
 };
 
 mod copy;
-pub mod daemon;
 mod html;
 pub(crate) mod queue_builder;
 pub(crate) mod rustc_version;

@@ -1,6 +1,6 @@
 //! a collection of custom extractors related to our app-context (context::Context)
 
-use crate::web::error::AxumNope;
+use crate::error::AxumNope;
 use anyhow::Context as _;
 use axum::{
     RequestPartsExt,

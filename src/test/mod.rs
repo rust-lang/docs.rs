@@ -25,7 +25,6 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
-use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
 use http::{
     HeaderMap, HeaderName, HeaderValue, StatusCode,
