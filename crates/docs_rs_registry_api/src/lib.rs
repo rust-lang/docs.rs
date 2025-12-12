@@ -1,3 +1,6 @@
+mod config;
+
+use crate::config::Config;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_database::types::version::Version;
@@ -17,14 +20,14 @@ pub struct RegistryApi {
 
 #[derive(Debug)]
 pub struct CrateData {
-    pub(crate) owners: Vec<CrateOwner>,
+    pub owners: Vec<CrateOwner>,
 }
 
 #[derive(Debug)]
-pub(crate) struct ReleaseData {
-    pub(crate) release_time: DateTime<Utc>,
-    pub(crate) yanked: bool,
-    pub(crate) downloads: i32,
+pub struct ReleaseData {
+    pub release_time: DateTime<Utc>,
+    pub yanked: bool,
+    pub downloads: i32,
 }
 
 impl Default for ReleaseData {
@@ -39,9 +42,9 @@ impl Default for ReleaseData {
 
 #[derive(Debug, Clone)]
 pub struct CrateOwner {
-    pub(crate) avatar: String,
-    pub(crate) login: String,
-    pub(crate) kind: OwnerKind,
+    pub avatar: String,
+    pub login: String,
+    pub kind: OwnerKind,
 }
 
 #[derive(
@@ -75,24 +78,35 @@ impl fmt::Display for OwnerKind {
 
 #[derive(Deserialize, Debug)]
 
-pub(crate) struct SearchCrate {
-    pub(crate) name: String,
+pub struct SearchCrate {
+    pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
 
-pub(crate) struct SearchMeta {
-    pub(crate) next_page: Option<String>,
-    pub(crate) prev_page: Option<String>,
+pub struct SearchMeta {
+    pub next_page: Option<String>,
+    pub prev_page: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
-pub(crate) struct Search {
-    pub(crate) crates: Vec<SearchCrate>,
-    pub(crate) meta: SearchMeta,
+pub struct Search {
+    pub crates: Vec<SearchCrate>,
+    pub meta: SearchMeta,
 }
 
 impl RegistryApi {
+    pub fn from_environment() -> Result<Self> {
+        Self::from_config(&Config::from_environment()?)
+    }
+
+    pub fn from_config(config: &config::Config) -> Result<Self> {
+        Self::new(
+            config.registry_api_host.clone(),
+            config.crates_io_api_call_retries,
+        )
+    }
+
     pub fn new(api_base: Url, max_retries: u32) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
@@ -123,11 +137,7 @@ impl RegistryApi {
     }
 
     #[instrument(skip(self))]
-    pub(crate) async fn get_release_data(
-        &self,
-        name: &str,
-        version: &Version,
-    ) -> Result<ReleaseData> {
+    pub async fn get_release_data(&self, name: &str, version: &Version) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
             .await
@@ -255,7 +265,7 @@ impl RegistryApi {
     }
 
     /// Fetch crates from the registry's API
-    pub(crate) async fn search(&self, query_params: &str) -> Result<Search> {
+    pub async fn search(&self, query_params: &str) -> Result<Search> {
         #[derive(Deserialize, Debug)]
         struct SearchError {
             detail: String,

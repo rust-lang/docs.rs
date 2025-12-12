@@ -4,5 +4,33 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_storage = { path = "../docs_rs_storage" }
+docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_watcher = { path = "../docs_rs_watcher" }
+docs_rs_registry_api = { path = "../docs_rs_registry_api" }
+docs_rs_build_utils = { path = "../docs_rs_build_utils" }
+docs_rs_context = { path = "../docs_rs_context" }
+url = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+slug = { workspace = true }
+futures-util = { workspace = true }
+docs_rs_utils = { path = "../docs_rs_utils" }
+docsrs-metadata = { path = "../metadata" }
+opentelemetry = { workspace = true }
+itertools = { workspace = true }
+regex = { workspace = true }
+rustwide = { workspace = true }
+tracing = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
+log = "0.4"
+tempfile = { workspace = true }
+toml = { workspace = true }
+hostname = "0.4.0"

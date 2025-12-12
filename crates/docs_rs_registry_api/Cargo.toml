@@ -14,3 +14,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 sqlx = { workspace = true }
 bincode = { workspace = true }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }

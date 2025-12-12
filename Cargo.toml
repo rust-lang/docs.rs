@@ -45,6 +45,7 @@ sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "an
 clap = { version = "4.0.22", features = [ "derive" ] }
 askama = "0.14.0"
 toml = "0.9.2"
+slug = "0.1.1"
 
 # dev dependencies
 test-case = "3.0.0"
@@ -69,14 +70,12 @@ docs_rs_watcher = { path = "crates/docs_rs_watcher" }
 docs_rs_logging = { path = "crates/docs_rs_logging" }
 docs_rs_web_utils = { path = "crates/docs_rs_web_utils" }
 docsrs-metadata = { path = "crates/metadata" }
+docs_rs_registry_api = { path = "crates/docs_rs_registry_api" }
 fn-error-context = "0.2.0"
 futures-util = { workspace = true }
 getrandom = "0.3.1"
-hex = "0.4.3"
-hostname = "0.4.0"
 http = { workspace = true }
 itertools = { workspace = true }
-log = "0.4"
 mime = { workspace = true }
 num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
@@ -93,10 +92,9 @@ sentry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
-slug = "0.1.1"
+slug = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true }
-sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

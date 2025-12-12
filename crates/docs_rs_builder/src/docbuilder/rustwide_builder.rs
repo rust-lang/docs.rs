@@ -1,30 +1,34 @@
 use crate::{
-    Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi,
+    config::Config,
     db::{
-        add_doc_coverage, blacklist::is_blacklisted, finish_build, finish_release,
-        initialize_build, initialize_crate, initialize_release, types::BuildStatus,
-        update_build_with_error, update_crate_data_in_database,
+        add_package::{
+            add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
+            initialize_release, update_build_with_error, update_crate_data_in_database,
+        },
+        blacklist::is_blacklisted,
     },
-    docbuilder::Limits,
-    error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
-    utils::{copy_dir_all, parse_rustc_version, report_error},
+    utils::copy::copy_dir_all,
 };
-use anyhow::{Context as _, Error, anyhow, bail};
+use anyhow::{Context as _, Error, Result, anyhow, bail};
+use docs_rs_build_utils::limits::Limits;
 use docs_rs_cargo_metadata::{CargoMetadata, Package as MetadataPackage};
+use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
     service_config::{ConfigName, get_config, set_config},
-    types::{BuildId, CrateId, ReleaseId, version::Version},
+    types::{BuildId, BuildStatus, CrateId, ReleaseId, version::Version},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_registry_api::RegistryApi;
 use docs_rs_storage::{
     AsyncStorage, RustdocJsonFormatVersion, Storage, compress,
     compression::CompressionAlgorithm,
     file::{add_path_into_database, add_path_into_remote_archive, file_list_to_json},
     get_file_list, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
-use docs_rs_utils::{BUILD_VERSION, retry};
+use docs_rs_utils::rustc_version::parse_rustc_version;
+use docs_rs_utils::{BUILD_VERSION, RUSTDOC_STATIC_STORAGE_PREFIX, retry};
 use docs_rs_watcher::repositories::RepositoryStatsUpdater;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
@@ -107,10 +111,10 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-fn build_workspace(context: &Context) -> Result<Workspace> {
-    let mut builder = WorkspaceBuilder::new(&context.config.rustwide_workspace, USER_AGENT)
-        .running_inside_docker(context.config.inside_docker);
-    if let Some(custom_image) = &context.config.docker_image {
+fn build_workspace(config: &Config) -> Result<Workspace> {
+    let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
+        .running_inside_docker(config.inside_docker);
+    if let Some(custom_image) = &config.docker_image {
         let image = match SandboxImage::local(custom_image) {
             Ok(i) => i,
             Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
@@ -195,32 +199,32 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init(context: &Context) -> Result<Self> {
-        let toolchain = context.runtime.block_on(async {
-            let mut conn = context.pool.get_async().await?;
+    pub fn init(config: Config, context: &Context) -> Result<Self> {
+        let toolchain = context.runtime().block_on(async {
+            let mut conn = context.pool()?.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
 
         Ok(RustwideBuilder {
-            workspace: build_workspace(context)?,
+            workspace: build_workspace(&config)?,
             toolchain,
-            config: context.config.clone(),
-            db: context.pool.clone(),
-            runtime: context.runtime.clone(),
-            storage: context.storage.clone(),
-            async_storage: context.async_storage.clone(),
-            registry_api: context.registry_api.clone(),
+            config: config.into(),
+            db: context.pool()?.clone(),
+            runtime: context.runtime().clone(),
+            storage: context.blocking_storage()?,
+            async_storage: context.storage()?,
+            registry_api: RegistryApi::from_environment()?.into(),
             repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
-            builder_metrics: BuilderMetrics::new(&context.meter_provider).into(),
+            builder_metrics: BuilderMetrics::new(context.meter_provider()).into(),
         })
     }
 
-    pub fn reinitialize_workspace_if_interval_passed(&mut self, context: &Context) -> Result<()> {
-        let interval = context.config.build_workspace_reinitialization_interval;
+    pub fn reinitialize_workspace_if_interval_passed(&mut self) -> Result<()> {
+        let interval = self.config.build_workspace_reinitialization_interval;
         if self.workspace_initialize_time.elapsed() >= interval {
             info!("start reinitialize workspace again");
-            self.workspace = build_workspace(context)?;
+            self.workspace = build_workspace(&self.config)?;
             self.workspace_initialize_time = Instant::now();
         }
 
@@ -522,13 +526,13 @@ impl RustwideBuilder {
                 let static_files = dest.as_ref().join("static.files");
                 if static_files.try_exists()? {
                     self.runtime.block_on(add_path_into_database(
-                        &self.async_storage,
+                        &self.storage,
                         RUSTDOC_STATIC_STORAGE_PREFIX,
                         &static_files,
                     ))?;
                 } else {
                     self.runtime.block_on(add_path_into_database(
-                        &self.async_storage,
+                        &self.storage,
                         RUSTDOC_STATIC_STORAGE_PREFIX,
                         &dest,
                     ))?;
@@ -694,7 +698,7 @@ impl RustwideBuilder {
                 let files_list = {
                     let (files_list, new_alg) =
                         self.runtime.block_on(add_path_into_remote_archive(
-                            &self.async_storage,
+                            &self.storage,
                             &source_archive_path(name, version),
                             build.host_source_dir(),
                         ))?;
@@ -789,7 +793,7 @@ impl RustwideBuilder {
                     }
                     let (file_list, new_alg) =
                         self.runtime.block_on(add_path_into_remote_archive(
-                            &self.async_storage,
+                            &self.storage,
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;

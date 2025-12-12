@@ -1,3 +1,5 @@
+pub mod rustc_version;
+
 use anyhow::Result;
 use std::{panic, thread, time::Duration};
 use tokio::runtime;

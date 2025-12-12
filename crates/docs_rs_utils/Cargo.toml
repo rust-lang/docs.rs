@@ -8,6 +8,8 @@ build = "build.rs"
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

@@ -1,4 +1,4 @@
-mod db;
+pub mod db;
 
 use anyhow::{Context, Result, bail};
 use docs_rs_database::types::version::Version;

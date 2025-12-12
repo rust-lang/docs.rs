@@ -1,26 +1,4 @@
-/// the measured times from cdn invalidations, meaning:
-/// * how long an invalidation took, or
-/// * how long the invalidation was queued
-///
-/// will be put into these buckets (seconds,
-/// each entry is the upper bound).
-/// Prometheus only gets the counts per bucket in a certain
-/// time range, no exact durations.
-pub const CDN_INVALIDATION_HISTOGRAM_BUCKETS: &[f64; 11] = &[
-    60.0,    // 1
-    120.0,   // 2
-    300.0,   // 5
-    600.0,   // 10
-    900.0,   // 15
-    1200.0,  // 20
-    1800.0,  // 30
-    2700.0,  // 45
-    6000.0,  // 100
-    12000.0, // 200
-    24000.0, // 400
-];
-
-/// buckets for documentation size, in MiB
+//// buckets for documentation size, in MiB
 /// Base for some estimates:
 /// * `itertools` docs is an 8.2 MB archive with 144 MB of docs
 /// * the biggest doc archive know of (`stm32ral`) is an 1.8 GiB archive,

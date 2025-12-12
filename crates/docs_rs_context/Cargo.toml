@@ -8,3 +8,5 @@ anyhow = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_build_queue = { path = "../docs_rs_build_queue" }
+tokio = { workspace = true }
+docs_rs_storage = { path = "../docs_rs_storage" }

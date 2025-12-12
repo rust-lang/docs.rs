@@ -1,21 +1,6 @@
-//! Database operations
 use anyhow::Result;
+use hex;
 use sqlx::migrate::{Migrate, Migrator};
-
-pub use self::add_package::update_latest_version_id;
-pub(crate) use self::add_package::{
-    add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
-    initialize_release, update_build_with_error,
-};
-pub use self::{
-    add_package::{update_build_status, update_crate_data_in_database},
-    overrides::Overrides,
-};
-
-mod add_package;
-pub mod blacklist;
-mod overrides;
-pub mod types;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 

@@ -16,6 +16,7 @@ pub use font_awesome_as_a_crate::icons;
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
+use docs_rs_context::Context;
 use docs_rs_database::types::{CrateId, krate_name::KrateName, version::Version};
 use serde::Serialize;
 use serde_json::Value;
@@ -473,7 +474,7 @@ async fn set_sentry_transaction_name_from_axum_route(
 
 async fn apply_middleware(
     router: AxumRouter,
-    // context: &Context,
+    context: &Context,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
