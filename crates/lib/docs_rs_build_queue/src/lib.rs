@@ -14,7 +14,7 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_utils::run_blocking;
 use futures_util::TryStreamExt as _;
 use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::runtime;
 use tracing::error;
 
@@ -248,105 +248,6 @@ impl Default for BuildPackageSummary {
     }
 }
 
-impl AsyncBuildQueue {
-    pub async fn process_next_crate(
-        &self,
-        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary> + Send + 'static,
-    ) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        let mut transaction = conn.begin().await?;
-
-        // fetch the next available crate from the queue table.
-        // We are using `SELECT FOR UPDATE` inside a transaction so
-        // the QueuedCrate is locked until we are finished with it.
-        // `SKIP LOCKED` here will enable another build-server to just
-        // skip over taken (=locked) rows and start building the first
-        // available one.
-        let to_process = match sqlx::query_as!(
-            QueuedCrate,
-            r#"SELECT
-                    id,
-                    name,
-                    version as "version: Version",
-                    priority,
-                    registry,
-                    attempt
-                 FROM queue
-                 WHERE
-                    attempt < $1 AND
-                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
-                 ORDER BY priority ASC, attempt ASC, id ASC
-                 LIMIT 1
-                 FOR UPDATE SKIP LOCKED"#,
-            self.config.build_attempts as i32,
-            self.config.delay_between_build_attempts.as_secs_f64(),
-        )
-        .fetch_optional(&mut *transaction)
-        .await?
-        {
-            Some(krate) => krate,
-            None => return Ok(()),
-        };
-
-        // FIXME: can the closure also be async? Or is sync better?
-        let res = run_blocking("builder", {
-            let to_process = to_process.clone();
-            move || f(&to_process)
-        })
-        .await;
-        // FIXME: how to handle when we want to have the attepmtp count
-
-        async fn increase_attempt_count(
-            to_process: &QueuedCrate,
-            transaction: &mut sqlx::PgConnection,
-        ) -> Result<i32> {
-            let attempt: i32 = sqlx::query_scalar!(
-                "UPDATE queue
-                 SET
-                    attempt = attempt + 1,
-                    last_attempt = NOW()
-                 WHERE id = $1
-                 RETURNING attempt;",
-                to_process.id,
-            )
-            .fetch_one(&mut *transaction)
-            .await?;
-
-            Ok(attempt)
-        }
-
-        match res {
-            Ok(BuildPackageSummary {
-                should_reattempt: false,
-                successful: _,
-            }) => {
-                sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
-                    .execute(&mut *transaction)
-                    .await?;
-            }
-            Ok(BuildPackageSummary {
-                should_reattempt: true,
-                successful: _,
-            }) => {
-                increase_attempt_count(&to_process, &mut transaction).await?;
-            }
-            Err(e) => {
-                let next_attempt = increase_attempt_count(&to_process, &mut transaction).await?;
-                error!(
-                    ?e,
-                    name=%to_process.name,
-                    version=%to_process.version,
-                    next_attempt,
-                    "Failed to build package from queue"
-                );
-            }
-        }
-
-        transaction.commit().await?;
-        Ok(())
-    }
-}
-
 #[derive(Debug)]
 pub struct BuildQueue {
     runtime: runtime::Handle,
@@ -399,6 +300,95 @@ impl BuildQueue {
     #[cfg(test)]
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
         self.runtime.block_on(self.inner.queued_crates())
+    }
+
+    pub fn process_next_crate(
+        &self,
+        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
+    ) -> Result<()> {
+        let mut conn = self.runtime.block_on(self.inner.db.get_async())?;
+        let mut transaction = self.runtime.block_on(conn.begin())?;
+
+        // fetch the next available crate from the queue table.
+        // We are using `SELECT FOR UPDATE` inside a transaction so
+        // the QueuedCrate is locked until we are finished with it.
+        // `SKIP LOCKED` here will enable another build-server to just
+        // skip over taken (=locked) rows and start building the first
+        // available one.
+        let to_process = match self.runtime.block_on(
+            sqlx::query_as!(
+                QueuedCrate,
+                r#"SELECT
+                    id,
+                    name,
+                    version as "version: Version",
+                    priority,
+                    registry,
+                    attempt
+                 FROM queue
+                 WHERE
+                    attempt < $1 AND
+                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
+                 ORDER BY priority ASC, attempt ASC, id ASC
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED"#,
+                self.inner.config.build_attempts as i32,
+                self.inner.config.delay_between_build_attempts.as_secs_f64(),
+            )
+            .fetch_optional(&mut *transaction),
+        )? {
+            Some(krate) => krate,
+            None => return Ok(()),
+        };
+
+        let res = f(&to_process);
+
+        let mut increase_attempt_count = || -> Result<i32> {
+            let next_attempt: i32 = self.runtime.block_on(
+                sqlx::query_scalar!(
+                    "UPDATE queue
+                         SET
+                            attempt = attempt + 1,
+                            last_attempt = NOW()
+                         WHERE id = $1
+                         RETURNING attempt;",
+                    to_process.id,
+                )
+                .fetch_one(&mut *transaction),
+            )?;
+
+            Ok(next_attempt)
+        };
+
+        match res {
+            Ok(BuildPackageSummary {
+                should_reattempt: false,
+                successful: _,
+            }) => {
+                self.runtime.block_on(
+                    sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
+                        .execute(&mut *transaction),
+                )?;
+            }
+            Ok(BuildPackageSummary {
+                should_reattempt: true,
+                successful: _,
+            }) => {
+                increase_attempt_count()?;
+            }
+            Err(e) => {
+                increase_attempt_count()?;
+                error!(
+                    ?e,
+                    name = %to_process.name,
+                    version = %to_process.version,
+                    "Failed to build package queue"
+                );
+            }
+        }
+
+        self.runtime.block_on(transaction.commit())?;
+        Ok(())
     }
 }
 

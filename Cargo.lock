@@ -1804,6 +1804,7 @@ name = "docs_rs_builder"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "docs_rs_build_queue",
  "docs_rs_build_utils",
  "docs_rs_cargo_metadata",
  "docs_rs_context",

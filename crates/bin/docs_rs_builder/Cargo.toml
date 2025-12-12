@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_build_utils = { path = "../../lib/docs_rs_build_utils" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
