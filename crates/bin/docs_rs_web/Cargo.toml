@@ -26,6 +26,7 @@ docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
 docs_rs_headers = { path = "../../lib/docs_rs_headers" }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 docs_rs_web_utils = { path = "../../lib/docs_rs_web_utils" }
@@ -59,6 +60,7 @@ tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 url = { workspace = true }
 slug = { workspace = true }
 getrandom = "0.3.1"
+clap = { workspace = true }
 
 
 [build-dependencies] 

@@ -2,6 +2,7 @@
 
 pub mod page;
 
+pub use config::Config;
 use docs_rs_database::types::BuildStatus;
 pub use docs_rs_utils::{BUILD_VERSION, DEFAULT_MAX_TARGETS};
 pub use font_awesome_as_a_crate::icons;
@@ -65,7 +66,7 @@ use std::{
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::{config::Config, metrics::WebMetrics};
+use crate::metrics::WebMetrics;
 use docs_rs_utils::rustc_version::get_correct_docsrs_style_file;
 
 use self::crate_details::Release;
@@ -524,8 +525,9 @@ pub(crate) async fn build_axum_app(
     .await
 }
 
+/// runs the webserver, blocks forever, until we get a shutdown signal for graceful shutdown.
 #[instrument(skip_all)]
-pub fn start_web_server(
+pub async fn run_web_server(
     addr: Option<SocketAddr>,
     config: Arc<Config>,
     context: &Context,
@@ -540,19 +542,16 @@ pub fn start_web_server(
         axum_addr.port()
     );
 
-    context.runtime().block_on(async {
-        let app = build_axum_app(config, context, template_data)
-            .await?
-            .into_make_service();
-        let listener = tokio::net::TcpListener::bind(axum_addr)
-            .await
-            .context("error binding socket for web server")?;
+    let app = build_axum_app(config, context, template_data)
+        .await?
+        .into_make_service();
+    let listener = tokio::net::TcpListener::bind(axum_addr)
+        .await
+        .context("error binding socket for web server")?;
 
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
-            .await?;
-        Ok::<(), Error>(())
-    })?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }
