@@ -924,7 +924,7 @@ impl AsyncStorage {
         }
 
         // remove existing local archive index files.
-        let local_index_folder = self.config.local_archive_cache_path.join(&prefix);
+        let local_index_folder = self.config.local_archive_cache_path.join(prefix);
         if local_index_folder.exists() {
             // FIXME: make this work when prefix is not a folder?
             tokio::fs::remove_dir_all(&local_index_folder)

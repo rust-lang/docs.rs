@@ -1,7 +1,4 @@
-use crate::{
-    config::Config,
-    overrides::{self, Overrides},
-};
+use crate::{config::Config, overrides::Overrides};
 use anyhow::Result;
 use serde::Serialize;
 use std::time::Duration;

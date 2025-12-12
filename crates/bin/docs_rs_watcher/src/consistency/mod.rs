@@ -1,9 +1,6 @@
 // use crate::build_queue::PRIORITY_CONSISTENCY_CHECK;
 // use crate::{Context, db::delete};
-use anyhow::{Context as _, Result};
-use docs_rs_build_queue::PRIORITY_CONSISTENCY_CHECK;
-use itertools::Itertools;
-use tracing::{info, warn};
+use anyhow::Result;
 
 mod data;
 mod db;

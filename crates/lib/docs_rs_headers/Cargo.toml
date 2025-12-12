@@ -12,6 +12,5 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 itertools = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }
-docs_rs_utils = { path = "../docs_rs_utils" }
 docs_rs_web_utils = { path = "../docs_rs_web_utils" }
 askama = { workspace = true }

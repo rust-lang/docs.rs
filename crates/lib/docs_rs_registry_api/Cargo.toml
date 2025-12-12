@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.83"
 bincode = { workspace = true }
 chrono = { workspace = true }
 docs_rs_database = { path = "../docs_rs_database" }

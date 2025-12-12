@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use docs_rs_database::types::{CrateId, version::Version};
 use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use sqlx::Connection;

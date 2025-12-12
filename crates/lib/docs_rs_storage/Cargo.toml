@@ -37,7 +37,9 @@ zstd = "0.13.0"
 serde_json = { workspace = true }
 
 [dev-dependencies]
+criterion = "0.8.0"
 test-case = { workspace = true }
+
 
 [[bench]]
 name = "compression"

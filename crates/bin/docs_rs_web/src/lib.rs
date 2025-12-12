@@ -476,7 +476,7 @@ async fn apply_middleware(
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
 
-    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider()));
+    let web_metrics = Arc::new(WebMetrics::new(context.meter_provider()));
 
     Ok(router.layer(
         ServiceBuilder::new()

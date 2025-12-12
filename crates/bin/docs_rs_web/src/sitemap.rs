@@ -7,7 +7,6 @@ use crate::{
     impl_axum_webpage,
     page::templates::{RenderBrands, RenderSolid, filters},
 };
-use anyhow::Context as _;
 use askama::Template;
 use async_stream::stream;
 use axum::{

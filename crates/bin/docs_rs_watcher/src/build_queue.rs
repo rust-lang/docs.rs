@@ -61,7 +61,7 @@ pub async fn get_new_crates(
 
     for change in &changes {
         if let Some((ref krate, ..)) = change.crate_deleted() {
-            match delete_crate(&mut *conn, &storage, krate).await {
+            match delete_crate(&mut *conn, storage, krate).await {
                 Ok(_) => info!(
                     "crate {} was deleted from the index and the database",
                     krate
@@ -74,7 +74,7 @@ pub async fn get_new_crates(
 
             let krate: KrateName = krate.parse().unwrap();
 
-            cdn.queue_crate_invalidation(&krate).await;
+            cdn.queue_crate_invalidation(&krate).await?;
             build_queue.remove_crate_from_queue(&krate).await?;
             continue;
         }
@@ -85,7 +85,7 @@ pub async fn get_new_crates(
                 .parse()
                 .context("couldn't parse release version as semver")?;
 
-            match delete_version(&mut *conn, &storage, &release.name, &version).await {
+            match delete_version(&mut *conn, storage, &release.name, &version).await {
                 Ok(_) => info!(
                     "release {}-{} was deleted from the index and the database",
                     release.name, release.version
@@ -96,7 +96,7 @@ pub async fn get_new_crates(
             }
 
             let krate: KrateName = release.name.parse().unwrap();
-            cdn.queue_crate_invalidation(&krate).await;
+            cdn.queue_crate_invalidation(&krate).await?;
             build_queue
                 .remove_version_from_queue(&release.name, &version)
                 .await?;
@@ -150,7 +150,7 @@ pub async fn get_new_crates(
             }
 
             let krate: KrateName = release.name.parse().unwrap();
-            cdn.queue_crate_invalidation(&krate).await;
+            cdn.queue_crate_invalidation(&krate).await?;
         }
     }
 

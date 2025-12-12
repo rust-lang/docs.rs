@@ -32,9 +32,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
-use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_cargo_metadata::Dependency;
-use docs_rs_database::types::version::Version;
 use docs_rs_headers::etag::ETagComputer;
 use docs_rs_headers::{IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;

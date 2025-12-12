@@ -11,7 +11,7 @@ use crate::{
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     rustdoc::OfficialCrateDescription,
 };
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{
     extract::{Extension, Query},

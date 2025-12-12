@@ -9,11 +9,7 @@ use std::{fs, io, thread};
 use tracing::{error, warn};
 
 /// the main build-server loop
-pub fn queue_builder(
-    config: &Config,
-    context: &Context,
-    mut builder: RustwideBuilder,
-) -> Result<()> {
+pub fn queue_builder(config: &Config, context: &Context, builder: RustwideBuilder) -> Result<()> {
     loop {
         let temp_dir = &config.temp_dir;
         if temp_dir.exists()

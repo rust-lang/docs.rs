@@ -112,7 +112,7 @@ pub fn start_background_service_metric_collector(
     build_queue: Arc<AsyncBuildQueue>,
     meter_provider: &AnyMeterProvider,
 ) -> Result<()> {
-    let service_metrics = Arc::new(OtelServiceMetrics::new(&meter_provider));
+    let service_metrics = Arc::new(OtelServiceMetrics::new(meter_provider));
 
     start_async_cron(
         "background service metric collector",

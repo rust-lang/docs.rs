@@ -11,7 +11,6 @@ derive_more = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 futures-util = { workspace = true }
-hex = "0.4.3"
 mime = { workspace = true }
 mime_guess = "2"
 opentelemetry = { workspace = true }

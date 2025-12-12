@@ -1,4 +1,4 @@
-//// buckets for documentation size, in MiB
+/// buckets for documentation size, in MiB
 /// Base for some estimates:
 /// * `itertools` docs is an 8.2 MB archive with 144 MB of docs
 /// * the biggest doc archive know of (`stm32ral`) is an 1.8 GiB archive,
