@@ -1,1 +1,1 @@
-pub(crate) mod rustwide_builder;
+pub mod rustwide_builder;

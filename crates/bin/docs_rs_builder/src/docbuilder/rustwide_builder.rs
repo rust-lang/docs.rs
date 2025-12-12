@@ -199,7 +199,7 @@ pub struct RustwideBuilder {
 }
 
 impl RustwideBuilder {
-    pub fn init(config: Config, context: &Context) -> Result<Self> {
+    pub fn init(config: Arc<Config>, context: &Context) -> Result<Self> {
         let toolchain = context.runtime().block_on(async {
             let mut conn = context.pool()?.get_async().await?;
             get_configured_toolchain(&mut conn).await

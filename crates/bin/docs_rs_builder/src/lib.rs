@@ -1,6 +1,7 @@
 mod config;
-mod metrics;
-
 mod db;
-mod docbuilder;
-mod utils;
+pub mod docbuilder;
+mod metrics;
+pub mod utils;
+
+pub use config::Config;

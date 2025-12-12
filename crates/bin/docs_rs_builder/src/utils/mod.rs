@@ -1,7 +1,7 @@
 //! Various utilities for docs.rs
 
 pub(crate) mod copy;
-pub(crate) mod queue_builder;
+pub mod queue_builder;
 
 // #[cfg(test)]
 // mod tests {

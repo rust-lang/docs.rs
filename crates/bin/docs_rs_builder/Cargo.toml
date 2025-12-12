@@ -10,6 +10,7 @@ docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
@@ -33,3 +34,5 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+tracing-log = "0.2.0"
+
