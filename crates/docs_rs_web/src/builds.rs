@@ -8,6 +8,7 @@ use crate::{
     impl_axum_webpage,
     // filters,
     match_version,
+    page::templates::filters,
     page::templates::{RenderBrands, RenderRegular, RenderSolid},
 };
 use anyhow::{Result, anyhow};
@@ -20,7 +21,7 @@ use axum_extra::{
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
-use docs_rs_build_utils::limis::Limits;
+use docs_rs_build_utils::limits::Limits;
 use docs_rs_database::types::{BuildId, BuildStatus, version::Version};
 use docs_rs_headers::CanonicalUrl;
 use http::StatusCode;

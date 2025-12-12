@@ -69,6 +69,8 @@ use std::{
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
+use crate::metrics::WebMetrics;
+
 use self::crate_details::Release;
 use page::GlobalAlert;
 
@@ -471,7 +473,7 @@ async fn set_sentry_transaction_name_from_axum_route(
 
 async fn apply_middleware(
     router: AxumRouter,
-    context: &Context,
+    // context: &Context,
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();

@@ -7,7 +7,7 @@ use crate::{
         rustdoc::{PageKind, RustdocParams},
     },
     impl_axum_webpage, match_version,
-    page::templates::{RenderBrands, RenderRegular, RenderSolid},
+    page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
 };
 use anyhow::anyhow;
 use askama::Template;

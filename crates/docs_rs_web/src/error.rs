@@ -104,7 +104,7 @@ impl AxumNope {
                 status: StatusCode::UNAUTHORIZED,
             },
             AxumNope::InternalError(source) => {
-                crate::utils::report_error(&source);
+                error!(?source, "Internal server error");
                 ErrorInfo {
                     title: "Internal Server Error",
                     message: Cow::Owned(source.to_string()),

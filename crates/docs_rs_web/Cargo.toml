@@ -55,6 +55,7 @@ opentelemetry_sdk = { workspace = true }
 strum = { workspace = true }
 font-awesome-as-a-crate = { path = "../font-awesome-as-a-crate" }
 docs_rs_build_utils = { path = "../docs_rs_build_utils" }
+toml = { workspace = true }
 
 
 [build-dependencies] 

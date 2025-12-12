@@ -564,7 +564,7 @@ impl RustdocPage {
                 etag.map(TypedHeader),
                 Extension(cache_policy),
                 TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),
-                Body::from_stream(utils::rewrite_rustdoc_html_stream(
+                Body::from_stream(utils::html::rewrite_rustdoc_html_stream(
                     template_data,
                     rustdoc_html.content,
                     max_parse_memory,
