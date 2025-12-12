@@ -41,6 +41,7 @@ fn fetch_rate_limit_state(headers: &HeaderMap) -> (Option<u64>, Option<DateTime<
     )
 }
 
+#[derive(Debug)]
 pub struct Cdn {
     client: reqwest::Client,
     config: Arc<config::Config>,
@@ -66,7 +67,7 @@ impl Cdn {
                 .default_headers(headers)
                 .build()?,
             config,
-            metrics: metrics::CdnMetrics::new(&meter_provider),
+            metrics: metrics::CdnMetrics::new(meter_provider),
         })
     }
 

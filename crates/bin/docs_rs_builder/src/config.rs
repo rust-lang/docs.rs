@@ -14,7 +14,6 @@ pub struct Config {
 
     // Build params
     pub(crate) build_attempts: u16,
-    pub(crate) delay_between_build_attempts: Duration,
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) inside_docker: bool,
     pub(crate) docker_image: Option<String>,
@@ -37,10 +36,6 @@ impl Config {
             // service_sid: maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?,
             prefix,
             build_attempts: env("DOCSRS_BUILD_ATTEMPTS", 5u16)?,
-            delay_between_build_attempts: Duration::from_secs(env::<u64>(
-                "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
-                60,
-            )?),
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?

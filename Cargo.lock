@@ -1776,6 +1776,7 @@ dependencies = [
  "chrono",
  "docs_rs_database",
  "docs_rs_env_vars",
+ "docs_rs_fastly",
  "docs_rs_opentelemetry",
  "futures-util",
  "opentelemetry",

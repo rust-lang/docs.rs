@@ -10,10 +10,13 @@ use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
     types::version::Version,
 };
+use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::TryStreamExt as _;
-use std::{collections::HashMap, sync::Arc};
+use sqlx::Connection as _;
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::runtime;
+use tracing::error;
 
 pub const PRIORITY_DEFAULT: i32 = 0;
 /// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
@@ -42,15 +45,22 @@ pub struct QueuedCrate {
 #[derive(Debug)]
 pub struct AsyncBuildQueue {
     pub db: Pool,
+    config: Arc<Config>,
+    cdn: Arc<Cdn>,
     queue_metrics: metrics::BuildQueueMetrics,
-    max_attempts: i32,
 }
 
 impl AsyncBuildQueue {
-    pub fn new(db: Pool, config: &Config, otel_meter_provider: &AnyMeterProvider) -> Self {
+    pub fn new(
+        db: Pool,
+        cdn: Arc<Cdn>,
+        config: Arc<Config>,
+        otel_meter_provider: &AnyMeterProvider,
+    ) -> Self {
         AsyncBuildQueue {
-            max_attempts: config.build_attempts.into(),
             db,
+            cdn,
+            config,
             queue_metrics: metrics::BuildQueueMetrics::new(otel_meter_provider),
         }
     }
@@ -115,7 +125,7 @@ impl AsyncBuildQueue {
                 FROM queue
                 WHERE attempt < $1
                 GROUP BY priority"#,
-            self.max_attempts,
+            self.config.build_attempts as i32,
         )
         .fetch(&mut *conn)
         .map_ok(|row| (row.priority, row.count as usize))
@@ -128,7 +138,7 @@ impl AsyncBuildQueue {
 
         Ok(sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count!" FROM queue WHERE attempt >= $1;"#,
-            self.max_attempts,
+            self.config.build_attempts as i32,
         )
         .fetch_one(&mut *conn)
         .await? as usize)
@@ -149,7 +159,7 @@ impl AsyncBuildQueue {
              FROM queue
              WHERE attempt < $1
              ORDER BY priority ASC, attempt ASC, id ASC"#,
-            self.max_attempts
+            self.config.build_attempts as i32,
         )
         .fetch_all(&mut *conn)
         .await?)
@@ -165,7 +175,7 @@ impl AsyncBuildQueue {
                 name = $2 AND
                 version = $3
              ",
-            self.max_attempts,
+            self.config.build_attempts as i32,
             name,
             version as _,
         )
@@ -230,6 +240,119 @@ impl AsyncBuildQueue {
 }
 
 #[derive(Debug)]
+pub struct BuildPackageSummary {
+    pub successful: bool,
+    pub should_reattempt: bool,
+}
+
+#[cfg(test)]
+impl Default for BuildPackageSummary {
+    fn default() -> Self {
+        Self {
+            successful: true,
+            should_reattempt: false,
+        }
+    }
+}
+
+impl AsyncBuildQueue {
+    pub async fn process_next_crate(
+        &self,
+        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
+    ) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+        let mut transaction = conn.begin().await?;
+
+        // fetch the next available crate from the queue table.
+        // We are using `SELECT FOR UPDATE` inside a transaction so
+        // the QueuedCrate is locked until we are finished with it.
+        // `SKIP LOCKED` here will enable another build-server to just
+        // skip over taken (=locked) rows and start building the first
+        // available one.
+        let to_process = match sqlx::query_as!(
+            QueuedCrate,
+            r#"SELECT
+                    id,
+                    name,
+                    version as "version: Version",
+                    priority,
+                    registry,
+                    attempt
+                 FROM queue
+                 WHERE
+                    attempt < $1 AND
+                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
+                 ORDER BY priority ASC, attempt ASC, id ASC
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED"#,
+            self.config.build_attempts as i32,
+            self.config.delay_between_build_attempts.as_secs_f64(),
+        )
+        .fetch_optional(&mut *transaction)
+        .await?
+        {
+            Some(krate) => krate,
+            None => return Ok(()),
+        };
+
+        let res = f(&to_process);
+
+        self.cdn
+            .queue_crate_invalidation(&to_process.name.parse().unwrap())
+            .await?;
+
+        async fn increase_attempt_count(
+            to_process: &QueuedCrate,
+            transaction: &mut sqlx::PgConnection,
+        ) -> Result<i32> {
+            let attempt: i32 = sqlx::query_scalar!(
+                "UPDATE queue
+                 SET
+                    attempt = attempt + 1,
+                    last_attempt = NOW()
+                 WHERE id = $1
+                 RETURNING attempt;",
+                to_process.id,
+            )
+            .fetch_one(&mut *transaction)
+            .await?;
+
+            Ok(attempt)
+        }
+
+        match res {
+            Ok(BuildPackageSummary {
+                should_reattempt: false,
+                successful: _,
+            }) => {
+                sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+            Ok(BuildPackageSummary {
+                should_reattempt: true,
+                successful: _,
+            }) => {
+                increase_attempt_count(&to_process, &mut *transaction).await?;
+            }
+            Err(e) => {
+                let next_attempt = increase_attempt_count(&to_process, &mut *transaction).await?;
+                error!(
+                    ?e,
+                    name=%to_process.name,
+                    version=%to_process.version,
+                    next_attempt,
+                    "Failed to build package from queue"
+                );
+            }
+        }
+
+        transaction.commit().await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
 pub struct BuildQueue {
     runtime: runtime::Handle,
     inner: Arc<AsyncBuildQueue>,
@@ -261,27 +384,27 @@ impl BuildQueue {
     pub fn unlock(&self) -> Result<()> {
         self.runtime.block_on(self.inner.unlock())
     }
-    // #[cfg(test)]
-    // pub(crate) fn pending_count(&self) -> Result<usize> {
-    //     self.runtime.block_on(self.inner.pending_count())
-    // }
-    // #[cfg(test)]
-    // pub(crate) fn prioritized_count(&self) -> Result<usize> {
-    //     self.runtime.block_on(self.inner.prioritized_count())
-    // }
-    // #[cfg(test)]
-    // pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
-    //     self.runtime
-    //         .block_on(self.inner.pending_count_by_priority())
-    // }
-    // #[cfg(test)]
-    // pub(crate) fn failed_count(&self) -> Result<usize> {
-    //     self.runtime.block_on(self.inner.failed_count())
-    // }
-    // #[cfg(test)]
-    // pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
-    //     self.runtime.block_on(self.inner.queued_crates())
-    // }
+    #[cfg(test)]
+    pub(crate) fn pending_count(&self) -> Result<usize> {
+        self.runtime.block_on(self.inner.pending_count())
+    }
+    #[cfg(test)]
+    pub(crate) fn prioritized_count(&self) -> Result<usize> {
+        self.runtime.block_on(self.inner.prioritized_count())
+    }
+    #[cfg(test)]
+    pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
+        self.runtime
+            .block_on(self.inner.pending_count_by_priority())
+    }
+    #[cfg(test)]
+    pub(crate) fn failed_count(&self) -> Result<usize> {
+        self.runtime.block_on(self.inner.failed_count())
+    }
+    #[cfg(test)]
+    pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
+        self.runtime.block_on(self.inner.queued_crates())
+    }
 }
 
 // #[cfg(test)]

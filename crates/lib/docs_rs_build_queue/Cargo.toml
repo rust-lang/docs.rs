@@ -8,6 +8,7 @@ anyhow = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_fastly = { path = "../docs_rs_fastly" }
 opentelemetry = { workspace = true }
 futures-util = { workspace = true }
 serde = { workspace = true }
