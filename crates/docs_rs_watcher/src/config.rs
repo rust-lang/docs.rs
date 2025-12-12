@@ -14,15 +14,10 @@ pub struct Config {
     // Time between 'git gc --auto' calls in seconds
     pub registry_gc_interval: u64,
 
-    // Github authentication
-    pub github_accesstoken: Option<String>,
-    pub github_updater_min_rate_limit: u32,
-
-    // GitLab authentication
-    pub gitlab_accesstoken: Option<String>,
-
     // automatic rebuild configuration
     pub max_queued_rebuilds: Option<u16>,
+
+    pub repository: docs_rs_repository_stats::Config,
 }
 
 impl Config {
@@ -40,10 +35,8 @@ impl Config {
                 60,
             )?),
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
-            github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
-            github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?,
-            gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
             max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
+            repository: docs_rs_repository_stats::Config::from_environment()?,
         })
     }
 }

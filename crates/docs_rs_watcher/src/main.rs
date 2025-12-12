@@ -3,10 +3,10 @@ use clap::Parser;
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_utils::start_async_cron;
 use docs_rs_watcher::{
-    Config, rebuilds::queue_rebuilds, repositories::RepositoryStatsUpdater,
-    service_metrics::OtelServiceMetrics, watch_registry,
+    Config, rebuilds::queue_rebuilds, service_metrics::OtelServiceMetrics, watch_registry,
 };
 use std::{sync::Arc, time::Duration};
 use tracing::{info, trace};
@@ -66,7 +66,7 @@ fn start_background_repository_stats_updater(config: &Config, pool: Pool) {
     // creating a pool or if config fails, which shouldn't happen here because this is run right at
     // startup.
 
-    let updater = Arc::new(RepositoryStatsUpdater::new(&config, pool));
+    let updater = Arc::new(RepositoryStatsUpdater::new(&config.repository, pool));
 
     start_async_cron(
         "repository stats updater",

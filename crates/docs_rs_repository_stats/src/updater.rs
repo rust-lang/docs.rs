@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    repositories::{GitHub, GitLab, RateLimitReached},
+    {GitHub, GitLab, RateLimitReached},
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -70,6 +70,10 @@ impl fmt::Debug for RepositoryStatsUpdater {
 }
 
 impl RepositoryStatsUpdater {
+    pub fn from_environment(pool: Pool) -> Result<Self> {
+        Ok(Self::new(&Config::from_environment()?, pool))
+    }
+
     pub fn new(config: &Config, pool: Pool) -> Self {
         let mut updaters: Vec<Box<dyn RepositoryForge + Send + Sync>> = Vec::new();
         if let Ok(Some(updater)) = GitHub::new(config) {

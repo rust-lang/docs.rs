@@ -13,43 +13,40 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
+askama = "0.14.0"
+async-stream = "0.3.5"
 bincode = "2.0.1"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4.0.22", features = [ "derive" ] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
 futures-util = "0.3.5"
+http = "1.0.0"
+itertools = { version = "0.14.0" }
+mime = "0.3.16"
+mockito = "1.0.2"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+rayon = "1.6.1"
+regex = "1"
+reqwest = { version = "0.12", features = ["json", "gzip"] }
 semver = { version = "1.0.4", features = ["serde"] }
+sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.4.0"
-itertools = { version = "0.14.0" }
+slug = "0.1.1"
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
 strum = { version = "0.27.0", features = ["derive"] }
+tempfile = "3.1.0"
+test-case = "3.0.0"
 thiserror = "2.0.3"
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
-walkdir = "2"
-regex = "1"
+toml = "0.9.2"
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
-rayon = "1.6.1"
-mime = "0.3.16"
-async-stream = "0.3.5"
-tempfile = "3.1.0"
-http = "1.0.0"
-reqwest = { version = "0.12", features = ["json", "gzip"] }
-rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
-sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
-clap = { version = "4.0.22", features = [ "derive" ] }
-askama = "0.14.0"
-toml = "0.9.2"
-slug = "0.1.1"
-
-# dev dependencies
-test-case = "3.0.0"
-mockito = "1.0.2"
+walkdir = "2"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -58,19 +55,19 @@ bincode = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 derive_more = { workspace = true }
-docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
-docs_rs_utils = { path = "crates/docs_rs_utils" }
-docs_rs_database = { path = "crates/docs_rs_database" }
 docs_rs_build_queue = { path = "crates/docs_rs_build_queue" }
-docs_rs_opentelemetry = { path = "crates/docs_rs_opentelemetry" }
 docs_rs_cargo_metadata = { path = "crates/docs_rs_cargo_metadata" }
-docs_rs_storage = { path = "crates/docs_rs_storage" }
+docs_rs_database = { path = "crates/docs_rs_database" }
+docs_rs_env_vars = { path = "crates/docs_rs_env_vars" }
 docs_rs_headers = { path = "crates/docs_rs_headers" }
-docs_rs_watcher = { path = "crates/docs_rs_watcher" }
 docs_rs_logging = { path = "crates/docs_rs_logging" }
+docs_rs_opentelemetry = { path = "crates/docs_rs_opentelemetry" }
+docs_rs_registry_api = { path = "crates/docs_rs_registry_api" }
+docs_rs_storage = { path = "crates/docs_rs_storage" }
+docs_rs_utils = { path = "crates/docs_rs_utils" }
+docs_rs_watcher = { path = "crates/docs_rs_watcher" }
 docs_rs_web_utils = { path = "crates/docs_rs_web_utils" }
 docsrs-metadata = { path = "crates/metadata" }
-docs_rs_registry_api = { path = "crates/docs_rs_registry_api" }
 fn-error-context = "0.2.0"
 futures-util = { workspace = true }
 getrandom = "0.3.1"
@@ -86,7 +83,6 @@ path-slash = "0.2.0"
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
-rustwide = { workspace = true }
 semver = { workspace = true }
 sentry = { workspace = true }
 serde = { workspace = true }

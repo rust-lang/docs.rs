@@ -1919,7 +1919,6 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "rustwide",
  "semver",
  "sentry",
  "serde",
@@ -1982,6 +1981,7 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
+ "docs_rs_repository_stats",
  "docs_rs_storage",
  "docs_rs_utils",
  "docs_rs_watcher",
@@ -2130,6 +2130,7 @@ name = "docs_rs_registry_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode 2.0.1",
  "chrono",
  "docs_rs_database",
@@ -2140,6 +2141,27 @@ dependencies = [
  "sqlx",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "docs_rs_repository_stats"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "docs_rs_cargo_metadata",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_utils",
+ "futures-util",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tracing",
 ]
 
 [[package]]
@@ -2197,7 +2219,6 @@ name = "docs_rs_watcher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "clap",
  "crates-index",
@@ -2210,6 +2231,7 @@ dependencies = [
  "docs_rs_fastly",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
+ "docs_rs_repository_stats",
  "docs_rs_storage",
  "docs_rs_utils",
  "futures-util",

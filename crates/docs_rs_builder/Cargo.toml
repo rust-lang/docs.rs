@@ -14,6 +14,7 @@ docs_rs_watcher = { path = "../docs_rs_watcher" }
 docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_build_utils = { path = "../docs_rs_build_utils" }
 docs_rs_context = { path = "../docs_rs_context" }
+docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
 url = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
@@ -24,7 +25,7 @@ docsrs-metadata = { path = "../metadata" }
 opentelemetry = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
-rustwide = { workspace = true }
+rustwide = { version = "0.20.0", features = ["unstable-toolchain-ci", "unstable"] }
 tracing = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }

@@ -5,7 +5,6 @@ pub(crate) mod db;
 mod index;
 mod priorities;
 pub mod rebuilds;
-pub mod repositories;
 pub mod service_metrics;
 mod utils;
 

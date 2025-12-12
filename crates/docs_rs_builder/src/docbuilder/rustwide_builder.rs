@@ -21,6 +21,7 @@ use docs_rs_database::{
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
+use docs_rs_repository_stast::RepositoryStatsUpdater;
 use docs_rs_storage::{
     AsyncStorage, RustdocJsonFormatVersion, Storage, compress,
     compression::CompressionAlgorithm,
@@ -29,7 +30,6 @@ use docs_rs_storage::{
 };
 use docs_rs_utils::rustc_version::parse_rustc_version;
 use docs_rs_utils::{BUILD_VERSION, RUSTDOC_STATIC_STORAGE_PREFIX, retry};
-use docs_rs_watcher::repositories::RepositoryStatsUpdater;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};
@@ -214,7 +214,7 @@ impl RustwideBuilder {
             storage: context.blocking_storage()?,
             async_storage: context.storage()?,
             registry_api: RegistryApi::from_environment()?.into(),
-            repository_stats_updater: context.repository_stats_updater.clone(),
+            repository_stats_updater: RepositoryStatsUpdater::new()?.into(),
             workspace_initialize_time: Instant::now(),
             builder_metrics: BuilderMetrics::new(context.meter_provider()).into(),
         })
