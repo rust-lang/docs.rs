@@ -1865,6 +1865,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode 2.0.1",
+ "chrono",
  "derive_more",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",

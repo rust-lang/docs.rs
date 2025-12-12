@@ -1,11 +1,7 @@
-use anyhow::{Context as _, Result};
+use anyhow::Context as _;
 use clap::Parser;
-use docs_rs_build_queue::AsyncBuildQueue;
-use docs_rs_database::Pool;
-use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_utils::start_async_cron;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tracing::{info, trace};
+use docs_rs_web::{Config, run_web_server};
+use std::{net::SocketAddr, sync::Arc};
 
 #[derive(Parser)]
 #[command(
@@ -34,9 +30,9 @@ async fn main() -> anyhow::Result<()> {
         .with_registry_api()
         .await?;
 
-    let config = Arc::new(crate::Config::from_environment()?);
+    let config = Arc::new(Config::from_environment()?);
 
-    start_web_server(args.socket_addr, config, &context).await?;
+    run_web_server(args.socket_addr, config, &context).await?;
 
     Ok(())
 }

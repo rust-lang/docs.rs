@@ -1,4 +1,5 @@
 mod config;
+pub mod crate_details;
 pub(crate) mod migrate;
 pub mod mimes;
 pub mod service_config;
