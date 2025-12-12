@@ -10,11 +10,11 @@ use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
     types::version::Version,
 };
-use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_utils::run_blocking;
 use futures_util::TryStreamExt as _;
 use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc};
 use tokio::runtime;
 use tracing::error;
 
@@ -46,20 +46,13 @@ pub struct QueuedCrate {
 pub struct AsyncBuildQueue {
     pub db: Pool,
     config: Arc<Config>,
-    cdn: Arc<Cdn>,
     queue_metrics: metrics::BuildQueueMetrics,
 }
 
 impl AsyncBuildQueue {
-    pub fn new(
-        db: Pool,
-        cdn: Arc<Cdn>,
-        config: Arc<Config>,
-        otel_meter_provider: &AnyMeterProvider,
-    ) -> Self {
+    pub fn new(db: Pool, config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Self {
         AsyncBuildQueue {
             db,
-            cdn,
             config,
             queue_metrics: metrics::BuildQueueMetrics::new(otel_meter_provider),
         }
@@ -258,7 +251,7 @@ impl Default for BuildPackageSummary {
 impl AsyncBuildQueue {
     pub async fn process_next_crate(
         &self,
-        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
+        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary> + Send + 'static,
     ) -> Result<()> {
         let mut conn = self.db.get_async().await?;
         let mut transaction = conn.begin().await?;
@@ -295,11 +288,13 @@ impl AsyncBuildQueue {
             None => return Ok(()),
         };
 
-        let res = f(&to_process);
-
-        self.cdn
-            .queue_crate_invalidation(&to_process.name.parse().unwrap())
-            .await?;
+        // FIXME: can the closure also be async? Or is sync better?
+        let res = run_blocking("builder", {
+            let to_process = to_process.clone();
+            move || f(&to_process)
+        })
+        .await;
+        // FIXME: how to handle when we want to have the attepmtp count
 
         async fn increase_attempt_count(
             to_process: &QueuedCrate,
@@ -333,10 +328,10 @@ impl AsyncBuildQueue {
                 should_reattempt: true,
                 successful: _,
             }) => {
-                increase_attempt_count(&to_process, &mut *transaction).await?;
+                increase_attempt_count(&to_process, &mut transaction).await?;
             }
             Err(e) => {
-                let next_attempt = increase_attempt_count(&to_process, &mut *transaction).await?;
+                let next_attempt = increase_attempt_count(&to_process, &mut transaction).await?;
                 error!(
                     ?e,
                     name=%to_process.name,
