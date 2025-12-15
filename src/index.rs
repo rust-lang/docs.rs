@@ -1,10 +1,7 @@
-use crate::{
-    Config,
-    error::Result,
-    utils::{report_error, run_blocking},
-};
+use crate::{Config, error::Result, utils::report_error};
 use anyhow::Context as _;
 use crates_index_diff::{Change, gix, index::diff::Order};
+use docs_rs_utils::run_blocking;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, atomic::AtomicBool},

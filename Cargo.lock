@@ -1990,6 +1990,7 @@ dependencies = [
  "derive_more 2.1.0",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
+ "docs_rs_utils",
  "docsrs-metadata",
  "flate2",
  "fn-error-context",
@@ -2073,6 +2074,18 @@ dependencies = [
  "opentelemetry_sdk",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "docs_rs_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "regex",
+ "time",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

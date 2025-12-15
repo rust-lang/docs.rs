@@ -18,12 +18,12 @@ use crate::{
         types::version::Version,
     },
     error::Result,
-    utils::spawn_blocking,
 };
 use axum_extra::headers;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_utils::spawn_blocking;
 use fn_error_context::context;
 use futures_util::stream::BoxStream;
 use mime::Mime;

@@ -18,6 +18,9 @@ pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
 pub use self::web::start_web_server;
 
+pub use docs_rs_utils::{
+    APP_USER_AGENT, BUILD_VERSION, DEFAULT_MAX_TARGETS, RUSTDOC_STATIC_STORAGE_PREFIX,
+};
 pub use font_awesome_as_a_crate::icons;
 
 mod build_queue;
@@ -49,34 +52,3 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
     fa_icon: "exclamation-triangle",
 });
 */
-
-/// Version string generated at build time contains last git
-/// commit hash and build date
-pub const BUILD_VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("GIT_SHA"),
-    " ",
-    env!("BUILD_DATE"),
-    " )"
-);
-
-pub const APP_USER_AGENT: &str = concat!(
-    env!("CARGO_PKG_NAME"),
-    " ",
-    " (",
-    env!("GIT_SHA"),
-    " ",
-    env!("BUILD_DATE"),
-    " )"
-);
-
-/// Where rustdoc's static files are stored in S3.
-/// Since the prefix starts with `/`, it needs to be referenced with a double slash in
-/// API & AWS CLI.
-/// Example:
-/// `s3://rust-docs-rs//rustdoc-static/something.css`
-pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
-
-/// Maximum number of targets allowed for a crate to be documented on.
-pub const DEFAULT_MAX_TARGETS: usize = 10;

@@ -10,7 +10,7 @@ use crate::{
     impl_axum_webpage,
     registry_api::OwnerKind,
     storage::PathNotFoundError,
-    utils::{Dependency, get_correct_docsrs_style_file},
+    utils::Dependency,
     web::{
         MatchedRelease, MetaData, ReqVersion,
         cache::CachePolicy,
@@ -19,6 +19,7 @@ use crate::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
+        get_correct_docsrs_style_file,
         headers::CanonicalUrl,
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
