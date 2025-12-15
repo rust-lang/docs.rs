@@ -10,12 +10,13 @@ use crate::{
     docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
     storage::AsyncStorage,
-    utils::{ConfigName, get_config, get_crate_priority, report_error, retry, set_config},
+    utils::{ConfigName, get_config, get_crate_priority, report_error, set_config},
 };
 use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_utils::retry;
 use fn_error_context::context;
 use futures_util::{StreamExt, stream::TryStreamExt};
 use opentelemetry::metrics::Counter;

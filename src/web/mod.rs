@@ -7,7 +7,6 @@ use crate::{
         CrateId,
         types::{BuildStatus, krate_name::KrateName, version::Version},
     },
-    utils::get_correct_docsrs_style_file,
     web::{
         metrics::WebMetrics,
         page::templates::{RenderBrands, RenderSolid, filters},
@@ -16,6 +15,7 @@ use crate::{
 use anyhow::{Context as _, Result, anyhow, bail};
 use askama::Template;
 use axum_extra::middleware::option_layer;
+use docs_rs_utils::rustc_version::parse_rustc_date;
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, instrument};
@@ -53,7 +53,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
@@ -83,6 +83,23 @@ pub(crate) fn encode_url_path(path: &str) -> String {
 
 pub(crate) fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
     Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
+}
+
+/// Picks the correct "rustdoc.css" static file depending on which rustdoc version was used to
+/// generate this version of this crate.
+pub fn get_correct_docsrs_style_file(version: &str) -> Result<String> {
+    let date = parse_rustc_date(version)?;
+    // This is the date where https://github.com/rust-lang/rust/pull/144476 was merged.
+    if NaiveDate::from_ymd_opt(2025, 8, 20).unwrap() < date {
+        Ok("rustdoc-2025-08-20.css".to_owned())
+    // This is the date where https://github.com/rust-lang/rust/pull/91356 was merged.
+    } else if NaiveDate::from_ymd_opt(2021, 12, 5).unwrap() < date {
+        // If this is the new rustdoc layout, we need the newer docs.rs CSS file.
+        Ok("rustdoc-2021-12-05.css".to_owned())
+    } else {
+        // By default, we return the old docs.rs CSS file.
+        Ok("rustdoc.css".to_owned())
+    }
 }
 
 const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
@@ -797,6 +814,19 @@ mod test {
         let data = web.get(path).await.unwrap().text().await.unwrap();
         let node = kuchikiki::parse_html().one(data);
         node.select("#clipboard").unwrap().count() == 1
+    }
+
+    #[test]
+    fn test_get_correct_docsrs_style_file() {
+        assert_eq!(
+            get_correct_docsrs_style_file("rustc 1.10.0-nightly (57ef01513 2016-05-23)").unwrap(),
+            "rustdoc.css"
+        );
+        assert_eq!(
+            get_correct_docsrs_style_file("docsrs 0.2.0 (ba9ae23 2022-05-26)").unwrap(),
+            "rustdoc-2021-12-05.css"
+        );
+        assert!(get_correct_docsrs_style_file("docsrs 0.2.0").is_err(),);
     }
 
     #[test]

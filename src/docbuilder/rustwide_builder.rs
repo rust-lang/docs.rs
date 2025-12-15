@@ -17,12 +17,13 @@ use crate::{
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
     },
     utils::{
-        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, parse_rustc_version,
-        report_error, retry, set_config,
+        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, report_error,
+        set_config,
     },
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};

@@ -7,10 +7,11 @@ use crate::{
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::CompressionAlgorithm,
-    utils::{MetadataPackage, rustc_version::parse_rustc_date},
+    utils::MetadataPackage,
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
+use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
 use slug::slugify;

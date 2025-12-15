@@ -22,23 +22,27 @@ exclude = [
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
+chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+regex = "1"
+tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 
 [dependencies]
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
+docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 log = "0.4"
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
 tracing-log = "0.2.0"
-regex = "1"
+regex = { workspace = true }
 clap = { version = "4.0.22", features = [ "derive" ] }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
 rayon = "1.6.1"
@@ -79,7 +83,7 @@ derive_builder = "0.20.2"
 
 # Async
 async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
-tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
+tokio = { workspace = true }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
 futures-util = "0.3.5"
@@ -113,7 +117,7 @@ walkdir = "2"
 phf = "0.13.1"
 
 # Date and Time utilities
-chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
+chrono = { workspace = true }
 
 # Transitive dependencies we don't use directly but need to have specific versions of
 constant_time_eq = "0.4.2"
