@@ -1989,6 +1989,7 @@ dependencies = [
  "derive_builder",
  "derive_more 2.1.0",
  "docs_rs_env_vars",
+ "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_utils",
  "docsrs-metadata",
@@ -2059,6 +2060,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "tracing",
+]
+
+[[package]]
+name = "docs_rs_logging"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_utils",
+ "sentry",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

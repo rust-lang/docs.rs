@@ -1,0 +1,11 @@
+[package]
+name = "docs_rs_logging"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+docs_rs_utils = { path = "../docs_rs_utils" }
+sentry = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
