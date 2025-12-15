@@ -1988,6 +1988,7 @@ dependencies = [
  "dashmap",
  "derive_builder",
  "derive_more 2.1.0",
+ "docs_rs_env_vars",
  "docsrs-metadata",
  "flate2",
  "fn-error-context",
@@ -2050,6 +2051,14 @@ dependencies = [
  "walkdir",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "docs_rs_env_vars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tracing",
 ]
 
 [[package]]
