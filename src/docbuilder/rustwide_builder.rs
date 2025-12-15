@@ -10,7 +10,7 @@ use crate::{
     },
     docbuilder::Limits,
     error::Result,
-    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS, otel::AnyMeterProvider},
+    metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
     repositories::RepositoryStatsUpdater,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
@@ -22,6 +22,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Error, anyhow, bail};
+use docs_rs_opentelemetry::AnyMeterProvider;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
 use opentelemetry::metrics::{Counter, Histogram};

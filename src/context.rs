@@ -1,11 +1,9 @@
 use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, RegistryApi, Storage,
-    cdn::CdnMetrics,
-    db::Pool,
-    metrics::otel::{AnyMeterProvider, get_meter_provider},
-    repositories::RepositoryStatsUpdater,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, RegistryApi, Storage, cdn::CdnMetrics,
+    db::Pool, repositories::RepositoryStatsUpdater,
 };
 use anyhow::Result;
+use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use std::sync::Arc;
 use tokio::runtime;
 
@@ -26,7 +24,7 @@ pub struct Context {
 impl Context {
     /// Create a new context environment from the given configuration.
     pub async fn from_config(config: Config) -> Result<Self> {
-        let meter_provider = get_meter_provider(&config)?;
+        let meter_provider = get_meter_provider(&config.opentelemetry)?;
         let pool = Pool::new(&config, &meter_provider).await?;
         Self::from_config_with_metrics_and_pool(config, meter_provider, pool).await
     }

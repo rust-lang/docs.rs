@@ -1,19 +1,13 @@
 mod fakes;
 pub(crate) mod headers;
-mod test_metrics;
 
-pub(crate) use self::{
-    fakes::{FakeBuild, fake_release_that_failed_before_build},
-    test_metrics::setup_test_meter_provider,
-};
+pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
     config::ConfigBuilder,
     db::{self, AsyncPoolClient, Pool, types::version::Version},
     error::Result,
-    metrics::otel::AnyMeterProvider,
     storage::{AsyncStorage, Storage, StorageKind},
-    test::test_metrics::CollectedMetrics,
     web::{
         build_axum_app, cache,
         headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys},
@@ -24,6 +18,10 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_opentelemetry::{
+    AnyMeterProvider,
+    testing::{CollectedMetrics, setup_test_meter_provider},
+};
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
 use http::{

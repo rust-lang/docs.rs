@@ -1,4 +1,3 @@
-pub(crate) mod otel;
 pub(crate) mod service;
 
 /// the measured times from cdn invalidations, meaning:

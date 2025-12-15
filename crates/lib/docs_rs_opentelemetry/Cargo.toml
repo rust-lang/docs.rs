@@ -1,0 +1,18 @@
+[package]
+name = "docs_rs_opentelemetry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+derive_more = { workspace = true, optional = true }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
+opentelemetry-resource-detectors = "0.10.0"
+opentelemetry_sdk = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[features]
+testing = ["dep:derive_more"]

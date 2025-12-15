@@ -1,8 +1,6 @@
-use crate::{
-    Config, db::types::krate_name::KrateName, metrics::otel::AnyMeterProvider,
-    web::headers::SurrogateKey,
-};
+use crate::{Config, db::types::krate_name::KrateName, web::headers::SurrogateKey};
 use anyhow::Result;
+use docs_rs_opentelemetry::AnyMeterProvider;
 use opentelemetry::metrics::{Counter, Gauge};
 use tracing::{error, info, instrument};
 

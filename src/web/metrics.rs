@@ -1,10 +1,11 @@
-use crate::metrics::{RESPONSE_TIME_HISTOGRAM_BUCKETS, otel::AnyMeterProvider};
+use crate::metrics::RESPONSE_TIME_HISTOGRAM_BUCKETS;
 use axum::{
     extract::{MatchedPath, Request as AxumRequest},
     http::StatusCode,
     middleware::Next,
     response::IntoResponse,
 };
+use docs_rs_opentelemetry::AnyMeterProvider;
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},

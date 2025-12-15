@@ -142,8 +142,7 @@ pub struct Config {
     // automatic rebuild configuration
     pub(crate) max_queued_rebuilds: Option<u16>,
 
-    // opentelemetry endpoint to send OTLP to
-    pub(crate) opentelemetry_endpoint: Option<Url>,
+    pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
 }
 
 impl Config {
@@ -187,7 +186,6 @@ impl Config {
                 "DOCSRS_REGISTRY_API_HOST",
                 "https://crates.io".parse().unwrap(),
             )?)
-            .opentelemetry_endpoint(maybe_env("OTEL_EXPORTER_OTLP_ENDPOINT")?)
             .prefix(prefix.clone())
             .database_url(require_env("DOCSRS_DATABASE_URL")?)
             .max_pool_size(env("DOCSRS_MAX_POOL_SIZE", 90u32)?)
@@ -248,7 +246,8 @@ impl Config {
                 "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
                 86400,
             )?))
-            .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?))
+            .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?)
+            .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?))
     }
 
     pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
