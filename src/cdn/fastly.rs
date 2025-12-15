@@ -175,8 +175,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{TestEnvironment, setup_test_meter_provider};
+    use crate::test::TestEnvironment;
     use chrono::TimeZone;
+    use docs_rs_opentelemetry::testing::setup_test_meter_provider;
     use std::str::FromStr as _;
 
     #[test]

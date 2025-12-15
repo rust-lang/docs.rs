@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::AnyMeterProvider;
 use anyhow::{Result, anyhow};
 use derive_more::Deref;
 use opentelemetry_sdk::metrics::{
@@ -9,11 +10,9 @@ use opentelemetry_sdk::metrics::{
     },
 };
 
-use crate::metrics::otel::AnyMeterProvider;
-
 /// set up a standalone InMemoryMetricExporter and MeterProvider for testing purposes.
 /// For when you want to collect metrics, and then inspect what was collected.
-pub(crate) fn setup_test_meter_provider() -> (InMemoryMetricExporter, AnyMeterProvider) {
+pub fn setup_test_meter_provider() -> (InMemoryMetricExporter, AnyMeterProvider) {
     let metric_exporter = InMemoryMetricExporter::default();
 
     (
@@ -29,10 +28,10 @@ pub(crate) fn setup_test_meter_provider() -> (InMemoryMetricExporter, AnyMeterPr
 /// small wrapper around the collected result of the InMemoryMetricExporter.
 /// For convenience in tests.
 #[derive(Debug)]
-pub(crate) struct CollectedMetrics(pub(crate) Vec<ResourceMetrics>);
+pub struct CollectedMetrics(pub Vec<ResourceMetrics>);
 
 impl CollectedMetrics {
-    pub(crate) fn get_metric<'a>(
+    pub fn get_metric<'a>(
         &'a self,
         scope: impl AsRef<str>,
         name: impl AsRef<str>,
@@ -70,10 +69,10 @@ impl CollectedMetrics {
 }
 
 #[derive(Debug, Deref)]
-pub(crate) struct CollectedMetric<'a>(&'a Metric);
+pub struct CollectedMetric<'a>(&'a Metric);
 
 impl<'a> CollectedMetric<'a> {
-    pub(crate) fn get_u64_counter(&'a self) -> &'a SumDataPoint<u64> {
+    pub fn get_u64_counter(&'a self) -> &'a SumDataPoint<u64> {
         let AggregatedMetrics::U64(metric_data) = self.data() else {
             panic!("Expected U64 metric data, got: {:?}", self.data());
         };
@@ -93,7 +92,7 @@ impl<'a> CollectedMetric<'a> {
         result
     }
 
-    pub(crate) fn get_f64_histogram(&'a self) -> &'a HistogramDataPoint<f64> {
+    pub fn get_f64_histogram(&'a self) -> &'a HistogramDataPoint<f64> {
         let AggregatedMetrics::F64(metric_data) = self.data() else {
             panic!("Expected F64 metric data, got: {:?}", self.data());
         };

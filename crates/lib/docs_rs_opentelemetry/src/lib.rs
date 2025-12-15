@@ -1,4 +1,8 @@
-use crate::Config;
+mod config;
+#[cfg(feature = "testing")]
+pub mod testing;
+pub use config::Config;
+
 use anyhow::Result;
 use opentelemetry::{
     InstrumentationScope,
@@ -26,8 +30,8 @@ impl MeterProviderWithExt for opentelemetry_sdk::metrics::SdkMeterProvider {
 
 /// opentelemetry metric provider setup,
 /// if no endpoint is configured, use a no-op provider
-pub(crate) fn get_meter_provider(config: &Config) -> Result<AnyMeterProvider> {
-    if let Some(ref endpoint) = config.opentelemetry_endpoint {
+pub fn get_meter_provider(config: &config::Config) -> Result<AnyMeterProvider> {
+    if let Some(ref endpoint) = config.endpoint {
         let endpoint = endpoint.to_string();
         info!(endpoint, "setting up OpenTelemetry metrics exporter");
 
@@ -61,7 +65,7 @@ pub(crate) fn get_meter_provider(config: &Config) -> Result<AnyMeterProvider> {
 /// For now, copy/paste from opentelemetry-sdk, see
 /// https://github.com/open-telemetry/opentelemetry-rust/pull/3111
 #[derive(Debug, Default)]
-pub(crate) struct NoopMeterProvider {
+pub struct NoopMeterProvider {
     _private: (),
 }
 
@@ -86,13 +90,13 @@ impl MeterProviderWithExt for NoopMeterProvider {
 
 /// A no-op instance of a `Meter`
 #[derive(Debug, Default)]
-pub(crate) struct NoopMeter {
+pub struct NoopMeter {
     _private: (),
 }
 
 impl NoopMeter {
     /// Create a new no-op meter core.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         NoopMeter { _private: () }
     }
 }

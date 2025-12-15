@@ -1,4 +1,5 @@
-use crate::{Config, metrics::otel::AnyMeterProvider};
+use crate::Config;
+use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{future::BoxFuture, stream::BoxStream};
 use opentelemetry::metrics::{Counter, ObservableGauge};
 use sqlx::{Executor, postgres::PgPoolOptions};
