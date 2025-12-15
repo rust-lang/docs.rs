@@ -29,15 +29,17 @@ opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"]
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 regex = "1"
+sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 
 [dependencies]
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
+docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
 docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
-sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+sentry = { workspace = true }
 log = "0.4"
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
