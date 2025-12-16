@@ -1,20 +1,18 @@
-use crate::Config;
-use crate::error::Result;
+use crate::{
+    RateLimitReached,
+    config::Config,
+    updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
+};
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
     Client as HttpClient,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
 use serde::Deserialize;
 use tracing::{trace, warn};
-
-use crate::{
-    APP_USER_AGENT,
-    repositories::{
-        FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,
-    },
-};
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
     nodes(ids: $ids) {
@@ -90,10 +88,6 @@ impl GitHub {
 impl RepositoryForge for GitHub {
     fn host(&self) -> &'static str {
         "github.com"
-    }
-
-    fn icon(&self) -> &'static str {
-        "github"
     }
 
     /// How many repositories to update in a single chunk. Values over 100 are probably going to be
@@ -268,19 +262,18 @@ struct GraphIssues {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, GitHub};
-    use crate::repositories::RateLimitReached;
-    use crate::repositories::updater::{RepositoryForge, repository_name};
-    use crate::test::TestEnvironment;
+    use crate::{
+        Config, GitHub, RateLimitReached,
+        updater::{RepositoryForge, repository_name},
+    };
     use anyhow::Result;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 
     fn github_config() -> anyhow::Result<Config> {
-        TestEnvironment::base_config()
-            .github_accesstoken(Some(TEST_TOKEN.to_owned()))
-            .build()
-            .map_err(Into::into)
+        let mut cfg = Config::from_environment()?;
+        cfg.github_accesstoken = Some(TEST_TOKEN.to_owned());
+        Ok(cfg)
     }
 
     async fn mock_server_and_github(config: &Config) -> (mockito::ServerGuard, GitHub) {

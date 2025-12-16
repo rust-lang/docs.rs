@@ -22,7 +22,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,sqlx-cli
+          tool: just,sqlx-cli,fd-find
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

@@ -30,7 +30,6 @@ mod docbuilder;
 mod error;
 pub mod index;
 pub mod metrics;
-pub mod repositories;
 pub mod storage;
 #[cfg(test)]
 mod test;

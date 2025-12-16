@@ -35,13 +35,6 @@ pub struct Config {
     #[builder(default)]
     pub(crate) s3_bucket_is_temporary: bool,
 
-    // Github authentication
-    pub(crate) github_accesstoken: Option<String>,
-    pub(crate) github_updater_min_rate_limit: u32,
-
-    // GitLab authentication
-    pub(crate) gitlab_accesstoken: Option<String>,
-
     // Access token for APIs for crates.io (careful: use
     // constant_time_eq for comparisons!)
     pub(crate) cratesio_token: Option<String>,
@@ -127,6 +120,7 @@ pub struct Config {
     pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
     pub(crate) registry_api: docs_rs_registry_api::Config,
     pub(crate) database: docs_rs_database::Config,
+    pub(crate) repository_stats: docs_rs_repository_stats::Config,
 }
 
 impl Config {
@@ -171,9 +165,6 @@ impl Config {
             .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
             .s3_region(env("S3_REGION", "us-west-1".to_string())?)
             .s3_endpoint(maybe_env("S3_ENDPOINT")?)
-            .github_accesstoken(maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?)
-            .github_updater_min_rate_limit(env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?)
-            .gitlab_accesstoken(maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?)
             .cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
             .max_file_size(env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?)
             .max_file_size_html(env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?)
@@ -223,7 +214,8 @@ impl Config {
             )
             .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?)
             .registry_api(docs_rs_registry_api::Config::from_environment()?)
-            .database(docs_rs_database::Config::from_environment()?))
+            .database(docs_rs_database::Config::from_environment()?)
+            .repository_stats(docs_rs_repository_stats::Config::from_environment()?))
     }
 
     pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {

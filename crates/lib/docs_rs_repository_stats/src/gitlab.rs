@@ -1,6 +1,7 @@
-use crate::error::Result;
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
     Client as HttpClient,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
@@ -11,10 +12,8 @@ use std::str::FromStr;
 use tracing::warn;
 
 use crate::{
-    APP_USER_AGENT,
-    repositories::{
-        FetchRepositoriesResult, RateLimitReached, Repository, RepositoryForge, RepositoryName,
-    },
+    RateLimitReached,
+    updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
@@ -88,10 +87,6 @@ impl GitLab {
 impl RepositoryForge for GitLab {
     fn host(&self) -> &'static str {
         self.host
-    }
-
-    fn icon(&self) -> &'static str {
-        "gitlab"
     }
 
     fn chunk_size(&self) -> usize {
@@ -266,9 +261,10 @@ struct GraphProject {
 
 #[cfg(test)]
 mod tests {
-    use super::GitLab;
-    use crate::repositories::RateLimitReached;
-    use crate::repositories::updater::{RepositoryForge, repository_name};
+    use crate::{
+        GitLab, RateLimitReached,
+        updater::{RepositoryForge, repository_name},
+    };
     use anyhow::Result;
 
     async fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {

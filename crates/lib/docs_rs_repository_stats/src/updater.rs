@@ -1,6 +1,8 @@
-use crate::Config;
-use crate::error::Result;
-use crate::repositories::{GitHub, GitLab, RateLimitReached};
+use crate::{
+    config::Config,
+    {GitHub, GitLab, RateLimitReached},
+};
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::MetadataPackage;
@@ -17,9 +19,6 @@ pub trait RepositoryForge {
     /// Result used both as the `host` column in the DB and to match repository URLs during
     /// backfill.
     fn host(&self) -> &'static str;
-
-    /// FontAwesome icon used in the front-end.
-    fn icon(&self) -> &'static str;
 
     /// How many items we can query in one graphql request.
     fn chunk_size(&self) -> usize;
@@ -68,6 +67,10 @@ impl fmt::Debug for RepositoryStatsUpdater {
 }
 
 impl RepositoryStatsUpdater {
+    pub fn from_environment(pool: Pool) -> Result<Self> {
+        Ok(Self::new(&Config::from_environment()?, pool))
+    }
+
     pub fn new(config: &Config, pool: Pool) -> Self {
         let mut updaters: Vec<Box<dyn RepositoryForge + Send + Sync>> = Vec::new();
         if let Ok(Some(updater)) = GitHub::new(config) {
@@ -82,7 +85,7 @@ impl RepositoryStatsUpdater {
         Self { updaters, pool }
     }
 
-    pub(crate) async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
+    pub async fn load_repository(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         let url = match &metadata.repository {
             Some(url) => url,
             None => {
@@ -211,9 +214,7 @@ impl RepositoryStatsUpdater {
 
             let mut missing_urls = HashSet::new();
             for row in &needs_backfilling {
-                let url = if let Some(ref url) = row.repository_url {
-                    url
-                } else {
+                let Some(url) = row.repository_url.as_ref() else {
                     continue;
                 };
 
@@ -309,7 +310,7 @@ impl RepositoryStatsUpdater {
     }
 }
 
-pub(crate) fn repository_name(url: &str) -> Option<RepositoryName<'_>> {
+pub fn repository_name(url: &str) -> Option<RepositoryName<'_>> {
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"https?://(?P<host>[^/]+)/(?P<owner>[\w\._/-]+)/(?P<repo>[\w\._-]+)").unwrap()
     });

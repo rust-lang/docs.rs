@@ -1,0 +1,25 @@
+[package]
+name = "docs_rs_repository_stats"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait  = "0.1.89"
+chrono = { workspace = true }
+docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_utils = { path = "../docs_rs_utils" }
+futures-util = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+mockito = { workspace = true }
+tokio = { workspace = true }

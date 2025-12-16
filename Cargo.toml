@@ -56,6 +56,7 @@ docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "crates/lib/docs_rs_registry_api" }
+docs_rs_repository_stats = { path = "crates/lib/docs_rs_repository_stats" }
 docs_rs_types = { path = "crates/lib/docs_rs_types" }
 docs_rs_uri = { path = "crates/lib/docs_rs_uri" }
 docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
@@ -120,7 +121,6 @@ serde_json = { workspace = true }
 bincode = { workspace = true }
 
 # axum dependencies
-async-trait = "0.1.83"
 axum = { version = "0.8.1", features = ["macros"] }
 axum-extra = { workspace = true }
 tower = "0.5.1"
