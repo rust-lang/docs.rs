@@ -15,12 +15,10 @@ use crate::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
     },
-    utils::{
-        CargoMetadata, ConfigName, MetadataPackage, copy_dir_all, get_config, report_error,
-        set_config,
-    },
+    utils::{ConfigName, copy_dir_all, get_config, report_error, set_config},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
+use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
@@ -108,6 +106,22 @@ fn build_workspace(context: &Context) -> Result<Workspace> {
     let workspace = builder.init()?;
     workspace.purge_all_build_dirs()?;
     Ok(workspace)
+}
+
+fn load_metadata_from_rustwide(
+    workspace: &Workspace,
+    toolchain: &Toolchain,
+    source_dir: &Path,
+) -> Result<CargoMetadata> {
+    let res = Command::new(workspace, toolchain.cargo())
+        .args(&["metadata", "--format-version", "1"])
+        .cd(source_dir)
+        .log_output(false)
+        .run_capture()?;
+    let [metadata] = res.stdout_lines() else {
+        bail!("invalid output returned by `cargo metadata`")
+    };
+    CargoMetadata::load_from_metadata(metadata)
 }
 
 #[derive(Debug)]
@@ -529,7 +543,7 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = CargoMetadata::load_from_rustwide(&self.workspace, &self.toolchain, path)
+        let metadata = load_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
             .map_err(|err| {
                 err.context(format!("failed to load local package {}", path.display()))
             })?;
@@ -1146,7 +1160,7 @@ impl RustwideBuilder {
         create_essential_files: bool,
         collect_metrics: bool,
     ) -> Result<FullBuildResult> {
-        let cargo_metadata = CargoMetadata::load_from_rustwide(
+        let cargo_metadata = load_metadata_from_rustwide(
             &self.workspace,
             &self.toolchain,
             &build.host_source_dir(),

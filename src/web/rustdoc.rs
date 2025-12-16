@@ -6,7 +6,7 @@ use crate::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
         rustdoc_json_path,
     },
-    utils::{self, Dependency},
+    utils,
     web::{
         MetaData, axum_cached_redirect,
         cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
@@ -38,6 +38,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use docs_rs_cargo_metadata::Dependency;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_types::{KrateName, ReqVersion};
@@ -1075,11 +1076,11 @@ mod test {
         docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
         storage::decompress,
         test::*,
-        utils::Dependency,
         web::cache::CachePolicy,
     };
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
+    use docs_rs_cargo_metadata::Dependency;
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_types::Version;
     use docs_rs_uri::encode_url_path;

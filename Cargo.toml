@@ -46,6 +46,7 @@ tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 
 [dependencies]
+docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata" }
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_fastly = { path = "crates/lib/docs_rs_fastly" }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
@@ -138,6 +139,7 @@ chrono = { workspace = true }
 constant_time_eq = "0.4.2"
 
 [dev-dependencies]
+docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata", features = ["testing"] }
 docs_rs_fastly = { path = "crates/lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
