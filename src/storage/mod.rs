@@ -4,6 +4,7 @@ mod database;
 mod s3;
 
 pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
+
 use self::{
     compression::{compress_async, wrap_reader_for_decompression},
     database::DatabaseBackend,
@@ -12,7 +13,6 @@ use self::{
 use crate::{
     Config,
     db::{
-        Pool,
         file::{FileEntry, detect_mime},
         mimes,
     },
@@ -21,6 +21,7 @@ use crate::{
 use axum_extra::headers;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, Version};
 use docs_rs_utils::spawn_blocking;

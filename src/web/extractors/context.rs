@@ -1,15 +1,13 @@
 //! a collection of custom extractors related to our app-context (context::Context)
 
-use crate::{
-    db::{AsyncPoolClient, Pool},
-    web::error::AxumNope,
-};
+use crate::web::error::AxumNope;
 use anyhow::Context as _;
 use axum::{
     RequestPartsExt,
     extract::{Extension, FromRequestParts},
     http::request::Parts,
 };
+use docs_rs_database::{AsyncPoolClient, Pool};
 use std::ops::{Deref, DerefMut};
 
 /// Extractor for a async sqlx database connection.

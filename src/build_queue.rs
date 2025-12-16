@@ -1,6 +1,6 @@
 use crate::{
     BuildPackageSummary, Config, Context, Index, RustwideBuilder,
-    db::{AsyncPoolClient, Pool, delete_crate, delete_version, update_latest_version_id},
+    db::{delete_crate, delete_version, update_latest_version_id},
     docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
     storage::AsyncStorage,
@@ -9,6 +9,7 @@ use crate::{
 use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
+use docs_rs_database::{AsyncPoolClient, Pool};
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{CrateId, KrateName, Version};

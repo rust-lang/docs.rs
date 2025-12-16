@@ -17,11 +17,6 @@ pub struct Config {
     /// How long to wait between registry checks
     pub(crate) delay_between_registry_fetches: Duration,
 
-    // Database connection params
-    pub(crate) database_url: String,
-    pub(crate) max_pool_size: u32,
-    pub(crate) min_pool_idle: u32,
-
     // Storage params
     pub(crate) storage_backend: StorageKind,
 
@@ -131,6 +126,7 @@ pub struct Config {
     pub(crate) fastly: docs_rs_fastly::Config,
     pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
     pub(crate) registry_api: docs_rs_registry_api::Config,
+    pub(crate) database: docs_rs_database::Config,
 }
 
 impl Config {
@@ -170,9 +166,6 @@ impl Config {
             .registry_index_path(env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?)
             .registry_url(maybe_env("REGISTRY_URL")?)
             .prefix(prefix.clone())
-            .database_url(require_env("DOCSRS_DATABASE_URL")?)
-            .max_pool_size(env("DOCSRS_MAX_POOL_SIZE", 90u32)?)
-            .min_pool_idle(env("DOCSRS_MIN_POOL_IDLE", 10u32)?)
             .storage_backend(env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?)
             .aws_sdk_max_retries(env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?)
             .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
@@ -229,7 +222,8 @@ impl Config {
                     .context("error reading fastly config from environment")?,
             )
             .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?)
-            .registry_api(docs_rs_registry_api::Config::from_environment()?))
+            .registry_api(docs_rs_registry_api::Config::from_environment()?)
+            .database(docs_rs_database::Config::from_environment()?))
     }
 
     pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {

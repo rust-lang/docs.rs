@@ -1,8 +1,9 @@
 use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Storage, db::Pool,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Storage,
     repositories::RepositoryStatsUpdater,
 };
 use anyhow::Result;
+use docs_rs_database::Pool;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_registry_api::RegistryApi;
@@ -27,7 +28,7 @@ impl Context {
     /// Create a new context environment from the given configuration.
     pub async fn from_config(config: Config) -> Result<Self> {
         let meter_provider = get_meter_provider(&config.opentelemetry)?;
-        let pool = Pool::new(&config, &meter_provider).await?;
+        let pool = Pool::new(&config.database, &meter_provider).await?;
         let cdn = config
             .fastly
             .is_valid()

@@ -1,7 +1,6 @@
-use crate::Config;
+use crate::{Config, errors::PoolError, metrics::PoolMetrics};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{future::BoxFuture, stream::BoxStream};
-use opentelemetry::metrics::{Counter, ObservableGauge};
 use sqlx::{Executor, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
@@ -12,58 +11,6 @@ use tokio::runtime;
 use tracing::debug;
 
 const DEFAULT_SCHEMA: &str = "public";
-
-#[derive(Debug)]
-struct PoolMetrics {
-    failed_connections: Counter<u64>,
-    _idle_connections: ObservableGauge<u64>,
-    _used_connections: ObservableGauge<u64>,
-    _max_connections: ObservableGauge<u64>,
-}
-
-impl PoolMetrics {
-    fn new(pool: sqlx::PgPool, meter_provider: &AnyMeterProvider) -> Self {
-        let meter = meter_provider.meter("pool");
-        const PREFIX: &str = "docsrs.db.pool";
-        Self {
-            failed_connections: meter
-                .u64_counter(format!("{PREFIX}.failed_connections"))
-                .with_unit("1")
-                .build(),
-            _idle_connections: meter
-                .u64_observable_gauge(format!("{PREFIX}.idle_connections"))
-                .with_unit("1")
-                .with_callback({
-                    let pool = pool.clone();
-                    move |observer| {
-                        observer.observe(pool.num_idle() as u64, &[]);
-                    }
-                })
-                .build(),
-            _used_connections: meter
-                .u64_observable_gauge(format!("{PREFIX}.used_connections"))
-                .with_unit("1")
-                .with_callback({
-                    let pool = pool.clone();
-                    move |observer| {
-                        let used = pool.size() as u64 - pool.num_idle() as u64;
-                        observer.observe(used, &[]);
-                    }
-                })
-                .build(),
-            _max_connections: meter
-                .u64_observable_gauge(format!("{PREFIX}.max_connections"))
-                .with_unit("1")
-                .with_callback({
-                    let pool = pool.clone();
-                    move |observer| {
-                        observer.observe(pool.size() as u64, &[]);
-                    }
-                })
-                .build(),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Pool {
@@ -83,8 +30,8 @@ impl Pool {
         Self::new_inner(config, DEFAULT_SCHEMA, otel_meter_provider).await
     }
 
-    #[cfg(test)]
-    pub(crate) async fn new_with_schema(
+    #[cfg(feature = "testing")]
+    pub async fn new_with_schema(
         config: &Config,
         schema: &str,
         otel_meter_provider: &AnyMeterProvider,
@@ -232,13 +179,4 @@ impl Drop for AsyncPoolClient {
         let _guard = self.runtime.enter();
         drop(self.inner.take())
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PoolError {
-    #[error("failed to create the database connection pool")]
-    AsyncPoolCreationFailed(#[source] sqlx::Error),
-
-    #[error("failed to get a database connection")]
-    AsyncClientError(#[source] sqlx::Error),
 }
