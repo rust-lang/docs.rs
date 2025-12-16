@@ -1,5 +1,5 @@
 use crate::{
-    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
+    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, Storage,
     db::{
         Pool, add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
@@ -22,6 +22,7 @@ use crate::{
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_registry_api::RegistryApi;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
 use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
@@ -1430,9 +1431,9 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry_api::ReleaseData;
     use crate::storage::{CompressionAlgorithm, compression};
     use crate::test::{AxumRouterTestExt, TestEnvironment};
+    use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{BuildStatus, Feature, ReleaseId, Version};
     use pretty_assertions::assert_eq;
     use std::{io, iter};

@@ -6,7 +6,6 @@ use std::{
     path::{self, Path, PathBuf},
     time::Duration,
 };
-use url::Url;
 
 #[derive(Debug, derive_builder::Builder)]
 #[builder(pattern = "owned")]
@@ -14,7 +13,6 @@ pub struct Config {
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
-    pub registry_api_host: Url,
 
     /// How long to wait between registry checks
     pub(crate) delay_between_registry_fetches: Duration,
@@ -52,9 +50,6 @@ pub struct Config {
     // Access token for APIs for crates.io (careful: use
     // constant_time_eq for comparisons!)
     pub(crate) cratesio_token: Option<String>,
-
-    // amount of retries for external API calls, mostly crates.io
-    pub crates_io_api_call_retries: u32,
 
     // request timeout in seconds
     pub(crate) request_timeout: Option<Duration>,
@@ -135,6 +130,7 @@ pub struct Config {
 
     pub(crate) fastly: docs_rs_fastly::Config,
     pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
+    pub(crate) registry_api: docs_rs_registry_api::Config,
 }
 
 impl Config {
@@ -171,13 +167,8 @@ impl Config {
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 60,
             )?))
-            .crates_io_api_call_retries(env("DOCSRS_CRATESIO_API_CALL_RETRIES", 3u32)?)
             .registry_index_path(env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?)
             .registry_url(maybe_env("REGISTRY_URL")?)
-            .registry_api_host(env(
-                "DOCSRS_REGISTRY_API_HOST",
-                "https://crates.io".parse().unwrap(),
-            )?)
             .prefix(prefix.clone())
             .database_url(require_env("DOCSRS_DATABASE_URL")?)
             .max_pool_size(env("DOCSRS_MAX_POOL_SIZE", 90u32)?)
@@ -237,7 +228,8 @@ impl Config {
                 docs_rs_fastly::Config::from_environment()
                     .context("error reading fastly config from environment")?,
             )
-            .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?))
+            .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?)
+            .registry_api(docs_rs_registry_api::Config::from_environment()?))
     }
 
     pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
