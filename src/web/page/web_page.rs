@@ -69,7 +69,7 @@ macro_rules! impl_axum_webpage {
 
                 $(
                     let canonical_url = {
-                        let canonical_url: fn(&Self) -> Option<$crate::web::headers::CanonicalUrl> = $canonical_url;
+                        let canonical_url: fn(&Self) -> Option<docs_rs_headers::CanonicalUrl> = $canonical_url;
                         (canonical_url)(&self)
                     };
                     if let Some(canonical_url) = canonical_url {

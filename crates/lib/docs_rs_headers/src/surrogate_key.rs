@@ -96,7 +96,7 @@ impl From<KrateName> for SurrogateKey {
 }
 
 /// A full Fastly Surrogate-Key header, containing zero or more keys.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct SurrogateKeys(BTreeSet<SurrogateKey>);
 
 impl IntoIterator for SurrogateKeys {
@@ -239,7 +239,7 @@ impl SurrogateKeys {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "testing")]
     pub fn try_from_iter<I>(iter: I) -> anyhow::Result<Self>
     where
         I: IntoIterator<Item = SurrogateKey>,
@@ -258,7 +258,7 @@ impl SurrogateKeys {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "testing")]
 impl FromStr for SurrogateKeys {
     type Err = anyhow::Error;
 
@@ -274,7 +274,7 @@ impl FromStr for SurrogateKeys {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::headers::{test_typed_decode, test_typed_encode};
+    use crate::testing::{test_typed_decode, test_typed_encode};
     use std::ops::RangeInclusive;
     use test_case::test_case;
 

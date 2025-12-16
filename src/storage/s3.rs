@@ -1,5 +1,5 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{Config, web::headers::compute_etag};
+use crate::Config;
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
@@ -12,6 +12,7 @@ use aws_sdk_s3::{
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use axum_extra::headers;
 use chrono::Utc;
+use docs_rs_headers::compute_etag;
 use futures_util::{
     future::TryFutureExt,
     pin_mut,

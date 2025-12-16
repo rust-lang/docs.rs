@@ -1164,7 +1164,8 @@ pub(crate) fn source_archive_path(name: &str, version: &Version) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test::TestEnvironment, web::headers::compute_etag};
+    use crate::test::TestEnvironment;
+    use docs_rs_headers::compute_etag;
     use std::env;
     use test_case::test_case;
 
@@ -1525,8 +1526,10 @@ mod test {
 /// This is the preferred way to test whether backends work.
 #[cfg(test)]
 mod backend_tests {
+    use docs_rs_headers::compute_etag;
+
     use super::*;
-    use crate::{test::TestEnvironment, web::headers::compute_etag};
+    use crate::test::TestEnvironment;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();

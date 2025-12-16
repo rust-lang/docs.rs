@@ -8,15 +8,14 @@ use crate::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
-        filters,
-        headers::CanonicalUrl,
-        match_version,
+        filters, match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
 use anyhow::anyhow;
 use askama::Template;
 use axum::response::IntoResponse;
+use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{Feature as DbFeature, KrateName, ReqVersion};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};

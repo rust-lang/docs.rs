@@ -1,6 +1,4 @@
-use super::{
-    cache::CachePolicy, headers::IfNoneMatch, metrics::request_recorder, routes::get_static,
-};
+use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
 use crate::{db::mimes::APPLICATION_OPENSEARCH_XML, web::cache::STATIC_ASSET_CACHE_POLICY};
 use axum::{
     Router as AxumRouter,
@@ -13,6 +11,7 @@ use axum_extra::{
     headers::{ContentType, ETag, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use docs_rs_headers::IfNoneMatch;
 use http::{StatusCode, Uri};
 use tower_http::services::ServeDir;
 
@@ -130,11 +129,9 @@ pub(crate) fn build_static_router() -> AxumRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
-        web::headers::compute_etag,
-    };
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use axum::{Router, body::Body};
+    use docs_rs_headers::compute_etag;
     use http::{
         HeaderMap,
         header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},

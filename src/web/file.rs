@@ -1,6 +1,6 @@
 //! Database based file handler
 
-use super::{cache::CachePolicy, headers::IfNoneMatch};
+use super::cache::CachePolicy;
 use crate::{
     Config,
     error::Result,
@@ -16,6 +16,7 @@ use axum_extra::{
     TypedHeader,
     headers::{ContentType, LastModified},
 };
+use docs_rs_headers::IfNoneMatch;
 use std::time::SystemTime;
 use tokio_util::io::ReaderStream;
 use tracing::warn;
@@ -135,12 +136,11 @@ impl StreamingFile {
 mod tests {
     use super::*;
     use crate::{
-        storage::CompressionAlgorithm,
-        test::TestEnvironment,
-        web::{cache::STATIC_ASSET_CACHE_POLICY, headers::compute_etag},
+        storage::CompressionAlgorithm, test::TestEnvironment, web::cache::STATIC_ASSET_CACHE_POLICY,
     };
     use axum_extra::headers::{ETag, HeaderMapExt as _};
     use chrono::Utc;
+    use docs_rs_headers::compute_etag;
     use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
 

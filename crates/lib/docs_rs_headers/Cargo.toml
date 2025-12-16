@@ -1,0 +1,25 @@
+[package]
+name = "docs_rs_headers"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+axum-core = "0.5.5"
+axum-extra = { workspace = true }
+askama = { workspace = true }
+derive_more = { workspace = true }
+docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_uri = { path = "../docs_rs_uri" }
+http = { workspace = true }
+itertools = { workspace = true }
+md5 = "0.8.0"
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+test-case = { workspace = true }
+tokio = { workspace = true }
+
+[features]
+testing = []

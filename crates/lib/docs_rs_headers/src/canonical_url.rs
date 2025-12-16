@@ -1,8 +1,8 @@
 use anyhow::Result;
 use askama::filters::HtmlSafe;
-use axum::http::uri::Uri;
 use axum_extra::headers::{Header, HeaderName, HeaderValue};
 use docs_rs_uri::EscapedURI;
+use http::uri::Uri;
 use serde::Serialize;
 use std::{fmt, ops::Deref};
 
@@ -96,9 +96,8 @@ impl HtmlSafe for CanonicalUrl {}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use axum::http::HeaderMap;
     use axum_extra::headers::HeaderMapExt;
+    use http::HeaderMap;
 
     #[test]
     fn test_serialize_canonical_from_uri() {

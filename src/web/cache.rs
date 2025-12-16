@@ -1,12 +1,10 @@
-use crate::{
-    config::Config,
-    web::headers::{SURROGATE_CONTROL, SURROGATE_KEY, SurrogateKey, SurrogateKeys},
-};
+use crate::config::Config;
 use axum::{
     Extension, extract::Request as AxumHttpRequest, middleware::Next,
     response::Response as AxumResponse,
 };
 use axum_extra::headers::HeaderMapExt as _;
+use docs_rs_headers::{SURROGATE_CONTROL, SURROGATE_KEY, SurrogateKey, SurrogateKeys};
 use http::{
     HeaderMap, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, ETAG},
