@@ -14,7 +14,6 @@ use crate::{
         crate_details::CrateDetails,
         csp::Csp,
         error::{AxumNope, AxumResult},
-        escaped_uri::EscapedURI,
         extractors::{
             DbConnection, Path, WantedCompression,
             rustdoc::{PageKind, RustdocParams, UrlParams},
@@ -42,6 +41,7 @@ use axum_extra::{
     typed_header::TypedHeader,
 };
 use docs_rs_types::{KrateName, ReqVersion};
+use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{
@@ -1077,11 +1077,12 @@ mod test {
         storage::decompress,
         test::*,
         utils::Dependency,
-        web::{cache::CachePolicy, encode_url_path},
+        web::cache::CachePolicy,
     };
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
     use docs_rs_types::Version;
+    use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;

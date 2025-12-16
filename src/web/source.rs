@@ -363,11 +363,12 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
-        web::{cache::CachePolicy, encode_url_path, headers::IfNoneMatch},
+        web::{cache::CachePolicy, headers::IfNoneMatch},
     };
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
     use docs_rs_types::KrateName;
+    use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use mime::APPLICATION_PDF;
     use reqwest::StatusCode;

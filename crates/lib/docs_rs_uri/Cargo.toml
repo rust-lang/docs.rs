@@ -1,0 +1,15 @@
+[package]
+name = "docs_rs_uri"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+askama = { workspace = true }
+bincode = { workspace = true }
+http = { workspace = true }
+percent-encoding = "2.2.0"
+url = { workspace = true }
+
+[dev-dependencies]
+test-case = { workspace = true }

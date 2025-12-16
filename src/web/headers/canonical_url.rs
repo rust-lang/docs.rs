@@ -1,8 +1,8 @@
-use crate::web::escaped_uri::EscapedURI;
 use anyhow::Result;
 use askama::filters::HtmlSafe;
 use axum::http::uri::Uri;
 use axum_extra::headers::{Header, HeaderName, HeaderValue};
+use docs_rs_uri::EscapedURI;
 use serde::Serialize;
 use std::{fmt, ops::Deref};
 

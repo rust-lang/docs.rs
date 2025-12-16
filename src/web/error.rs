@@ -1,7 +1,7 @@
 use crate::{
     db::PoolError,
     storage::PathNotFoundError,
-    web::{AxumErrorPage, cache::CachePolicy, escaped_uri::EscapedURI, releases::Search},
+    web::{AxumErrorPage, cache::CachePolicy, releases::Search},
 };
 use anyhow::{Result, anyhow};
 use axum::{
@@ -9,6 +9,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
+use docs_rs_uri::EscapedURI;
 use std::borrow::Cow;
 
 #[derive(Debug, thiserror::Error)]

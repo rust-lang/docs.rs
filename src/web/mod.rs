@@ -6,7 +6,6 @@ pub(crate) mod cache;
 pub(crate) mod crate_details;
 mod csp;
 pub(crate) mod error;
-mod escaped_uri;
 pub(crate) mod extractors;
 mod features;
 mod file;
@@ -48,7 +47,6 @@ use docs_rs_types::{BuildStatus, CrateId, KrateName, ReqVersion, Version, Versio
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use error::AxumNope;
 use page::TemplateData;
-use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use sentry::integrations::tower as sentry_tower;
 use serde::Serialize;
 use serde_json::Value;
@@ -60,19 +58,6 @@ use std::{
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{info, instrument};
-
-// from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
-// and https://github.com/tokio-rs/axum/blob/main/axum-extra/src/lib.rs
-const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
-const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-
-pub(crate) fn encode_url_path(path: &str) -> String {
-    utf8_percent_encode(path, PATH).to_string()
-}
-
-pub(crate) fn url_decode<'a>(input: &'a str) -> Result<Cow<'a, str>> {
-    Ok(percent_encoding::percent_decode(input.as_bytes()).decode_utf8()?)
-}
 
 /// Picks the correct "rustdoc.css" static file depending on which rustdoc version was used to
 /// generate this version of this crate.
@@ -641,8 +626,6 @@ impl_axum_webpage! {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr as _;
-
     use super::*;
     use crate::docbuilder::DocCoverage;
     use crate::test::{
@@ -653,6 +636,7 @@ mod test {
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use std::str::FromStr as _;
     use test_case::test_case;
 
     async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
@@ -1235,12 +1219,5 @@ mod test {
     fn test_axum_redirect_failure(path: &str) {
         assert!(axum_redirect(path).is_err());
         assert!(axum_cached_redirect(path, cache::CachePolicy::NoCaching).is_err());
-    }
-
-    #[test_case("/something/", "/something/")] // already valid path
-    #[test_case("/something>", "/something%3E")] // something to encode
-    #[test_case("/something%3E", "/something%3E")] // re-running doesn't change anything
-    fn test_encode_url_path(input: &str, expected: &str) {
-        assert_eq!(encode_url_path(input), expected);
     }
 }

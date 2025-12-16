@@ -2,10 +2,7 @@
 
 use crate::{
     storage::CompressionAlgorithm,
-    web::{
-        MatchedRelease, MetaData, error::AxumNope, escaped_uri::EscapedURI, extractors::Path,
-        url_decode,
-    },
+    web::{MatchedRelease, MetaData, error::AxumNope, extractors::Path},
 };
 use anyhow::Result;
 use axum::{
@@ -14,6 +11,7 @@ use axum::{
     http::{Uri, request::Parts},
 };
 use docs_rs_types::{BuildId, KrateName, ReqVersion};
+use docs_rs_uri::{EscapedURI, url_decode};
 use itertools::Itertools as _;
 use serde::Deserialize;
 
