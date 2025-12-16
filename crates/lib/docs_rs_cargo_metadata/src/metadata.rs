@@ -1,34 +1,15 @@
-use crate::{error::Result, web::extractors::rustdoc::RustdocParams};
-use anyhow::{Context, bail};
-use docs_rs_types::{KrateName, ReqVersion, Version, VersionReq};
-use rustwide::{Toolchain, Workspace, cmd::Command};
+use anyhow::{Context, Result};
+use docs_rs_types::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 
-pub(crate) struct CargoMetadata {
+pub struct CargoMetadata {
     root: Package,
 }
 
 impl CargoMetadata {
-    pub(crate) fn load_from_rustwide(
-        workspace: &Workspace,
-        toolchain: &Toolchain,
-        source_dir: &Path,
-    ) -> Result<Self> {
-        let res = Command::new(workspace, toolchain.cargo())
-            .args(&["metadata", "--format-version", "1"])
-            .cd(source_dir)
-            .log_output(false)
-            .run_capture()?;
-        let [metadata] = res.stdout_lines() else {
-            bail!("invalid output returned by `cargo metadata`")
-        };
-        Self::load_from_metadata(metadata)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn load_from_host_path(source_dir: &Path) -> Result<Self> {
+    #[cfg(feature = "testing")]
+    pub fn load_from_host_path(source_dir: &std::path::Path) -> Result<Self> {
         let res = std::process::Command::new("cargo")
             .args(["metadata", "--format-version", "1", "--offline"])
             .current_dir(source_dir)
@@ -36,12 +17,12 @@ impl CargoMetadata {
         let status = res.status;
         if !status.success() {
             let stderr = std::str::from_utf8(&res.stderr).unwrap_or("");
-            bail!("error returned by `cargo metadata`: {status}\n{stderr}")
+            anyhow::bail!("error returned by `cargo metadata`: {status}\n{stderr}")
         }
         Self::load_from_metadata(std::str::from_utf8(&res.stdout)?)
     }
 
-    pub(crate) fn load_from_metadata(metadata: &str) -> Result<Self> {
+    pub fn load_from_metadata(metadata: &str) -> Result<Self> {
         let metadata = serde_json::from_str::<DeserializedMetadata>(metadata)?;
         let root = metadata.resolve.root;
         Ok(CargoMetadata {
@@ -53,26 +34,26 @@ impl CargoMetadata {
         })
     }
 
-    pub(crate) fn root(&self) -> &Package {
+    pub fn root(&self) -> &Package {
         &self.root
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct Package {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) version: Version,
-    pub(crate) license: Option<String>,
-    pub(crate) repository: Option<String>,
-    pub(crate) homepage: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) documentation: Option<String>,
-    pub(crate) dependencies: Vec<Dependency>,
-    pub(crate) targets: Vec<Target>,
-    pub(crate) readme: Option<String>,
-    pub(crate) keywords: Vec<String>,
-    pub(crate) features: HashMap<String, Vec<String>>,
+pub struct Package {
+    pub id: String,
+    pub name: String,
+    pub version: Version,
+    pub license: Option<String>,
+    pub repository: Option<String>,
+    pub homepage: Option<String>,
+    pub description: Option<String>,
+    pub documentation: Option<String>,
+    pub dependencies: Vec<Dependency>,
+    pub targets: Vec<Target>,
+    pub readme: Option<String>,
+    pub keywords: Vec<String>,
+    pub features: HashMap<String, Vec<String>>,
 }
 
 impl Package {
@@ -82,7 +63,7 @@ impl Package {
             .find(|target| target.crate_types.iter().any(|kind| kind != "bin"))
     }
 
-    pub(crate) fn is_library(&self) -> bool {
+    pub fn is_library(&self) -> bool {
         self.library_target().is_some()
     }
 
@@ -90,7 +71,7 @@ impl Package {
         name.replace('-', "_")
     }
 
-    pub(crate) fn package_name(&self) -> String {
+    pub fn package_name(&self) -> String {
         self.library_name().unwrap_or_else(|| {
             self.targets
                 .first()
@@ -99,25 +80,25 @@ impl Package {
         })
     }
 
-    pub(crate) fn library_name(&self) -> Option<String> {
+    pub fn library_name(&self) -> Option<String> {
         self.library_target()
             .map(|target| self.normalize_package_name(&target.name))
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct Target {
-    pub(crate) name: String,
-    #[cfg(not(test))]
+pub struct Target {
+    pub name: String,
+    #[cfg(not(feature = "testing"))]
     crate_types: Vec<String>,
-    #[cfg(test)]
-    pub(crate) crate_types: Vec<String>,
-    pub(crate) src_path: Option<String>,
+    #[cfg(feature = "testing")]
+    pub crate_types: Vec<String>,
+    pub src_path: Option<String>,
 }
 
 impl Target {
-    #[cfg(test)]
-    pub(crate) fn dummy_lib(name: String, src_path: Option<String>) -> Self {
+    #[cfg(feature = "testing")]
+    pub fn dummy_lib(name: String, src_path: Option<String>) -> Self {
         Target {
             name,
             crate_types: vec!["lib".into()],
@@ -127,25 +108,12 @@ impl Target {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub(crate) struct Dependency {
-    pub(crate) name: String,
-    pub(crate) req: VersionReq,
-    pub(crate) kind: Option<String>,
-    pub(crate) rename: Option<String>,
-    pub(crate) optional: bool,
-}
-
-impl Dependency {
-    pub(crate) fn rustdoc_params(&self) -> RustdocParams {
-        RustdocParams::new(
-            // I validated in the database, which makes me assume that renames are
-            // handled before storing the deps into the column.
-            self.name
-                .parse::<KrateName>()
-                .expect("we validated that the dep name is always a valid KrateName"),
-        )
-        .with_req_version(ReqVersion::Semver(self.req.clone()))
-    }
+pub struct Dependency {
+    pub name: String,
+    pub req: VersionReq,
+    pub kind: Option<String>,
+    pub rename: Option<String>,
+    pub optional: bool,
 }
 
 impl bincode::Encode for Dependency {
@@ -172,7 +140,7 @@ impl bincode::Encode for Dependency {
 }
 
 impl Dependency {
-    #[cfg(test)]
+    #[cfg(feature = "testing")]
     pub fn new(name: String, req: VersionReq) -> Dependency {
         Dependency {
             name,
@@ -183,7 +151,7 @@ impl Dependency {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "testing")]
     pub fn set_optional(mut self, optional: bool) -> Self {
         self.optional = optional;
         self

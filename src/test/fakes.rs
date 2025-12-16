@@ -10,11 +10,11 @@ use crate::{
         AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, compress,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
     },
-    utils::{Dependency, MetadataPackage, cargo_metadata::Target},
 };
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{BuildId, BuildStatus, ReleaseId, Version, VersionReq};
 use std::{collections::HashMap, fmt, iter, sync::Arc};

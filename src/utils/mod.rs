@@ -1,10 +1,6 @@
 //! Various utilities for docs.rs
 
-pub(crate) use self::{
-    cargo_metadata::{CargoMetadata, Dependency, Package as MetadataPackage},
-    copy::copy_dir_all,
-    html::rewrite_rustdoc_html_stream,
-};
+pub(crate) use self::{copy::copy_dir_all, html::rewrite_rustdoc_html_stream};
 pub use self::{
     daemon::{start_daemon, watch_registry},
     queue::{
@@ -14,7 +10,6 @@ pub use self::{
     queue_builder::queue_builder,
 };
 
-pub(crate) mod cargo_metadata;
 pub mod consistency;
 mod copy;
 pub mod daemon;

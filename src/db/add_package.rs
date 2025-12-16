@@ -1,12 +1,11 @@
 use crate::{
-    db::types::dependencies::ReleaseDependencyList,
     docbuilder::DocCoverage,
     error::Result,
     storage::CompressionAlgorithm,
-    utils::MetadataPackage,
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
+use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, Version};
 use docs_rs_utils::rustc_version::parse_rustc_date;
@@ -623,8 +622,8 @@ where
 mod test {
     use super::*;
     use crate::test::*;
-    use crate::utils::CargoMetadata;
     use chrono::NaiveDate;
+    use docs_rs_cargo_metadata::CargoMetadata;
     use docs_rs_registry_api::OwnerKind;
     use std::slice;
     use test_case::test_case;
