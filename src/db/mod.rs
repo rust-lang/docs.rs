@@ -13,7 +13,6 @@ pub use self::{
     file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,
     pool::{AsyncPoolClient, Pool, PoolError},
-    types::{BuildId, CrateId, ReleaseId},
 };
 
 mod add_package;

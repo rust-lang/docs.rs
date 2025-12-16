@@ -1991,6 +1991,7 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
+ "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
  "flate2",
@@ -2025,11 +2026,9 @@ dependencies = [
  "regex",
  "reqwest",
  "rustwide",
- "semver",
  "sentry",
  "serde",
  "serde_json",
- "serde_with",
  "slug",
  "sqlx",
  "strum",
@@ -2086,6 +2085,23 @@ dependencies = [
  "opentelemetry_sdk",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "docs_rs_types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode 2.0.1",
+ "crates_io_validation",
+ "derive_more 2.1.0",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sqlx",
+ "test-case",
+ "tokio",
 ]
 
 [[package]]

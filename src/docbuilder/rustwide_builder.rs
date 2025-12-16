@@ -1,11 +1,10 @@
 use crate::{
     AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, RegistryApi, Storage,
     db::{
-        BuildId, CrateId, Pool, ReleaseId, add_doc_coverage, add_path_into_remote_archive,
+        Pool, add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
         file::{add_path_into_database, file_list_to_json},
         finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-        types::{BuildStatus, version::Version},
         update_build_with_error, update_crate_data_in_database,
     },
     docbuilder::Limits,
@@ -23,6 +22,7 @@ use crate::{
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
 use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
@@ -1430,10 +1430,10 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::Feature;
     use crate::registry_api::ReleaseData;
     use crate::storage::{CompressionAlgorithm, compression};
     use crate::test::{AxumRouterTestExt, TestEnvironment};
+    use docs_rs_types::{BuildStatus, Feature, ReleaseId, Version};
     use pretty_assertions::assert_eq;
     use std::{io, iter};
     use test_case::test_case;

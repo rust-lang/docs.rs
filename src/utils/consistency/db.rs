@@ -1,6 +1,7 @@
 use super::data::{Crate, Crates, Release, Releases};
-use crate::{Config, db::types::version::Version};
+use crate::Config;
 use anyhow::Result;
+use docs_rs_types::Version;
 use itertools::Itertools;
 
 pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Result<Crates> {

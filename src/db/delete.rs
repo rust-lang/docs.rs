@@ -1,14 +1,14 @@
 use crate::{
     Config,
-    db::types::version::Version,
     error::Result,
     storage::{AsyncStorage, rustdoc_archive_path, source_archive_path},
 };
 use anyhow::Context as _;
+use docs_rs_types::{CrateId, Version};
 use fn_error_context::context;
 use sqlx::Connection;
 
-use super::{CrateId, update_latest_version_id};
+use super::update_latest_version_id;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
@@ -206,10 +206,10 @@ async fn delete_crate_from_database(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::ReleaseId;
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::storage::{CompressionAlgorithm, rustdoc_json_path};
     use crate::test::{KRATE, V1, V2, async_wrapper, fake_release_that_failed_before_build};
+    use docs_rs_types::ReleaseId;
     use test_case::test_case;
 
     async fn crate_exists(conn: &mut sqlx::PgConnection, name: &str) -> Result<bool> {

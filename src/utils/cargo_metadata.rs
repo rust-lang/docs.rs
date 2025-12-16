@@ -1,9 +1,7 @@
-use crate::db::types::krate_name::KrateName;
-use crate::web::ReqVersion;
-use crate::{db::types::version::Version, error::Result, web::extractors::rustdoc::RustdocParams};
+use crate::{error::Result, web::extractors::rustdoc::RustdocParams};
 use anyhow::{Context, bail};
+use docs_rs_types::{KrateName, ReqVersion, Version, VersionReq};
 use rustwide::{Toolchain, Workspace, cmd::Command};
-use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

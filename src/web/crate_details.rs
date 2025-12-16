@@ -1,18 +1,12 @@
 use crate::{
     AsyncStorage,
-    db::{
-        BuildId, CrateId, ReleaseId,
-        types::{
-            BuildStatus, dependencies::ReleaseDependencyList, krate_name::KrateName,
-            version::Version,
-        },
-    },
+    db::types::dependencies::ReleaseDependencyList,
     impl_axum_webpage,
     registry_api::OwnerKind,
     storage::PathNotFoundError,
     utils::Dependency,
     web::{
-        MatchedRelease, MetaData, ReqVersion,
+        MatchedRelease, MetaData,
         cache::CachePolicy,
         error::{AxumNope, AxumResult},
         extractors::{
@@ -32,6 +26,7 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
+use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use log::warn;
 use serde_json::Value;
@@ -729,13 +724,13 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::krate_name::KrateName;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
         async_wrapper, fake_release_that_failed_before_build,
     };
     use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
+    use docs_rs_types::KrateName;
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;

@@ -1,10 +1,8 @@
 use crate::{
-    AsyncStorage, Config,
-    db::{BuildId, types::version::Version},
-    impl_axum_webpage,
+    AsyncStorage, Config, impl_axum_webpage,
     storage::PathNotFoundError,
     web::{
-        MetaData, ReqVersion,
+        MetaData,
         cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
         error::{AxumNope, AxumResult},
         extractors::{
@@ -21,6 +19,7 @@ use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
+use docs_rs_types::{BuildId, ReqVersion, Version};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -363,12 +362,12 @@ pub(crate) async fn source_browser_handler(
 #[cfg(test)]
 mod tests {
     use crate::{
-        db::types::krate_name::KrateName,
         test::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
         web::{cache::CachePolicy, encode_url_path, headers::IfNoneMatch},
     };
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
+    use docs_rs_types::KrateName;
     use kuchikiki::traits::TendrilSink;
     use mime::APPLICATION_PDF;
     use reqwest::StatusCode;

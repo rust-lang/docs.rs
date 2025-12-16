@@ -1,7 +1,5 @@
 use crate::{
-    AsyncStorage, Config,
-    db::{BuildId, types::BuildStatus},
-    impl_axum_webpage,
+    AsyncStorage, Config, impl_axum_webpage,
     web::{
         MetaData,
         cache::CachePolicy,
@@ -16,6 +14,7 @@ use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
+use docs_rs_types::{BuildId, BuildStatus};
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -185,13 +184,11 @@ pub(crate) async fn build_details_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        db::types::{BuildId, ReleaseId},
-        test::{
-            AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, V0_1,
-            async_wrapper, fake_release_that_failed_before_build,
-        },
+    use crate::test::{
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, V0_1, async_wrapper,
+        fake_release_that_failed_before_build,
     };
+    use docs_rs_types::{BuildId, ReleaseId};
     use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
 

@@ -1,8 +1,7 @@
 use crate::{
-    db::types::{Feature as DbFeature, krate_name::KrateName},
     impl_axum_webpage,
     web::{
-        MetaData, ReqVersion,
+        MetaData,
         cache::CachePolicy,
         error::{AxumNope, AxumResult},
         extractors::{
@@ -18,6 +17,7 @@ use crate::{
 use anyhow::anyhow;
 use askama::Template;
 use axum::response::IntoResponse;
+use docs_rs_types::{Feature as DbFeature, KrateName, ReqVersion};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
@@ -277,10 +277,7 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        db::types::krate_name::KrateName,
-        test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
-    };
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use std::str::FromStr as _;

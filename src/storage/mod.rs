@@ -12,10 +12,9 @@ use self::{
 use crate::{
     Config,
     db::{
-        BuildId, Pool,
+        Pool,
         file::{FileEntry, detect_mime},
         mimes,
-        types::version::Version,
     },
     error::Result,
 };
@@ -23,6 +22,7 @@ use axum_extra::headers;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_types::{BuildId, Version};
 use docs_rs_utils::spawn_blocking;
 use fn_error_context::context;
 use futures_util::stream::BoxStream;

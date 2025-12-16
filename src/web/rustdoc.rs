@@ -2,7 +2,6 @@
 
 use crate::{
     AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
-    db::types::krate_name::KrateName,
     registry_api::OwnerKind,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
@@ -10,7 +9,7 @@ use crate::{
     },
     utils::{self, Dependency},
     web::{
-        MetaData, ReqVersion, axum_cached_redirect,
+        MetaData, axum_cached_redirect,
         cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
         crate_details::CrateDetails,
         csp::Csp,
@@ -42,6 +41,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use docs_rs_types::{KrateName, ReqVersion};
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::Deserialize;
 use std::{
@@ -1072,7 +1072,6 @@ mod test {
     use super::*;
     use crate::{
         Config,
-        db::types::version::Version,
         docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
         registry_api::{CrateOwner, OwnerKind},
         storage::decompress,
@@ -1082,6 +1081,7 @@ mod test {
     };
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
+    use docs_rs_types::Version;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;

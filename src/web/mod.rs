@@ -1,25 +1,5 @@
 //! Web interface of docs.rs
 
-pub mod page;
-
-use crate::{
-    db::{
-        CrateId,
-        types::{BuildStatus, krate_name::KrateName, version::Version},
-    },
-    web::{
-        metrics::WebMetrics,
-        page::templates::{RenderBrands, RenderSolid, filters},
-    },
-};
-use anyhow::{Context as _, Result, anyhow, bail};
-use askama::Template;
-use axum_extra::middleware::option_layer;
-use docs_rs_utils::rustc_version::parse_rustc_date;
-use serde::Serialize;
-use serde_json::Value;
-use tracing::{info, instrument};
-
 mod build_details;
 mod builds;
 pub(crate) mod cache;
@@ -35,6 +15,7 @@ mod highlight;
 mod licenses;
 mod markdown;
 pub(crate) mod metrics;
+pub mod page;
 mod releases;
 mod routes;
 pub(crate) mod rustdoc;
@@ -43,8 +24,16 @@ mod source;
 mod statics;
 mod status;
 
-use crate::{Context, impl_axum_webpage};
-use anyhow::Error;
+use crate::{
+    Context, impl_axum_webpage,
+    web::{
+        crate_details::Release,
+        metrics::WebMetrics,
+        page::templates::{RenderBrands, RenderSolid, filters},
+    },
+};
+use anyhow::{Context as _, Error, Result, anyhow, bail};
+use askama::Template;
 use axum::{
     Router as AxumRouter,
     extract::{Extension, MatchedPath, Request as AxumRequest},
@@ -53,24 +42,24 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
 };
+use axum_extra::middleware::option_layer;
 use chrono::{DateTime, NaiveDate, Utc};
+use docs_rs_types::{BuildStatus, CrateId, KrateName, ReqVersion, Version, VersionReq};
+use docs_rs_utils::rustc_version::parse_rustc_date;
 use error::AxumNope;
 use page::TemplateData;
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
-use semver::VersionReq;
 use sentry::integrations::tower as sentry_tower;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde::Serialize;
+use serde_json::Value;
 use std::{
     borrow::Cow,
-    fmt::{self, Display},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    str::FromStr,
     sync::Arc,
 };
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
-
-use self::crate_details::Release;
+use tracing::{info, instrument};
 
 // from https://github.com/servo/rust-url/blob/master/url/src/parser.rs
 // and https://github.com/tokio-rs/axum/blob/main/axum-extra/src/lib.rs
@@ -103,117 +92,6 @@ pub fn get_correct_docsrs_style_file(version: &str) -> Result<String> {
 }
 
 const DEFAULT_BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
-
-/// Represents a version identifier in a request in the original state.
-/// Can be an exact version, a semver requirement, or the string "latest".
-#[derive(Debug, Default, Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
-pub(crate) enum ReqVersion {
-    Exact(Version),
-    Semver(VersionReq),
-    #[default]
-    Latest,
-}
-
-impl ReqVersion {
-    pub(crate) fn is_latest(&self) -> bool {
-        matches!(self, ReqVersion::Latest)
-    }
-}
-
-impl bincode::Encode for ReqVersion {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        // manual implementation since VersionReq doesn't implement Encode,
-        // and I don't want to NewType it right now.
-        match self {
-            ReqVersion::Exact(v) => {
-                0u8.encode(encoder)?;
-                v.encode(encoder)
-            }
-            ReqVersion::Semver(req) => {
-                1u8.encode(encoder)?;
-                req.to_string().encode(encoder)
-            }
-            ReqVersion::Latest => {
-                2u8.encode(encoder)?;
-                Ok(())
-            }
-        }
-    }
-}
-
-impl Display for ReqVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ReqVersion::Exact(version) => version.fmt(f),
-            ReqVersion::Semver(version_req) => version_req.fmt(f),
-            ReqVersion::Latest => write!(f, "latest"),
-        }
-    }
-}
-
-impl FromStr for ReqVersion {
-    type Err = semver::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "latest" {
-            Ok(ReqVersion::Latest)
-        } else if let Ok(version) = Version::parse(s) {
-            Ok(ReqVersion::Exact(version))
-        } else if s.is_empty() || s == "newest" {
-            Ok(ReqVersion::Semver(VersionReq::STAR))
-        } else {
-            VersionReq::parse(s).map(ReqVersion::Semver)
-        }
-    }
-}
-
-impl From<&ReqVersion> for ReqVersion {
-    fn from(value: &ReqVersion) -> Self {
-        value.clone()
-    }
-}
-
-impl From<Version> for ReqVersion {
-    fn from(value: Version) -> Self {
-        ReqVersion::Exact(value)
-    }
-}
-
-impl From<&Version> for ReqVersion {
-    fn from(value: &Version) -> Self {
-        value.clone().into()
-    }
-}
-
-impl From<VersionReq> for ReqVersion {
-    fn from(value: VersionReq) -> Self {
-        ReqVersion::Semver(value)
-    }
-}
-
-impl From<&VersionReq> for ReqVersion {
-    fn from(value: &VersionReq) -> Self {
-        value.clone().into()
-    }
-}
-
-impl TryFrom<String> for ReqVersion {
-    type Error = semver::Error;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        value.parse()
-    }
-}
-
-impl TryFrom<&str> for ReqVersion {
-    type Error = semver::Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        value.parse()
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct MatchedRelease {
@@ -763,12 +641,15 @@ impl_axum_webpage! {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr as _;
+
     use super::*;
+    use crate::docbuilder::DocCoverage;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
         async_wrapper,
     };
-    use crate::{db::ReleaseId, docbuilder::DocCoverage};
+    use docs_rs_types::ReleaseId;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use serde_json::json;
@@ -1354,42 +1235,6 @@ mod test {
     fn test_axum_redirect_failure(path: &str) {
         assert!(axum_redirect(path).is_err());
         assert!(axum_cached_redirect(path, cache::CachePolicy::NoCaching).is_err());
-    }
-
-    #[test]
-    fn test_parse_req_version_latest() {
-        let req_version: ReqVersion = "latest".parse().unwrap();
-        assert_eq!(req_version, ReqVersion::Latest);
-        assert_eq!(req_version.to_string(), "latest");
-    }
-
-    #[test_case("1.2.3")]
-    fn test_parse_req_version_exact(input: &str) {
-        let req_version: ReqVersion = input.parse().unwrap();
-        assert_eq!(
-            req_version,
-            ReqVersion::Exact(Version::parse(input).unwrap())
-        );
-        assert_eq!(req_version.to_string(), input);
-    }
-
-    #[test_case("^1.2.3")]
-    #[test_case("*")]
-    fn test_parse_req_version_semver(input: &str) {
-        let req_version: ReqVersion = input.parse().unwrap();
-        assert_eq!(
-            req_version,
-            ReqVersion::Semver(VersionReq::parse(input).unwrap())
-        );
-        assert_eq!(req_version.to_string(), input);
-    }
-
-    #[test_case("")]
-    #[test_case("newest")]
-    fn test_parse_req_version_semver_latest(input: &str) {
-        let req_version: ReqVersion = input.parse().unwrap();
-        assert_eq!(req_version, ReqVersion::Semver(VersionReq::STAR));
-        assert_eq!(req_version.to_string(), "*")
     }
 
     #[test_case("/something/", "/something/")] // already valid path
