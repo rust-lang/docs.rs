@@ -1,4 +1,4 @@
-use crate::web::{encode_url_path, url_decode};
+use crate::encode::{encode_url_path, url_decode};
 use askama::filters::HtmlSafe;
 use http::{Uri, uri::PathAndQuery};
 use std::{borrow::Borrow, fmt::Display, iter, str::FromStr};
@@ -200,7 +200,7 @@ impl EscapedURI {
         self.uri
     }
 
-    pub(crate) fn with_fragment(mut self, fragment: impl AsRef<str>) -> Self {
+    pub fn with_fragment(mut self, fragment: impl AsRef<str>) -> Self {
         self.fragment = Some(encode_url_path(fragment.as_ref()));
         self
     }
@@ -298,8 +298,6 @@ impl PartialEq<str> for EscapedURI {
 #[cfg(test)]
 mod tests {
     use super::EscapedURI;
-    use crate::web::{cache::CachePolicy, error::AxumNope};
-    use axum::response::IntoResponse as _;
     use http::Uri;
     use test_case::test_case;
 
@@ -307,18 +305,6 @@ mod tests {
         let s = input.to_string();
         assert_eq!(input, s); // tests the ParialEq<str> impl
         assert_eq!(s.parse::<EscapedURI>().unwrap(), *input);
-    }
-
-    #[test]
-    fn test_redirect_error_encodes_url_path() {
-        let response = AxumNope::Redirect(
-            EscapedURI::from_path("/something>"),
-            CachePolicy::ForeverInCdnAndBrowser,
-        )
-        .into_response();
-
-        assert_eq!(response.status(), 302);
-        assert_eq!(response.headers().get("Location").unwrap(), "/something%3E");
     }
 
     #[test_case("/something" => "/something")]

@@ -1992,6 +1992,7 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_types",
+ "docs_rs_uri",
  "docs_rs_utils",
  "docsrs-metadata",
  "flate2",
@@ -2017,7 +2018,6 @@ dependencies = [
  "opentelemetry",
  "opentelemetry_sdk",
  "path-slash",
- "percent-encoding",
  "phf 0.13.1",
  "phf_codegen 0.13.1",
  "pretty_assertions",
@@ -2102,6 +2102,19 @@ dependencies = [
  "sqlx",
  "test-case",
  "tokio",
+]
+
+[[package]]
+name = "docs_rs_uri"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "bincode 2.0.1",
+ "http 1.4.0",
+ "percent-encoding",
+ "test-case",
+ "url",
 ]
 
 [[package]]

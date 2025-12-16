@@ -8,7 +8,6 @@ use crate::{
     web::{
         axum_redirect,
         cache::CachePolicy,
-        encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
@@ -26,6 +25,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, ReqVersion, Version};
+use docs_rs_uri::encode_url_path;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
