@@ -1,11 +1,8 @@
 use super::TestDatabase;
 use crate::{
     db::{
-        BuildId, ReleaseId,
         file::{FileEntry, file_list_to_json},
-        initialize_build, initialize_crate, initialize_release,
-        types::{BuildStatus, version::Version},
-        update_build_status,
+        initialize_build, initialize_crate, initialize_release, update_build_status,
     },
     docbuilder::{DocCoverage, RUSTDOC_JSON_COMPRESSION_ALGORITHMS},
     error::Result,
@@ -19,6 +16,7 @@ use crate::{
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_types::{BuildId, BuildStatus, ReleaseId, Version, VersionReq};
 use std::{collections::HashMap, fmt, iter, sync::Arc};
 use tracing::debug;
 
@@ -109,7 +107,7 @@ impl<'a> FakeRelease<'a> {
                 documentation: Some("https://docs.example.com".into()),
                 dependencies: vec![Dependency {
                     name: "fake-dependency".into(),
-                    req: semver::VersionReq::parse("^1.0.0").unwrap(),
+                    req: VersionReq::parse("^1.0.0").unwrap(),
                     kind: None,
                     rename: None,
                     optional: false,

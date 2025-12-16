@@ -1,6 +1,8 @@
+pub use semver::VersionReq;
+
 #[allow(clippy::disallowed_types)]
 mod version_impl {
-    use crate::error::Result;
+    use anyhow::Result;
     use derive_more::{Deref, Display, From, Into};
     use serde_with::{DeserializeFromStr, SerializeDisplay};
     use sqlx::{

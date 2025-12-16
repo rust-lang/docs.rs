@@ -1,12 +1,7 @@
-use crate::db::AsyncPoolClient;
 use crate::{
     BuildPackageSummary, Config, Context, Index, RustwideBuilder,
     cdn::{self, CdnMetrics},
-    db::{
-        CrateId, Pool, delete_crate, delete_version,
-        types::{krate_name::KrateName, version::Version},
-        update_latest_version_id,
-    },
+    db::{AsyncPoolClient, Pool, delete_crate, delete_version, update_latest_version_id},
     docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
     storage::AsyncStorage,
@@ -16,6 +11,7 @@ use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_types::{CrateId, KrateName, Version};
 use docs_rs_utils::retry;
 use fn_error_context::context;
 use futures_util::{StreamExt, stream::TryStreamExt};
@@ -948,9 +944,9 @@ FROM crates AS c
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::BuildStatus;
     use crate::test::{FakeBuild, KRATE, TestEnvironment, V1, V2};
     use chrono::Utc;
+    use docs_rs_types::BuildStatus;
     use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]

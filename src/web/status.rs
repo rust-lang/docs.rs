@@ -52,8 +52,9 @@ pub(crate) async fn status_handler(
 mod tests {
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper},
-        web::{ReqVersion, cache::CachePolicy},
+        web::cache::CachePolicy,
     };
+    use docs_rs_types::ReqVersion;
     use reqwest::StatusCode;
     use test_case::test_case;
 

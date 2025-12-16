@@ -1,16 +1,14 @@
 //! Releases web handlersrelease
 
-use super::cache::CachePolicy;
-use crate::build_queue::PRIORITY_CONTINUOUS;
-use crate::db::types::krate_name::KrateName;
 use crate::{
     AsyncBuildQueue, Config, RegistryApi,
-    build_queue::QueuedCrate,
-    db::types::version::Version,
+    build_queue::{PRIORITY_CONTINUOUS, QueuedCrate},
     impl_axum_webpage,
     utils::report_error,
     web::{
-        ReqVersion, axum_redirect, encode_url_path,
+        axum_redirect,
+        cache::CachePolicy,
+        encode_url_path,
         error::{AxumNope, AxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
         match_version,
@@ -27,6 +25,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_types::{KrateName, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -787,7 +786,6 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::types::BuildStatus;
     use crate::db::{finish_build, initialize_build, initialize_crate, initialize_release};
     use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::test::{
@@ -796,6 +794,7 @@ mod tests {
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
+    use docs_rs_types::BuildStatus;
     use kuchikiki::traits::TendrilSink;
     use mockito::Matcher;
     use reqwest::StatusCode;

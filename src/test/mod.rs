@@ -5,7 +5,7 @@ pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
     config::ConfigBuilder,
-    db::{self, AsyncPoolClient, Pool, types::version::Version},
+    db::{self, AsyncPoolClient, Pool},
     error::Result,
     storage::{AsyncStorage, Storage, StorageKind},
     web::{
@@ -22,6 +22,7 @@ use docs_rs_opentelemetry::{
     AnyMeterProvider,
     testing::{CollectedMetrics, setup_test_meter_provider},
 };
+use docs_rs_types::Version;
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
 use http::{

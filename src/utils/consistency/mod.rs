@@ -155,10 +155,8 @@ where
 mod tests {
     use super::diff::Difference;
     use super::*;
-    use crate::{
-        db::types::version::Version,
-        test::{TestEnvironment, V1, V2, async_wrapper},
-    };
+    use crate::test::{TestEnvironment, V1, V2, async_wrapper};
+    use docs_rs_types::Version;
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {

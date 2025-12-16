@@ -1,8 +1,5 @@
 use crate::{
-    db::types::{
-        BuildId, BuildStatus, CrateId, Feature, ReleaseId, dependencies::ReleaseDependencyList,
-        version::Version,
-    },
+    db::types::dependencies::ReleaseDependencyList,
     docbuilder::DocCoverage,
     error::Result,
     registry_api::{CrateData, CrateOwner, ReleaseData},
@@ -11,6 +8,7 @@ use crate::{
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
+use docs_rs_types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, Version};
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;

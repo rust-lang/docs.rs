@@ -1,11 +1,10 @@
 //! special rustdoc extractors
 
 use crate::{
-    db::{BuildId, types::krate_name::KrateName},
     storage::CompressionAlgorithm,
     web::{
-        MatchedRelease, MetaData, ReqVersion, error::AxumNope, escaped_uri::EscapedURI,
-        extractors::Path, url_decode,
+        MatchedRelease, MetaData, error::AxumNope, escaped_uri::EscapedURI, extractors::Path,
+        url_decode,
     },
 };
 use anyhow::Result;
@@ -14,6 +13,7 @@ use axum::{
     extract::{FromRequestParts, MatchedPath},
     http::{Uri, request::Parts},
 };
+use docs_rs_types::{BuildId, KrateName, ReqVersion};
 use itertools::Itertools as _;
 use serde::Deserialize;
 
@@ -905,11 +905,9 @@ fn find_static_route_suffix<'a, 'b>(route: &'a str, path: &'b str) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        db::types::version::Version,
-        test::{AxumResponseTestExt, AxumRouterTestExt, V1},
-    };
+    use crate::test::{AxumResponseTestExt, AxumRouterTestExt, V1};
     use axum::{Router, routing::get};
+    use docs_rs_types::Version;
     use test_case::test_case;
 
     const KRATE: KrateName = KrateName::from_static("krate");

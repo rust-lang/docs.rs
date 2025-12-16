@@ -1,15 +1,10 @@
-use crate::build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
-use crate::db::types::krate_name::KrateName;
 use crate::{
     AsyncBuildQueue, Config,
-    db::{
-        BuildId,
-        types::{BuildStatus, version::Version},
-    },
+    build_queue::PRIORITY_MANUAL_FROM_CRATES_IO,
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
-        MetaData, ReqVersion,
+        MetaData,
         cache::CachePolicy,
         error::{AxumNope, AxumResult, JsonAxumNope, JsonAxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
@@ -28,6 +23,7 @@ use axum_extra::{
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
+use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
@@ -217,7 +213,6 @@ async fn get_builds(
 
 #[cfg(test)]
 mod tests {
-    use super::BuildStatus;
     use crate::{
         db::Overrides,
         test::{
@@ -228,6 +223,7 @@ mod tests {
     };
     use anyhow::Result;
     use axum::{body::Body, http::Request};
+    use docs_rs_types::BuildStatus;
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use tower::ServiceExt;

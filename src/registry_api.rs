@@ -1,6 +1,7 @@
-use crate::{APP_USER_AGENT, db::types::version::Version, error::Result};
+use crate::{APP_USER_AGENT, error::Result};
 use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, Utc};
+use docs_rs_types::Version;
 use docs_rs_utils::retry_async;
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};

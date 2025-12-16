@@ -1,5 +1,5 @@
 use super::data::Crate;
-use crate::db::types::version::Version;
+use docs_rs_types::Version;
 use itertools::{
     EitherOrBoth::{Both, Left, Right},
     Itertools,

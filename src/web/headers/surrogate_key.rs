@@ -2,10 +2,10 @@
 //! see
 //! https://www.fastly.com/documentation/reference/http/http-headers/Surrogate-Key/haeders.surrogate keys
 
-use crate::db::types::krate_name::KrateName;
 use anyhow::{Context as _, bail};
 use axum_extra::headers::{self, Header};
 use derive_more::Deref;
+use docs_rs_types::KrateName;
 use http::{HeaderName, HeaderValue};
 use itertools::Itertools as _;
 use std::{collections::BTreeSet, fmt::Display, iter, str::FromStr};

@@ -22,6 +22,7 @@ exclude = [
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
+bincode = "2.0.1"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
 opentelemetry = "0.31.0"
@@ -30,6 +31,10 @@ opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 regex = "1"
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
+test-case = "3.0.0"
 tokio = { version = "1.0", features = ["rt-multi-thread", "signal", "macros", "process", "sync"] }
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
@@ -38,6 +43,7 @@ url = { version = "2.1.1", features = ["serde"] }
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
+docs_rs_types = { path = "crates/lib/docs_rs_types" }
 docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
 sentry = { workspace = true }
 log = "0.4"
@@ -51,9 +57,8 @@ rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
 reqwest = { version = "0.12", features = ["json", "gzip"] }
-semver = { version = "1.0.4", features = ["serde"] }
 slug = "0.1.1"
-sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "sqlite", "chrono" ] }
+sqlx = { workspace = true }
 url = { workspace = true }
 docsrs-metadata = { path = "crates/lib/metadata" }
 anyhow = { workspace = true }
@@ -96,10 +101,9 @@ aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 http = "1.0.0"
 
 # Data serialization and deserialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_with = "3.4.0"
-bincode = "2.0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
 
 # axum dependencies
 async-trait = "0.1.83"
@@ -129,12 +133,13 @@ crates_io_validation = { path = "crates/lib/crates_io_validation" }
 
 [dev-dependencies]
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
+docs_rs_types = { path = "crates/lib/docs_rs_types", features = ["testing"] }
 criterion = "0.8.0"
 kuchikiki = "0.8"
 http-body-util = "0.1.0"
 rand = "0.9"
 mockito = "1.0.2"
-test-case = "3.0.0"
+test-case = { workspace = true }
 tower = { version = "0.5.1", features = ["util"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
 aws-smithy-types = "1.0.1"

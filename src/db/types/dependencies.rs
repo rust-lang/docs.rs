@@ -1,6 +1,6 @@
 use crate::utils::Dependency;
 use derive_more::Deref;
-use semver::VersionReq;
+use docs_rs_types::VersionReq;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_KIND: &str = "normal";
