@@ -1,6 +1,5 @@
 use crate::{
     BuildPackageSummary, Config, Context, Index, RustwideBuilder,
-    cdn::{self, CdnMetrics},
     db::{AsyncPoolClient, Pool, delete_crate, delete_version, update_latest_version_id},
     docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
@@ -10,6 +9,7 @@ use crate::{
 use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
+use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{CrateId, KrateName, Version};
 use docs_rs_utils::retry;
@@ -71,7 +71,7 @@ pub struct AsyncBuildQueue {
     pub(crate) db: Pool,
     queue_metrics: BuildQueueMetrics,
     builder_metrics: Arc<BuilderMetrics>,
-    cdn_metrics: Arc<CdnMetrics>,
+    cdn: Option<Arc<Cdn>>,
     max_attempts: i32,
 }
 
@@ -80,7 +80,7 @@ impl AsyncBuildQueue {
         db: Pool,
         config: Arc<Config>,
         storage: Arc<AsyncStorage>,
-        cdn_metrics: Arc<CdnMetrics>,
+        cdn: Option<Arc<Cdn>>,
         otel_meter_provider: &AnyMeterProvider,
     ) -> Self {
         AsyncBuildQueue {
@@ -90,7 +90,7 @@ impl AsyncBuildQueue {
             storage,
             queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
             builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
-            cdn_metrics,
+            cdn,
         }
     }
 
@@ -341,9 +341,12 @@ impl AsyncBuildQueue {
             }
         };
 
-        if let Err(err) =
-            cdn::queue_crate_invalidation(&self.config, &self.cdn_metrics, &krate).await
-        {
+        let Some(cdn) = &self.cdn else {
+            info!(%krate, "no CDN configured, skippping crate invalidation");
+            return;
+        };
+
+        if let Err(err) = cdn.queue_crate_invalidation(&krate).await {
             report_error(&err);
         }
     }
@@ -947,6 +950,7 @@ mod tests {
     use crate::test::{FakeBuild, KRATE, TestEnvironment, V1, V2};
     use chrono::Utc;
     use docs_rs_types::BuildStatus;
+    use pretty_assertions::assert_eq;
     use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1691,22 +1695,9 @@ mod tests {
 
     #[test]
     fn test_invalidate_cdn_after_error() -> Result<()> {
-        let mut fastly_api = mockito::Server::new();
-
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .fastly_api_host(fastly_api.url().parse().unwrap())
-                .fastly_api_token(Some("test-token".into()))
-                .fastly_service_sid(Some("test-sid-1".into()))
-                .build()?,
-        )?;
+        let env = TestEnvironment::new_with_runtime()?;
 
         let queue = env.build_queue();
-
-        let m = fastly_api
-            .mock("POST", "/service/test-sid-1/purge")
-            .with_status(200)
-            .create();
 
         queue.add_crate("will_fail", &V1, 0, None)?;
 
@@ -1715,28 +1706,22 @@ mod tests {
             anyhow::bail!("simulate a failure");
         })?;
 
-        m.expect(1).assert();
+        assert_eq!(
+            env.runtime()
+                .block_on(env.cdn().purged_keys())
+                .unwrap()
+                .to_string(),
+            "crate-will_fail",
+        );
 
         Ok(())
     }
+
     #[test]
     fn test_invalidate_cdn_after_build() -> Result<()> {
-        let mut fastly_api = mockito::Server::new();
-
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .fastly_api_host(fastly_api.url().parse().unwrap())
-                .fastly_api_token(Some("test-token".into()))
-                .fastly_service_sid(Some("test-sid-1".into()))
-                .build()?,
-        )?;
+        let env = TestEnvironment::new_with_runtime()?;
 
         let queue = env.build_queue();
-
-        let m = fastly_api
-            .mock("POST", "/service/test-sid-1/purge")
-            .with_status(200)
-            .create();
 
         queue.add_crate("will_succeed", &V1, -1, None)?;
 
@@ -1745,7 +1730,13 @@ mod tests {
             Ok(BuildPackageSummary::default())
         })?;
 
-        m.expect(1).assert();
+        assert_eq!(
+            env.runtime()
+                .block_on(env.cdn().purged_keys())
+                .unwrap()
+                .to_string(),
+            "crate-will_succeed",
+        );
 
         Ok(())
     }

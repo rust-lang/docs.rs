@@ -1,5 +1,5 @@
 use crate::storage::StorageKind;
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{
     io,
@@ -116,15 +116,6 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    /// Fastly API host, typically only overwritten for testing
-    pub fastly_api_host: Url,
-
-    /// Fastly API token for purging the services below.
-    pub fastly_api_token: Option<String>,
-
-    /// fastly service SID for the main domain
-    pub fastly_service_sid: Option<String>,
-
     pub(crate) build_workspace_reinitialization_interval: Duration,
 
     // Build params
@@ -142,6 +133,7 @@ pub struct Config {
     // automatic rebuild configuration
     pub(crate) max_queued_rebuilds: Option<u16>,
 
+    pub(crate) fastly: docs_rs_fastly::Config,
     pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
 }
 
@@ -214,12 +206,6 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .fastly_api_host(env(
-                "DOCSRS_FASTLY_API_HOST",
-                "https://api.fastly.com".parse().unwrap(),
-            )?)
-            .fastly_api_token(maybe_env("DOCSRS_FASTLY_API_TOKEN")?)
-            .fastly_service_sid(maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?)
             .local_archive_cache_path(ensure_absolute_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
@@ -247,6 +233,10 @@ impl Config {
                 86400,
             )?))
             .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?)
+            .fastly(
+                docs_rs_fastly::Config::from_environment()
+                    .context("error reading fastly config from environment")?,
+            )
             .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?))
     }
 
