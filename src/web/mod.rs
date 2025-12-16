@@ -9,7 +9,6 @@ pub(crate) mod error;
 pub(crate) mod extractors;
 mod features;
 mod file;
-pub(crate) mod headers;
 mod highlight;
 mod licenses;
 mod markdown;

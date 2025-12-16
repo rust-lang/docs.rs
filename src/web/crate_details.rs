@@ -13,9 +13,7 @@ use crate::{
             DbConnection,
             rustdoc::{PageKind, RustdocParams},
         },
-        get_correct_docsrs_style_file,
-        headers::CanonicalUrl,
-        match_version,
+        get_correct_docsrs_style_file, match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
 };
@@ -26,6 +24,7 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
+use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use log::warn;

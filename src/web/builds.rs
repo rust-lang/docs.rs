@@ -8,9 +8,7 @@ use crate::{
         cache::CachePolicy,
         error::{AxumNope, AxumResult, JsonAxumNope, JsonAxumResult},
         extractors::{DbConnection, Path, rustdoc::RustdocParams},
-        filters,
-        headers::CanonicalUrl,
-        match_version,
+        filters, match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid},
     },
 };
@@ -23,6 +21,7 @@ use axum_extra::{
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
+use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;

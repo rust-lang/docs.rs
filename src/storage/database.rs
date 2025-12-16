@@ -1,6 +1,7 @@
 use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::{db::Pool, error::Result, web::headers::compute_etag};
+use crate::{db::Pool, error::Result};
 use chrono::{DateTime, Utc};
+use docs_rs_headers::compute_etag;
 use futures_util::stream::{Stream, TryStreamExt};
 use sqlx::Acquire;
 use std::io;

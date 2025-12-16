@@ -19,7 +19,6 @@ use crate::{
             rustdoc::{PageKind, RustdocParams, UrlParams},
         },
         file::StreamingFile,
-        headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG},
         licenses, match_version,
         metrics::WebMetrics,
         page::{
@@ -40,6 +39,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_types::{KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};

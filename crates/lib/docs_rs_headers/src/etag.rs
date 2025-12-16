@@ -1,21 +1,5 @@
-mod canonical_url;
-mod if_none_match;
-mod surrogate_key;
-
 use axum_extra::headers::ETag;
-use http::HeaderName;
 use std::io::{self, Write};
-
-pub use canonical_url::CanonicalUrl;
-pub(crate) use if_none_match::IfNoneMatch;
-pub use surrogate_key::{SURROGATE_KEY, SurrogateKey, SurrogateKeys};
-
-/// Fastly's Surrogate-Control header
-/// https://www.fastly.com/documentation/reference/http/http-headers/Surrogate-Control/
-pub static SURROGATE_CONTROL: HeaderName = HeaderName::from_static("surrogate-control");
-
-/// X-Robots-Tag header for search engines.
-pub static X_ROBOTS_TAG: HeaderName = HeaderName::from_static("x-robots-tag");
 
 /// compute our etag header value from some content
 ///
@@ -30,7 +14,8 @@ pub fn compute_etag<T: AsRef<[u8]>>(content: T) -> ETag {
 ///
 /// Works the same way as the inner `md5::Context`,
 /// but produces an `ETag` when finalized.
-pub(crate) struct ETagComputer(md5::Context);
+#[derive(Default)]
+pub struct ETagComputer(md5::Context);
 
 impl ETagComputer {
     pub fn new() -> Self {

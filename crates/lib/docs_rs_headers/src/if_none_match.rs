@@ -28,7 +28,7 @@ mod header_impl {
     use derive_more::Deref;
 
     #[derive(Debug, Clone, PartialEq, Deref)]
-    pub(crate) struct IfNoneMatch(pub axum_extra::headers::IfNoneMatch);
+    pub struct IfNoneMatch(pub axum_extra::headers::IfNoneMatch);
 
     impl Header for IfNoneMatch {
         fn name() -> &'static http::HeaderName {
@@ -65,13 +65,13 @@ mod header_impl {
     }
 }
 
-pub(crate) use header_impl::IfNoneMatch;
+pub use header_impl::IfNoneMatch;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use anyhow::Result;
-    use axum::{RequestPartsExt, body::Body, extract::Request};
+    use axum_core::{RequestPartsExt as _, body::Body, extract::Request};
     use axum_extra::{
         TypedHeader,
         headers::{ETag, HeaderMapExt as _},

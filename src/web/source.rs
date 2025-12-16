@@ -10,15 +10,16 @@ use crate::{
             rustdoc::{PageKind, RustdocParams},
         },
         file::StreamingFile,
-        headers::{CanonicalUrl, IfNoneMatch},
         match_version,
         page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
 };
+
 use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
+use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
 use docs_rs_types::{BuildId, ReqVersion, Version};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
@@ -363,10 +364,11 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::{
         test::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
-        web::{cache::CachePolicy, headers::IfNoneMatch},
+        web::cache::CachePolicy,
     };
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
+    use docs_rs_headers::IfNoneMatch;
     use docs_rs_types::KrateName;
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;

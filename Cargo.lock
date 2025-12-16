@@ -1983,12 +1983,12 @@ dependencies = [
  "constant_time_eq",
  "crates-index",
  "crates-index-diff",
- "crates_io_validation",
  "criterion",
  "dashmap",
  "derive_builder",
  "derive_more 2.1.0",
  "docs_rs_env_vars",
+ "docs_rs_headers",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_types",
@@ -2059,6 +2059,26 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "tracing",
+]
+
+[[package]]
+name = "docs_rs_headers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askama",
+ "axum-core",
+ "axum-extra",
+ "derive_more 2.1.0",
+ "docs_rs_types",
+ "docs_rs_uri",
+ "http 1.4.0",
+ "itertools 0.14.0",
+ "md5",
+ "serde",
+ "serde_json",
+ "test-case",
+ "tokio",
 ]
 
 [[package]]

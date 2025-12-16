@@ -1,11 +1,7 @@
-use crate::{
-    APP_USER_AGENT,
-    cdn::CdnMetrics,
-    config::Config,
-    web::headers::{SURROGATE_KEY, SurrogateKey, SurrogateKeys},
-};
+use crate::{APP_USER_AGENT, cdn::CdnMetrics, config::Config};
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone as _, Utc};
+use docs_rs_headers::{SURROGATE_KEY, SurrogateKey, SurrogateKeys};
 use http::{
     HeaderMap, HeaderName, HeaderValue,
     header::{ACCEPT, USER_AGENT},

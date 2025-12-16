@@ -22,11 +22,13 @@ exclude = [
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
+axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 askama = "0.14.0"
 bincode = "2.0.1"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
 http = "1.0.0"
+itertools = { version = "0.14.0" }
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
@@ -43,6 +45,7 @@ url = { version = "2.1.1", features = ["serde"] }
 
 [dependencies]
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
+docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
 docs_rs_types = { path = "crates/lib/docs_rs_types" }
@@ -85,7 +88,7 @@ dashmap = "6.0.0"
 zip = {version = "6.0.0", default-features = false, features = ["bzip2"]}
 bzip2 = "0.6.0"
 getrandom = "0.3.1"
-itertools = { version = "0.14.0" }
+itertools = { workspace = true }
 hex = "0.4.3"
 derive_more = { workspace = true }
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
@@ -111,7 +114,7 @@ bincode = { workspace = true }
 # axum dependencies
 async-trait = "0.1.83"
 axum = { version = "0.8.1", features = ["macros"] }
-axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
+axum-extra = { workspace = true }
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 mime = "0.3.16"
@@ -129,11 +132,9 @@ chrono = { workspace = true }
 
 # Transitive dependencies we don't use directly but need to have specific versions of
 constant_time_eq = "0.4.2"
-md5 = "0.8.0"
-
-crates_io_validation = { path = "crates/lib/crates_io_validation" }
 
 [dev-dependencies]
+docs_rs_headers = { path = "crates/lib/docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "crates/lib/docs_rs_types", features = ["testing"] }
 criterion = "0.8.0"

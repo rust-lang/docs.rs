@@ -8,16 +8,13 @@ use crate::{
     db::{self, AsyncPoolClient, Pool},
     error::Result,
     storage::{AsyncStorage, Storage, StorageKind},
-    web::{
-        build_axum_app, cache,
-        headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys},
-        page::TemplateData,
-    },
+    web::{build_axum_app, cache, page::TemplateData},
 };
 use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::{
     AnyMeterProvider,
     testing::{CollectedMetrics, setup_test_meter_provider},
