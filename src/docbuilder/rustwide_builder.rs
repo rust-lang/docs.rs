@@ -1,7 +1,7 @@
 use crate::{
     AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, Storage,
     db::{
-        Pool, add_doc_coverage, add_path_into_remote_archive,
+        add_doc_coverage, add_path_into_remote_archive,
         blacklist::is_blacklisted,
         file::{add_path_into_database, file_list_to_json},
         finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
@@ -19,6 +19,7 @@ use crate::{
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
+use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};

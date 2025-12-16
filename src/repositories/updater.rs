@@ -1,9 +1,10 @@
+use crate::Config;
 use crate::error::Result;
 use crate::repositories::{GitHub, GitLab, RateLimitReached};
-use crate::{Config, db::Pool};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::MetadataPackage;
+use docs_rs_database::Pool;
 use futures_util::stream::TryStreamExt;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};

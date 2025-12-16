@@ -1988,6 +1988,7 @@ dependencies = [
  "derive_builder",
  "derive_more 2.1.0",
  "docs_rs_cargo_metadata",
+ "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_fastly",
  "docs_rs_headers",
@@ -2067,6 +2068,21 @@ dependencies = [
  "serde",
  "serde_json",
  "test-case",
+]
+
+[[package]]
+name = "docs_rs_database"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_env_vars",
+ "docs_rs_opentelemetry",
+ "futures-util",
+ "opentelemetry",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

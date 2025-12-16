@@ -5,7 +5,7 @@ pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
     config::ConfigBuilder,
-    db::{self, AsyncPoolClient, Pool},
+    db,
     error::Result,
     storage::{AsyncStorage, Storage, StorageKind},
     web::{build_axum_app, cache, page::TemplateData},
@@ -14,6 +14,7 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_database::{AsyncPoolClient, Pool};
 use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::{
@@ -478,11 +479,15 @@ impl TestEnvironment {
     }
 
     pub(crate) fn base_config() -> ConfigBuilder {
+        let mut database_config =
+            docs_rs_database::Config::from_environment().expect("can't load database config");
+        // Use less connections for each test compared to production.
+        database_config.max_pool_size = 8;
+        database_config.min_pool_idle = 2;
+
         Config::from_env()
             .expect("can't load base config from environment")
-            // Use less connections for each test compared to production.
-            .max_pool_size(8)
-            .min_pool_idle(2)
+            .database(database_config)
             // Use the database for storage, as it's faster than S3.
             .storage_backend(StorageKind::Database)
             // Use a temporary S3 bucket.
@@ -581,6 +586,8 @@ impl TestDatabase {
         // A random schema name is generated and used for the current connection. This allows each
         // test to create a fresh instance of the database to run within.
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
+
+        let config = &config.database;
 
         let pool = Pool::new_with_schema(config, &schema, otel_meter_provider).await?;
 

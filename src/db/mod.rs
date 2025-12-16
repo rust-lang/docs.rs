@@ -12,7 +12,6 @@ pub use self::{
     delete::{delete_crate, delete_version},
     file::{add_path_into_database, add_path_into_remote_archive},
     overrides::Overrides,
-    pool::{AsyncPoolClient, Pool, PoolError},
 };
 
 mod add_package;
@@ -21,7 +20,6 @@ pub mod delete;
 pub(crate) mod file;
 pub(crate) mod mimes;
 mod overrides;
-mod pool;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
