@@ -14,6 +14,7 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::{
     AnyMeterProvider,
@@ -502,6 +503,13 @@ impl TestEnvironment {
 
     pub(crate) fn build_queue(&self) -> &BuildQueue {
         &self.context.build_queue
+    }
+
+    pub(crate) fn cdn(&self) -> &Cdn {
+        self.context
+            .cdn
+            .as_ref()
+            .expect("in test envs we always have the mock CDN")
     }
 
     pub(crate) fn config(&self) -> &Config {

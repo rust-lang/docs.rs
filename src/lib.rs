@@ -24,7 +24,6 @@ pub use docs_rs_utils::{
 pub use font_awesome_as_a_crate::icons;
 
 mod build_queue;
-pub mod cdn;
 mod config;
 mod context;
 pub mod db;

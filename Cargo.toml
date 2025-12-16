@@ -22,18 +22,20 @@ exclude = [
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
-axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 askama = "0.14.0"
+axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 bincode = "2.0.1"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
 http = "1.0.0"
 itertools = { version = "0.14.0" }
+mockito = "1.0.2"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 regex = "1"
+reqwest = { version = "0.12", features = ["json", "gzip"] }
 sentry = { version = "0.46.0", features = ["panic", "tracing", "tower-http", "anyhow", "backtrace"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -44,6 +46,7 @@ tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 
 [dependencies]
+docs_rs_fastly = { path = "crates/lib/docs_rs_fastly" }
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
@@ -62,7 +65,7 @@ crates-index = { version = "3.0.0", default-features = false, features = ["git",
 rayon = "1.6.1"
 num_cpus = "1.15.0"
 crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
-reqwest = { version = "0.12", features = ["json", "gzip"] }
+reqwest = { workspace = true }
 slug = "0.1.1"
 sqlx = { workspace = true }
 url = { workspace = true }
@@ -134,6 +137,7 @@ chrono = { workspace = true }
 constant_time_eq = "0.4.2"
 
 [dev-dependencies]
+docs_rs_fastly = { path = "crates/lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "crates/lib/docs_rs_types", features = ["testing"] }
@@ -141,7 +145,7 @@ criterion = "0.8.0"
 kuchikiki = "0.8"
 http-body-util = "0.1.0"
 rand = "0.9"
-mockito = "1.0.2"
+mockito = { workspace = true }
 test-case = { workspace = true }
 tower = { version = "0.5.1", features = ["util"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }

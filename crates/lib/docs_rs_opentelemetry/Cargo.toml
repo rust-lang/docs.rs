@@ -15,4 +15,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [features]
-testing = ["dep:derive_more"]
+testing = [
+    "dep:derive_more",
+    "opentelemetry_sdk/testing",
+]
