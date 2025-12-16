@@ -2,7 +2,6 @@
 
 use crate::{
     AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
-    registry_api::OwnerKind,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
         rustdoc_json_path,
@@ -40,6 +39,7 @@ use axum_extra::{
     typed_header::TypedHeader,
 };
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
+use docs_rs_registry_api::OwnerKind;
 use docs_rs_types::{KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
@@ -1073,7 +1073,6 @@ mod test {
     use crate::{
         Config,
         docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
-        registry_api::{CrateOwner, OwnerKind},
         storage::decompress,
         test::*,
         utils::Dependency,
@@ -1081,6 +1080,7 @@ mod test {
     };
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
+    use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_types::Version;
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;

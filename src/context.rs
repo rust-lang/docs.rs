@@ -1,10 +1,11 @@
 use crate::{
-    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, RegistryApi, Storage, db::Pool,
+    AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Storage, db::Pool,
     repositories::RepositoryStatsUpdater,
 };
 use anyhow::Result;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
+use docs_rs_registry_api::RegistryApi;
 use std::sync::Arc;
 use tokio::runtime;
 
@@ -82,10 +83,7 @@ impl Context {
             async_storage,
             cdn,
             pool: pool.clone(),
-            registry_api: Arc::new(RegistryApi::new(
-                config.registry_api_host.clone(),
-                config.crates_io_api_call_retries,
-            )?),
+            registry_api: Arc::new(RegistryApi::from_config(&config.registry_api)?),
             repository_stats_updater: Arc::new(RepositoryStatsUpdater::new(&config, pool)),
             runtime,
             config,

@@ -2,7 +2,6 @@ use crate::{
     AsyncStorage,
     db::types::dependencies::ReleaseDependencyList,
     impl_axum_webpage,
-    registry_api::OwnerKind,
     storage::PathNotFoundError,
     utils::Dependency,
     web::{
@@ -25,6 +24,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_headers::CanonicalUrl;
+use docs_rs_registry_api::OwnerKind;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use log::warn;
@@ -723,12 +723,13 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::update_build_status;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
         async_wrapper, fake_release_that_failed_before_build,
     };
-    use crate::{db::update_build_status, registry_api::CrateOwner};
     use anyhow::Error;
+    use docs_rs_registry_api::CrateOwner;
     use docs_rs_types::KrateName;
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;

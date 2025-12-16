@@ -6,7 +6,6 @@ use crate::{
     },
     docbuilder::{DocCoverage, RUSTDOC_JSON_COMPRESSION_ALGORITHMS},
     error::Result,
-    registry_api::{CrateData, CrateOwner, ReleaseData},
     storage::{
         AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, compress,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -16,6 +15,7 @@ use crate::{
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{BuildId, BuildStatus, ReleaseId, Version, VersionReq};
 use std::{collections::HashMap, fmt, iter, sync::Arc};
 use tracing::debug;

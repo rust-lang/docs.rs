@@ -1,11 +1,13 @@
-use crate::{APP_USER_AGENT, error::Result};
-use anyhow::{Context, anyhow, bail};
+use crate::{
+    Config,
+    models::{CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCrate, SearchMeta},
+};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_types::Version;
-use docs_rs_utils::retry_async;
+use docs_rs_utils::{APP_USER_AGENT, retry_async};
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
-use serde::{Deserialize, Serialize};
-use std::fmt;
+use serde::Deserialize;
 use tracing::instrument;
 use url::Url;
 
@@ -16,84 +18,14 @@ pub struct RegistryApi {
     client: reqwest::Client,
 }
 
-#[derive(Debug)]
-pub struct CrateData {
-    pub(crate) owners: Vec<CrateOwner>,
-}
-
-#[derive(Debug)]
-pub(crate) struct ReleaseData {
-    pub(crate) release_time: DateTime<Utc>,
-    pub(crate) yanked: bool,
-    pub(crate) downloads: i32,
-}
-
-impl Default for ReleaseData {
-    fn default() -> ReleaseData {
-        ReleaseData {
-            release_time: Utc::now(),
-            yanked: false,
-            downloads: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CrateOwner {
-    pub(crate) avatar: String,
-    pub(crate) login: String,
-    pub(crate) kind: OwnerKind,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    sqlx::Type,
-    bincode::Encode,
-)]
-#[sqlx(type_name = "owner_kind", rename_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
-pub enum OwnerKind {
-    User,
-    Team,
-}
-
-impl fmt::Display for OwnerKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::User => f.write_str("user"),
-            Self::Team => f.write_str("team"),
-        }
-    }
-}
-
-#[derive(Deserialize, Debug)]
-
-pub(crate) struct SearchCrate {
-    pub(crate) name: String,
-}
-
-#[derive(Deserialize, Debug)]
-
-pub(crate) struct SearchMeta {
-    pub(crate) next_page: Option<String>,
-    pub(crate) prev_page: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-pub(crate) struct Search {
-    pub(crate) crates: Vec<SearchCrate>,
-    pub(crate) meta: SearchMeta,
-}
-
 impl RegistryApi {
+    pub fn from_config(config: &Config) -> Result<Self> {
+        Self::new(
+            config.registry_api_host.clone(),
+            config.crates_io_api_call_retries,
+        )
+    }
+
     pub fn new(api_base: Url, max_retries: u32) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
@@ -124,11 +56,7 @@ impl RegistryApi {
     }
 
     #[instrument(skip(self))]
-    pub(crate) async fn get_release_data(
-        &self,
-        name: &str,
-        version: &Version,
-    ) -> Result<ReleaseData> {
+    pub async fn get_release_data(&self, name: &str, version: &Version) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
             .await
@@ -256,7 +184,7 @@ impl RegistryApi {
     }
 
     /// Fetch crates from the registry's API
-    pub(crate) async fn search(&self, query_params: &str) -> Result<Search> {
+    pub async fn search(&self, query_params: &str) -> Result<Search> {
         #[derive(Deserialize, Debug)]
         struct SearchError {
             detail: String,

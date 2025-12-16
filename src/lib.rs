@@ -14,7 +14,6 @@ pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
 pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
 pub use self::index::Index;
-pub use self::registry_api::RegistryApi;
 pub use self::storage::{AsyncStorage, Storage};
 pub use self::web::start_web_server;
 
@@ -31,7 +30,6 @@ mod docbuilder;
 mod error;
 pub mod index;
 pub mod metrics;
-mod registry_api;
 pub mod repositories;
 pub mod storage;
 #[cfg(test)]

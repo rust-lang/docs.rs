@@ -1992,6 +1992,7 @@ dependencies = [
  "docs_rs_headers",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
+ "docs_rs_registry_api",
  "docs_rs_types",
  "docs_rs_uri",
  "docs_rs_utils",
@@ -2125,6 +2126,23 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-resource-detectors",
  "opentelemetry_sdk",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "docs_rs_registry_api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode 2.0.1",
+ "chrono",
+ "docs_rs_env_vars",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "reqwest",
+ "serde",
+ "sqlx",
  "tracing",
  "url",
 ]

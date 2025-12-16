@@ -206,9 +206,9 @@ async fn delete_crate_from_database(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry_api::{CrateOwner, OwnerKind};
     use crate::storage::{CompressionAlgorithm, rustdoc_json_path};
     use crate::test::{KRATE, V1, V2, async_wrapper, fake_release_that_failed_before_build};
+    use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_types::ReleaseId;
     use test_case::test_case;
 
