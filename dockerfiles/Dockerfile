@@ -57,6 +57,8 @@ RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/bin/cratesfyi.rs && \
     echo "fn main() {}" > build.rs
 
+ENV SQLX_OFFLINE=true
+
 ARG PROFILE=release
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
     --mount=type=cache,target=/build/target,id=cargo-target,sharing=locked \

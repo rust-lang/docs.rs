@@ -8,13 +8,18 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
     -c 500 \
     {{ host }}/rayon/1.11.0/rayon/
 
+# update sqlx metadata offline mode, for all 
+# crates that have it.
 [group('testing')]
 [group('sqlx')]
+[no-cd]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
-  cargo sqlx prepare \
-    --database-url $DOCSRS_DATABASE_URL \
-    --workspace {{ args }} \
-    -- --all-targets --all-features
+    cargo sqlx prepare \
+      --database-url $DOCSRS_DATABASE_URL \
+      --workspace \
+      {{ args }} \
+      -- --all-targets --all-features
+
 
 [group('testing')]
 [group('sqlx')]

@@ -10,7 +10,6 @@ use crate::{
     docbuilder::Limits,
     error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
-    repositories::RepositoryStatsUpdater,
     storage::{
         CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
         rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -22,6 +21,7 @@ use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
 use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
+use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
 use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};

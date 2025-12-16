@@ -1966,7 +1966,6 @@ dependencies = [
  "askama",
  "async-compression",
  "async-stream",
- "async-trait",
  "aws-config",
  "aws-sdk-s3",
  "aws-smithy-runtime",
@@ -1995,6 +1994,7 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
+ "docs_rs_repository_stats",
  "docs_rs_types",
  "docs_rs_uri",
  "docs_rs_utils",
@@ -2175,6 +2175,29 @@ dependencies = [
  "sqlx",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "docs_rs_repository_stats"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "docs_rs_cargo_metadata",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_utils",
+ "futures-util",
+ "mockito",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
