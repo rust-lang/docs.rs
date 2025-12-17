@@ -1,6 +1,5 @@
 use crate::{
     Config,
-    db::mimes,
     docbuilder::Limits,
     impl_axum_webpage,
     utils::{ConfigName, get_config, report_error},
@@ -22,6 +21,7 @@ use axum::{
 };
 use axum_extra::{TypedHeader, headers::ContentType};
 use chrono::{TimeZone, Utc};
+use docs_rs_mimes as mimes;
 use futures_util::{StreamExt as _, pin_mut};
 use std::sync::Arc;
 use tracing::{Span, error};

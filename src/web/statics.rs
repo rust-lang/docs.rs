@@ -1,5 +1,5 @@
 use super::{cache::CachePolicy, metrics::request_recorder, routes::get_static};
-use crate::{db::mimes::APPLICATION_OPENSEARCH_XML, web::cache::STATIC_ASSET_CACHE_POLICY};
+use crate::web::cache::STATIC_ASSET_CACHE_POLICY;
 use axum::{
     Router as AxumRouter,
     extract::{Extension, Request},
@@ -12,6 +12,7 @@ use axum_extra::{
     typed_header::TypedHeader,
 };
 use docs_rs_headers::IfNoneMatch;
+use docs_rs_mimes::APPLICATION_OPENSEARCH_XML;
 use http::{StatusCode, Uri};
 use tower_http::services::ServeDir;
 

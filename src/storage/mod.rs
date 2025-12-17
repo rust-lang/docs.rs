@@ -10,18 +10,12 @@ use self::{
     database::DatabaseBackend,
     s3::S3Backend,
 };
-use crate::{
-    Config,
-    db::{
-        file::{FileEntry, detect_mime},
-        mimes,
-    },
-    error::Result,
-};
+use crate::{Config, db::file::FileEntry, error::Result};
 use axum_extra::headers;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use docs_rs_database::Pool;
+use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, Version};
 use docs_rs_utils::spawn_blocking;

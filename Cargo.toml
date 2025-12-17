@@ -30,6 +30,7 @@ derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into
 futures-util = "0.3.5"
 http = "1.0.0"
 itertools = { version = "0.14.0" }
+mime = "0.3.16"
 mockito = "1.0.2"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
@@ -54,6 +55,7 @@ docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_fastly = { path = "crates/lib/docs_rs_fastly" }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
+docs_rs_mimes = { path = "crates/lib/docs_rs_mimes" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "crates/lib/docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "crates/lib/docs_rs_repository_stats" }
@@ -84,7 +86,6 @@ toml = "0.9.2"
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 rustwide = { version = "0.21.0", features = ["unstable-toolchain-ci", "unstable"] }
-mime_guess = "2"
 zstd = "0.13.0"
 flate2 = "1.1.1"
 hostname = "0.4.0"
@@ -125,7 +126,7 @@ axum = { version = "0.8.1", features = ["macros"] }
 axum-extra = { workspace = true }
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
-mime = "0.3.16"
+mime = { workspace = true }
 
 tempfile = "3.1.0"
 fn-error-context = "0.2.0"
