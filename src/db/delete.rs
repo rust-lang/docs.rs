@@ -1,9 +1,6 @@
-use crate::{
-    Config,
-    error::Result,
-    storage::{AsyncStorage, rustdoc_archive_path, source_archive_path},
-};
+use crate::{Config, error::Result};
 use anyhow::Context as _;
+use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use docs_rs_types::{CrateId, Version};
 use fn_error_context::context;
 use sqlx::Connection;
@@ -41,7 +38,7 @@ pub async fn delete_crate(
         storage.delete_prefix(&remote_folder).await?;
 
         // remove existing local archive index files.
-        let local_index_folder = config.local_archive_cache_path.join(&remote_folder);
+        let local_index_folder = config.storage.local_archive_cache_path.join(&remote_folder);
         if local_index_folder.exists() {
             tokio::fs::remove_dir_all(&local_index_folder)
                 .await
@@ -82,7 +79,7 @@ pub async fn delete_version(
             .await?;
     }
 
-    let local_archive_cache = &config.local_archive_cache_path;
+    let local_archive_cache = &config.storage.local_archive_cache_path;
     let mut paths = vec![source_archive_path(name, version)];
     if is_library {
         paths.push(rustdoc_archive_path(name, version));
@@ -206,9 +203,9 @@ async fn delete_crate_from_database(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{CompressionAlgorithm, rustdoc_json_path};
     use crate::test::{KRATE, V1, V2, async_wrapper, fake_release_that_failed_before_build};
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
+    use docs_rs_storage::{CompressionAlgorithm, RustdocJsonFormatVersion, rustdoc_json_path};
     use docs_rs_types::ReleaseId;
     use test_case::test_case;
 
@@ -383,7 +380,7 @@ mod tests {
                         "a",
                         version,
                         "x86_64-unknown-linux-gnu",
-                        crate::storage::RustdocJsonFormatVersion::Latest,
+                        RustdocJsonFormatVersion::Latest,
                         Some(CompressionAlgorithm::Zstd),
                     ))
                     .await
@@ -459,6 +456,7 @@ mod tests {
                 assert!(!env.async_storage().exists(&archive_index).await?);
                 assert!(
                     !env.config()
+                        .storage
                         .local_archive_cache_path
                         .join(&archive_index)
                         .exists()

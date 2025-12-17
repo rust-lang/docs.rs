@@ -1,3 +1,6 @@
+#[cfg(feature = "testing")]
+pub mod testing;
+
 use sentry::{
     TransactionContext, integrations::panic as sentry_panic,
     integrations::tracing as sentry_tracing,

@@ -1,3 +1,4 @@
+use crate::errors::SizeLimitReached;
 use std::{
     io::{self, Write},
     pin::Pin,
@@ -11,14 +12,14 @@ pub(crate) struct SizedBuffer {
 }
 
 impl SizedBuffer {
-    pub(crate) fn new(limit: usize) -> Self {
+    pub fn new(limit: usize) -> Self {
         SizedBuffer {
             inner: Vec::new(),
             limit,
         }
     }
 
-    pub(crate) fn reserve(&mut self, amount: usize) {
+    pub fn reserve(&mut self, amount: usize) {
         if self.inner.len() + amount > self.limit {
             self.inner.reserve_exact(self.limit - self.inner.len());
         } else {
@@ -26,7 +27,7 @@ impl SizedBuffer {
         }
     }
 
-    pub(crate) fn into_inner(self) -> Vec<u8> {
+    pub fn into_inner(self) -> Vec<u8> {
         self.inner
     }
 }
@@ -34,7 +35,7 @@ impl SizedBuffer {
 impl Write for SizedBuffer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.inner.len() + buf.len() > self.limit {
-            Err(io::Error::other(crate::error::SizeLimitReached))
+            Err(io::Error::other(SizeLimitReached))
         } else {
             self.inner.write(buf)
         }
@@ -88,12 +89,7 @@ mod tests {
 
         // Ensure adding a third chunk fails
         let error = buffer.write(&[0; 500]).unwrap_err();
-        assert!(
-            error
-                .get_ref()
-                .unwrap()
-                .is::<crate::error::SizeLimitReached>()
-        );
+        assert!(error.get_ref().unwrap().is::<SizeLimitReached>());
 
         // Ensure all the third chunk was discarded
         assert_eq!(1000, buffer.inner.len());

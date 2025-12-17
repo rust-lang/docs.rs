@@ -1,11 +1,6 @@
-use crate::storage::StorageKind;
 use anyhow::{Context as _, Result, bail};
 use docs_rs_env_vars::{env, maybe_env, require_env};
-use std::{
-    io,
-    path::{self, Path, PathBuf},
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Debug, derive_builder::Builder)]
 #[builder(pattern = "owned")]
@@ -17,24 +12,6 @@ pub struct Config {
     /// How long to wait between registry checks
     pub(crate) delay_between_registry_fetches: Duration,
 
-    // Storage params
-    pub(crate) storage_backend: StorageKind,
-
-    // AWS SDK configuration
-    pub(crate) aws_sdk_max_retries: u32,
-
-    // S3 params
-    pub(crate) s3_bucket: String,
-    pub(crate) s3_region: String,
-    pub(crate) s3_endpoint: Option<String>,
-
-    // DO NOT CONFIGURE THIS THROUGH AN ENVIRONMENT VARIABLE!
-    // Accidentally turning this on outside of the test suite might cause data loss in the
-    // production environment.
-    #[cfg(test)]
-    #[builder(default)]
-    pub(crate) s3_bucket_is_temporary: bool,
-
     // Access token for APIs for crates.io (careful: use
     // constant_time_eq for comparisons!)
     pub(crate) cratesio_token: Option<String>,
@@ -43,9 +20,6 @@ pub struct Config {
     pub(crate) request_timeout: Option<Duration>,
     pub(crate) report_request_timeouts: bool,
 
-    // Max size of the files served by the docs.rs frontend
-    pub(crate) max_file_size: usize,
-    pub(crate) max_file_size_html: usize,
     // The most memory that can be used to parse an HTML file
     pub(crate) max_parse_memory: usize,
     // Time between 'git gc --auto' calls in seconds
@@ -62,25 +36,6 @@ pub struct Config {
     // `500` for a ratio of 7249 over 54k crates.
     // For unit-tests the number has to be higher.
     pub(crate) random_crate_search_view_size: u32,
-
-    // where do we want to store the locally cached index files
-    // for the remote archives?
-    pub(crate) local_archive_cache_path: PathBuf,
-
-    // expected number of entries in the local archive cache.
-    // Makes server restarts faster by preallocating some data structures.
-    // General numbers (as of 2025-12):
-    // * we have ~1.5 mio releases with archive storage (and 400k without)
-    // * each release has on average 2 archive files (rustdoc, source)
-    // so, over all, 3 mio archive index files in S3.
-    //
-    // While due to crawlers we will download _all_ of them over time, the old
-    // metric "releases accessed in the last 10 minutes" was around 50k, if I
-    // recall correctly.
-    // We're using a local DashMap to store some locks for these indexes,
-    // and we already know in advance we need these 50k entries.
-    // So we can preallocate the DashMap with this number to avoid resizes.
-    pub(crate) local_archive_cache_expected_count: usize,
 
     // Where to collect metrics for the metrics initiative.
     // When empty, we won't collect metrics.
@@ -121,6 +76,7 @@ pub struct Config {
     pub(crate) registry_api: docs_rs_registry_api::Config,
     pub(crate) database: docs_rs_database::Config,
     pub(crate) repository_stats: docs_rs_repository_stats::Config,
+    pub(crate) storage: Arc<docs_rs_storage::Config>,
 }
 
 impl Config {
@@ -160,14 +116,7 @@ impl Config {
             .registry_index_path(env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?)
             .registry_url(maybe_env("REGISTRY_URL")?)
             .prefix(prefix.clone())
-            .storage_backend(env("DOCSRS_STORAGE_BACKEND", StorageKind::Database)?)
-            .aws_sdk_max_retries(env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?)
-            .s3_bucket(env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?)
-            .s3_region(env("S3_REGION", "us-west-1".to_string())?)
-            .s3_endpoint(maybe_env("S3_ENDPOINT")?)
             .cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
-            .max_file_size(env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?)
-            .max_file_size_html(env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?)
             // LOL HTML only uses as much memory as the size of the start tag!
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             .max_parse_memory(env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?)
@@ -181,14 +130,6 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .local_archive_cache_path(ensure_absolute_path(env(
-                "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
-                prefix.join("archive_cache"),
-            )?)?)
-            .local_archive_cache_expected_count(env(
-                "DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT",
-                100_000usize,
-            )?)
             .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
             .temp_dir(temp_dir)
             .rustwide_workspace(env(
@@ -215,26 +156,7 @@ impl Config {
             .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?)
             .registry_api(docs_rs_registry_api::Config::from_environment()?)
             .database(docs_rs_database::Config::from_environment()?)
-            .repository_stats(docs_rs_repository_stats::Config::from_environment()?))
-    }
-
-    pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
-        static HTML: &str = "html";
-
-        if let Some(ext) = path.as_ref().extension()
-            && ext == HTML
-        {
-            self.max_file_size_html
-        } else {
-            self.max_file_size
-        }
-    }
-}
-
-fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
-    if path.is_absolute() {
-        Ok(path)
-    } else {
-        Ok(path::absolute(&path)?)
+            .repository_stats(docs_rs_repository_stats::Config::from_environment()?)
+            .storage(Arc::new(docs_rs_storage::Config::from_environment()?)))
     }
 }

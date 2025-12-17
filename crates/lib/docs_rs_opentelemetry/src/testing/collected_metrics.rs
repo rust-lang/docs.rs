@@ -1,29 +1,8 @@
-use std::sync::Arc;
-
-use crate::AnyMeterProvider;
 use anyhow::{Result, anyhow};
 use derive_more::Deref;
-use opentelemetry_sdk::metrics::{
-    InMemoryMetricExporter, PeriodicReader,
-    data::{
-        AggregatedMetrics, HistogramDataPoint, Metric, MetricData, ResourceMetrics, SumDataPoint,
-    },
+use opentelemetry_sdk::metrics::data::{
+    AggregatedMetrics, HistogramDataPoint, Metric, MetricData, ResourceMetrics, SumDataPoint,
 };
-
-/// set up a standalone InMemoryMetricExporter and MeterProvider for testing purposes.
-/// For when you want to collect metrics, and then inspect what was collected.
-pub fn setup_test_meter_provider() -> (InMemoryMetricExporter, AnyMeterProvider) {
-    let metric_exporter = InMemoryMetricExporter::default();
-
-    (
-        metric_exporter.clone(),
-        Arc::new(
-            opentelemetry_sdk::metrics::SdkMeterProvider::builder()
-                .with_reader(PeriodicReader::builder(metric_exporter.clone()).build())
-                .build(),
-        ),
-    )
-}
 
 /// small wrapper around the collected result of the InMemoryMetricExporter.
 /// For convenience in tests.

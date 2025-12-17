@@ -7,8 +7,8 @@
 //! It's recommended that you use the S3 bucket in production to avoid running out of disk space.
 //! However, postgres is still available for testing and backwards compatibility.
 
-use crate::error::Result;
-use crate::storage::{AsyncStorage, CompressionAlgorithm};
+use crate::{compression::CompressionAlgorithm, storage::non_blocking::AsyncStorage};
+use anyhow::Result;
 use docs_rs_mimes::detect_mime;
 use mime::Mime;
 use serde_json::Value;
@@ -19,12 +19,12 @@ use tracing::instrument;
 /// Used to return metadata about the file.
 #[derive(Debug)]
 pub struct FileEntry {
-    pub(crate) path: PathBuf,
-    pub(crate) size: u64,
+    pub path: PathBuf,
+    pub size: u64,
 }
 
 impl FileEntry {
-    pub(crate) fn mime(&self) -> Mime {
+    pub fn mime(&self) -> Mime {
         detect_mime(&self.path)
     }
 }
@@ -58,7 +58,7 @@ pub async fn add_path_into_remote_archive<P: AsRef<Path> + std::fmt::Debug>(
     Ok((file_list, algorithm))
 }
 
-pub(crate) fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> Value {
+pub fn file_list_to_json(files: impl IntoIterator<Item = FileEntry>) -> Value {
     Value::Array(
         files
             .into_iter()

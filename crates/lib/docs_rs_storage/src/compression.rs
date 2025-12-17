@@ -53,7 +53,7 @@ impl std::convert::TryFrom<i32> for CompressionAlgorithm {
     }
 }
 
-pub(crate) fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
+pub fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
     match algorithm {
         CompressionAlgorithm::Zstd => "zst",
         CompressionAlgorithm::Bzip2 => "bz2",
@@ -61,7 +61,7 @@ pub(crate) fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static st
     }
 }
 
-pub(crate) fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
+pub fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
     match ext {
         "zst" => Some(CompressionAlgorithm::Zstd),
         "bz2" => Some(CompressionAlgorithm::Bzip2),
@@ -170,6 +170,9 @@ pub fn decompress(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{StreamingBlob, errors::SizeLimitReached};
+    use anyhow::Result;
+    use chrono::Utc;
     use strum::IntoEnumIterator;
     use test_case::test_case;
 
@@ -219,7 +222,7 @@ mod tests {
             assert!(
                 err.downcast_ref::<std::io::Error>()
                     .and_then(|io| io.get_ref())
-                    .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                    .and_then(|err| err.downcast_ref::<SizeLimitReached>())
                     .is_some()
             );
         }
@@ -238,5 +241,63 @@ mod tests {
     fn test_file_extensions(alg: CompressionAlgorithm, expected: &str) {
         assert_eq!(file_extension_for(alg), expected);
         assert_eq!(compression_from_file_extension(expected), Some(alg));
+    }
+
+    #[tokio::test]
+    #[test_case(CompressionAlgorithm::Zstd)]
+    #[test_case(CompressionAlgorithm::Bzip2)]
+    #[test_case(CompressionAlgorithm::Gzip)]
+    async fn test_async_compression(alg: CompressionAlgorithm) -> Result<()> {
+        const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
+
+        let compressed_index_content = {
+            let mut buf: Vec<u8> = Vec::new();
+            compress_async(&mut io::Cursor::new(CONTENT.to_vec()), &mut buf, alg).await?;
+            buf
+        };
+
+        {
+            // try low-level async decompression
+            let mut decompressed_buf: Vec<u8> = Vec::new();
+            let mut reader = wrap_reader_for_decompression(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+            );
+
+            tokio::io::copy(&mut reader, &mut io::Cursor::new(&mut decompressed_buf)).await?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        {
+            // try sync decompression
+            let decompressed_buf: Vec<u8> = decompress(
+                io::Cursor::new(compressed_index_content.clone()),
+                alg,
+                usize::MAX,
+            )?;
+
+            assert_eq!(decompressed_buf, CONTENT);
+        }
+
+        // try decompress via storage API
+        let blob = StreamingBlob {
+            path: "some_path.db".into(),
+            mime: mime::APPLICATION_OCTET_STREAM,
+            date_updated: Utc::now(),
+            etag: None,
+            compression: Some(alg),
+            content_length: compressed_index_content.len(),
+            content: Box::new(io::Cursor::new(compressed_index_content)),
+        }
+        .decompress()
+        .await?
+        .materialize(usize::MAX)
+        .await?;
+
+        assert_eq!(blob.compression, None);
+        assert_eq!(blob.content, CONTENT);
+
+        Ok(())
     }
 }

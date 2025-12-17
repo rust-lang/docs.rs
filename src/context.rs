@@ -1,10 +1,11 @@
-use crate::{AsyncBuildQueue, AsyncStorage, BuildQueue, Config, Storage};
+use crate::{AsyncBuildQueue, BuildQueue, Config};
 use anyhow::Result;
 use docs_rs_database::Pool;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime;
 
@@ -33,7 +34,10 @@ impl Context {
             .then(|| Cdn::from_config(&config.fastly, &meter_provider))
             .transpose()?;
 
-        Self::from_parts(config, meter_provider, pool, cdn).await
+        let async_storage =
+            Arc::new(AsyncStorage::new(config.storage.clone(), &meter_provider).await?);
+
+        Self::from_parts(config, meter_provider, pool, async_storage, cdn).await
     }
 
     /// Create a new context environment from the given configuration, for running tests.
@@ -42,8 +46,16 @@ impl Context {
         config: Config,
         meter_provider: AnyMeterProvider,
         pool: Pool,
+        async_storage: Arc<AsyncStorage>,
     ) -> Result<Self> {
-        Self::from_parts(config, meter_provider, pool, Some(Cdn::mock())).await
+        Self::from_parts(
+            config,
+            meter_provider,
+            pool,
+            async_storage,
+            Some(Cdn::mock()),
+        )
+        .await
     }
 
     /// private function for context environment generation, allows passing in a
@@ -53,12 +65,10 @@ impl Context {
         config: Config,
         meter_provider: AnyMeterProvider,
         pool: Pool,
+        async_storage: Arc<AsyncStorage>,
         cdn: Option<Cdn>,
     ) -> Result<Self> {
         let config = Arc::new(config);
-
-        let async_storage =
-            Arc::new(AsyncStorage::new(pool.clone(), config.clone(), &meter_provider).await?);
 
         let cdn = cdn.map(Arc::new);
         let async_build_queue = Arc::new(AsyncBuildQueue::new(

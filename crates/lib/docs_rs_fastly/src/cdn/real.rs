@@ -170,7 +170,7 @@ impl CdnBehaviour for RealCdn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use docs_rs_opentelemetry::testing::setup_test_meter_provider;
+    use docs_rs_opentelemetry::testing::TestMetrics;
     use std::str::FromStr as _;
 
     #[tokio::test]
@@ -191,9 +191,8 @@ mod tests {
             .create_async()
             .await;
 
-        let (_exporter, meter_provider) = setup_test_meter_provider();
-
-        let cdn = RealCdn::from_config(&config, &meter_provider)?;
+        let test_metrics = TestMetrics::new();
+        let cdn = RealCdn::from_config(&config, test_metrics.provider())?;
 
         cdn.purge_surrogate_keys(vec![
             SurrogateKey::from_str("crate-foo").unwrap(),
@@ -224,8 +223,8 @@ mod tests {
             .create_async()
             .await;
 
-        let (_exporter, meter_provider) = setup_test_meter_provider();
-        let cdn = RealCdn::from_config(&config, &meter_provider)?;
+        let test_metrics = TestMetrics::new();
+        let cdn = RealCdn::from_config(&config, test_metrics.provider())?;
 
         assert!(
             cdn.purge_surrogate_keys(vec![
@@ -275,8 +274,8 @@ mod tests {
             .create_async()
             .await;
 
-        let (_exporter, meter_provider) = setup_test_meter_provider();
-        let cdn = RealCdn::from_config(&config, &meter_provider)?;
+        let test_metrics = TestMetrics::new();
+        let cdn = RealCdn::from_config(&config, test_metrics.provider())?;
 
         let keys: Vec<_> = (0..350)
             .map(|n| SurrogateKey::from_str(&format!("crate-foo-{n}")).unwrap())

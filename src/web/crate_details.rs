@@ -1,6 +1,5 @@
 use crate::{
-    AsyncStorage, impl_axum_webpage,
-    storage::PathNotFoundError,
+    impl_axum_webpage,
     web::{
         MatchedRelease, MetaData,
         cache::CachePolicy,
@@ -23,6 +22,7 @@ use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
+use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use log::warn;

@@ -1,253 +1,36 @@
-mod archive_index;
-pub(crate) mod compression;
-mod database;
-mod s3;
-
-pub use self::compression::{CompressionAlgorithm, CompressionAlgorithms, compress, decompress};
-
-use self::{
-    compression::{compress_async, wrap_reader_for_decompression},
-    database::DatabaseBackend,
-    s3::S3Backend,
+#[cfg(any(test, feature = "testing"))]
+use crate::backends::memory::MemoryBackend;
+use crate::{
+    Config,
+    archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION},
+    backends::{StorageBackend, StorageBackendMethods, s3::S3Backend},
+    blob::{Blob, BlobUpload, StreamingBlob},
+    compression::{CompressionAlgorithm, compress, compress_async},
+    errors::PathNotFoundError,
+    file::FileEntry,
+    metrics::StorageMetrics,
+    types::{FileRange, StorageKind},
+    utils::{
+        file_list::get_file_list,
+        storage_path::{rustdoc_archive_path, source_archive_path},
+    },
 };
-use crate::{Config, db::file::FileEntry, error::Result};
-use axum_extra::headers;
-use chrono::{DateTime, Utc};
+use anyhow::Result;
 use dashmap::DashMap;
-use docs_rs_database::Pool;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, Version};
 use docs_rs_utils::spawn_blocking;
-use fn_error_context::context;
 use futures_util::stream::BoxStream;
-use mime::Mime;
-use opentelemetry::metrics::Counter;
-use path_slash::PathExt;
 use std::{
     fmt,
     fs::{self, File},
     io::{self, BufReader},
-    iter,
-    num::ParseIntError,
-    ops::RangeInclusive,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
-use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt},
-    runtime,
-    sync::Mutex,
-};
+use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, trace, warn};
-use walkdir::WalkDir;
-
-const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
-
-type FileRange = RangeInclusive<u64>;
-
-#[derive(Debug, thiserror::Error)]
-#[error("path not found")]
-pub(crate) struct PathNotFoundError;
-
-/// represents a blob to be uploaded to storage.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct BlobUpload {
-    pub(crate) path: String,
-    pub(crate) mime: Mime,
-    pub(crate) content: Vec<u8>,
-    pub(crate) compression: Option<CompressionAlgorithm>,
-}
-
-impl From<Blob> for BlobUpload {
-    fn from(value: Blob) -> Self {
-        Self {
-            path: value.path,
-            mime: value.mime,
-            content: value.content,
-            compression: value.compression,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Blob {
-    pub(crate) path: String,
-    pub(crate) mime: Mime,
-    pub(crate) date_updated: DateTime<Utc>,
-    pub(crate) etag: Option<headers::ETag>,
-    pub(crate) content: Vec<u8>,
-    pub(crate) compression: Option<CompressionAlgorithm>,
-}
-
-pub(crate) struct StreamingBlob {
-    pub(crate) path: String,
-    pub(crate) mime: Mime,
-    pub(crate) date_updated: DateTime<Utc>,
-    pub(crate) etag: Option<headers::ETag>,
-    pub(crate) compression: Option<CompressionAlgorithm>,
-    pub(crate) content_length: usize,
-    pub(crate) content: Box<dyn AsyncBufRead + Unpin + Send>,
-}
-
-impl std::fmt::Debug for StreamingBlob {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StreamingBlob")
-            .field("path", &self.path)
-            .field("mime", &self.mime)
-            .field("date_updated", &self.date_updated)
-            .field("etag", &self.etag)
-            .field("compression", &self.compression)
-            .finish()
-    }
-}
-
-impl StreamingBlob {
-    /// wrap the content stream in a streaming decompressor according to the
-    /// algorithm found in `compression` attribute.
-    pub(crate) async fn decompress(mut self) -> Result<Self, io::Error> {
-        let Some(alg) = self.compression else {
-            return Ok(self);
-        };
-
-        self.content = wrap_reader_for_decompression(self.content, alg);
-
-        // We fill the first bytes here to force the compressor to start decompressing.
-        // This is because we want a failure here in this method when the data is corrupted,
-        // so we can directly act on that, and users don't have any errors when they just
-        // stream the data.
-        // This won't _comsume_ the bytes. The user of this StreamingBlob will still be able
-        // to stream the whole content.
-        //
-        // This doesn't work 100% of the time. We might get other i/o error here,
-        // or the decompressor might stumble on corrupted data later during streaming.
-        //
-        // But: the most common error is that the format "magic bytes" at the beginning
-        // of the stream are missing, and that's caught here.
-        let decompressed_buf = self.content.fill_buf().await?;
-        debug_assert!(
-            !decompressed_buf.is_empty(),
-            "we assume if we have > 0 decompressed bytes, start of the decompression works."
-        );
-
-        self.compression = None;
-        // not touching the etag, it should represent the original content
-        Ok(self)
-    }
-
-    /// consume the inner stream and materialize the full blob into memory.
-    pub(crate) async fn materialize(mut self, max_size: usize) -> Result<Blob> {
-        let mut content = crate::utils::sized_buffer::SizedBuffer::new(max_size);
-        content.reserve(self.content_length);
-
-        tokio::io::copy(&mut self.content, &mut content).await?;
-
-        Ok(Blob {
-            path: self.path,
-            mime: self.mime,
-            date_updated: self.date_updated,
-            etag: self.etag, // downloading doesn't change the etag
-            content: content.into_inner(),
-            compression: self.compression,
-        })
-    }
-}
-
-impl From<Blob> for StreamingBlob {
-    fn from(value: Blob) -> Self {
-        Self {
-            path: value.path,
-            mime: value.mime,
-            date_updated: value.date_updated,
-            etag: value.etag,
-            compression: value.compression,
-            content_length: value.content.len(),
-            content: Box::new(io::Cursor::new(value.content)),
-        }
-    }
-}
-
-pub fn get_file_list<P: AsRef<Path>>(path: P) -> Box<dyn Iterator<Item = Result<PathBuf>>> {
-    let path = path.as_ref().to_path_buf();
-    if path.is_file() {
-        let path = if let Some(parent) = path.parent() {
-            path.strip_prefix(parent).unwrap().to_path_buf()
-        } else {
-            path
-        };
-
-        Box::new(iter::once(Ok(path)))
-    } else if path.is_dir() {
-        Box::new(
-            WalkDir::new(path.clone())
-                .into_iter()
-                .filter_map(move |result| {
-                    let direntry = match result {
-                        Ok(de) => de,
-                        Err(err) => return Some(Err(err.into())),
-                    };
-
-                    if !direntry.file_type().is_dir() {
-                        Some(Ok(direntry
-                            .path()
-                            .strip_prefix(&path)
-                            .unwrap()
-                            .to_path_buf()))
-                    } else {
-                        None
-                    }
-                }),
-        )
-    } else {
-        Box::new(iter::empty())
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("invalid storage backend")]
-pub struct InvalidStorageBackendError;
-
-#[derive(Debug)]
-pub enum StorageKind {
-    Database,
-    S3,
-}
-
-impl std::str::FromStr for StorageKind {
-    type Err = InvalidStorageBackendError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "database" => Ok(StorageKind::Database),
-            "s3" => Ok(StorageKind::S3),
-            _ => Err(InvalidStorageBackendError),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct StorageMetrics {
-    uploaded_files: Counter<u64>,
-}
-
-impl StorageMetrics {
-    fn new(meter_provider: &AnyMeterProvider) -> Self {
-        let meter = meter_provider.meter("storage");
-        const PREFIX: &str = "docsrs.storage";
-        Self {
-            uploaded_files: meter
-                .u64_counter(format!("{PREFIX}.uploaded_files"))
-                .with_unit("1")
-                .build(),
-        }
-    }
-}
-
-enum StorageBackend {
-    Database(DatabaseBackend),
-    S3(Box<S3Backend>),
-}
 
 pub struct AsyncStorage {
     backend: StorageBackend,
@@ -257,21 +40,14 @@ pub struct AsyncStorage {
 }
 
 impl AsyncStorage {
-    pub async fn new(
-        pool: Pool,
-        config: Arc<Config>,
-        otel_meter_provider: &AnyMeterProvider,
-    ) -> Result<Self> {
+    pub async fn new(config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
         let otel_metrics = StorageMetrics::new(otel_meter_provider);
 
         Ok(Self {
             backend: match config.storage_backend {
-                StorageKind::Database => {
-                    StorageBackend::Database(DatabaseBackend::new(pool, otel_metrics))
-                }
-                StorageKind::S3 => {
-                    StorageBackend::S3(Box::new(S3Backend::new(&config, otel_metrics).await?))
-                }
+                #[cfg(any(test, feature = "testing"))]
+                StorageKind::Memory => StorageBackend::Memory(MemoryBackend::new(otel_metrics)),
+                StorageKind::S3 => StorageBackend::S3(S3Backend::new(&config, otel_metrics).await?),
             },
             locks: DashMap::with_capacity(config.local_archive_cache_expected_count),
             config,
@@ -279,11 +55,8 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(crate) async fn exists(&self, path: &str) -> Result<bool> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.exists(path).await,
-            StorageBackend::S3(s3) => s3.exists(path).await,
-        }
+    pub async fn exists(&self, path: &str) -> Result<bool> {
+        self.backend.exists(path).await
     }
 
     /// Fetch a rustdoc file from our blob storage.
@@ -296,7 +69,7 @@ impl AsyncStorage {
     /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
     ///    where we can fetch the requested path from inside the ZIP file.
     #[instrument]
-    pub(crate) async fn stream_rustdoc_file(
+    pub async fn stream_rustdoc_file(
         &self,
         name: &str,
         version: &Version,
@@ -315,8 +88,7 @@ impl AsyncStorage {
         })
     }
 
-    #[context("fetching {path} from {name} {version} (archive: {archive_storage})")]
-    pub(crate) async fn fetch_source_file(
+    pub async fn fetch_source_file(
         &self,
         name: &str,
         version: &Version,
@@ -331,7 +103,7 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(crate) async fn stream_source_file(
+    pub async fn stream_source_file(
         &self,
         name: &str,
         version: &Version,
@@ -350,7 +122,7 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(crate) async fn rustdoc_file_exists(
+    pub async fn rustdoc_file_exists(
         &self,
         name: &str,
         version: &Version,
@@ -369,7 +141,7 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(crate) async fn exists_in_archive(
+    pub async fn exists_in_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
@@ -402,7 +174,7 @@ impl AsyncStorage {
 
     /// get, decompress and materialize an object from store
     #[instrument]
-    pub(crate) async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+    pub async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         self.get_stream(path).await?.materialize(max_size).await
     }
 
@@ -411,22 +183,19 @@ impl AsyncStorage {
     /// We don't decompress ourselves, S3 only decompresses with a correct
     /// `Content-Encoding` header set, which we don't.
     #[instrument]
-    pub(crate) async fn get_raw_stream(&self, path: &str) -> Result<StreamingBlob> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.get_stream(path, None).await,
-            StorageBackend::S3(s3) => s3.get_stream(path, None).await,
-        }
+    pub async fn get_raw_stream(&self, path: &str) -> Result<StreamingBlob> {
+        self.backend.get_stream(path, None).await
     }
 
     /// get a decompressing stream to an object in storage.
     #[instrument]
-    pub(crate) async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
+    pub async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
     /// get, decompress and materialize part of an object from store
     #[instrument]
-    pub(super) async fn get_range(
+    pub(crate) async fn get_range(
         &self,
         path: &str,
         max_size: usize,
@@ -441,16 +210,13 @@ impl AsyncStorage {
 
     /// get a decompressing stream to a range inside an object in storage
     #[instrument]
-    pub(super) async fn get_range_stream(
+    pub(crate) async fn get_range_stream(
         &self,
         path: &str,
         range: FileRange,
         compression: Option<CompressionAlgorithm>,
     ) -> Result<StreamingBlob> {
-        let mut raw_stream = match &self.backend {
-            StorageBackend::Database(db) => db.get_stream(path, Some(range)).await,
-            StorageBackend::S3(s3) => s3.get_stream(path, Some(range)).await,
-        }?;
+        let mut raw_stream = self.backend.get_stream(path, Some(range)).await?;
         // `compression` represents the compression of the file-stream inside the archive.
         // We don't compress the whole archive, so the encoding of the archive's blob is irrelevant
         // here.
@@ -580,7 +346,7 @@ impl AsyncStorage {
     }
 
     #[instrument]
-    pub(crate) async fn get_from_archive(
+    pub async fn get_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
@@ -594,7 +360,7 @@ impl AsyncStorage {
     }
 
     #[instrument(skip(self))]
-    pub(crate) async fn stream_from_archive(
+    pub async fn stream_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
@@ -655,7 +421,7 @@ impl AsyncStorage {
     }
 
     #[instrument(skip(self))]
-    pub(crate) async fn store_all_in_archive(
+    pub async fn store_all_in_archive(
         &self,
         archive_path: &str,
         root_dir: &Path,
@@ -729,28 +495,29 @@ impl AsyncStorage {
             buf
         };
 
-        self.store_inner(vec![
-            BlobUpload {
-                path: archive_path.to_string(),
-                mime: mimes::APPLICATION_ZIP.clone(),
-                content: zip_content,
-                compression: None,
-            },
-            BlobUpload {
-                path: remote_index_path,
-                mime: mime::APPLICATION_OCTET_STREAM,
-                content: compressed_index_content,
-                compression: Some(alg),
-            },
-        ])
-        .await?;
+        self.backend
+            .store_batch(vec![
+                BlobUpload {
+                    path: archive_path.to_string(),
+                    mime: mimes::APPLICATION_ZIP.clone(),
+                    content: zip_content,
+                    compression: None,
+                },
+                BlobUpload {
+                    path: remote_index_path,
+                    mime: mime::APPLICATION_OCTET_STREAM,
+                    content: compressed_index_content,
+                    compression: Some(alg),
+                },
+            ])
+            .await?;
 
         Ok((file_paths, CompressionAlgorithm::Bzip2))
     }
 
     /// Store all files in `root_dir` into the backend under `prefix`.
     #[instrument(skip(self))]
-    pub(crate) async fn store_all(
+    pub async fn store_all(
         &self,
         prefix: &Path,
         root_dir: &Path,
@@ -776,7 +543,7 @@ impl AsyncStorage {
                     let file_size = file.metadata()?.len();
 
                     let content = compress(file, alg)?;
-                    let bucket_path = prefix.join(&file_path).to_slash().unwrap().to_string();
+                    let bucket_path = prefix.join(&file_path).to_string_lossy().to_string();
 
                     let file_info = FileEntry {
                         path: file_path,
@@ -797,19 +564,19 @@ impl AsyncStorage {
         })
         .await?;
 
-        self.store_inner(blobs).await?;
+        self.backend.store_batch(blobs).await?;
         Ok((file_paths_and_mimes, alg))
     }
 
     #[cfg(test)]
-    pub(crate) async fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
-        self.store_inner(blobs).await
+    pub async fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
+        self.backend.store_batch(blobs).await
     }
 
     // Store file into the backend at the given path, uncompressed.
     // The path will also be used to determine the mime type.
     #[instrument(skip(self, content))]
-    pub(crate) async fn store_one_uncompressed(
+    pub async fn store_one_uncompressed(
         &self,
         path: impl Into<String> + std::fmt::Debug,
         content: impl Into<Vec<u8>>,
@@ -818,13 +585,14 @@ impl AsyncStorage {
         let content = content.into();
         let mime = detect_mime(&path).to_owned();
 
-        self.store_inner(vec![BlobUpload {
-            path,
-            mime,
-            content,
-            compression: None,
-        }])
-        .await?;
+        self.backend
+            .store_batch(vec![BlobUpload {
+                path,
+                mime,
+                content,
+                compression: None,
+            }])
+            .await?;
 
         Ok(())
     }
@@ -832,7 +600,7 @@ impl AsyncStorage {
     // Store file into the backend at the given path (also used to detect mime type), returns the
     // chosen compression algorithm
     #[instrument(skip(self, content))]
-    pub(crate) async fn store_one(
+    pub async fn store_one(
         &self,
         path: impl Into<String> + std::fmt::Debug,
         content: impl Into<Vec<u8>>,
@@ -843,19 +611,20 @@ impl AsyncStorage {
         let content = compress(&*content, alg)?;
         let mime = detect_mime(&path).to_owned();
 
-        self.store_inner(vec![BlobUpload {
-            path,
-            mime,
-            content,
-            compression: Some(alg),
-        }])
-        .await?;
+        self.backend
+            .store_batch(vec![BlobUpload {
+                path,
+                mime,
+                content,
+                compression: Some(alg),
+            }])
+            .await?;
 
         Ok(alg)
     }
 
     #[instrument(skip(self))]
-    pub(crate) async fn store_path(
+    pub async fn store_path(
         &self,
         target_path: impl Into<String> + std::fmt::Debug,
         source_path: impl AsRef<Path> + std::fmt::Debug,
@@ -868,45 +637,31 @@ impl AsyncStorage {
 
         let mime = detect_mime(&target_path).to_owned();
 
-        self.store_inner(vec![BlobUpload {
-            path: target_path,
-            mime,
-            content,
-            compression: Some(alg),
-        }])
-        .await?;
+        self.backend
+            .store_batch(vec![BlobUpload {
+                path: target_path,
+                mime,
+                content,
+                compression: Some(alg),
+            }])
+            .await?;
 
         Ok(alg)
     }
 
-    async fn store_inner(&self, batch: Vec<BlobUpload>) -> Result<()> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.store_batch(batch).await,
-            StorageBackend::S3(s3) => s3.store_batch(batch).await,
-        }
+    pub async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String>> {
+        self.backend.list_prefix(prefix).await
     }
 
-    pub(super) async fn list_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> BoxStream<'a, Result<String>> {
-        match &self.backend {
-            StorageBackend::Database(db) => Box::pin(db.list_prefix(prefix).await),
-            StorageBackend::S3(s3) => Box::pin(s3.list_prefix(prefix).await),
-        }
-    }
-
-    pub(crate) async fn delete_prefix(&self, prefix: &str) -> Result<()> {
-        match &self.backend {
-            StorageBackend::Database(db) => db.delete_prefix(prefix).await,
-            StorageBackend::S3(s3) => s3.delete_prefix(prefix).await,
-        }
+    #[instrument(skip(self))]
+    pub async fn delete_prefix(&self, prefix: &str) -> Result<()> {
+        self.backend.delete_prefix(prefix).await
     }
 
     // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
     // we leak the web server, and Drop isn't executed in that case (since the leaked web server
     // still holds a reference to the storage).
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) async fn cleanup_after_test(&self) -> Result<()> {
         if let StorageBackend::S3(s3) = &self.backend {
             s3.cleanup_after_test().await?;
@@ -918,481 +673,27 @@ impl AsyncStorage {
 impl std::fmt::Debug for AsyncStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.backend {
-            StorageBackend::Database(_) => write!(f, "database-backed storage"),
+            #[cfg(any(test, feature = "testing"))]
+            StorageBackend::Memory(_) => write!(f, "memory-backed storage"),
             StorageBackend::S3(_) => write!(f, "S3-backed storage"),
         }
     }
 }
 
-/// Sync wrapper around `AsyncStorage` for parts of the codebase that are not async.
-pub struct Storage {
-    inner: Arc<AsyncStorage>,
-    runtime: runtime::Handle,
-}
-
-#[allow(dead_code)]
-impl Storage {
-    pub fn new(inner: Arc<AsyncStorage>, runtime: runtime::Handle) -> Self {
-        Self { inner, runtime }
-    }
-
-    pub(crate) fn exists(&self, path: &str) -> Result<bool> {
-        self.runtime.block_on(self.inner.exists(path))
-    }
-
-    pub(crate) fn fetch_source_file(
-        &self,
-        name: &str,
-        version: &Version,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.fetch_source_file(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
-    }
-
-    pub(crate) fn rustdoc_file_exists(
-        &self,
-        name: &str,
-        version: &Version,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        archive_storage: bool,
-    ) -> Result<bool> {
-        self.runtime.block_on(self.inner.rustdoc_file_exists(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
-    }
-
-    pub(crate) fn exists_in_archive(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-    ) -> Result<bool> {
-        self.runtime.block_on(
-            self.inner
-                .exists_in_archive(archive_path, latest_build_id, path),
-        )
-    }
-
-    pub(crate) fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get(path, max_size))
-    }
-
-    pub(super) fn get_range(
-        &self,
-        path: &str,
-        max_size: usize,
-        range: FileRange,
-        compression: Option<CompressionAlgorithm>,
-    ) -> Result<Blob> {
-        self.runtime
-            .block_on(self.inner.get_range(path, max_size, range, compression))
-    }
-
-    pub(crate) fn get_from_archive(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        max_size: usize,
-    ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get_from_archive(
-            archive_path,
-            latest_build_id,
-            path,
-            max_size,
-        ))
-    }
-
-    pub(crate) fn store_all_in_archive(
-        &self,
-        archive_path: &str,
-        root_dir: &Path,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
-        self.runtime
-            .block_on(self.inner.store_all_in_archive(archive_path, root_dir))
-    }
-
-    pub(crate) fn store_all(
-        &self,
-        prefix: &Path,
-        root_dir: &Path,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
-        self.runtime
-            .block_on(self.inner.store_all(prefix, root_dir))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
-        self.runtime.block_on(self.inner.store_blobs(blobs))
-    }
-
-    // Store file into the backend at the given path, uncompressed.
-    // The path will also be used to determine the mime type.
-    #[instrument(skip(self, content))]
-    pub(crate) fn store_one_uncompressed(
-        &self,
-        path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
-    ) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.store_one_uncompressed(path, content))
-    }
-
-    // Store file into the backend at the given path (also used to detect mime type), returns the
-    // chosen compression algorithm
-    #[instrument(skip(self, content))]
-    pub(crate) fn store_one(
-        &self,
-        path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
-    ) -> Result<CompressionAlgorithm> {
-        self.runtime.block_on(self.inner.store_one(path, content))
-    }
-
-    // Store file into the backend at the given path (also used to detect mime type), returns the
-    // chosen compression algorithm
-    #[instrument(skip(self))]
-    pub(crate) fn store_path(
-        &self,
-        target_path: impl Into<String> + std::fmt::Debug,
-        source_path: impl AsRef<Path> + std::fmt::Debug,
-    ) -> Result<CompressionAlgorithm> {
-        self.runtime
-            .block_on(self.inner.store_path(target_path, source_path))
-    }
-
-    /// sync wrapper for the list_prefix function
-    /// purely for testing purposes since it collects all files into a Vec.
-    #[cfg(test)]
-    pub(crate) fn list_prefix(&self, prefix: &str) -> impl Iterator<Item = Result<String>> {
-        use futures_util::stream::StreamExt;
-        self.runtime
-            .block_on(async {
-                self.inner
-                    .list_prefix(prefix)
-                    .await
-                    .collect::<Vec<_>>()
-                    .await
-            })
-            .into_iter()
-    }
-
-    #[instrument(skip(self))]
-    pub(crate) fn delete_prefix(&self, prefix: &str) -> Result<()> {
-        self.runtime.block_on(self.inner.delete_prefix(prefix))
-    }
-
-    // We're using `&self` instead of consuming `self` or creating a Drop impl because during tests
-    // we leak the web server, and Drop isn't executed in that case (since the leaked web server
-    // still holds a reference to the storage).
-    #[cfg(test)]
-    pub(crate) async fn cleanup_after_test(&self) -> Result<()> {
-        self.inner.cleanup_after_test().await
-    }
-}
-
-impl std::fmt::Debug for Storage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "sync wrapper for {:?}", self.inner)
-    }
-}
-
-pub(crate) fn rustdoc_archive_path(name: &str, version: &Version) -> String {
-    format!("rustdoc/{name}/{version}.zip")
-}
-
-#[derive(strum::Display, Debug, PartialEq, Eq, Clone, Copy)]
-#[strum(serialize_all = "snake_case")]
-pub(crate) enum RustdocJsonFormatVersion {
-    #[strum(serialize = "{0}")]
-    Version(u16),
-    Latest,
-}
-
-impl FromStr for RustdocJsonFormatVersion {
-    type Err = ParseIntError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "latest" {
-            Ok(RustdocJsonFormatVersion::Latest)
-        } else {
-            s.parse::<u16>().map(RustdocJsonFormatVersion::Version)
-        }
-    }
-}
-
-pub(crate) fn rustdoc_json_path(
-    name: &str,
-    version: &Version,
-    target: &str,
-    format_version: RustdocJsonFormatVersion,
-    compression_algorithm: Option<CompressionAlgorithm>,
-) -> String {
-    let mut path = format!(
-        "rustdoc-json/{name}/{version}/{target}/{name}_{version}_{target}_{format_version}.json"
-    );
-
-    if let Some(alg) = compression_algorithm {
-        path.push('.');
-        path.push_str(compression::file_extension_for(alg));
-    }
-
-    path
-}
-
-pub(crate) fn source_archive_path(name: &str, version: &Version) -> String {
-    format!("sources/{name}/{version}.zip")
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::TestEnvironment;
-    use docs_rs_headers::compute_etag;
-    use std::env;
-    use test_case::test_case;
-
-    const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
-
-    fn streaming_blob(
-        content: impl Into<Vec<u8>>,
-        alg: Option<CompressionAlgorithm>,
-    ) -> StreamingBlob {
-        let content = content.into();
-        StreamingBlob {
-            path: "some_path.db".into(),
-            mime: mime::APPLICATION_OCTET_STREAM,
-            date_updated: Utc::now(),
-            compression: alg,
-            etag: Some(compute_etag(&content)),
-            content_length: content.len(),
-            content: Box::new(io::Cursor::new(content)),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_streaming_blob_uncompressed() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-
-        // without decompression
-        {
-            let stream = streaming_blob(CONTENT, None);
-            let blob = stream.materialize(usize::MAX).await?;
-            assert_eq!(blob.content, CONTENT);
-            assert!(blob.compression.is_none());
-        }
-
-        // with decompression, does nothing
-        {
-            let stream = streaming_blob(CONTENT, None);
-            let blob = stream.decompress().await?.materialize(usize::MAX).await?;
-            assert_eq!(blob.content, CONTENT);
-            assert!(blob.compression.is_none());
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_streaming_broken_zstd_blob() -> Result<()> {
-        const NOT_ZSTD: &[u8] = b"Hello, world!";
-        let alg = CompressionAlgorithm::Zstd;
-
-        // without decompression
-        // Doesn't fail because we don't call `.decompress`
-        {
-            let stream = streaming_blob(NOT_ZSTD, Some(alg));
-            let blob = stream.materialize(usize::MAX).await?;
-            assert_eq!(blob.content, NOT_ZSTD);
-            assert_eq!(blob.compression, Some(alg));
-        }
-
-        // with decompression
-        // should fail in the `.decompress` call,
-        // not later when materializing / streaming.
-        {
-            let err = streaming_blob(NOT_ZSTD, Some(alg))
-                .decompress()
-                .await
-                .unwrap_err();
-
-            assert_eq!(err.kind(), io::ErrorKind::Other);
-
-            assert_eq!(
-                err.to_string(),
-                "Unknown frame descriptor",
-                "unexpected error: {}",
-                err
-            );
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_streaming_blob_zstd() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-        let mut compressed_content = Vec::new();
-        let alg = CompressionAlgorithm::Zstd;
-        compress_async(
-            &mut io::Cursor::new(CONTENT.to_vec()),
-            &mut compressed_content,
-            alg,
-        )
-        .await?;
-
-        // without decompression
-        {
-            let stream = streaming_blob(compressed_content.clone(), Some(alg));
-            let blob = stream.materialize(usize::MAX).await?;
-            assert_eq!(blob.content, compressed_content);
-            assert_eq!(blob.content.last_chunk::<3>().unwrap(), &ZSTD_EOF_BYTES);
-            assert_eq!(blob.compression, Some(alg));
-        }
-
-        // with decompression
-        {
-            let blob = streaming_blob(compressed_content.clone(), Some(alg))
-                .decompress()
-                .await?
-                .materialize(usize::MAX)
-                .await?;
-            assert_eq!(blob.content, CONTENT);
-            assert!(blob.compression.is_none());
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[test_case(CompressionAlgorithm::Zstd)]
-    #[test_case(CompressionAlgorithm::Bzip2)]
-    #[test_case(CompressionAlgorithm::Gzip)]
-    async fn test_async_compression(alg: CompressionAlgorithm) -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
-
-        let compressed_index_content = {
-            let mut buf: Vec<u8> = Vec::new();
-            compress_async(&mut io::Cursor::new(CONTENT.to_vec()), &mut buf, alg).await?;
-            buf
-        };
-
-        {
-            // try low-level async decompression
-            let mut decompressed_buf: Vec<u8> = Vec::new();
-            let mut reader = wrap_reader_for_decompression(
-                io::Cursor::new(compressed_index_content.clone()),
-                alg,
-            );
-
-            tokio::io::copy(&mut reader, &mut io::Cursor::new(&mut decompressed_buf)).await?;
-
-            assert_eq!(decompressed_buf, CONTENT);
-        }
-
-        {
-            // try sync decompression
-            let decompressed_buf: Vec<u8> = decompress(
-                io::Cursor::new(compressed_index_content.clone()),
-                alg,
-                usize::MAX,
-            )?;
-
-            assert_eq!(decompressed_buf, CONTENT);
-        }
-
-        // try decompress via storage API
-        let blob = StreamingBlob {
-            path: "some_path.db".into(),
-            mime: mime::APPLICATION_OCTET_STREAM,
-            date_updated: Utc::now(),
-            etag: None,
-            compression: Some(alg),
-            content_length: compressed_index_content.len(),
-            content: Box::new(io::Cursor::new(compressed_index_content)),
-        }
-        .decompress()
-        .await?
-        .materialize(usize::MAX)
-        .await?;
-
-        assert_eq!(blob.compression, None);
-        assert_eq!(blob.content, CONTENT);
-
-        Ok(())
-    }
-
-    #[test_case("latest", RustdocJsonFormatVersion::Latest)]
-    #[test_case("42", RustdocJsonFormatVersion::Version(42))]
-    fn test_json_format_version(input: &str, expected: RustdocJsonFormatVersion) {
-        // test Display
-        assert_eq!(expected.to_string(), input);
-        // test FromStr
-        assert_eq!(expected, input.parse().unwrap());
-    }
-
-    #[test]
-    fn test_get_file_list() -> Result<()> {
-        crate::test::init_logger();
-        let dir = env::current_dir().unwrap();
-
-        let files: Vec<_> = get_file_list(&dir).collect::<Result<Vec<_>>>()?;
-        assert!(!files.is_empty());
-
-        let files: Vec<_> = get_file_list(dir.join("Cargo.toml")).collect::<Result<Vec<_>>>()?;
-        assert_eq!(files[0], std::path::Path::new("Cargo.toml"));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_mime_types() {
-        check_mime(".gitignore", "text/plain");
-        check_mime("hello.toml", "text/toml");
-        check_mime("hello.css", "text/css");
-        check_mime("hello.js", "text/javascript");
-        check_mime("hello.html", "text/html");
-        check_mime("hello.hello.md", "text/markdown");
-        check_mime("hello.markdown", "text/markdown");
-        check_mime("hello.json", "application/json");
-        check_mime("hello.txt", "text/plain");
-        check_mime("file.rs", "text/rust");
-        check_mime("important.svg", "image/svg+xml");
-    }
-
-    fn check_mime(path: &str, expected_mime: &str) {
-        let detected_mime = detect_mime(Path::new(&path));
-        assert_eq!(detected_mime, expected_mime);
-    }
+    use crate::testing::TestStorage;
+    use tokio::fs;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_outdated_local_archive_index_gets_redownloaded() -> Result<()> {
-        use tokio::fs;
-
-        let env = TestEnvironment::with_config(
-            TestEnvironment::base_config()
-                .storage_backend(StorageKind::S3)
-                .build()?,
-        )
-        .await?;
-
-        let storage = env.async_storage();
+        let metrics = docs_rs_opentelemetry::testing::TestMetrics::new();
+        let storage = TestStorage::from_kind(StorageKind::S3, metrics.provider()).await?;
 
         // virtual latest build id, used for local caching of the index files
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(42));
-        let cache_root = env.config().local_archive_cache_path.clone();
+        let cache_root = storage.config.local_archive_cache_path.clone();
 
         let cache_filename = |archive_name: &str| {
             cache_root.join(format!(
@@ -1425,14 +726,14 @@ mod test {
 
         // create two archives with indexes that contain the same filename
         create_archive(
-            storage,
+            &storage,
             "test1.zip",
             &["file1.txt", "file2.txt", "important.txt"],
         )
         .await?;
 
         create_archive(
-            storage,
+            &storage,
             "test2.zip",
             &["important.txt", "another_file_1.txt", "another_file_2.txt"],
         )
@@ -1512,7 +813,7 @@ mod test {
     }
 }
 
-/// Backend tests are a set of tests executed on all the supported storage backends. They ensure
+/// Backend tests are a set of tests executed on all the supportedootorage backends. They ensure
 /// docs.rs behaves the same no matter the storage backend currently used.
 ///
 /// To add a new test create the function without adding the `#[test]` attribute, and add the
@@ -1521,31 +822,32 @@ mod test {
 /// This is the preferred way to test whether backends work.
 #[cfg(test)]
 mod backend_tests {
-    use docs_rs_headers::compute_etag;
-
     use super::*;
-    use crate::test::TestEnvironment;
+    use crate::{PathNotFoundError, errors::SizeLimitReached};
+    use docs_rs_headers::compute_etag;
+    use docs_rs_opentelemetry::testing::TestMetrics;
+    use futures_util::TryStreamExt as _;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
         files.iter().find(|info| info.path == path)
     }
 
-    fn test_exists(storage: &Storage) -> Result<()> {
-        assert!(!storage.exists("path/to/file.txt").unwrap());
+    async fn test_exists(storage: &AsyncStorage) -> Result<()> {
+        assert!(!storage.exists("path/to/file.txt").await.unwrap());
         let blob = BlobUpload {
             path: "path/to/file.txt".into(),
             mime: mime::TEXT_PLAIN,
             content: "Hello world!".into(),
             compression: None,
         };
-        storage.store_blobs(vec![blob])?;
-        assert!(storage.exists("path/to/file.txt")?);
+        storage.store_blobs(vec![blob]).await?;
+        assert!(storage.exists("path/to/file.txt").await?);
 
         Ok(())
     }
 
-    fn test_get_object(storage: &Storage) -> Result<()> {
+    async fn test_get_object(storage: &AsyncStorage) -> Result<()> {
         let path: &str = "foo/bar.txt";
         let blob = BlobUpload {
             path: path.into(),
@@ -1554,9 +856,9 @@ mod backend_tests {
             content: b"test content\n".to_vec(),
         };
 
-        storage.store_blobs(vec![blob.clone()])?;
+        storage.store_blobs(vec![blob.clone()]).await?;
 
-        let found = storage.get(path, usize::MAX)?;
+        let found = storage.get(path, usize::MAX).await?;
         assert_eq!(blob.mime, found.mime);
         assert_eq!(blob.content, found.content);
         // while our db backend just does MD5,
@@ -1567,6 +869,7 @@ mod backend_tests {
             assert!(
                 storage
                     .get(path, usize::MAX)
+                    .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
                     .is_some()
@@ -1576,7 +879,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_get_range(storage: &Storage) -> Result<()> {
+    async fn test_get_range(storage: &AsyncStorage) -> Result<()> {
         let blob = BlobUpload {
             path: "foo/bar.txt".into(),
             mime: mime::TEXT_PLAIN,
@@ -1586,12 +889,14 @@ mod backend_tests {
 
         let full_etag = compute_etag(&blob.content);
 
-        storage.store_blobs(vec![blob.clone()])?;
+        storage.store_blobs(vec![blob.clone()]).await?;
 
         let mut etags = Vec::new();
 
         for range in [0..=4, 5..=12] {
-            let partial_blob = storage.get_range("foo/bar.txt", usize::MAX, range.clone(), None)?;
+            let partial_blob = storage
+                .get_range("foo/bar.txt", usize::MAX, range.clone(), None)
+                .await?;
             let range = (*range.start() as usize)..=(*range.end() as usize);
             assert_eq!(blob.content[range], partial_blob.content);
 
@@ -1609,6 +914,7 @@ mod backend_tests {
             assert!(
                 storage
                     .get_range(path, usize::MAX, 0..=4, None)
+                    .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
                     .is_some()
@@ -1618,37 +924,45 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_list_prefix(storage: &Storage) -> Result<()> {
+    async fn test_list_prefix(storage: &AsyncStorage) -> Result<()> {
         static FILENAMES: &[&str] = &["baz.txt", "some/bar.txt"];
 
-        storage.store_blobs(
-            FILENAMES
-                .iter()
-                .map(|&filename| BlobUpload {
-                    path: filename.into(),
-                    mime: mime::TEXT_PLAIN,
-                    compression: None,
-                    content: b"test content\n".to_vec(),
-                })
-                .collect(),
-        )?;
+        storage
+            .store_blobs(
+                FILENAMES
+                    .iter()
+                    .map(|&filename| BlobUpload {
+                        path: filename.into(),
+                        mime: mime::TEXT_PLAIN,
+                        compression: None,
+                        content: b"test content\n".to_vec(),
+                    })
+                    .collect(),
+            )
+            .await?;
 
         assert_eq!(
-            storage.list_prefix("").collect::<Result<Vec<String>>>()?,
+            storage
+                .list_prefix("")
+                .await
+                .try_collect::<Vec<_>>()
+                .await?,
             FILENAMES
         );
 
         assert_eq!(
             storage
                 .list_prefix("some/")
-                .collect::<Result<Vec<String>>>()?,
+                .await
+                .try_collect::<Vec<_>>()
+                .await?,
             &["some/bar.txt"]
         );
 
         Ok(())
     }
 
-    fn test_too_long_filename(storage: &Storage) -> Result<()> {
+    async fn test_too_long_filename(storage: &AsyncStorage) -> Result<()> {
         // minio returns ErrKeyTooLongError when the key is over 1024 bytes long.
         // When testing, minio just gave me `XMinioInvalidObjectName`, so I'll check that too.
         let long_filename = "ATCG".repeat(512);
@@ -1656,6 +970,7 @@ mod backend_tests {
         assert!(
             storage
                 .get(&long_filename, 42)
+                .await
                 .unwrap_err()
                 .is::<PathNotFoundError>()
         );
@@ -1663,7 +978,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_get_too_big(storage: &Storage) -> Result<()> {
+    async fn test_get_too_big(storage: &AsyncStorage) -> Result<()> {
         const MAX_SIZE: usize = 1024;
 
         let small_blob = BlobUpload {
@@ -1679,25 +994,28 @@ mod backend_tests {
             compression: None,
         };
 
-        storage.store_blobs(vec![small_blob.clone(), big_blob])?;
+        storage
+            .store_blobs(vec![small_blob.clone(), big_blob])
+            .await?;
 
-        let blob = storage.get("small-blob.bin", MAX_SIZE)?;
+        let blob = storage.get("small-blob.bin", MAX_SIZE).await?;
         assert_eq!(blob.content.len(), small_blob.content.len());
 
         assert!(
             storage
                 .get("big-blob.bin", MAX_SIZE)
+                .await
                 .unwrap_err()
                 .downcast_ref::<std::io::Error>()
                 .and_then(|io| io.get_ref())
-                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                .and_then(|err| err.downcast_ref::<SizeLimitReached>())
                 .is_some()
         );
 
         Ok(())
     }
 
-    fn test_store_blobs(env: &TestEnvironment, storage: &Storage) -> Result<()> {
+    async fn test_store_blobs(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         const NAMES: &[&str] = &[
             "a",
             "b",
@@ -1716,15 +1034,15 @@ mod backend_tests {
             })
             .collect::<Vec<_>>();
 
-        storage.store_blobs(blobs.clone()).unwrap();
+        storage.store_blobs(blobs.clone()).await.unwrap();
 
         for blob in &blobs {
-            let actual = storage.get(&blob.path, usize::MAX)?;
+            let actual = storage.get(&blob.path, usize::MAX).await?;
             assert_eq!(blob.path, actual.path);
             assert_eq!(blob.mime, actual.mime);
         }
 
-        let collected_metrics = env.collected_metrics();
+        let collected_metrics = metrics.collected_metrics();
 
         assert_eq!(
             collected_metrics
@@ -1737,14 +1055,21 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_exists_without_remote_archive(storage: &Storage) -> Result<()> {
+    async fn test_exists_without_remote_archive(storage: &AsyncStorage) -> Result<()> {
         // when remote and local index don't exist, any `exists_in_archive`  should
         // return `false`
-        assert!(!storage.exists_in_archive("some_archive_name", None, "some_file_name")?);
+        assert!(
+            !storage
+                .exists_in_archive("some_archive_name", None, "some_file_name")
+                .await?
+        );
         Ok(())
     }
 
-    fn test_store_all_in_archive(env: &TestEnvironment, storage: &Storage) -> Result<()> {
+    async fn test_store_all_in_archive(
+        storage: &AsyncStorage,
+        metrics: &TestMetrics,
+    ) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-archive-test")
             .tempdir()?;
@@ -1758,15 +1083,19 @@ mod backend_tests {
         }
 
         let local_index_location = storage
-            .inner
             .config
             .local_archive_cache_path
             .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
-        let (stored_files, compression_alg) =
-            storage.store_all_in_archive("folder/test.zip", dir.path())?;
+        let (stored_files, compression_alg) = storage
+            .store_all_in_archive("folder/test.zip", dir.path())
+            .await?;
 
-        assert!(storage.exists(&format!("folder/test.zip.{ARCHIVE_INDEX_FILE_EXTENSION}"))?);
+        assert!(
+            storage
+                .exists(&format!("folder/test.zip.{ARCHIVE_INDEX_FILE_EXTENSION}"))
+                .await?
+        );
 
         assert_eq!(compression_alg, CompressionAlgorithm::Bzip2);
         assert_eq!(stored_files.len(), files.len());
@@ -1789,23 +1118,35 @@ mod backend_tests {
 
         // the first exists-query will download and store the index
         assert!(!local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", None, "Cargo.toml",)?);
+        assert!(
+            storage
+                .exists_in_archive("folder/test.zip", None, "Cargo.toml")
+                .await?
+        );
 
         // the second one will use the local index
         assert!(local_index_location.exists());
-        assert!(storage.exists_in_archive("folder/test.zip", None, "src/main.rs",)?);
+        assert!(
+            storage
+                .exists_in_archive("folder/test.zip", None, "src/main.rs")
+                .await?
+        );
 
-        let file = storage.get_from_archive("folder/test.zip", None, "Cargo.toml", usize::MAX)?;
+        let file = storage
+            .get_from_archive("folder/test.zip", None, "Cargo.toml", usize::MAX)
+            .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
-        let file = storage.get_from_archive("folder/test.zip", None, "src/main.rs", usize::MAX)?;
+        let file = storage
+            .get_from_archive("folder/test.zip", None, "src/main.rs", usize::MAX)
+            .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "folder/test.zip/src/main.rs");
 
-        let collected_metrics = env.collected_metrics();
+        let collected_metrics = metrics.collected_metrics();
 
         assert_eq!(
             collected_metrics
@@ -1818,7 +1159,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_store_all(env: &TestEnvironment, storage: &Storage) -> Result<()> {
+    async fn test_store_all(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         let dir = tempfile::Builder::new()
             .prefix("docs.rs-upload-test")
             .tempdir()?;
@@ -1831,7 +1172,7 @@ mod backend_tests {
             fs::write(path, "data")?;
         }
 
-        let (stored_files, algs) = storage.store_all(Path::new("prefix"), dir.path())?;
+        let (stored_files, algs) = storage.store_all(Path::new("prefix"), dir.path()).await?;
         assert_eq!(stored_files.len(), files.len());
         for name in &files {
             assert!(get_file_info(&stored_files, name).is_some());
@@ -1845,19 +1186,19 @@ mod backend_tests {
             "text/rust"
         );
 
-        let file = storage.get("prefix/Cargo.toml", usize::MAX)?;
+        let file = storage.get("prefix/Cargo.toml", usize::MAX).await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "prefix/Cargo.toml");
 
-        let file = storage.get("prefix/src/main.rs", usize::MAX)?;
+        let file = storage.get("prefix/src/main.rs", usize::MAX).await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "prefix/src/main.rs");
 
         assert_eq!(algs, CompressionAlgorithm::default());
 
-        let collected_metrics = env.collected_metrics();
+        let collected_metrics = metrics.collected_metrics();
         assert_eq!(
             collected_metrics
                 .get_metric("storage", "docsrs.storage.uploaded_files")?
@@ -1869,7 +1210,7 @@ mod backend_tests {
         Ok(())
     }
 
-    fn test_batched_uploads(storage: &Storage) -> Result<()> {
+    async fn test_batched_uploads(storage: &AsyncStorage) -> Result<()> {
         let uploads: Vec<_> = (0..=100)
             .map(|i| {
                 let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
@@ -1882,21 +1223,21 @@ mod backend_tests {
             })
             .collect();
 
-        storage.store_blobs(uploads.clone())?;
+        storage.store_blobs(uploads.clone()).await?;
 
         for blob in &uploads {
-            let stored = storage.get(&blob.path, usize::MAX)?;
+            let stored = storage.get(&blob.path, usize::MAX).await?;
             assert_eq!(&stored.content, &blob.content);
         }
 
         Ok(())
     }
 
-    fn test_delete_prefix_without_matches(storage: &Storage) -> Result<()> {
-        storage.delete_prefix("prefix_without_objects")
+    async fn test_delete_prefix_without_matches(storage: &AsyncStorage) -> Result<()> {
+        storage.delete_prefix("prefix_without_objects").await
     }
 
-    fn test_delete_prefix(storage: &Storage) -> Result<()> {
+    async fn test_delete_prefix(storage: &AsyncStorage) -> Result<()> {
         test_deletion(
             storage,
             "foo/bar/",
@@ -1910,9 +1251,10 @@ mod backend_tests {
             &["foo.txt", "foo/bar.txt", "bar.txt"],
             &["foo/bar/baz.txt", "foo/bar/foobar.txt"],
         )
+        .await
     }
 
-    fn test_delete_percent(storage: &Storage) -> Result<()> {
+    async fn test_delete_percent(storage: &AsyncStorage) -> Result<()> {
         // PostgreSQL treats "%" as a special char when deleting a prefix. Make sure any "%" in the
         // provided prefix is properly escaped.
         test_deletion(
@@ -1922,36 +1264,40 @@ mod backend_tests {
             &["foo/bar.txt"],
             &["foo/%/bar.txt"],
         )
+        .await
     }
 
-    fn test_deletion(
-        storage: &Storage,
+    async fn test_deletion(
+        storage: &AsyncStorage,
         prefix: &str,
         start: &[&str],
         present: &[&str],
         missing: &[&str],
     ) -> Result<()> {
-        storage.store_blobs(
-            start
-                .iter()
-                .map(|path| BlobUpload {
-                    path: (*path).to_string(),
-                    content: b"foo\n".to_vec(),
-                    compression: None,
-                    mime: mime::TEXT_PLAIN,
-                })
-                .collect(),
-        )?;
+        storage
+            .store_blobs(
+                start
+                    .iter()
+                    .map(|path| BlobUpload {
+                        path: (*path).to_string(),
+                        content: b"foo\n".to_vec(),
+                        compression: None,
+                        mime: mime::TEXT_PLAIN,
+                    })
+                    .collect(),
+            )
+            .await?;
 
-        storage.delete_prefix(prefix)?;
+        storage.delete_prefix(prefix).await?;
 
         for existing in present {
-            assert!(storage.get(existing, usize::MAX).is_ok());
+            assert!(storage.get(existing, usize::MAX).await.is_ok());
         }
         for missing in missing {
             assert!(
                 storage
                     .get(missing, usize::MAX)
+                    .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
                     .is_some()
@@ -1971,16 +1317,16 @@ mod backend_tests {
         ) => {
             $(
                 mod $backend {
-                    use crate::test::TestEnvironment;
-                    use crate::storage::{StorageKind};
+                    use crate::types::StorageKind;
+                    use crate::testing::TestStorage;
+                    use docs_rs_opentelemetry::testing::TestMetrics;
 
-                    fn get_env() -> anyhow::Result<crate::test::TestEnvironment> {
-                        crate::test::TestEnvironment::with_config_and_runtime(
-                            TestEnvironment::base_config()
-                                .storage_backend($config)
-                                .build()?
-                        )
+                    async fn get_storage() -> anyhow::Result<(TestStorage, TestMetrics)> {
+                        let metrics = TestMetrics::new();
+                        let storage = TestStorage::from_kind($config, metrics.provider()).await?;
+                        Ok((storage, metrics))
                     }
+
 
                     backend_tests!(@tests $tests);
                     backend_tests!(@tests_with_metrics $tests_with_metrics);
@@ -1989,19 +1335,19 @@ mod backend_tests {
         };
         (@tests { $($test:ident,)* }) => {
             $(
-                #[test]
-                fn $test() -> anyhow::Result<()> {
-                    let env = get_env()?;
-                    super::$test(&*env.storage())
+                #[tokio::test(flavor = "multi_thread")]
+                async fn $test() -> anyhow::Result<()> {
+                    let (storage, _metrics) = get_storage().await?;
+                    super::$test(&storage).await
                 }
             )*
         };
         (@tests_with_metrics { $($test:ident,)* }) => {
             $(
-                #[test]
-                fn $test() -> anyhow::Result<()> {
-                    let env = get_env()?;
-                    super::$test(&env, &*env.storage())
+                #[tokio::test(flavor = "multi_thread")]
+                async fn $test() -> anyhow::Result<()> {
+                    let (storage, metrics) = get_storage().await?;
+                    super::$test(&storage, &metrics).await
                 }
             )*
         };
@@ -2010,7 +1356,7 @@ mod backend_tests {
     backend_tests! {
         backends {
             s3 => StorageKind::S3,
-            database => StorageKind::Database,
+            memory => StorageKind::Memory,
         }
 
         tests {

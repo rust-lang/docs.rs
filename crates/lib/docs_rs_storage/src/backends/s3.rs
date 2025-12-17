@@ -1,5 +1,11 @@
-use super::{BlobUpload, FileRange, StorageMetrics, StreamingBlob};
-use crate::Config;
+use crate::{
+    Config,
+    backends::StorageBackendMethods,
+    blob::{BlobUpload, StreamingBlob},
+    errors::PathNotFoundError,
+    metrics::StorageMetrics,
+    types::FileRange,
+};
 use anyhow::{Context as _, Error};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
@@ -10,15 +16,13 @@ use aws_sdk_s3::{
     types::{Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
-use axum_extra::headers;
 use chrono::Utc;
-use docs_rs_headers::compute_etag;
+use docs_rs_headers::{ETag, compute_etag};
 use futures_util::{
     future::TryFutureExt,
-    pin_mut,
-    stream::{FuturesUnordered, Stream, StreamExt},
+    stream::{BoxStream, FuturesUnordered, StreamExt},
 };
-use tracing::{error, instrument, warn};
+use tracing::{error, warn};
 
 // error codes to check for when trying to determine if an error is
 // a "NOT FOUND" error.
@@ -52,13 +56,13 @@ where
                 if let Some(err_code) = err.code()
                     && NOT_FOUND_ERROR_CODES.contains(&err_code)
                 {
-                    return Err(super::PathNotFoundError.into());
+                    return Err(PathNotFoundError.into());
                 }
 
                 if let SdkError::ServiceError(err) = &err
                     && err.raw().status().as_u16() == http::StatusCode::NOT_FOUND.as_u16()
                 {
-                    return Err(super::PathNotFoundError.into());
+                    return Err(PathNotFoundError.into());
                 }
 
                 Err(err.into())
@@ -67,16 +71,16 @@ where
     }
 }
 
-pub(super) struct S3Backend {
+pub(crate) struct S3Backend {
     client: Client,
     bucket: String,
     otel_metrics: StorageMetrics,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     temporary: bool,
 }
 
 impl S3Backend {
-    pub(super) async fn new(config: &Config, otel_metrics: StorageMetrics) -> Result<Self, Error> {
+    pub(crate) async fn new(config: &Config, otel_metrics: StorageMetrics) -> Result<Self, Error> {
         let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let mut config_builder = aws_sdk_s3::config::Builder::from(&shared_config)
             .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
@@ -88,14 +92,10 @@ impl S3Backend {
 
         let client = Client::from_conf(config_builder.build());
 
-        #[cfg(test)]
+        #[cfg(any(test, feature = "testing"))]
         {
             // Create the temporary S3 bucket during tests.
             if config.s3_bucket_is_temporary {
-                if cfg!(not(test)) {
-                    panic!("safeguard to prevent creating temporary buckets outside of tests");
-                }
-
                 client
                     .create_bucket()
                     .bucket(&config.s3_bucket)
@@ -108,12 +108,31 @@ impl S3Backend {
             client,
             otel_metrics,
             bucket: config.s3_bucket.clone(),
-            #[cfg(test)]
+            #[cfg(any(test, feature = "testing"))]
             temporary: config.s3_bucket_is_temporary,
         })
     }
 
-    pub(super) async fn exists(&self, path: &str) -> Result<bool, Error> {
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) async fn cleanup_after_test(&self) -> Result<(), Error> {
+        assert!(
+            self.temporary,
+            "cleanup_after_test called on non-temporary S3 backend"
+        );
+
+        self.delete_prefix("").await?;
+        self.client
+            .delete_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+}
+
+impl StorageBackendMethods for S3Backend {
+    async fn exists(&self, path: &str) -> Result<bool, Error> {
         match self
             .client
             .head_object()
@@ -124,13 +143,12 @@ impl S3Backend {
             .convert_errors()
         {
             Ok(_) => Ok(true),
-            Err(err) if err.is::<super::PathNotFoundError>() => Ok(false),
+            Err(err) if err.is::<PathNotFoundError>() => Ok(false),
             Err(other) => Err(other),
         }
     }
 
-    #[instrument(skip(self))]
-    pub(super) async fn get_stream(
+    async fn get_stream(
         &self,
         path: &str,
         range: Option<FileRange>,
@@ -181,7 +199,7 @@ impl S3Backend {
                     range.end()
                 )))
             } else {
-                match s3_etag.parse::<headers::ETag>() {
+                match s3_etag.parse::<ETag>() {
                     Ok(etag) => Some(etag),
                     Err(err) => {
                         error!(?err, s3_etag, "Failed to parse ETag from S3");
@@ -212,7 +230,7 @@ impl S3Backend {
         })
     }
 
-    pub(super) async fn store_batch(&self, mut batch: Vec<BlobUpload>) -> Result<(), Error> {
+    async fn store_batch(&self, mut batch: Vec<BlobUpload>) -> Result<(), Error> {
         // Attempt to upload the batch 3 times
         for _ in 0..3 {
             let mut futures = FuturesUnordered::new();
@@ -230,7 +248,7 @@ impl S3Backend {
                             self.otel_metrics.uploaded_files.add(1, &[]);
                         })
                         .map_err(|err| {
-                            warn!("Failed to upload blob to S3: {:?}", err);
+                            warn!(?err, "Failed to upload blob to S3");
                             // Reintroduce failed blobs for a retry
                             blob
                         }),
@@ -253,11 +271,8 @@ impl S3Backend {
         panic!("failed to upload 3 times, exiting");
     }
 
-    pub(super) async fn list_prefix<'a>(
-        &'a self,
-        prefix: &'a str,
-    ) -> impl Stream<Item = Result<String, Error>> + 'a {
-        try_stream! {
+    async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String, Error>> {
+        Box::pin(try_stream! {
             let mut continuation_token = None;
             loop {
                 let list = self
@@ -282,12 +297,11 @@ impl S3Backend {
                     break;
                 }
             }
-        }
+        })
     }
 
-    pub(super) async fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
+    async fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
         let stream = self.list_prefix(prefix).await;
-        pin_mut!(stream);
         let mut chunks = stream.chunks(900); // 1000 is the limit for the delete_objects API
 
         while let Some(batch) = chunks.next().await {
@@ -321,34 +335,4 @@ impl S3Backend {
         }
         Ok(())
     }
-
-    #[cfg(test)]
-    pub(super) async fn cleanup_after_test(&self) -> Result<(), Error> {
-        if !self.temporary {
-            return Ok(());
-        }
-
-        if cfg!(not(test)) {
-            panic!("safeguard to prevent deleting the production bucket");
-        }
-
-        self.delete_prefix("").await?;
-        self.client
-            .delete_bucket()
-            .bucket(&self.bucket)
-            .send()
-            .await?;
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // The tests for this module are in src/storage/mod.rs, as part of the backend tests. Please
-    // add any test checking the public interface there.
-
-    // NOTE: trying to upload a file ending with `/` will behave differently in test and prod.
-    // NOTE: On s3, it will succeed and create a file called `/`.
-    // NOTE: On min.io, it will fail with 'Object name contains unsupported characters.'
 }

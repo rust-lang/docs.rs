@@ -1,5 +1,5 @@
 use crate::{
-    AsyncStorage, Config, impl_axum_webpage,
+    Config, impl_axum_webpage,
     web::{
         MetaData,
         cache::CachePolicy,
@@ -14,6 +14,7 @@ use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::Extension, response::IntoResponse};
 use chrono::{DateTime, Utc};
+use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
 use futures_util::TryStreamExt;
 use serde::Deserialize;

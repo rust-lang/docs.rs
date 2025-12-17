@@ -1,7 +1,4 @@
-use crate::{
-    storage::PathNotFoundError,
-    web::{AxumErrorPage, cache::CachePolicy, releases::Search},
-};
+use crate::web::{AxumErrorPage, cache::CachePolicy, releases::Search};
 use anyhow::{Result, anyhow};
 use axum::{
     Json,
@@ -9,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use docs_rs_database::PoolError;
+use docs_rs_storage::PathNotFoundError;
 use docs_rs_uri::EscapedURI;
 use std::borrow::Cow;
 

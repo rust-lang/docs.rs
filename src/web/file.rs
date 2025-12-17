@@ -1,11 +1,7 @@
 //! Database based file handler
 
 use super::cache::CachePolicy;
-use crate::{
-    Config,
-    error::Result,
-    storage::{AsyncStorage, Blob, StreamingBlob},
-};
+use crate::{Config, error::Result};
 use axum::{
     body::Body,
     extract::Extension,
@@ -17,6 +13,7 @@ use axum_extra::{
     headers::{ContentType, LastModified},
 };
 use docs_rs_headers::IfNoneMatch;
+use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
 use std::time::SystemTime;
 use tokio_util::io::ReaderStream;
 use tracing::warn;
@@ -36,13 +33,11 @@ impl File {
         path: &str,
         config: &Config,
     ) -> Result<File> {
-        let max_size = if path.ends_with(".html") {
-            config.max_file_size_html
-        } else {
-            config.max_file_size
-        };
-
-        Ok(File(storage.get(path, max_size).await?))
+        Ok(File(
+            storage
+                .get(path, config.storage.max_file_size_for(path))
+                .await?,
+        ))
     }
 }
 
@@ -135,12 +130,11 @@ impl StreamingFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        storage::CompressionAlgorithm, test::TestEnvironment, web::cache::STATIC_ASSET_CACHE_POLICY,
-    };
+    use crate::{test::TestEnvironment, web::cache::STATIC_ASSET_CACHE_POLICY};
     use axum_extra::headers::{ETag, HeaderMapExt as _};
     use chrono::Utc;
     use docs_rs_headers::compute_etag;
+    use docs_rs_storage::{CompressionAlgorithm, StorageKind};
     use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
 
@@ -259,8 +253,15 @@ mod tests {
         let env = Rc::new(
             TestEnvironment::with_config(
                 TestEnvironment::base_config()
-                    .max_file_size(MAX_SIZE)
-                    .max_file_size_html(MAX_HTML_SIZE)
+                    .storage(
+                        docs_rs_storage::Config::test_config(StorageKind::Memory)?
+                            .set(|mut cfg| {
+                                cfg.max_file_size = MAX_SIZE;
+                                cfg.max_file_size_html = MAX_HTML_SIZE;
+                                cfg
+                            })
+                            .into(),
+                    )
                     .build()?,
             )
             .await?,
@@ -299,7 +300,7 @@ mod tests {
                 .unwrap_err()
                 .downcast_ref::<std::io::Error>()
                 .and_then(|io| io.get_ref())
-                .and_then(|err| err.downcast_ref::<crate::error::SizeLimitReached>())
+                .and_then(|err| err.downcast_ref::<docs_rs_storage::SizeLimitReached>())
                 .is_some()
         };
 

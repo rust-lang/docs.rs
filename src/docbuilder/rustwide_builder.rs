@@ -1,19 +1,13 @@
 use crate::{
-    AsyncStorage, Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX, Storage,
+    Config, Context, RUSTDOC_STATIC_STORAGE_PREFIX,
     db::{
-        add_doc_coverage, add_path_into_remote_archive,
-        blacklist::is_blacklisted,
-        file::{add_path_into_database, file_list_to_json},
-        finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-        update_build_with_error, update_crate_data_in_database,
+        add_doc_coverage, blacklist::is_blacklisted, finish_build, finish_release,
+        initialize_build, initialize_crate, initialize_release, update_build_with_error,
+        update_crate_data_in_database,
     },
     docbuilder::Limits,
     error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
-    storage::{
-        CompressionAlgorithm, RustdocJsonFormatVersion, compress, get_file_list,
-        rustdoc_archive_path, rustdoc_json_path, source_archive_path,
-    },
     utils::{ConfigName, copy_dir_all, get_config, report_error, set_config},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
@@ -22,6 +16,11 @@ use docs_rs_database::Pool;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_storage::{
+    AsyncStorage, CompressionAlgorithm, RustdocJsonFormatVersion, Storage, add_path_into_database,
+    add_path_into_remote_archive, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
+    rustdoc_json_path, source_archive_path,
+};
 use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
 use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
@@ -1446,9 +1445,9 @@ impl Default for BuildPackageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{CompressionAlgorithm, compression};
     use crate::test::{AxumRouterTestExt, TestEnvironment};
     use docs_rs_registry_api::ReleaseData;
+    use docs_rs_storage::{CompressionAlgorithm, compression};
     use docs_rs_types::{BuildStatus, Feature, ReleaseId, Version};
     use pretty_assertions::assert_eq;
     use std::{io, iter};
