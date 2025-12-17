@@ -1,9 +1,13 @@
+mod detect;
+
+pub use detect::detect_mime;
+
 use mime::Mime;
 use std::sync::LazyLock;
 
 macro_rules! mime {
     ($id:ident, $mime:expr) => {
-        pub(crate) static $id: LazyLock<Mime> = LazyLock::new(|| $mime.parse().unwrap());
+        pub static $id: LazyLock<Mime> = LazyLock::new(|| $mime.parse().unwrap());
     };
 }
 

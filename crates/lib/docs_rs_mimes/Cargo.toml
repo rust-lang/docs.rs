@@ -1,0 +1,11 @@
+[package]
+name = "docs_rs_mimes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mime_guess = "2"
+mime = { workspace = true }
+
+[dev-dependencies]
+test-case = { workspace = true }
