@@ -1,12 +1,12 @@
 use crate::{
     docbuilder::DocCoverage,
     error::Result,
-    storage::CompressionAlgorithm,
     web::crate_details::{latest_release, releases_for_crate},
 };
 use anyhow::{Context, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
+use docs_rs_storage::CompressionAlgorithm;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, Version};
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;

@@ -1,12 +1,7 @@
 //! rustdoc handlerr
 
 use crate::{
-    AsyncStorage, BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX,
-    storage::{
-        CompressionAlgorithm, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
-        rustdoc_json_path,
-    },
-    utils,
+    BUILD_VERSION, Config, RUSTDOC_STATIC_STORAGE_PREFIX, utils,
     web::{
         MetaData, axum_cached_redirect,
         cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
@@ -41,6 +36,10 @@ use axum_extra::{
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
+use docs_rs_storage::{
+    AsyncStorage, CompressionAlgorithm, PathNotFoundError, RustdocJsonFormatVersion, StreamingBlob,
+    rustdoc_archive_path, rustdoc_json_path,
+};
 use docs_rs_types::{KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
@@ -331,7 +330,7 @@ pub(crate) async fn rustdoc_redirector_handler(
                     .into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY)),
                 Err(err) => {
                     if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
-                        && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+                        && !matches!(err.downcast_ref(), Some(PathNotFoundError))
                     {
                         error!(inner_path, ?err, "got error serving file");
                     }
@@ -669,7 +668,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         Ok(file) => file,
         Err(err) => {
             if !matches!(err.downcast_ref(), Some(AxumNope::ResourceNotFound))
-                && !matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError))
+                && !matches!(err.downcast_ref(), Some(PathNotFoundError))
             {
                 error!("got error serving {}: {}", storage_path, err);
             }
@@ -972,7 +971,7 @@ pub(crate) async fn json_download_handler(
             StreamingFile(file).into_response(if_none_match.as_deref(), cache_policy),
             None,
         ),
-        Err(err) if matches!(err.downcast_ref(), Some(crate::storage::PathNotFoundError)) => {
+        Err(err) if matches!(err.downcast_ref(), Some(PathNotFoundError)) => {
             // we have old files on the bucket where we stored zstd compressed files,
             // with content-encoding=zstd & just a `.json` file extension.
             // As a fallback, we redirect to that, if zstd was requested (which is also the default).
@@ -1074,7 +1073,6 @@ mod test {
     use crate::{
         Config,
         docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
-        storage::decompress,
         test::*,
         web::cache::CachePolicy,
     };
@@ -1082,27 +1080,15 @@ mod test {
     use chrono::{NaiveDate, Utc};
     use docs_rs_cargo_metadata::Dependency;
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
+    use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::Version;
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
-    use std::{collections::BTreeMap, io, str::FromStr as _};
+    use std::{collections::BTreeMap, str::FromStr as _};
     use test_case::test_case;
     use tracing::info;
-
-    /// try decompressing the zip & read the content
-    fn check_archive_consistency(compressed_body: &[u8]) -> anyhow::Result<()> {
-        let mut zip = zip::ZipArchive::new(io::Cursor::new(compressed_body))?;
-        for i in 0..zip.len() {
-            let mut file = zip.by_index(i)?;
-
-            let mut buf = Vec::new();
-            io::copy(&mut file, &mut buf)?;
-        }
-
-        Ok(())
-    }
 
     async fn try_latest_version_redirect(
         krate: &str,

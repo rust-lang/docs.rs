@@ -7,7 +7,6 @@ use crate::{
     config::ConfigBuilder,
     db,
     error::Result,
-    storage::{AsyncStorage, Storage, StorageKind},
     web::{build_axum_app, cache, page::TemplateData},
 };
 use anyhow::{Context as _, anyhow};
@@ -19,8 +18,9 @@ use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::{
     AnyMeterProvider,
-    testing::{CollectedMetrics, setup_test_meter_provider},
+    testing::{CollectedMetrics, TestMetrics},
 };
+use docs_rs_storage::{AsyncStorage, Storage, StorageKind, testing::TestStorage};
 use docs_rs_types::Version;
 use fn_error_context::context;
 use futures_util::stream::TryStreamExt;
@@ -29,10 +29,9 @@ use http::{
     header::{CACHE_CONTROL, CONTENT_TYPE},
 };
 use http_body_util::BodyExt;
-use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use serde::de::DeserializeOwned;
 use sqlx::Connection as _;
-use std::{collections::HashMap, fs, future::Future, panic, rc::Rc, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fs, future::Future, panic, rc::Rc, sync::Arc};
 use tokio::{runtime, task::block_in_place};
 use tower::ServiceExt;
 use tracing::error;
@@ -411,29 +410,19 @@ impl AxumRouterTestExt for axum::Router {
 }
 
 pub(crate) struct TestEnvironment {
-    // NOTE: the database has to come before the context,
+    // NOTE: the database & storage have to come before the context,
     // otherwise it can happen that we can't cleanup the test database
     // because the tokio runtime from the context is gone.
     db: TestDatabase,
+    _storage: TestStorage,
     pub context: Context,
     owned_runtime: Option<Arc<runtime::Runtime>>,
-    collected_metrics: InMemoryMetricExporter,
+    test_metrics: TestMetrics,
 }
 
 pub(crate) fn init_logger() {
-    use tracing_subscriber::{EnvFilter, filter::Directive};
-
     rustwide::logging::init_with(tracing_log::LogTracer::new());
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
-                .with_env_var("DOCSRS_LOG")
-                .from_env_lossy(),
-        )
-        .with_test_writer()
-        .finish();
-    let _ = tracing::subscriber::set_global_default(subscriber);
+    docs_rs_logging::testing::init();
 }
 
 impl TestEnvironment {
@@ -463,38 +452,40 @@ impl TestEnvironment {
         // create index directory
         fs::create_dir_all(config.registry_index_path.clone())?;
 
-        let (metric_exporter, meter_provider) = setup_test_meter_provider();
+        let test_metrics = TestMetrics::new();
 
-        let test_db = TestDatabase::new(&config, &meter_provider)
+        let test_db = TestDatabase::new(&config, test_metrics.provider())
             .await
             .context("can't initialize test database")?;
 
+        let test_storage =
+            TestStorage::from_config(config.storage.clone(), test_metrics.provider())
+                .await
+                .context("can't initialize test storage")?;
+
         Ok(Self {
-            context: Context::from_test_config(config, meter_provider, test_db.pool().clone())
-                .await?,
+            context: Context::from_test_config(
+                config,
+                test_metrics.provider().clone(),
+                test_db.pool().clone(),
+                test_storage.storage(),
+            )
+            .await?,
             db: test_db,
+            _storage: test_storage,
             owned_runtime: None,
-            collected_metrics: metric_exporter,
+            test_metrics,
         })
     }
 
     pub(crate) fn base_config() -> ConfigBuilder {
-        let mut database_config =
-            docs_rs_database::Config::from_environment().expect("can't load database config");
-        // Use less connections for each test compared to production.
-        database_config.max_pool_size = 8;
-        database_config.min_pool_idle = 2;
-
         Config::from_env()
             .expect("can't load base config from environment")
-            .database(database_config)
-            // Use the database for storage, as it's faster than S3.
-            .storage_backend(StorageKind::Database)
-            // Use a temporary S3 bucket.
-            .s3_bucket(format!("docsrs-test-bucket-{}", rand::random::<u64>()))
-            .s3_bucket_is_temporary(true)
-            .local_archive_cache_path(
-                std::env::temp_dir().join(format!("docsrs-test-index-{}", rand::random::<u64>())),
+            .database(docs_rs_database::Config::test_config().expect("can't load database config"))
+            .storage(
+                docs_rs_storage::Config::test_config(StorageKind::Memory)
+                    .expect("can't load storage config")
+                    .into(),
             )
             // set stale content serving so Cache::ForeverInCdn and Cache::ForeverInCdnAndStaleInBrowser
             // are actually different.
@@ -538,8 +529,7 @@ impl TestEnvironment {
     }
 
     pub(crate) fn collected_metrics(&self) -> CollectedMetrics {
-        self.context.meter_provider.force_flush().unwrap();
-        CollectedMetrics(self.collected_metrics.get_finished_metrics().unwrap())
+        self.test_metrics.collected_metrics()
     }
 
     pub(crate) async fn web_app(&self) -> Router {
@@ -551,26 +541,6 @@ impl TestEnvironment {
 
     pub(crate) async fn fake_release(&self) -> fakes::FakeRelease<'_> {
         fakes::FakeRelease::new(self.async_db(), self.context.async_storage.clone())
-    }
-}
-
-impl Drop for TestEnvironment {
-    fn drop(&mut self) {
-        let storage = self.context.storage.clone();
-        let runtime = self.runtime();
-
-        block_in_place(move || {
-            runtime.block_on(async move {
-                storage
-                    .cleanup_after_test()
-                    .await
-                    .expect("failed to cleanup after tests");
-            });
-        });
-
-        if self.context.config.local_archive_cache_path.exists() {
-            fs::remove_dir_all(&self.context.config.local_archive_cache_path).unwrap();
-        }
     }
 }
 

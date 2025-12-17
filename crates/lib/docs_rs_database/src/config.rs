@@ -15,4 +15,15 @@ impl Config {
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10u32)?,
         })
     }
+
+    #[cfg(any(feature = "testing", test))]
+    pub fn test_config() -> anyhow::Result<Self> {
+        let mut config = Self::from_environment()?;
+
+        // Use less connections for each test compared to production.
+        config.max_pool_size = 8;
+        config.min_pool_idle = 2;
+
+        Ok(config)
+    }
 }

@@ -49,4 +49,24 @@ mod tests {
     fn test_detect_mime(ext: &str, expected: &Mime) {
         assert_eq!(&detect_mime(format!("something.{ext}")), expected);
     }
+
+    #[test]
+    fn test_mime_types() {
+        check_mime(".gitignore", "text/plain");
+        check_mime("hello.toml", "text/toml");
+        check_mime("hello.css", "text/css");
+        check_mime("hello.js", "text/javascript");
+        check_mime("hello.html", "text/html");
+        check_mime("hello.hello.md", "text/markdown");
+        check_mime("hello.markdown", "text/markdown");
+        check_mime("hello.json", "application/json");
+        check_mime("hello.txt", "text/plain");
+        check_mime("file.rs", "text/rust");
+        check_mime("important.svg", "image/svg+xml");
+    }
+
+    fn check_mime(path: &str, expected_mime: &str) {
+        let detected_mime = detect_mime(Path::new(&path));
+        assert_eq!(detected_mime, expected_mime);
+    }
 }

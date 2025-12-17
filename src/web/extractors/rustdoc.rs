@@ -1,15 +1,13 @@
 //! special rustdoc extractors
 
-use crate::{
-    storage::CompressionAlgorithm,
-    web::{MatchedRelease, MetaData, error::AxumNope, extractors::Path},
-};
+use crate::web::{MatchedRelease, MetaData, error::AxumNope, extractors::Path};
 use anyhow::Result;
 use axum::{
     RequestPartsExt,
     extract::{FromRequestParts, MatchedPath},
     http::{Uri, request::Parts},
 };
+use docs_rs_storage::CompressionAlgorithm;
 use docs_rs_types::{BuildId, KrateName, ReqVersion};
 use docs_rs_uri::{EscapedURI, url_decode};
 use itertools::Itertools as _;

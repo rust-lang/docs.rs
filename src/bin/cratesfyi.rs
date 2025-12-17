@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, Index, PackageKind, RustwideBuilder,
-    db::{self, Overrides, add_path_into_database},
+    db::{self, Overrides},
     queue_rebuilds_faulty_rustdoc, start_web_server,
     utils::{
         ConfigName, daemon::start_background_service_metric_collector, get_config,
@@ -11,6 +11,7 @@ use docs_rs::{
         remove_crate_priority, set_config, set_crate_priority,
     },
 };
+use docs_rs_storage::add_path_into_database;
 use docs_rs_types::{CrateId, Version};
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};

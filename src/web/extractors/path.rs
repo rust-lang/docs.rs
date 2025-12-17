@@ -1,8 +1,5 @@
 //! custom axum extractors for path parameters
-use crate::{
-    storage::{CompressionAlgorithm, compression::compression_from_file_extension},
-    web::error::AxumNope,
-};
+use crate::web::error::AxumNope;
 use anyhow::anyhow;
 use axum::{
     RequestPartsExt,
@@ -10,14 +7,14 @@ use axum::{
     http::request::Parts,
 };
 use derive_more::Deref;
+use docs_rs_storage::{CompressionAlgorithm, compression_from_file_extension};
 
 /// custom axum `Path` extractor that uses our own AxumNope::BadRequest
 /// as error response instead of a plain text "bad request"
 #[allow(clippy::disallowed_types)]
 mod path_impl {
-    use serde::de::DeserializeOwned;
-
     use super::*;
+    use serde::de::DeserializeOwned;
 
     #[derive(FromRequestParts)]
     #[from_request(via(axum::extract::Path), rejection(AxumNope))]

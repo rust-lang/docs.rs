@@ -1,12 +1,11 @@
-use crate::{
-    error::Result,
-    storage::{FileRange, compression::CompressionAlgorithm},
-};
-use anyhow::{Context as _, bail};
+use crate::{compression::CompressionAlgorithm, types::FileRange};
+use anyhow::{Context as _, Result, bail};
 use itertools::Itertools as _;
 use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};
 use std::{fs, io, path::Path};
 use tracing::instrument;
+
+pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) struct FileInfo {

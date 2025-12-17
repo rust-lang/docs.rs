@@ -1,6 +1,5 @@
 use crate::{
-    AsyncStorage, Config, impl_axum_webpage,
-    storage::PathNotFoundError,
+    Config, impl_axum_webpage,
     web::{
         MetaData,
         cache::{CachePolicy, STATIC_ASSET_CACHE_POLICY},
@@ -20,6 +19,7 @@ use askama::Template;
 use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
+use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{BuildId, ReqVersion, Version};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
@@ -294,7 +294,7 @@ pub(crate) async fn source_browser_handler(
                 ));
             return Ok(response);
         } else {
-            let max_file_size = config.max_file_size_for(&stream.path);
+            let max_file_size = config.storage.max_file_size_for(&stream.path);
 
             // otherwise we'll now download the content to render it into our template.
             match stream.materialize(max_file_size).await {
@@ -313,7 +313,7 @@ pub(crate) async fn source_browser_handler(
                     // if file is too large, set is_file_too_large to true
                     if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
                         err.get_ref()
-                            .map(|err| err.is::<crate::error::SizeLimitReached>())
+                            .map(|err| err.is::<docs_rs_storage::SizeLimitReached>())
                             .unwrap_or(false)
                     }) =>
                 {
@@ -369,6 +369,7 @@ mod tests {
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
     use docs_rs_headers::IfNoneMatch;
+    use docs_rs_storage::StorageKind;
     use docs_rs_types::KrateName;
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
@@ -856,8 +857,15 @@ mod tests {
     async fn large_file_test() -> Result<()> {
         let env = TestEnvironment::with_config(
             TestEnvironment::base_config()
-                .max_file_size(1)
-                .max_file_size_html(1)
+                .storage(
+                    docs_rs_storage::Config::test_config(StorageKind::Memory)?
+                        .set(|mut cfg| {
+                            cfg.max_file_size = 1;
+                            cfg.max_file_size_html = 1;
+                            cfg
+                        })
+                        .into(),
+                )
                 .build()?,
         )
         .await?;

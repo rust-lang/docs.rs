@@ -16,7 +16,6 @@ pub mod daemon;
 mod html;
 mod queue;
 pub(crate) mod queue_builder;
-pub(crate) mod sized_buffer;
 
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
