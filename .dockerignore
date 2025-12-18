@@ -16,3 +16,4 @@
 /target/
 /triagebot.toml
 archive_cache
+.git
