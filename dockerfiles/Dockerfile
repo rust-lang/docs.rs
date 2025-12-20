@@ -184,8 +184,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/docsrs
-# copy migrations so we can run them via CLI script
-COPY migrations migrations/
 
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
 

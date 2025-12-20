@@ -2,12 +2,14 @@
 name = "docs_rs_database"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [dependencies]
 anyhow = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 futures-util = { workspace = true }
+hex = "0.4.3"
 opentelemetry = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
