@@ -5,18 +5,19 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-axum-core = "0.5.5"
-axum-extra = { workspace = true }
 askama = { workspace = true }
+axum-core = "0.5.5"
 derive_more = { workspace = true }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_uri = { path = "../docs_rs_uri" }
+headers = "0.4.1"
 http = { workspace = true }
 itertools = { workspace = true }
 md5 = "0.8.0"
 serde = { workspace = true }
 
 [dev-dependencies]
+axum-extra = { workspace = true }
 serde_json = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }

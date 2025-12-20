@@ -1,7 +1,7 @@
 use anyhow::Result;
 use askama::filters::HtmlSafe;
-use axum_extra::headers::{Header, HeaderName, HeaderValue};
 use docs_rs_uri::EscapedURI;
+use headers::{Header, HeaderName, HeaderValue};
 use http::uri::Uri;
 use serde::Serialize;
 use std::{fmt, ops::Deref};
@@ -39,7 +39,7 @@ impl Header for CanonicalUrl {
         &http::header::LINK
     }
 
-    fn decode<'i, I>(_values: &mut I) -> Result<Self, axum_extra::headers::Error>
+    fn decode<'i, I>(_values: &mut I) -> Result<Self, headers::Error>
     where
         I: Iterator<Item = &'i HeaderValue>,
     {

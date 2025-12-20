@@ -5,9 +5,9 @@ mod surrogate_key;
 #[cfg(test)]
 mod testing;
 
-pub use axum_extra::headers::ETag;
 pub use canonical_url::CanonicalUrl;
 pub use etag::{ETagComputer, compute_etag};
+pub use headers::ETag;
 pub use if_none_match::IfNoneMatch;
 pub use surrogate_key::{SURROGATE_KEY, SurrogateKey, SurrogateKeys};
 

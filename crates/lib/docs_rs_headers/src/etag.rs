@@ -1,4 +1,4 @@
-use axum_extra::headers::ETag;
+use headers::ETag;
 use std::io::{self, Write};
 
 /// compute our etag header value from some content
