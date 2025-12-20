@@ -513,7 +513,7 @@ impl DatabaseSubcommand {
                 .runtime
                 .block_on(async {
                     let mut conn = ctx.pool.get_async().await?;
-                    db::migrate(&mut conn, version).await
+                    docs_rs_database::migrate(&mut conn, version).await
                 })
                 .context("Failed to run database migrations")?,
 

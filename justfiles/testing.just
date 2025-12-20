@@ -29,7 +29,9 @@ sqlx-check:
 [group('testing')]
 [group('sqlx')]
 sqlx-migrate-run: _ensure_db_and_s3_are_running
-  cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
+  cargo sqlx migrate run \
+    --database-url $DOCSRS_DATABASE_URL \
+    --source ./crates/lib/docs_rs_database/migrations
 
 [group('testing')]
 [group('sqlx')]
@@ -37,6 +39,7 @@ sqlx-migrate-revert target="0": _ensure_db_and_s3_are_running
   # --target 0 means "revert everything"
   cargo sqlx migrate revert \
     --database-url $DOCSRS_DATABASE_URL \
+    --source ./crates/lib/docs_rs_database/migrations \
     --target-version {{ target }}
 
 

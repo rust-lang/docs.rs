@@ -98,7 +98,6 @@ lol_html = "2.0.0"
 font-awesome-as-a-crate = { path = "crates/lib/font-awesome-as-a-crate" }
 getrandom = "0.3.1"
 itertools = { workspace = true }
-hex = "0.4.3"
 derive_more = { workspace = true }
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 derive_builder = "0.20.2"

@@ -5,7 +5,6 @@ pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
     AsyncBuildQueue, BuildQueue, Config, Context,
     config::ConfigBuilder,
-    db,
     error::Result,
     web::{build_axum_app, cache, page::TemplateData},
 };
@@ -570,7 +569,7 @@ impl TestDatabase {
             .execute(&mut conn)
             .await
             .context("error setting search path")?;
-        db::migrate(&mut conn, None)
+        docs_rs_database::migrate(&mut conn, None)
             .await
             .context("error running migrations")?;
 
@@ -631,7 +630,7 @@ impl Drop for TestDatabase {
                     return;
                 };
 
-                let migration_result = db::migrate(&mut conn, Some(0)).await;
+                let migration_result = docs_rs_database::migrate(&mut conn, Some(0)).await;
 
                 if let Err(e) = sqlx::query(format!("DROP SCHEMA {} CASCADE;", schema).as_str())
                     .execute(&mut *conn)
