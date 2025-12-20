@@ -24,11 +24,11 @@
 
 #[allow(clippy::disallowed_types)]
 mod header_impl {
-    use axum_extra::headers::{self, ETag, Header, IfNoneMatch as OriginalIfNoneMatch};
     use derive_more::Deref;
+    use headers::{self, ETag, Header, IfNoneMatch as OriginalIfNoneMatch};
 
     #[derive(Debug, Clone, PartialEq, Deref)]
-    pub struct IfNoneMatch(pub axum_extra::headers::IfNoneMatch);
+    pub struct IfNoneMatch(pub headers::IfNoneMatch);
 
     impl Header for IfNoneMatch {
         fn name() -> &'static http::HeaderName {

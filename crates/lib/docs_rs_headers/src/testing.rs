@@ -1,4 +1,4 @@
-use axum_extra::headers::{self, Header, HeaderMapExt};
+use headers::{self, Header, HeaderMapExt};
 use http::{HeaderMap, HeaderValue};
 
 pub(crate) fn test_typed_decode<H, V>(value: V) -> Result<Option<H>, headers::Error>
