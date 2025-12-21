@@ -6,11 +6,11 @@ use docs_rs::{
     db::{self, Overrides},
     queue_rebuilds_faulty_rustdoc, start_web_server,
     utils::{
-        ConfigName, daemon::start_background_service_metric_collector, get_config,
-        get_crate_pattern_and_priority, list_crate_priorities, queue_builder,
-        remove_crate_priority, set_config, set_crate_priority,
+        daemon::start_background_service_metric_collector, get_crate_pattern_and_priority,
+        list_crate_priorities, queue_builder, remove_crate_priority, set_crate_priority,
     },
 };
+use docs_rs_database::service_config::{ConfigName, get_config, set_config};
 use docs_rs_storage::add_path_into_database;
 use docs_rs_types::{CrateId, Version};
 use futures_util::StreamExt;
