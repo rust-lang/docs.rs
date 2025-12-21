@@ -12,13 +12,24 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
 # crates that have it.
 [group('testing')]
 [group('sqlx')]
-[no-cd]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
-    cargo sqlx prepare \
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  cargo sqlx prepare \
       --database-url $DOCSRS_DATABASE_URL \
       --workspace \
       {{ args }} \
       -- --all-targets --all-features
+
+  for subcrate in crates/lib/*; do
+    # NOTE: potential optimization: only run this command when `sqlx` 
+    # is in the dependencies of the subcrate.
+    (cd "${subcrate}" && cargo sqlx prepare \
+        --database-url $DOCSRS_DATABASE_URL \
+        {{ args }} \
+        -- --all-targets --all-features)
+  done
 
 
 [group('testing')]
