@@ -3,6 +3,7 @@ mod errors;
 mod metrics;
 mod migrations;
 mod pool;
+pub mod service_config;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

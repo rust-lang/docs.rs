@@ -8,11 +8,14 @@ use crate::{
     docbuilder::Limits,
     error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
-    utils::{ConfigName, copy_dir_all, get_config, report_error, set_config},
+    utils::{copy_dir_all, report_error},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
-use docs_rs_database::Pool;
+use docs_rs_database::{
+    Pool,
+    service_config::{ConfigName, get_config, set_config},
+};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
