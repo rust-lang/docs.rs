@@ -11,10 +11,19 @@ docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 futures-util = { workspace = true }
 hex = "0.4.3"
 opentelemetry = { workspace = true }
+rand = { workspace = true, optional = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
+[dev-dependencies]
+rand = { workspace = true }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
+test-case = { workspace = true }
+
 [features]
-testing = []
+testing = [
+    "dep:rand",
+    "docs_rs_opentelemetry/testing",
+]
