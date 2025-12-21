@@ -723,10 +723,11 @@ mod tests {
     use super::*;
     use crate::db::update_build_status;
     use crate::test::{
-        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
-        async_wrapper, fake_release_that_failed_before_build,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
+        fake_release_that_failed_before_build,
     };
     use anyhow::Error;
+    use docs_rs_database::testing::TestDatabase;
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_types::KrateName;
     use http::StatusCode;

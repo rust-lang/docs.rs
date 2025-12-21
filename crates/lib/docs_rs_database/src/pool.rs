@@ -30,7 +30,7 @@ impl Pool {
         Self::new_inner(config, DEFAULT_SCHEMA, otel_meter_provider).await
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub async fn new_with_schema(
         config: &Config,
         schema: &str,

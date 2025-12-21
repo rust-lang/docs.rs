@@ -1,4 +1,3 @@
-use super::TestDatabase;
 use crate::{
     db::{initialize_build, initialize_crate, initialize_release, update_build_status},
     docbuilder::{DocCoverage, RUSTDOC_JSON_COMPRESSION_ALGORITHMS},
@@ -8,6 +7,7 @@ use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
+use docs_rs_database::testing::TestDatabase;
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_storage::{
     AsyncStorage, CompressionAlgorithm, FileEntry, RustdocJsonFormatVersion,

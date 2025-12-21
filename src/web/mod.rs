@@ -628,9 +628,9 @@ mod test {
     use super::*;
     use crate::docbuilder::DocCoverage;
     use crate::test::{
-        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestDatabase, TestEnvironment,
-        async_wrapper,
+        AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
     };
+    use docs_rs_database::testing::TestDatabase;
     use docs_rs_types::ReleaseId;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;

@@ -12,28 +12,22 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
-use docs_rs_database::{AsyncPoolClient, Pool};
+use docs_rs_database::testing::TestDatabase;
 use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
-use docs_rs_opentelemetry::{
-    AnyMeterProvider,
-    testing::{CollectedMetrics, TestMetrics},
-};
+use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
 use docs_rs_storage::{AsyncStorage, Storage, StorageKind, testing::TestStorage};
 use docs_rs_types::Version;
 use fn_error_context::context;
-use futures_util::stream::TryStreamExt;
 use http::{
     HeaderMap, HeaderName, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, CONTENT_TYPE},
 };
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
-use sqlx::Connection as _;
 use std::{collections::HashMap, fs, future::Future, panic, rc::Rc, sync::Arc};
-use tokio::{runtime, task::block_in_place};
+use tokio::runtime;
 use tower::ServiceExt;
-use tracing::error;
 
 // testing krate name constants
 pub(crate) const KRATE: &str = "krate";
@@ -452,8 +446,7 @@ impl TestEnvironment {
         fs::create_dir_all(config.registry_index_path.clone())?;
 
         let test_metrics = TestMetrics::new();
-
-        let test_db = TestDatabase::new(&config, test_metrics.provider())
+        let test_db = TestDatabase::new(&config.database, test_metrics.provider())
             .await
             .context("can't initialize test database")?;
 
@@ -540,110 +533,5 @@ impl TestEnvironment {
 
     pub(crate) async fn fake_release(&self) -> fakes::FakeRelease<'_> {
         fakes::FakeRelease::new(self.async_db(), self.context.async_storage.clone())
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct TestDatabase {
-    pool: Pool,
-    schema: String,
-    runtime: runtime::Handle,
-}
-
-impl TestDatabase {
-    async fn new(config: &Config, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
-        // A random schema name is generated and used for the current connection. This allows each
-        // test to create a fresh instance of the database to run within.
-        let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());
-
-        let config = &config.database;
-
-        let pool = Pool::new_with_schema(config, &schema, otel_meter_provider).await?;
-
-        let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
-        sqlx::query(&format!("CREATE SCHEMA {schema}"))
-            .execute(&mut conn)
-            .await
-            .context("error creating schema")?;
-        sqlx::query(&format!("SET search_path TO {schema}, public"))
-            .execute(&mut conn)
-            .await
-            .context("error setting search path")?;
-        docs_rs_database::migrate(&mut conn, None)
-            .await
-            .context("error running migrations")?;
-
-        // Move all sequence start positions 10000 apart to avoid overlapping primary keys
-        let sequence_names: Vec<_> = sqlx::query!(
-            "SELECT relname
-             FROM pg_class
-             INNER JOIN pg_namespace ON
-                 pg_class.relnamespace = pg_namespace.oid
-             WHERE pg_class.relkind = 'S'
-                 AND pg_namespace.nspname = $1
-            ",
-            schema,
-        )
-        .fetch(&mut conn)
-        .map_ok(|row| row.relname)
-        .try_collect()
-        .await?;
-
-        for (i, sequence) in sequence_names.into_iter().enumerate() {
-            let offset = (i + 1) * 10000;
-            sqlx::query(&format!(
-                r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#
-            ))
-            .execute(&mut conn)
-            .await?;
-        }
-
-        Ok(TestDatabase {
-            pool,
-            schema,
-            runtime: runtime::Handle::current(),
-        })
-    }
-
-    pub(crate) fn pool(&self) -> &Pool {
-        &self.pool
-    }
-
-    pub(crate) async fn async_conn(&self) -> AsyncPoolClient {
-        self.pool
-            .get_async()
-            .await
-            .expect("failed to get a connection out of the pool")
-    }
-}
-
-impl Drop for TestDatabase {
-    fn drop(&mut self) {
-        let pool = self.pool.clone();
-        let schema = self.schema.clone();
-        let runtime = self.runtime.clone();
-
-        block_in_place(move || {
-            runtime.block_on(async move {
-                let Ok(mut conn) = pool.get_async().await else {
-                    error!("error in drop impl");
-                    return;
-                };
-
-                let migration_result = docs_rs_database::migrate(&mut conn, Some(0)).await;
-
-                if let Err(e) = sqlx::query(format!("DROP SCHEMA {} CASCADE;", schema).as_str())
-                    .execute(&mut *conn)
-                    .await
-                {
-                    error!("failed to drop test schema {}: {}", schema, e);
-                    return;
-                }
-
-                if let Err(err) = migration_result {
-                    error!(?err, "error reverting migrations");
-                }
-            })
-        });
     }
 }
