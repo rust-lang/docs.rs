@@ -36,7 +36,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
-zip = {version = "6.0.0", default-features = false, features = ["bzip2"]}
+zip = {version = "7.0.0", default-features = false, features = ["bzip2"]}
 zstd = "0.13.0"
 
 [dev-dependencies]
