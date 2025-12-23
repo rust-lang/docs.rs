@@ -1,10 +1,7 @@
-use crate::{
-    docbuilder::DocCoverage,
-    error::Result,
-    web::crate_details::{latest_release, releases_for_crate},
-};
+use crate::{docbuilder::DocCoverage, error::Result};
 use anyhow::{Context, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
+use docs_rs_database::crate_details::update_latest_version_id;
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_storage::CompressionAlgorithm;
 use docs_rs_types::{BuildId, BuildStatus, CrateId, Feature, ReleaseId, Version};
@@ -125,25 +122,6 @@ pub(crate) async fn finish_release(
         .context("couldn't update latest version id")?;
 
     update_build_status(conn, release_id).await?;
-
-    Ok(())
-}
-
-pub async fn update_latest_version_id(
-    conn: &mut sqlx::PgConnection,
-    crate_id: CrateId,
-) -> Result<()> {
-    let releases = releases_for_crate(conn, crate_id).await?;
-
-    sqlx::query!(
-        "UPDATE crates
-         SET latest_version_id = $2
-         WHERE id = $1",
-        crate_id.0,
-        latest_release(&releases).map(|release| release.id.0),
-    )
-    .execute(&mut *conn)
-    .await?;
 
     Ok(())
 }

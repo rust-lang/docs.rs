@@ -25,7 +25,6 @@ mod status;
 use crate::{
     Context, impl_axum_webpage,
     web::{
-        crate_details::Release,
         metrics::WebMetrics,
         page::templates::{RenderBrands, RenderSolid, filters},
     },
@@ -42,13 +41,13 @@ use axum::{
 };
 use axum_extra::middleware::option_layer;
 use chrono::{DateTime, NaiveDate, Utc};
+use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_types::{BuildStatus, CrateId, KrateName, ReqVersion, Version, VersionReq};
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use error::AxumNope;
 use page::TemplateData;
 use sentry::integrations::tower as sentry_tower;
 use serde::Serialize;
-use serde_json::Value;
 use std::{
     borrow::Cow,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -91,10 +90,10 @@ pub(crate) struct MatchedRelease {
     pub req_version: ReqVersion,
 
     /// the matched release
-    pub release: crate_details::Release,
+    pub release: Release,
 
     /// all releases since we have them anyways and so we can pass them to CrateDetails
-    pub(crate) all_releases: Vec<crate_details::Release>,
+    pub(crate) all_releases: Vec<Release>,
 }
 
 impl MatchedRelease {
@@ -251,7 +250,7 @@ async fn match_version(
 
     // first load and parse all versions of this crate,
     // `releases_for_crate` is already sorted, newest version first.
-    let releases = crate_details::releases_for_crate(conn, crate_id)
+    let releases = docs_rs_database::crate_details::releases_for_crate(conn, crate_id)
         .await
         .context("error fetching releases for crate")?;
 
@@ -589,7 +588,7 @@ impl MetaData {
             target_name: row.target_name,
             rustdoc_status: row.rustdoc_status,
             default_target: row.default_target,
-            doc_targets: row.doc_targets.map(MetaData::parse_doc_targets),
+            doc_targets: row.doc_targets.map(parse_doc_targets),
             yanked: row.yanked,
             rustdoc_css_file: row
                 .rustc_version
@@ -597,12 +596,6 @@ impl MetaData {
                 .map(get_correct_docsrs_style_file)
                 .transpose()?,
         })
-    }
-
-    fn parse_doc_targets(targets: Value) -> Vec<String> {
-        let mut targets: Vec<String> = serde_json::from_value(targets).unwrap_or_default();
-        targets.sort_unstable();
-        targets
     }
 }
 

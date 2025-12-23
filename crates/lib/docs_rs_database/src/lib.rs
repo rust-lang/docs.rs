@@ -1,4 +1,5 @@
 mod config;
+pub mod crate_details;
 mod errors;
 mod metrics;
 mod migrations;

@@ -1,6 +1,6 @@
 use crate::{
     BuildPackageSummary, Config, Context, Index, RustwideBuilder,
-    db::{delete_crate, delete_version, update_latest_version_id},
+    db::{delete_crate, delete_version},
     docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
     utils::{get_crate_priority, report_error},
@@ -10,6 +10,7 @@ use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
 use docs_rs_database::{
     AsyncPoolClient, Pool,
+    crate_details::update_latest_version_id,
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};

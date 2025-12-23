@@ -6,8 +6,10 @@ build = "build.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_types = { path = "../docs_rs_types" }
 futures-util = { workspace = true }
 hex = "0.4.3"
 opentelemetry = { workspace = true }
