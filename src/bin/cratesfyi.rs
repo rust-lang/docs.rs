@@ -10,7 +10,10 @@ use docs_rs::{
         list_crate_priorities, queue_builder, remove_crate_priority, set_crate_priority,
     },
 };
-use docs_rs_database::service_config::{ConfigName, get_config, set_config};
+use docs_rs_database::{
+    crate_details,
+    service_config::{ConfigName, get_config, set_config},
+};
 use docs_rs_storage::add_path_into_database;
 use docs_rs_types::{CrateId, Version};
 use futures_util::StreamExt;
@@ -533,7 +536,7 @@ impl DatabaseSubcommand {
 
                         println!("handling crate {}", row.name);
 
-                        db::update_latest_version_id(&mut update_conn, row.id).await?;
+                        crate_details::update_latest_version_id(&mut update_conn, row.id).await?;
                     }
 
                     Ok::<(), anyhow::Error>(())

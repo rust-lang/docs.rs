@@ -2003,8 +2003,10 @@ name = "docs_rs_database"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
+ "docs_rs_types",
  "futures-util",
  "hex",
  "opentelemetry",
