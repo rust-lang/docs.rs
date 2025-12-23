@@ -2,7 +2,7 @@
 {%- import "releases/header.html" as release_macros -%}
 
 {%- block header -%}
-    {% call release_macros::search_header(title=title) %}
+    {% call release_macros::search_header(title=title) %}{% endcall %}
 {%- endblock header -%}
 
 {%- block topbar -%}

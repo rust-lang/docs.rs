@@ -18,7 +18,7 @@
     </updated>
 
     {%- for release in recent_releases -%}
-        {%- set link -%}
+        {%- decl link -%}
         {%- if release.rustdoc_status && release.target_name.is_some() -%}
             {%- set link = "/{}/{}/{}/"|format(release.name, release.version, release.target_name.as_ref().unwrap()) -%}
         {%- else -%}

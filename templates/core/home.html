@@ -43,7 +43,7 @@ centered
             <ul>
                 {%- for release in recent_releases -%}
                     {%- set release_params = release.rustdoc_params() -%}
-                    {% set release_url %}
+                    {% decl release_url %}
                     {%- if release.rustdoc_status -%}
                         {%- set release_url = release_params.rustdoc_url() -%}
                     {%- else -%}

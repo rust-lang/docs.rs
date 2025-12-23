@@ -94,9 +94,9 @@ pub mod filters {
     use askama::filters::Safe;
     use chrono::{DateTime, Utc};
     use std::borrow::Cow;
+    use std::fmt::Display;
 
-    // Copied from `tera`.
-    pub fn escape_html<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
+    pub fn escape_html_inner(input: &str) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -118,7 +118,14 @@ pub mod filters {
     }
 
     // Copied from `tera`.
-    pub fn escape_xml<'a>(input: &'a str, _: &dyn Values) -> askama::Result<Cow<'a, str>> {
+    #[askama::filter_fn]
+    pub fn escape_html(input: &str, _: &dyn Values) -> askama::Result<impl Display> {
+        escape_html_inner(input)
+    }
+
+    // Copied from `tera`.
+    #[askama::filter_fn]
+    pub fn escape_xml(input: &str, _: &dyn Values) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'".contains(c)) {
             return Ok(Cow::Borrowed(input));
         }
@@ -138,15 +145,18 @@ pub mod filters {
 
     /// Prettily format a timestamp
     // TODO: This can be replaced by chrono
+    #[askama::filter_fn]
     pub fn timeformat(value: &DateTime<Utc>, _: &dyn Values) -> askama::Result<String> {
         Ok(crate::web::duration_to_str(*value))
     }
 
+    #[askama::filter_fn]
     pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
         const TIMES: &[&str] = &["seconds", "minutes", "hours"];
 
         let mut chosen_time = &TIMES[0];
 
+        let mut value = value;
         for time in &TIMES[1..] {
             if value / 60.0 >= 1.0 {
                 chosen_time = time;
@@ -167,6 +177,7 @@ pub mod filters {
 
     /// Dedent a string by removing all leading whitespace
     #[allow(clippy::unnecessary_wraps)]
+    #[askama::filter_fn]
     pub fn dedent<T: std::fmt::Display, I: Into<Option<i32>>>(
         value: T,
         _: &dyn Values,
@@ -204,6 +215,7 @@ pub mod filters {
         Ok(unindented)
     }
 
+    #[askama::filter_fn]
     pub fn highlight(
         code: impl std::fmt::Display,
         _: &dyn Values,
@@ -214,6 +226,7 @@ pub mod filters {
         Ok(Safe(format!("<pre><code>{highlighted_code}</code></pre>")))
     }
 
+    #[askama::filter_fn]
     pub fn round(value: &f32, _: &dyn Values, precision: u32) -> askama::Result<String> {
         let multiplier = if precision == 0 {
             1.0
@@ -223,14 +236,7 @@ pub mod filters {
         Ok(((multiplier * *value).round() / multiplier).to_string())
     }
 
-    pub fn split_first<'a>(
-        value: &'a str,
-        _: &dyn Values,
-        pat: &str,
-    ) -> askama::Result<Option<&'a str>> {
-        Ok(value.split(pat).next())
-    }
-
+    #[askama::filter_fn]
     pub fn json_encode<T: ?Sized + serde::Serialize>(
         value: &T,
         _: &dyn Values,

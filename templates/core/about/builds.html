@@ -104,7 +104,7 @@
         All the builds are executed inside a sandbox with limited resources. The current limits are:
     </p>
 
-    {% call macros::crate_limits(limits=limits) %}
+    {% call macros::crate_limits(limits=limits) %}{% endcall %}
 
     <p>
         If your build fails because it hit one of these limits, please

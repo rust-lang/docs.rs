@@ -8,8 +8,8 @@
 
         {%- set target_params = params.clone().with_doc_target(doc_target.clone()) -%}
 
-        {%- set target_no_follow -%}
-        {%- set target_url -%}
+        {%- decl target_no_follow -%}
+        {%- decl target_url -%}
         {%- if use_direct_platform_links -%}
             {%- set target_url = target_params.rustdoc_url() -%}
             {%- set target_no_follow = "" -%}

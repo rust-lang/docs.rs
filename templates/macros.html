@@ -96,7 +96,7 @@
         {%- set release_params = params.clone().with_req_version(release.version.clone()) -%}
 
         {# The url for the release, `/crate/:name/:version` #}
-        {% set release_url %}
+        {% decl release_url %}
         {% if use_target_redirect %}
             {%- set release_url = release_params.target_redirect_url() -%}
         {% else %} {# /crate #}
@@ -104,8 +104,8 @@
         {% endif %}
         {# The release's name and version, `:name-:version` #}
         {%- set release_name = "{}-{}"|format(params.name(), release.version) -%}
-        {%- set warning -%}
-        {%- set title -%}
+        {%- decl warning -%}
+        {%- decl title -%}
         {%- set yanked = release.yanked.unwrap_or_default() -%}
 
         {%- if !release.is_library.unwrap_or_default() -%}
@@ -160,7 +160,7 @@
     {%- for dep in dependencies -%}
         <li class="pure-menu-item">
             {%- set dependency_params = RustdocParams::new(dep.name.parse::<KrateName>().unwrap()).with_req_version(ReqVersion::Semver(dep.req.clone())) -%}
-            {%- set href -%}
+            {%- decl href -%}
             {%- if use_crate_details -%}
                 {%- set href = dependency_params.crate_details_url() -%}
             {%- else -%}

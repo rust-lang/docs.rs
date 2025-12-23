@@ -132,7 +132,7 @@
                             <li class="pure-menu-item">
                                 <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
                                     <ul class="pure-menu-list">
-                                        {% call macros::dependencies_list(dependencies=krate.dependencies, use_crate_details = false, if_empty="") %}
+                                        {% call macros::dependencies_list(dependencies=krate.dependencies, use_crate_details = false, if_empty="") %}{% endcall %}
                                     </ul>
                                 </div>
                             </li>
@@ -191,8 +191,8 @@
 
     {#- If this isn't the most recent stable release, offer a link to the latest -#}
     {%- elif is_latest_version is defined && !is_latest_version -%}
-        {% set tooltip %}
-        {% set title %}
+        {% decl tooltip %}
+        {% decl title %}
         {%- if yanked -%}
             {%- set tooltip = "You are seeing a yanked version of the {} crate. Click here to go to the latest version."|format(metadata.name) -%}
             {%- set title = "This release has been yanked, go to latest version" -%}

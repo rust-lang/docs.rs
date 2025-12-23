@@ -1,16 +1,16 @@
 {%- import "macros.html" as macros -%}
-        {%- let build_slug2 -%}
-        {%- if build_slug is defined -%}
-          {% let build_slug2 = build_slug -%}
-        {%- else -%}
-          {%- let build_slug2 =  slug::slugify(crate::BUILD_VERSION) -%}
-        {%- endif -%}
+{%- decl build_slug2 -%}
+{%- if build_slug is defined -%}
+  {% let build_slug2 = build_slug -%}
+{%- else -%}
+  {%- let build_slug2 =  slug::slugify(crate::BUILD_VERSION) -%}
+{%- endif -%}
 
-        {%- if let Some(css_file) = rustdoc_css_file -%}
-            <link rel="stylesheet" href="/-/static/{{css_file}}?{{build_slug2}}" media="all" />
-        {%- endif -%}
-        <link rel="stylesheet" href="/-/static/font-awesome.css?{{build_slug2}}" media="all" />
+{%- if let Some(css_file) = rustdoc_css_file -%}
+    <link rel="stylesheet" href="/-/static/{{css_file}}?{{build_slug2}}" media="all" />
+{%- endif -%}
+<link rel="stylesheet" href="/-/static/font-awesome.css?{{build_slug2}}" media="all" />
 
-        <link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+<link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 
-        <script type="text/javascript">{%- include "theme.js" -%}</script>
+<script type="text/javascript">{%- include "theme.js" -%}</script>

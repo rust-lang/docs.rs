@@ -2,7 +2,7 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}{% endcall %}
 {%- endblock title -%}
 
 {%- block topbar -%}
@@ -11,7 +11,7 @@
 
 {%- block header -%}
     {# Set the active tab to the `source` tab #}
-    {% call navigation::package_navigation(metadata=metadata, active_tab="source") %}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="source") %}{% endcall %}
 {%- endblock header -%}
 
 {%- block body_classes -%}
@@ -84,7 +84,7 @@
                                     #}
 
                                     {# Text files or files which mime starts with `text` #}
-                                    {%- elif file.mime == "text/plain" || file.mime|split_first("/") == Some("text") -%}
+                                    {%- elif file.mime == "text/plain" || file.mime.split('/').next() == Some("text") -%}
                                         {{ crate::icons::IconFileLines.render_regular(false, false, "") }}
 
                                         {# Binary files and any unrecognized types #}
@@ -113,7 +113,7 @@
 
             {# If the file has content, then display it in a codeblock #}
             {%- if let Some(file_content) = file_content -%}
-                {% set file_name %}
+                {% decl file_name %}
                 {% if let Some(file) = file %}
                     {% set file_name = file.name.as_str() %}
                 {% else %}
