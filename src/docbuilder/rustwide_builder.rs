@@ -1453,7 +1453,7 @@ mod tests {
     use docs_rs_storage::{CompressionAlgorithm, compression};
     use docs_rs_types::{BuildStatus, Feature, ReleaseId, Version};
     use pretty_assertions::assert_eq;
-    use std::{io, iter};
+    use std::{collections::BTreeMap, io, iter};
     use test_case::test_case;
 
     fn get_features(
@@ -1832,7 +1832,7 @@ mod tests {
                     targets: vec![],
                     readme: None,
                     keywords: vec![],
-                    features: HashMap::new(),
+                    features: BTreeMap::new(),
                 },
                 Path::new("/unknown/"),
                 "x86_64-unknown-linux-gnu",

@@ -19,17 +19,7 @@ use std::{borrow::Cow, io::Write, str::FromStr};
 /// FIXME: this should actually come from some shared crate between the rust projects,
 /// so the amount of duplication is less.
 #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Deref,
-    Into,
-    Display,
-    DeserializeFromStr,
-    SerializeDisplay,
-    bincode::Encode,
+    Debug, Clone, PartialEq, Eq, Hash, Deref, Into, Display, DeserializeFromStr, SerializeDisplay,
 )]
 pub struct KrateName(Cow<'static, str>);
 

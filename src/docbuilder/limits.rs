@@ -1,10 +1,9 @@
 use crate::{Config, db::Overrides, error::Result};
-use serde::Serialize;
 use std::time::Duration;
 
 const GB: usize = 1024 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Limits {
     pub memory: usize,
     pub targets: usize,

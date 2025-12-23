@@ -16,7 +16,7 @@ impl<'de> Deserialize<'de> for ReleaseDependency {
     {
         /// The three possible representations of a dependency in our internal JSON format
         /// in the `releases.dependencies` column.
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize)]
         #[serde(untagged)]
         enum Repr {
             /// just [name, version]``

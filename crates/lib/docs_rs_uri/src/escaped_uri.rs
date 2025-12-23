@@ -1,6 +1,7 @@
 use crate::encode::{encode_url_path, url_decode};
 use askama::filters::HtmlSafe;
 use http::{Uri, uri::PathAndQuery};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::{borrow::Borrow, fmt::Display, iter, str::FromStr};
 use url::form_urlencoded;
 
@@ -13,27 +14,10 @@ use url::form_urlencoded;
 ///
 /// Also we support fragments, with http::Uri doesn't support yet.
 /// See https://github.com/hyperium/http/issues/775
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, SerializeDisplay, DeserializeFromStr)]
 pub struct EscapedURI {
     uri: Uri,
     fragment: Option<String>,
-}
-
-impl bincode::Encode for EscapedURI {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        // encode as separate parts so we don't have to clone
-        self.uri.scheme_str().encode(encoder)?;
-        self.uri.authority().map(|a| a.as_str()).encode(encoder)?;
-        self.uri
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .encode(encoder)?;
-        self.fragment.encode(encoder)?;
-        Ok(())
-    }
 }
 
 impl EscapedURI {

@@ -11,7 +11,7 @@ use docs_rs_storage::CompressionAlgorithm;
 use docs_rs_types::{BuildId, KrateName, ReqVersion};
 use docs_rs_uri::{EscapedURI, url_decode};
 use itertools::Itertools as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const INDEX_HTML: &str = "index.html";
 const FOLDER_AND_INDEX_HTML: &str = "/index.html";
@@ -23,7 +23,7 @@ pub(crate) const ROOT_RUSTDOC_HTML_FILES: &[&str] = &[
     "scrape-examples-help.html",
 ];
 
-#[derive(Clone, Debug, PartialEq, bincode::Encode)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) enum PageKind {
     Rustdoc,
     Source,
@@ -39,7 +39,7 @@ pub(crate) enum PageKind {
 /// All of these have more or less detail depending on how much metadata we have here.
 /// Maintains some additional fields containing "fixed" things, whos quality
 /// gets better the more metadata we provide.
-#[derive(Clone, PartialEq, bincode::Encode)]
+#[derive(Clone, PartialEq, Serialize)]
 pub(crate) struct RustdocParams {
     // optional behaviour marker
     page_kind: Option<PageKind>,
@@ -102,7 +102,7 @@ impl std::fmt::Debug for RustdocParams {
 /// All except the crate name are optional or have a default,
 /// so this extractor can be used in many handlers with a variety of
 /// specificity of the route.
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct UrlParams {
     pub name: KrateName,
     #[serde(default)]

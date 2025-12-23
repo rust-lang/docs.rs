@@ -42,27 +42,6 @@ mod version_impl {
         }
     }
 
-    impl bincode::Encode for Version {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            let Self(semver::Version {
-                major,
-                minor,
-                patch,
-                pre: _,
-                build: _,
-            }) = self;
-            major.encode(encoder)?;
-            minor.encode(encoder)?;
-            patch.encode(encoder)?;
-            bincode::Encode::encode(self.0.pre.as_str(), encoder)?;
-            bincode::Encode::encode(self.0.build.as_str(), encoder)?;
-            Ok(())
-        }
-    }
-
     impl Type<Postgres> for Version {
         fn type_info() -> PgTypeInfo {
             <String as Type<Postgres>>::type_info()

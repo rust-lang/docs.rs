@@ -525,7 +525,7 @@ where
 }
 
 /// MetaData used in header
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, bincode::Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct MetaData {
     pub(crate) name: KrateName,
     /// The exact version of the release being shown.
