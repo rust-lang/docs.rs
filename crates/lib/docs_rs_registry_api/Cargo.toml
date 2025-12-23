@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-bincode = { workspace = true }
 chrono = { workspace = true }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }

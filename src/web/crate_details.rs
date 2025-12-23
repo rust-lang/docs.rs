@@ -733,7 +733,7 @@ mod tests {
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use std::str::FromStr as _;
     use test_case::test_case;
 
@@ -1579,7 +1579,7 @@ mod tests {
                 .await
                 .name("library")
                 .version("0.1.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -1602,7 +1602,7 @@ mod tests {
             let features = [("_private".into(), Vec::new())]
                 .iter()
                 .cloned()
-                .collect::<HashMap<String, Vec<String>>>();
+                .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")
@@ -1630,7 +1630,7 @@ mod tests {
             let features = [("feature1".into(), Vec::new())]
                 .iter()
                 .cloned()
-                .collect::<HashMap<String, Vec<String>>>();
+                .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")
@@ -1666,7 +1666,7 @@ mod tests {
             ]
             .iter()
             .cloned()
-            .collect::<HashMap<String, Vec<String>>>();
+            .collect::<BTreeMap<String, Vec<String>>>();
             env.fake_release()
                 .await
                 .name("library")

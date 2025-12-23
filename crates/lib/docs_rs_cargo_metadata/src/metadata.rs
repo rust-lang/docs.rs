@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use docs_rs_types::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub struct CargoMetadata {
     root: Package,
@@ -39,7 +39,7 @@ impl CargoMetadata {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct Package {
     pub id: String,
     pub name: String,
@@ -53,7 +53,7 @@ pub struct Package {
     pub targets: Vec<Target>,
     pub readme: Option<String>,
     pub keywords: Vec<String>,
-    pub features: HashMap<String, Vec<String>>,
+    pub features: BTreeMap<String, Vec<String>>,
 }
 
 impl Package {
@@ -86,7 +86,7 @@ impl Package {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct Target {
     pub name: String,
     #[cfg(not(feature = "testing"))]
@@ -107,36 +107,13 @@ impl Target {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Dependency {
     pub name: String,
     pub req: VersionReq,
     pub kind: Option<String>,
     pub rename: Option<String>,
     pub optional: bool,
-}
-
-impl bincode::Encode for Dependency {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        let Self {
-            name,
-            req,
-            kind,
-            rename,
-            optional,
-        } = self;
-        name.encode(encoder)?;
-        // FIXME: VersionReq does not implement Encode, so we serialize it to string
-        // Could be fixable by wrapping VersionReq in a newtype
-        req.to_string().encode(encoder)?;
-        kind.encode(encoder)?;
-        rename.encode(encoder)?;
-        optional.encode(encoder)?;
-        Ok(())
-    }
 }
 
 impl Dependency {
@@ -158,25 +135,25 @@ impl Dependency {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct DeserializedMetadata {
     packages: Vec<Package>,
     resolve: DeserializedResolve,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct DeserializedResolve {
     root: String,
     nodes: Vec<DeserializedResolveNode>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct DeserializedResolveNode {
     id: String,
     deps: Vec<DeserializedResolveDep>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 struct DeserializedResolveDep {
     pkg: String,
 }

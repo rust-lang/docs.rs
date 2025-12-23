@@ -57,9 +57,8 @@ pub(crate) const PRIORITY_CONSISTENCY_CHECK: i32 = 15;
 /// The static priority for background rebuilds, used when queueing rebuilds, and when rendering them collapsed in the UI.
 pub(crate) const PRIORITY_CONTINUOUS: i32 = 20;
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueuedCrate {
-    #[serde(skip)]
     id: i32,
     pub(crate) name: String,
     pub(crate) version: Version,

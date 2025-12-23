@@ -1,4 +1,5 @@
 use regex::Regex;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
@@ -8,7 +9,7 @@ static LICENSE_ID_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("[A-Za-z0-9.-]+").expect("Known regex must compile"));
 
 /// A segment of an SPDX license string
-#[derive(Clone, PartialEq, Eq, Debug, bincode::Encode)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 pub enum LicenseSegment {
     /// This is a set of glue tokens like OR, AND, `/`, `(`, `)`, etc.
     ///

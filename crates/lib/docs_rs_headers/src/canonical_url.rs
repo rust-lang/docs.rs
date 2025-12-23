@@ -9,7 +9,8 @@ use std::{fmt, ops::Deref};
 /// simplified typed header for a `Link rel=canonical` header in the response.
 ///
 /// When given only a path, it builds a full docs.rs URL.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
 pub struct CanonicalUrl(EscapedURI);
 
 impl CanonicalUrl {
@@ -59,15 +60,6 @@ impl Header for CanonicalUrl {
 impl fmt::Display for CanonicalUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl Serialize for CanonicalUrl {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0.to_string())
     }
 }
 

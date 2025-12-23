@@ -29,7 +29,7 @@ use docs_rs_types::{KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
 use futures_util::stream::TryStreamExt;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::Row;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -46,7 +46,7 @@ const RELEASES_IN_RELEASES: i64 = 30;
 /// Releases in recent releases feed
 const RELEASES_IN_FEED: i64 = 150;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
     pub(crate) name: KrateName,
     pub(crate) version: Version,
@@ -711,7 +711,7 @@ pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl 
 
 #[derive(Template)]
 #[template(path = "releases/build_queue.html")]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,

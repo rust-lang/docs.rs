@@ -238,7 +238,7 @@ fn get_dependency_versions(raw_dependencies: Option<Value>) -> HashMap<String, R
 /// The sorting order depends on depth-first traversal starting at the `"default"` feature,
 /// and falls back to alphabetic sorting for all non-default features.
 fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<String>) {
-    let mut all_features: HashMap<_, _> = raw_features
+    let mut all_features: BTreeMap<_, _> = raw_features
         .into_iter()
         .filter(|feature| !feature.is_private())
         .map(|feature| (feature.name.clone(), Feature::from(feature)))
@@ -408,7 +408,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.2.1")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -431,7 +431,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.2.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -455,7 +455,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -463,7 +463,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.2.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -489,7 +489,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -507,7 +507,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .features(HashMap::new())
+                .features(BTreeMap::new())
                 .create()
                 .await?;
 
@@ -539,7 +539,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .features(features.into_iter().collect::<HashMap<_, _>>())
+                .features(features.into_iter().collect::<BTreeMap<_, _>>())
                 .create()
                 .await?;
 

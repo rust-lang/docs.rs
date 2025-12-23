@@ -15,7 +15,11 @@ use docs_rs_storage::{
     rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{BuildId, BuildStatus, ReleaseId, Version, VersionReq};
-use std::{collections::HashMap, fmt, iter, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt, iter,
+    sync::Arc,
+};
 use tracing::debug;
 
 /// Create a fake release in the database that failed before the build.
@@ -121,7 +125,7 @@ impl<'a> FakeRelease<'a> {
                 ]
                 .iter()
                 .cloned()
-                .collect::<HashMap<String, Vec<String>>>(),
+                .collect::<BTreeMap<String, Vec<String>>>(),
             },
             builds: None,
             source_files: Vec::new(),
@@ -309,7 +313,7 @@ impl<'a> FakeRelease<'a> {
         }
     }
 
-    pub(crate) fn features(mut self, features: HashMap<String, Vec<String>>) -> Self {
+    pub(crate) fn features(mut self, features: BTreeMap<String, Vec<String>>) -> Self {
         self.package.features = features;
         self
     }

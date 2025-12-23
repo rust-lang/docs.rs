@@ -51,7 +51,7 @@ impl BuildDetailsPage {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct BuildDetailsParams {
     pub(crate) id: String,
     pub(crate) filename: Option<String>,

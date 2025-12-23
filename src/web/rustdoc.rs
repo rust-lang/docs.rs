@@ -43,7 +43,7 @@ use docs_rs_storage::{
 use docs_rs_types::{KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     iter,
@@ -380,6 +380,7 @@ pub(crate) async fn rustdoc_redirector_handler(
 /// small wrapper around CrateDetails to limit serialized fields we hand
 /// to the template.
 /// Mostly to know what we have to serialize into the etag.
+#[derive(Serialize)]
 pub struct LimitedCrateDetails {
     parsed_license: Option<Vec<licenses::LicenseSegment>>,
     homepage_url: Option<String>,
@@ -418,35 +419,7 @@ impl From<CrateDetails> for LimitedCrateDetails {
     }
 }
 
-impl bincode::Encode for LimitedCrateDetails {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        let LimitedCrateDetails {
-            parsed_license,
-            homepage_url,
-            documentation_url,
-            repository_url,
-            owners,
-            dependencies,
-            total_items,
-            documented_items,
-        } = self;
-
-        parsed_license.encode(encoder)?;
-        homepage_url.encode(encoder)?;
-        documentation_url.encode(encoder)?;
-        repository_url.encode(encoder)?;
-        owners.encode(encoder)?;
-        dependencies.encode(encoder)?;
-        total_items.encode(encoder)?;
-        documented_items.encode(encoder)?;
-        Ok(())
-    }
-}
-
-#[derive(Template, bincode::Encode)]
+#[derive(Template, Serialize)]
 #[template(path = "rustdoc/topbar.html")]
 pub struct RustdocPage {
     pub latest_path: EscapedURI,
@@ -494,14 +467,11 @@ impl RustdocPage {
 
         // we assume that all the info we put into the `RustdocPage` struct might change the
         // page content. So we have to pipe all of it into the ETag.
-        // I chose to add the additional bincode dependency because I was worried about the
+        // I chose to add the additional postcard dependency because I was worried about the
         // added processing time when handling these responses, since this is our
         // most accessed handler on the origin.
-        let config = bincode::config::standard()
-            .with_big_endian()
-            .with_variable_int_encoding();
-        bincode::encode_into_std_write(self, &mut etag, config)
-            .expect("bincode::Encode impl in RustdocPage can't fail");
+        postcard::to_io(self, &mut etag)
+            .expect("postcard::to_io can only when the underlying write fails, which it can't");
 
         etag.finalize()
     }
@@ -852,7 +822,7 @@ pub(crate) async fn target_redirect_handler(
     )?)
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct BadgeQueryParams {
     version: Option<ReqVersion>,
 }
@@ -875,7 +845,7 @@ pub(crate) async fn badge_handler(
     ))
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct JsonDownloadParams {
     pub(crate) format_version: Option<String>,
 }

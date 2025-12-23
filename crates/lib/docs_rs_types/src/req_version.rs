@@ -8,7 +8,7 @@ use std::{
 
 /// Represents a version identifier in a request in the original state.
 /// Can be an exact version, a semver requirement, or the string "latest".
-#[derive(Debug, Default, Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, DeserializeFromStr, SerializeDisplay)]
 pub enum ReqVersion {
     Exact(Version),
     Semver(VersionReq),
@@ -19,30 +19,6 @@ pub enum ReqVersion {
 impl ReqVersion {
     pub fn is_latest(&self) -> bool {
         matches!(self, ReqVersion::Latest)
-    }
-}
-
-impl bincode::Encode for ReqVersion {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        // manual implementation since VersionReq doesn't implement Encode,
-        // and I don't want to NewType it right now.
-        match self {
-            ReqVersion::Exact(v) => {
-                0u8.encode(encoder)?;
-                v.encode(encoder)
-            }
-            ReqVersion::Semver(req) => {
-                1u8.encode(encoder)?;
-                req.to_string().encode(encoder)
-            }
-            ReqVersion::Latest => {
-                2u8.encode(encoder)?;
-                Ok(())
-            }
-        }
     }
 }
 
