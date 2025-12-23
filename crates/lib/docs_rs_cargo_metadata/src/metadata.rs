@@ -144,10 +144,12 @@ struct DeserializedMetadata {
 #[derive(Deserialize)]
 struct DeserializedResolve {
     root: String,
+    #[allow(dead_code)]
     nodes: Vec<DeserializedResolveNode>,
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct DeserializedResolveNode {
     id: String,
     deps: Vec<DeserializedResolveDep>,
@@ -155,5 +157,6 @@ struct DeserializedResolveNode {
 
 #[derive(Deserialize)]
 struct DeserializedResolveDep {
+    #[allow(dead_code)]
     pkg: String,
 }
