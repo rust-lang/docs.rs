@@ -2,7 +2,7 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {% call macros::doc_title(name=name, version=version) %}
+    {% call macros::doc_title(name=name, version=version) %}{% endcall %}
 {%- endblock title -%}
 
 {%- block meta -%}
@@ -15,7 +15,7 @@
 
 {%- block header -%}
     {# Set the active tab to the `crate` tab #}
-    {% call navigation::package_navigation(metadata=metadata, active_tab="crate") %}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="crate") %}{% endcall %}
 {%- endblock header -%}
 
 {%- block body -%}
@@ -112,7 +112,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# List all dependencies that the current release has #}
-                                    {% call macros::dependencies_list(dependencies=dependencies, use_crate_details = true, if_empty="&mdash;") %}
+                                    {% call macros::dependencies_list(dependencies=dependencies, use_crate_details = true, if_empty="&mdash;") %}{% endcall %}
                                 </ul>
                             </div>
                         </li>
@@ -122,7 +122,7 @@
                             <div class="pure-menu pure-menu-scrollable sub-menu">
                                 <ul class="pure-menu-list">
                                     {# Display all releases of this crate #}
-                                    {% call macros::releases_list(params=params, releases=releases, use_target_redirect = false, retain_fragment = false) %}
+                                    {% call macros::releases_list(params=params, releases=releases, use_target_redirect = false, retain_fragment = false) %}{% endcall %}
                                 </ul>
                             </div>
                         </li>

@@ -2,7 +2,7 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}{% endcall %}
 {%- endblock title -%}
 
 {%- block meta -%}
@@ -14,7 +14,7 @@
 {%- endblock topbar -%}
 
 {%- block header -%}
-    {% call navigation::package_navigation(metadata=metadata, active_tab="features") %}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="features") %}{% endcall %}
 {%- endblock header -%}
 
 {%- block body -%}

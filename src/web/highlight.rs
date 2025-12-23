@@ -82,7 +82,7 @@ pub fn with_lang(lang: Option<&str>, code: &str, default: Option<&str>) -> Strin
             } else {
                 log::error!("failed while highlighting code: {err:?}");
             }
-            crate::web::page::templates::filters::escape_html(code, &())
+            crate::web::page::templates::filters::escape_html_inner(code)
                 .map(|s| s.to_string())
                 .unwrap_or_default()
         }

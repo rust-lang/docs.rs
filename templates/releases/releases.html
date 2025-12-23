@@ -12,7 +12,7 @@
             tab=release_type,
             owner=owner.as_deref().unwrap_or_default()
         )
-    %}
+    %}{% endcall %}
 {%- endblock header -%}
 
 {%- block topbar -%}
@@ -55,14 +55,14 @@ centered
                                 </div> {#- -#}
                             </a>
                         {%- when ReleaseStatus::Available(release) -%}
-                            {%- set release_params -%}
+                            {%- decl release_params -%}
                             {%- set has_unyanked_releases = release.has_unyanked_releases.unwrap_or(true) -%}
                             {%- if release_type == "search" && has_unyanked_releases -%}
                                 {%- set release_params = release.rustdoc_params().with_req_version(ReqVersion::Latest) -%}
                             {%- else -%}
                                 {%- set release_params = release.rustdoc_params() -%}
                             {%- endif -%}
-                            {%- set link -%}
+                            {%- decl link -%}
                             {%- if release.rustdoc_status -%}
                                 {% set link = release_params.rustdoc_url() -%}
                             {%- else -%}

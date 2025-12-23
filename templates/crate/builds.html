@@ -2,7 +2,7 @@
 {%- import "header/package_navigation.html" as navigation -%}
 
 {%- block title -%}
-    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}{% endcall %}
 {%- endblock title -%}
 
 {%- block meta -%}
@@ -18,7 +18,7 @@
 {%- endblock topbar -%}
 
 {%- block header -%}
-    {% call navigation::package_navigation(metadata=metadata, active_tab="builds") %}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="builds") %}{% endcall %}
 {%- endblock header -%}
 
 {%- block body -%}
@@ -100,7 +100,7 @@
                     resources. The limits for this crate are the following:
                 </p>
 
-                {% call macros::crate_limits(limits=limits) %}
+                {% call macros::crate_limits(limits=limits) %}{% endcall %}
 
                 <p>
                     If a build fails because it hit one of those limits please

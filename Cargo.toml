@@ -22,7 +22,7 @@ exclude = [
 
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"]}
-askama = "0.14.0"
+askama = "0.15.0"
 async-stream = "0.3.5"
 axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
