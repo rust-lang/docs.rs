@@ -17,6 +17,7 @@ pub mod page;
 mod releases;
 mod routes;
 pub(crate) mod rustdoc;
+mod security;
 mod sitemap;
 mod source;
 mod statics;
@@ -367,6 +368,7 @@ async fn apply_middleware(
                 set_sentry_transaction_name_from_axum_route,
             ))
             .layer(CatchPanicLayer::new())
+            .layer(middleware::from_fn(security::security_middleware))
             .layer(option_layer(
                 context
                     .config
