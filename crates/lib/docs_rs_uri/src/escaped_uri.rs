@@ -1,4 +1,8 @@
-use crate::encode::{encode_url_path, url_decode};
+use crate::{
+    UriError,
+    encode::{encode_url_path, url_decode},
+    errors::Result,
+};
 use askama::filters::HtmlSafe;
 use http::{Uri, uri::PathAndQuery};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -191,9 +195,9 @@ impl EscapedURI {
 }
 
 impl FromStr for EscapedURI {
-    type Err = http::uri::InvalidUri;
+    type Err = UriError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         if let Some((base, fragment)) = s.split_once('#') {
             Ok(Self::from_uri(base.parse()?).with_fragment(fragment))
         } else {
@@ -215,14 +219,11 @@ impl Display for EscapedURI {
 impl HtmlSafe for EscapedURI {}
 
 impl TryFrom<EscapedURI> for Uri {
-    type Error = anyhow::Error;
+    type Error = UriError;
 
-    fn try_from(value: EscapedURI) -> Result<Self, Self::Error> {
-        if let Some(fragment) = value.fragment {
-            Err(anyhow::anyhow!(
-                "can't convert EscapedURI with fragment '{}' into Uri",
-                fragment
-            ))
+    fn try_from(value: EscapedURI) -> Result<Self> {
+        if value.fragment.is_some() {
+            Err(UriError::Fragment)
         } else {
             Ok(value.uri)
         }
@@ -236,17 +237,17 @@ impl From<Uri> for EscapedURI {
 }
 
 impl TryFrom<String> for EscapedURI {
-    type Error = http::uri::InvalidUri;
+    type Error = UriError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> Result<Self> {
         value.parse()
     }
 }
 
 impl TryFrom<&str> for EscapedURI {
-    type Error = http::uri::InvalidUri;
+    type Error = UriError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self> {
         value.parse()
     }
 }

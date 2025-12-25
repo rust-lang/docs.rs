@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::errors::Result;
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use std::borrow::Cow;
 
