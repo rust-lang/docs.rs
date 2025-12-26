@@ -57,8 +57,6 @@ pub struct Config {
     pub(crate) build_workspace_reinitialization_interval: Duration,
 
     // Build params
-    pub(crate) build_attempts: u16,
-    pub(crate) delay_between_build_attempts: Duration,
     pub(crate) rustwide_workspace: PathBuf,
     pub(crate) temp_dir: PathBuf,
     pub(crate) inside_docker: bool,
@@ -77,6 +75,7 @@ pub struct Config {
     pub(crate) database: docs_rs_database::Config,
     pub(crate) repository_stats: docs_rs_repository_stats::Config,
     pub(crate) storage: Arc<docs_rs_storage::Config>,
+    pub(crate) build_queue: Arc<docs_rs_build_queue::Config>,
 }
 
 impl Config {
@@ -104,11 +103,6 @@ impl Config {
         let temp_dir = prefix.join("tmp");
 
         Ok(ConfigBuilder::default()
-            .build_attempts(env("DOCSRS_BUILD_ATTEMPTS", 5u16)?)
-            .delay_between_build_attempts(Duration::from_secs(env::<u64>(
-                "DOCSRS_DELAY_BETWEEN_BUILD_ATTEMPTS",
-                60,
-            )?))
             .delay_between_registry_fetches(Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 60,
@@ -157,6 +151,7 @@ impl Config {
             .registry_api(docs_rs_registry_api::Config::from_environment()?)
             .database(docs_rs_database::Config::from_environment()?)
             .repository_stats(docs_rs_repository_stats::Config::from_environment()?)
-            .storage(Arc::new(docs_rs_storage::Config::from_environment()?)))
+            .storage(Arc::new(docs_rs_storage::Config::from_environment()?))
+            .build_queue(Arc::new(docs_rs_build_queue::Config::from_environment()?)))
     }
 }

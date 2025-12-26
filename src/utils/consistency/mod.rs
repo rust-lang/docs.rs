@@ -1,6 +1,7 @@
-use crate::build_queue::PRIORITY_CONSISTENCY_CHECK;
-use crate::{Context, db::delete};
+use crate::{Context, build_queue::set_yanked, db::delete};
 use anyhow::{Context as _, Result};
+use docs_rs_build_queue::PRIORITY_CONSISTENCY_CHECK;
+use docs_rs_types::KrateName;
 use itertools::Itertools;
 use tracing::{info, warn};
 
@@ -96,11 +97,12 @@ where
                 result.crates_deleted += 1;
             }
             diff::Difference::CrateNotInDb(name, versions) => {
+                let name: KrateName = name.parse()?;
                 for version in versions {
                     if !dry_run
                         && let Err(err) = ctx
                             .async_build_queue
-                            .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
+                            .add_crate(&name, version, PRIORITY_CONSISTENCY_CHECK, None)
                             .await
                     {
                         warn!("{:?}", err);
@@ -124,10 +126,11 @@ where
                 result.releases_deleted += 1;
             }
             diff::Difference::ReleaseNotInDb(name, version) => {
+                let name: KrateName = name.parse()?;
                 if !dry_run
                     && let Err(err) = ctx
                         .async_build_queue
-                        .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
+                        .add_crate(&name, version, PRIORITY_CONSISTENCY_CHECK, None)
                         .await
                 {
                     warn!("{:?}", err);
@@ -135,12 +138,8 @@ where
                 result.builds_queued += 1;
             }
             diff::Difference::ReleaseYank(name, version, yanked) => {
-                if !dry_run
-                    && let Err(err) = ctx
-                        .async_build_queue
-                        .set_yanked(name, version, *yanked)
-                        .await
-                {
+                let name: KrateName = name.parse()?;
+                if !dry_run && let Err(err) = set_yanked(ctx, &name, version, *yanked).await {
                     warn!("{:?}", err);
                 }
                 result.yanks_corrected += 1;
@@ -156,7 +155,7 @@ mod tests {
     use super::diff::Difference;
     use super::*;
     use crate::test::{TestEnvironment, V1, V2, async_wrapper};
-    use docs_rs_types::Version;
+    use docs_rs_types::{Version, testing::KRATE};
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
@@ -302,7 +301,7 @@ mod tests {
                     .into_iter()
                     .map(|c| (c.name, V1, c.priority))
                     .collect::<Vec<_>>(),
-                vec![("krate".into(), V1, 15)]
+                vec![(KRATE, V1, 15)]
             );
             Ok(())
         })
@@ -328,7 +327,7 @@ mod tests {
                     .into_iter()
                     .map(|c| (c.name, c.version, c.priority))
                     .collect::<Vec<_>>(),
-                vec![("krate".into(), V1, 15), ("krate".into(), V2, 15)]
+                vec![(KRATE, V1, 15), (KRATE, V2, 15)]
             );
             Ok(())
         })

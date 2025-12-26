@@ -36,6 +36,7 @@ opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+pretty_assertions = "1.4.0"
 postcard = { version = "1.1.3", default-features = false, features = ["use-std"] }
 rand = "0.9"
 regex = "1"
@@ -55,6 +56,7 @@ url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
 
 [dependencies]
+docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata" }
 docs_rs_database = { path = "crates/lib/docs_rs_database" }
 docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
@@ -137,6 +139,7 @@ chrono = { workspace = true }
 constant_time_eq = "0.4.2"
 
 [dev-dependencies]
+docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue", features = ["testing"] }
 docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata", features = ["testing"] }
 docs_rs_database = { path = "crates/lib/docs_rs_database", features = ["testing"] }
 docs_rs_fastly = { path = "crates/lib/docs_rs_fastly", features = ["testing"] }
@@ -152,7 +155,7 @@ test-case = { workspace = true }
 tower = { version = "0.5.1", features = ["util"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
 indoc = "2.0.0"
-pretty_assertions = "1.4.0"
+pretty_assertions = { workspace = true }
 
 [build-dependencies]
 time = "0.3"

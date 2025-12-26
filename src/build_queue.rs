@@ -1,816 +1,403 @@
 use crate::{
-    BuildPackageSummary, Config, Context, Index, RustwideBuilder,
+    Config, Context, Index, PackageKind, RustwideBuilder,
     db::{delete_crate, delete_version},
-    docbuilder::{BuilderMetrics, PackageKind},
     error::Result,
     utils::{get_crate_priority, report_error},
 };
 use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
+use docs_rs_build_queue::{
+    AsyncBuildQueue, BuildPackageSummary, PRIORITY_BROKEN_RUSTDOC, PRIORITY_CONTINUOUS,
+    PRIORITY_MANUAL_FROM_CRATES_IO, QueuedCrate,
+};
 use docs_rs_database::{
-    AsyncPoolClient, Pool,
     crate_details::update_latest_version_id,
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
-use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{CrateId, KrateName, Version};
 use docs_rs_utils::retry;
 use fn_error_context::context;
-use futures_util::{StreamExt, stream::TryStreamExt};
-use opentelemetry::metrics::Counter;
-use sqlx::Connection as _;
-use std::{collections::HashMap, sync::Arc, time::Instant};
-use tokio::runtime;
+use futures_util::StreamExt;
+use std::time::Instant;
 use tracing::{debug, error, info, instrument, warn};
 
-#[derive(Debug)]
-struct BuildQueueMetrics {
-    queued_builds: Counter<u64>,
+pub async fn last_seen_reference(
+    conn: &mut sqlx::PgConnection,
+) -> Result<Option<crates_index_diff::gix::ObjectId>> {
+    if let Some(value) = get_config::<String>(conn, ConfigName::LastSeenIndexReference).await? {
+        return Ok(Some(crates_index_diff::gix::ObjectId::from_hex(
+            value.as_bytes(),
+        )?));
+    }
+    Ok(None)
 }
 
-impl BuildQueueMetrics {
-    fn new(meter_provider: &AnyMeterProvider) -> Self {
-        let meter = meter_provider.meter("build_queue");
-        const PREFIX: &str = "docsrs.build_queue";
-        Self {
-            queued_builds: meter
-                .u64_counter(format!("{PREFIX}.queued_builds"))
-                .with_unit("1")
-                .build(),
+pub async fn set_last_seen_reference(
+    conn: &mut sqlx::PgConnection,
+    oid: crates_index_diff::gix::ObjectId,
+) -> Result<()> {
+    set_config(conn, ConfigName::LastSeenIndexReference, oid.to_string()).await?;
+    Ok(())
+}
+
+async fn queue_crate_invalidation(krate: &str, cdn: Option<&Cdn>) {
+    let krate = match krate
+        .parse::<KrateName>()
+        .with_context(|| format!("can't parse crate name '{}'", krate))
+    {
+        Ok(krate) => krate,
+        Err(err) => {
+            report_error(&err);
+            return;
+        }
+    };
+
+    let Some(cdn) = &cdn else {
+        info!(%krate, "no CDN configured, skippping crate invalidation");
+        return;
+    };
+
+    if let Err(err) = cdn.queue_crate_invalidation(&krate).await {
+        report_error(&err);
+    }
+}
+
+/// Updates registry index repository and adds new crates into build queue.
+///
+/// Returns the number of crates added
+pub async fn get_new_crates(context: &Context, index: &Index) -> Result<usize> {
+    let mut conn = context.pool.get_async().await?;
+
+    let last_seen_reference = last_seen_reference(&mut conn).await?;
+    let last_seen_reference = if let Some(oid) = last_seen_reference {
+        oid
+    } else {
+        warn!(
+            "no last-seen reference found in our database. We assume a fresh install and
+                     set the latest reference (HEAD) as last. This means we will then start to queue
+                     builds for new releases only from now on, and not for all existing releases."
+        );
+        index.latest_commit_reference().await?
+    };
+
+    index.set_last_seen_reference(last_seen_reference).await?;
+
+    let (changes, new_reference) = index.peek_changes_ordered().await?;
+
+    debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
+
+    let crates_added = process_changes(context, &changes, index.repository_url()).await;
+
+    // set the reference in the database
+    // so this survives recreating the registry watcher
+    // server.
+    set_last_seen_reference(&mut conn, new_reference).await?;
+
+    Ok(crates_added)
+}
+
+async fn process_changes(
+    context: &Context,
+    changes: &Vec<Change>,
+    registry: Option<&str>,
+) -> usize {
+    let mut crates_added = 0;
+
+    for change in changes {
+        match process_change(context, change, registry).await {
+            Ok(added) => {
+                if added {
+                    crates_added += 1;
+                }
+            }
+            Err(err) => report_error(&err),
         }
     }
+    crates_added
 }
 
-pub(crate) const PRIORITY_DEFAULT: i32 = 0;
-/// Used for workspaces to avoid blocking the queue (done through the cratesfyi CLI, not used in code)
-#[allow(dead_code)]
-pub(crate) const PRIORITY_DEPRIORITIZED: i32 = 1;
-/// Rebuilds triggered from crates.io, see issue #2442
-pub(crate) const PRIORITY_MANUAL_FROM_CRATES_IO: i32 = 5;
-/// Used for rebuilds queued through cratesfyi for crate versions failed due to a broken Rustdoc nightly version.
-/// Note: a broken rustdoc version does not necessarily imply a failed build.
-pub(crate) const PRIORITY_BROKEN_RUSTDOC: i32 = 10;
-/// Used by the synchronize cratesfyi command when queueing builds that are in the crates.io index but not in the database.
-pub(crate) const PRIORITY_CONSISTENCY_CHECK: i32 = 15;
-/// The static priority for background rebuilds, used when queueing rebuilds, and when rendering them collapsed in the UI.
-pub(crate) const PRIORITY_CONTINUOUS: i32 = 20;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct QueuedCrate {
-    id: i32,
-    pub(crate) name: String,
-    pub(crate) version: Version,
-    pub(crate) priority: i32,
-    pub(crate) registry: Option<String>,
-    pub(crate) attempt: i32,
-}
-
-#[derive(Debug)]
-pub struct AsyncBuildQueue {
-    config: Arc<Config>,
-    storage: Arc<AsyncStorage>,
-    pub(crate) db: Pool,
-    queue_metrics: BuildQueueMetrics,
-    builder_metrics: Arc<BuilderMetrics>,
-    cdn: Option<Arc<Cdn>>,
-    max_attempts: i32,
-}
-
-impl AsyncBuildQueue {
-    pub fn new(
-        db: Pool,
-        config: Arc<Config>,
-        storage: Arc<AsyncStorage>,
-        cdn: Option<Arc<Cdn>>,
-        otel_meter_provider: &AnyMeterProvider,
-    ) -> Self {
-        AsyncBuildQueue {
-            max_attempts: config.build_attempts.into(),
-            config,
-            db,
-            storage,
-            queue_metrics: BuildQueueMetrics::new(otel_meter_provider),
-            builder_metrics: Arc::new(BuilderMetrics::new(otel_meter_provider)),
-            cdn,
+/// Process a crate change, returning whether the change was a crate addition or not.
+async fn process_change(
+    context: &Context,
+    change: &Change,
+    registry: Option<&str>,
+) -> Result<bool> {
+    match change {
+        Change::Added(release) => process_version_added(context, release, registry).await?,
+        Change::AddedAndYanked(release) => {
+            process_version_added(context, release, registry).await?;
+            process_version_yank_status(context, release).await?;
         }
+        Change::Unyanked(release) | Change::Yanked(release) => {
+            process_version_yank_status(context, release).await?
+        }
+        Change::CrateDeleted { name, .. } => process_crate_deleted(context, name.as_str()).await?,
+        Change::VersionDeleted(release) => process_version_deleted(context, release).await?,
+    };
+    Ok(change.added().is_some())
+}
+
+/// Processes crate changes, whether they got yanked or unyanked.
+async fn process_version_yank_status(context: &Context, release: &CrateVersion) -> Result<()> {
+    // FIXME: delay yanks of crates that have not yet finished building
+    // https://github.com/rust-lang/docs.rs/issues/1934
+    if let Ok(release_version) = Version::parse(&release.version) {
+        set_yanked_inner(
+            context,
+            release.name.as_str(),
+            &release_version,
+            release.yanked,
+        )
+        .await?;
     }
 
-    pub fn builder_metrics(&self) -> Arc<BuilderMetrics> {
-        self.builder_metrics.clone()
-    }
+    queue_crate_invalidation(&release.name, context.cdn.as_deref()).await;
+    Ok(())
+}
 
-    pub async fn last_seen_reference(&self) -> Result<Option<crates_index_diff::gix::ObjectId>> {
-        let mut conn = self.db.get_async().await?;
-        if let Some(value) =
-            get_config::<String>(&mut conn, ConfigName::LastSeenIndexReference).await?
+async fn process_version_added(
+    context: &Context,
+    release: &CrateVersion,
+    registry: Option<&str>,
+) -> Result<()> {
+    let mut conn = context.pool.get_async().await?;
+    let priority = get_crate_priority(&mut conn, &release.name).await?;
+    let name: KrateName = release.name.parse()?;
+    let version = &release
+        .version
+        .parse()
+        .context("couldn't parse release version as semver")?;
+    context
+        .async_build_queue
+        .add_crate(&name, version, priority, registry)
+        .await
+        .with_context(|| {
+            format!(
+                "failed adding {}-{} into build queue",
+                release.name, release.version
+            )
+        })?;
+    debug!(
+        name=%release.name,
+        version=%release.version,
+        "added into build queue",
+    );
+    context
+        .async_build_queue
+        .deprioritize_other_releases(&name, version, PRIORITY_MANUAL_FROM_CRATES_IO)
+        .await
+        .unwrap_or_else(|err| report_error(&err));
+    Ok(())
+}
+
+async fn process_version_deleted(context: &Context, release: &CrateVersion) -> Result<()> {
+    let mut conn = context.pool.get_async().await?;
+
+    let name: KrateName = release.name.parse()?;
+    let version: Version = release
+        .version
+        .parse()
+        .context("couldn't parse release version as semver")?;
+
+    delete_version(
+        &mut conn,
+        &context.async_storage,
+        &context.config,
+        &release.name,
+        &version,
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "failed to delete version {}-{}",
+            release.name, release.version
+        )
+    })?;
+    info!(
+        name=%release.name,
+        version=%release.version,
+        "release was deleted from the index and the database",
+    );
+    queue_crate_invalidation(&name, context.cdn.as_deref()).await;
+    context
+        .async_build_queue
+        .remove_version_from_queue(&name, &version)
+        .await?;
+    Ok(())
+}
+
+async fn process_crate_deleted(context: &Context, krate: &str) -> Result<()> {
+    let mut conn = context.pool.get_async().await?;
+
+    delete_crate(&mut conn, &context.async_storage, &context.config, krate)
+        .await
+        .with_context(|| format!("failed to delete crate {krate}"))?;
+    info!(
+        name=%krate,
+        "crate deleted from the index and the database",
+    );
+    queue_crate_invalidation(krate, context.cdn.as_deref()).await;
+
+    let name: KrateName = krate.parse()?;
+    context
+        .async_build_queue
+        .remove_crate_from_queue(&name)
+        .await
+}
+
+pub async fn set_yanked(
+    context: &Context,
+    name: &str,
+    version: &Version,
+    yanked: bool,
+) -> Result<()> {
+    set_yanked_inner(context, name, version, yanked).await
+}
+
+#[context("error trying to set {name}-{version} to yanked: {yanked}")]
+async fn set_yanked_inner(
+    context: &Context,
+    name: &str,
+    version: &Version,
+    yanked: bool,
+) -> Result<()> {
+    let mut conn = context.pool.get_async().await?;
+
+    let activity = if yanked { "yanked" } else { "unyanked" };
+
+    if let Some(crate_id) = sqlx::query_scalar!(
+        r#"UPDATE releases
+         SET yanked = $3
+         FROM crates
+         WHERE crates.id = releases.crate_id
+             AND name = $1
+             AND version = $2
+        RETURNING crates.id as "id: CrateId"
+        "#,
+        name,
+        version as _,
+        yanked,
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    {
+        debug!(
+            %name,
+            %version,
+            %activity,
+            "updating latest version id"
+        );
+        update_latest_version_id(&mut conn, crate_id).await?;
+    } else {
+        let name: KrateName = name.parse()?;
+        match context
+            .async_build_queue
+            .has_build_queued(&name, version)
+            .await
+            .context("error trying to fetch build queue")
         {
-            return Ok(Some(crates_index_diff::gix::ObjectId::from_hex(
-                value.as_bytes(),
-            )?));
-        }
-        Ok(None)
-    }
-
-    pub async fn set_last_seen_reference(
-        &self,
-        oid: crates_index_diff::gix::ObjectId,
-    ) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        set_config(
-            &mut conn,
-            ConfigName::LastSeenIndexReference,
-            oid.to_string(),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[context("error trying to add {name}-{version} to build queue")]
-    pub async fn add_crate(
-        &self,
-        name: &str,
-        version: &Version,
-        priority: i32,
-        registry: Option<&str>,
-    ) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-
-        sqlx::query!(
-            "INSERT INTO queue (name, version, priority, registry)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (name, version) DO UPDATE
-                SET priority = EXCLUDED.priority,
-                    registry = EXCLUDED.registry,
-                    attempt = 0,
-                    last_attempt = NULL
-            ;",
-            name,
-            version as _,
-            priority,
-            registry,
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    pub(crate) async fn pending_count(&self) -> Result<usize> {
-        Ok(self
-            .pending_count_by_priority()
-            .await?
-            .values()
-            .sum::<usize>())
-    }
-
-    pub(crate) async fn prioritized_count(&self) -> Result<usize> {
-        Ok(self
-            .pending_count_by_priority()
-            .await?
-            .iter()
-            .filter(|&(&priority, _)| priority <= 0)
-            .map(|(_, count)| count)
-            .sum::<usize>())
-    }
-
-    pub(crate) async fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
-        let mut conn = self.db.get_async().await?;
-
-        Ok(sqlx::query!(
-            r#"
-                SELECT
-                    priority,
-                    COUNT(*) as "count!"
-                FROM queue
-                WHERE attempt < $1
-                GROUP BY priority"#,
-            self.max_attempts,
-        )
-        .fetch(&mut *conn)
-        .map_ok(|row| (row.priority, row.count as usize))
-        .try_collect()
-        .await?)
-    }
-
-    pub(crate) async fn failed_count(&self) -> Result<usize> {
-        let mut conn = self.db.get_async().await?;
-
-        Ok(sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!" FROM queue WHERE attempt >= $1;"#,
-            self.max_attempts,
-        )
-        .fetch_one(&mut *conn)
-        .await? as usize)
-    }
-
-    pub(crate) async fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
-        let mut conn = self.db.get_async().await?;
-
-        Ok(sqlx::query_as!(
-            QueuedCrate,
-            r#"SELECT
-                id,
-                name,
-                version as "version: Version",
-                priority,
-                registry,
-                attempt
-             FROM queue
-             WHERE attempt < $1
-             ORDER BY priority ASC, attempt ASC, id ASC"#,
-            self.max_attempts
-        )
-        .fetch_all(&mut *conn)
-        .await?)
-    }
-
-    pub(crate) async fn has_build_queued(&self, name: &str, version: &Version) -> Result<bool> {
-        let mut conn = self.db.get_async().await?;
-        Ok(sqlx::query_scalar!(
-            "SELECT id
-             FROM queue
-             WHERE
-                attempt < $1 AND
-                name = $2 AND
-                version = $3
-             ",
-            self.max_attempts,
-            name,
-            version as _,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        .is_some())
-    }
-
-    async fn remove_crate_from_queue(&self, name: &str) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        sqlx::query!(
-            "DELETE
-             FROM queue
-             WHERE name = $1
-             ",
-            name
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn remove_version_from_queue(&self, name: &str, version: &Version) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        sqlx::query!(
-            "DELETE
-             FROM queue
-             WHERE
-                name = $1 AND
-                version = $2
-             ",
-            name,
-            version as _,
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-
-    /// Decreases the priority of all releases currently present in the queue not matching the version passed to *at least* new_priority.
-    pub(crate) async fn deprioritize_other_releases(
-        &self,
-        name: &str,
-        latest_version: &Version,
-        new_priority: i32,
-    ) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        sqlx::query!(
-            "UPDATE queue
-             SET priority = GREATEST(priority, $1)
-             WHERE
-                name = $2
-                AND version != $3
-                AND attempt < $4
-             ",
-            new_priority,
-            name,
-            latest_version as _,
-            self.max_attempts,
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        Ok(())
-    }
-}
-
-/// Locking functions.
-impl AsyncBuildQueue {
-    /// Checks for the lock and returns whether it currently exists.
-    pub async fn is_locked(&self) -> Result<bool> {
-        let mut conn = self.db.get_async().await?;
-
-        Ok(get_config::<bool>(&mut conn, ConfigName::QueueLocked)
-            .await?
-            .unwrap_or(false))
-    }
-
-    /// lock the queue. Daemon will check this lock and stop operating if it exists.
-    pub async fn lock(&self) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        set_config(&mut conn, ConfigName::QueueLocked, true).await
-    }
-
-    /// unlock the queue.
-    pub async fn unlock(&self) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        set_config(&mut conn, ConfigName::QueueLocked, false).await
-    }
-}
-
-/// Index methods.
-impl AsyncBuildQueue {
-    async fn queue_crate_invalidation(&self, krate: &str) {
-        let krate = match krate
-            .parse::<KrateName>()
-            .with_context(|| format!("can't parse crate name '{}'", krate))
-        {
-            Ok(krate) => krate,
+            Ok(false) => {
+                error!(
+                    %name,
+                    %version,
+                    "tried to yank or unyank non-existing release",
+                );
+            }
+            Ok(true) => {
+                // the rustwide builder will fetch the current yank state from
+                // crates.io, so and missed update here will be fixed after the
+                // build is finished.
+            }
             Err(err) => {
                 report_error(&err);
-                return;
-            }
-        };
-
-        let Some(cdn) = &self.cdn else {
-            info!(%krate, "no CDN configured, skippping crate invalidation");
-            return;
-        };
-
-        if let Err(err) = cdn.queue_crate_invalidation(&krate).await {
-            report_error(&err);
-        }
-    }
-
-    /// Updates registry index repository and adds new crates into build queue.
-    ///
-    /// Returns the number of crates added
-    pub async fn get_new_crates(&self, index: &Index) -> Result<usize> {
-        let last_seen_reference = self.last_seen_reference().await?;
-        let last_seen_reference = if let Some(oid) = last_seen_reference {
-            oid
-        } else {
-            warn!(
-                        "no last-seen reference found in our database. We assume a fresh install and
-                         set the latest reference (HEAD) as last. This means we will then start to queue
-                         builds for new releases only from now on, and not for all existing releases."
-                    );
-            index.latest_commit_reference().await?
-        };
-
-        index.set_last_seen_reference(last_seen_reference).await?;
-
-        let (changes, new_reference) = index.peek_changes_ordered().await?;
-
-        let mut conn = self.db.get_async().await?;
-
-        debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
-
-        let crates_added = self
-            .process_changes(&mut conn, &changes, index.repository_url())
-            .await;
-
-        // set the reference in the database
-        // so this survives recreating the registry watcher
-        // server.
-        self.set_last_seen_reference(new_reference).await?;
-
-        Ok(crates_added)
-    }
-
-    async fn process_changes(
-        &self,
-        conn: &mut AsyncPoolClient,
-        changes: &Vec<Change>,
-        registry: Option<&str>,
-    ) -> usize {
-        let mut crates_added = 0;
-
-        for change in changes {
-            match self.process_change(conn, change, registry).await {
-                Ok(added) => {
-                    if added {
-                        crates_added += 1;
-                    }
-                }
-                Err(err) => report_error(&err),
             }
         }
-        crates_added
     }
 
-    /// Process a crate change, returning whether the change was a crate addition or not.
-    async fn process_change(
-        &self,
-        conn: &mut AsyncPoolClient,
-        change: &Change,
-        registry: Option<&str>,
-    ) -> Result<bool> {
-        match change {
-            Change::Added(release) => self.process_version_added(conn, release, registry).await?,
-            Change::AddedAndYanked(release) => {
-                self.process_version_added(conn, release, registry).await?;
-                self.process_version_yank_status(conn, release).await?;
-            }
-            Change::Unyanked(release) | Change::Yanked(release) => {
-                self.process_version_yank_status(conn, release).await?
-            }
-            Change::CrateDeleted { name, .. } => {
-                self.process_crate_deleted(conn, name.as_str()).await?
-            }
-            Change::VersionDeleted(release) => self.process_version_deleted(conn, release).await?,
-        };
-        Ok(change.added().is_some())
-    }
-
-    /// Processes crate changes, whether they got yanked or unyanked.
-    async fn process_version_yank_status(
-        &self,
-        conn: &mut AsyncPoolClient,
-        release: &CrateVersion,
-    ) -> Result<()> {
-        // FIXME: delay yanks of crates that have not yet finished building
-        // https://github.com/rust-lang/docs.rs/issues/1934
-        if let Ok(release_version) = Version::parse(&release.version) {
-            self.set_yanked_inner(
-                conn,
-                release.name.as_str(),
-                &release_version,
-                release.yanked,
-            )
-            .await?;
-        }
-
-        self.queue_crate_invalidation(&release.name).await;
-        Ok(())
-    }
-
-    async fn process_version_added(
-        &self,
-        conn: &mut AsyncPoolClient,
-        release: &CrateVersion,
-        registry: Option<&str>,
-    ) -> Result<()> {
-        let priority = get_crate_priority(conn, &release.name).await?;
-        let version = &release
-            .version
-            .parse()
-            .context("couldn't parse release version as semver")?;
-        self.add_crate(&release.name, version, priority, registry)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed adding {}-{} into build queue",
-                    release.name, release.version
-                )
-            })?;
-        debug!(
-            name=%release.name,
-            version=%release.version,
-            "added into build queue",
-        );
-        self.queue_metrics.queued_builds.add(1, &[]);
-        self.deprioritize_other_releases(&release.name, version, PRIORITY_MANUAL_FROM_CRATES_IO)
-            .await
-            .unwrap_or_else(|err| report_error(&err));
-        Ok(())
-    }
-
-    async fn process_version_deleted(
-        &self,
-        conn: &mut AsyncPoolClient,
-        release: &CrateVersion,
-    ) -> Result<()> {
-        let version: Version = release
-            .version
-            .parse()
-            .context("couldn't parse release version as semver")?;
-
-        delete_version(conn, &self.storage, &self.config, &release.name, &version)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to delete version {}-{}",
-                    release.name, release.version
-                )
-            })?;
-        info!(
-            name=%release.name,
-            version=%release.version,
-            "release was deleted from the index and the database",
-        );
-        self.queue_crate_invalidation(&release.name).await;
-        self.remove_version_from_queue(&release.name, &version)
-            .await?;
-        Ok(())
-    }
-
-    async fn process_crate_deleted(&self, conn: &mut AsyncPoolClient, krate: &str) -> Result<()> {
-        delete_crate(conn, &self.storage, &self.config, krate)
-            .await
-            .with_context(|| format!("failed to delete crate {krate}"))?;
-        info!(
-            name=%krate,
-            "crate deleted from the index and the database",
-        );
-        self.queue_crate_invalidation(krate).await;
-        self.remove_crate_from_queue(krate).await
-    }
-
-    pub async fn set_yanked(&self, name: &str, version: &Version, yanked: bool) -> Result<()> {
-        let mut conn = self.db.get_async().await?;
-        self.set_yanked_inner(&mut conn, name, version, yanked)
-            .await
-    }
-
-    #[context("error trying to set {name}-{version} to yanked: {yanked}")]
-    async fn set_yanked_inner(
-        &self,
-        conn: &mut sqlx::PgConnection,
-        name: &str,
-        version: &Version,
-        yanked: bool,
-    ) -> Result<()> {
-        let activity = if yanked { "yanked" } else { "unyanked" };
-
-        if let Some(crate_id) = sqlx::query_scalar!(
-            r#"UPDATE releases
-             SET yanked = $3
-             FROM crates
-             WHERE crates.id = releases.crate_id
-                 AND name = $1
-                 AND version = $2
-            RETURNING crates.id as "id: CrateId"
-            "#,
-            name,
-            version as _,
-            yanked,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        {
-            debug!(
-                %name,
-                %version,
-                %activity,
-                "updating latest version id"
-            );
-            update_latest_version_id(&mut *conn, crate_id).await?;
-        } else {
-            match self
-                .has_build_queued(name, version)
-                .await
-                .context("error trying to fetch build queue")
-            {
-                Ok(false) => {
-                    error!(
-                        %name,
-                        %version,
-                        "tried to yank or unyank non-existing release",
-                    );
-                }
-                Ok(true) => {
-                    // the rustwide builder will fetch the current yank state from
-                    // crates.io, so and missed update here will be fixed after the
-                    // build is finished.
-                }
-                Err(err) => {
-                    report_error(&err);
-                }
-            }
-        }
-
-        Ok(())
-    }
+    Ok(())
 }
 
-#[derive(Debug)]
-pub struct BuildQueue {
-    runtime: runtime::Handle,
-    inner: Arc<AsyncBuildQueue>,
-}
+/// wrapper around BuildQueue::process_next_crate to handle metrics and cdn invalidation
+fn process_next_crate(
+    context: &Context,
+    f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
+) -> Result<()> {
+    let queue = context.build_queue.clone();
+    let builder_metrics = context.builder_metrics.clone();
+    let cdn = context.cdn.clone();
+    let runtime = context.runtime.clone();
+    let config = context.config.build_queue.clone();
 
-/// sync versions of async methods
-impl BuildQueue {
-    pub fn add_crate(
-        &self,
-        name: &str,
-        version: &Version,
-        priority: i32,
-        registry: Option<&str>,
-    ) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.add_crate(name, version, priority, registry))
-    }
-
-    pub fn set_yanked(&self, name: &str, version: &Version, yanked: bool) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.set_yanked(name, version, yanked))
-    }
-    pub fn is_locked(&self) -> Result<bool> {
-        self.runtime.block_on(self.inner.is_locked())
-    }
-    pub fn lock(&self) -> Result<()> {
-        self.runtime.block_on(self.inner.lock())
-    }
-    pub fn unlock(&self) -> Result<()> {
-        self.runtime.block_on(self.inner.unlock())
-    }
-    pub fn last_seen_reference(&self) -> Result<Option<crates_index_diff::gix::ObjectId>> {
-        self.runtime.block_on(self.inner.last_seen_reference())
-    }
-    pub fn set_last_seen_reference(&self, oid: crates_index_diff::gix::ObjectId) -> Result<()> {
-        self.runtime
-            .block_on(self.inner.set_last_seen_reference(oid))
-    }
-    #[cfg(test)]
-    pub(crate) fn pending_count(&self) -> Result<usize> {
-        self.runtime.block_on(self.inner.pending_count())
-    }
-    #[cfg(test)]
-    pub(crate) fn prioritized_count(&self) -> Result<usize> {
-        self.runtime.block_on(self.inner.prioritized_count())
-    }
-    #[cfg(test)]
-    pub(crate) fn pending_count_by_priority(&self) -> Result<HashMap<i32, usize>> {
-        self.runtime
-            .block_on(self.inner.pending_count_by_priority())
-    }
-    #[cfg(test)]
-    pub(crate) fn failed_count(&self) -> Result<usize> {
-        self.runtime.block_on(self.inner.failed_count())
-    }
-    #[cfg(test)]
-    pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
-        self.runtime.block_on(self.inner.queued_crates())
-    }
-}
-
-impl BuildQueue {
-    pub fn new(runtime: runtime::Handle, inner: Arc<AsyncBuildQueue>) -> Self {
-        Self { runtime, inner }
-    }
-
-    fn process_next_crate(
-        &self,
-        f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
-    ) -> Result<()> {
-        let mut conn = self.runtime.block_on(self.inner.db.get_async())?;
-        let mut transaction = self.runtime.block_on(conn.begin())?;
-
-        // fetch the next available crate from the queue table.
-        // We are using `SELECT FOR UPDATE` inside a transaction so
-        // the QueuedCrate is locked until we are finished with it.
-        // `SKIP LOCKED` here will enable another build-server to just
-        // skip over taken (=locked) rows and start building the first
-        // available one.
-        let to_process = match self.runtime.block_on(
-            sqlx::query_as!(
-                QueuedCrate,
-                r#"SELECT
-                    id,
-                    name,
-                    version as "version: Version",
-                    priority,
-                    registry,
-                    attempt
-                 FROM queue
-                 WHERE
-                    attempt < $1 AND
-                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
-                 ORDER BY priority ASC, attempt ASC, id ASC
-                 LIMIT 1
-                 FOR UPDATE SKIP LOCKED"#,
-                self.inner.max_attempts,
-                self.inner.config.delay_between_build_attempts.as_secs_f64(),
-            )
-            .fetch_optional(&mut *transaction),
-        )? {
-            Some(krate) => krate,
-            None => return Ok(()),
-        };
-
+    let next_attempt = queue.process_next_crate(|to_process| {
         let res = {
             let instant = Instant::now();
-            let res = f(&to_process);
+            let res = f(to_process);
             let elapsed = instant.elapsed().as_secs_f64();
-            self.inner.builder_metrics.build_time.record(elapsed, &[]);
+            builder_metrics.build_time.record(elapsed, &[]);
             res
         };
 
-        self.inner.builder_metrics.total_builds.add(1, &[]);
+        builder_metrics.total_builds.add(1, &[]);
 
-        self.runtime
-            .block_on(self.inner.queue_crate_invalidation(&to_process.name));
+        runtime.block_on(queue_crate_invalidation(&to_process.name, cdn.as_deref()));
 
-        let mut increase_attempt_count = || -> Result<()> {
-            let attempt: i32 = self.runtime.block_on(
-                sqlx::query_scalar!(
-                    "UPDATE queue
-                         SET
-                            attempt = attempt + 1,
-                            last_attempt = NOW()
-                         WHERE id = $1
-                         RETURNING attempt;",
-                    to_process.id,
-                )
-                .fetch_one(&mut *transaction),
-            )?;
+        res
+    })?;
 
-            if attempt >= self.inner.max_attempts {
-                self.inner.builder_metrics.failed_builds.add(1, &[]);
-            }
-            Ok(())
-        };
+    if let Some(next_attempt) = next_attempt
+        && next_attempt >= config.build_attempts as i32
+    {
+        builder_metrics.failed_builds.add(1, &[]);
+    }
 
-        match res {
-            Ok(BuildPackageSummary {
-                should_reattempt: false,
-                successful: _,
-            }) => {
-                self.runtime.block_on(
-                    sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
-                        .execute(&mut *transaction),
-                )?;
-            }
-            Ok(BuildPackageSummary {
-                should_reattempt: true,
-                successful: _,
-            }) => {
-                increase_attempt_count()?;
-            }
-            Err(e) => {
-                increase_attempt_count()?;
-                report_error(&e.context(format!(
-                    "Failed to build package {}-{} from queue",
-                    to_process.name, to_process.version
-                )))
-            }
+    Ok(())
+}
+
+pub(crate) fn build_next_queue_package(
+    context: &Context,
+    builder: &mut RustwideBuilder,
+) -> Result<bool> {
+    let mut processed = false;
+
+    let queue = context.build_queue.clone();
+
+    process_next_crate(context, |krate| {
+        processed = true;
+
+        let kind = krate
+            .registry
+            .as_ref()
+            .map(|r| PackageKind::Registry(r.as_str()))
+            .unwrap_or(PackageKind::CratesIo);
+
+        if let Err(err) = retry(
+            || {
+                builder
+                    .reinitialize_workspace_if_interval_passed(context)
+                    .context("Reinitialize workspace failed, locking queue")
+            },
+            3,
+        ) {
+            report_error(&err);
+            queue.lock()?;
+            return Err(err);
         }
 
-        self.runtime.block_on(transaction.commit())?;
-        Ok(())
-    }
+        if let Err(err) = builder
+            .update_toolchain_and_add_essential_files()
+            .context("Updating toolchain failed, locking queue")
+        {
+            report_error(&err);
+            queue.lock()?;
+            return Err(err);
+        }
 
-    /// Builds the top package from the queue. Returns whether there was a package in the queue.
-    ///
-    /// Note that this will return `Ok(true)` even if the package failed to build.
-    pub(crate) fn build_next_queue_package(
-        &self,
-        context: &Context,
-        builder: &mut RustwideBuilder,
-    ) -> Result<bool> {
-        let mut processed = false;
+        builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
+    })?;
 
-        self.process_next_crate(|krate| {
-            processed = true;
-
-            let kind = krate
-                .registry
-                .as_ref()
-                .map(|r| PackageKind::Registry(r.as_str()))
-                .unwrap_or(PackageKind::CratesIo);
-
-            if let Err(err) = retry(
-                || {
-                    builder
-                        .reinitialize_workspace_if_interval_passed(context)
-                        .context("Reinitialize workspace failed, locking queue")
-                },
-                3,
-            ) {
-                report_error(&err);
-                self.lock()?;
-                return Err(err);
-            }
-
-            if let Err(err) = builder
-                .update_toolchain_and_add_essential_files()
-                .context("Updating toolchain failed, locking queue")
-            {
-                report_error(&err);
-                self.lock()?;
-                return Err(err);
-            }
-
-            builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
-        })?;
-
-        Ok(processed)
-    }
+    Ok(processed)
 }
 
 /// Queue rebuilds as configured.
@@ -829,9 +416,9 @@ impl BuildQueue {
 pub async fn queue_rebuilds(
     conn: &mut sqlx::PgConnection,
     config: &Config,
-    build_queue: &AsyncBuildQueue,
+    queue: &AsyncBuildQueue,
 ) -> Result<()> {
-    let already_queued_rebuilds: usize = build_queue
+    let already_queued_rebuilds: usize = queue
         .pending_count_by_priority()
         .await?
         .iter()
@@ -851,7 +438,7 @@ pub async fn queue_rebuilds(
     let mut results = sqlx::query!(
         r#"SELECT i.* FROM (
              SELECT
-                 c.name,
+                 c.name as "name: KrateName",
                  r.version as "version: Version",
                  (
                     SELECT MAX(COALESCE(b.build_finished, b.build_started))
@@ -873,12 +460,9 @@ pub async fn queue_rebuilds(
     while let Some(row) = results.next().await {
         let row = row?;
 
-        if !build_queue
-            .has_build_queued(&row.name, &row.version)
-            .await?
-        {
+        if !queue.has_build_queued(&row.name, &row.version).await? {
             info!("queueing rebuild for {} {}...", &row.name, &row.version);
-            build_queue
+            queue
                 .add_crate(&row.name, &row.version, PRIORITY_CONTINUOUS, None)
                 .await?;
         }
@@ -896,7 +480,7 @@ pub async fn queue_rebuilds(
 #[instrument(skip_all)]
 pub async fn queue_rebuilds_faulty_rustdoc(
     conn: &mut sqlx::PgConnection,
-    build_queue: &AsyncBuildQueue,
+    queue: &AsyncBuildQueue,
     start_nightly_date: &NaiveDate,
     end_nightly_date: &Option<NaiveDate>,
 ) -> Result<i32> {
@@ -904,21 +488,20 @@ pub async fn queue_rebuilds_faulty_rustdoc(
         end_nightly_date.unwrap_or_else(|| start_nightly_date.succ_opt().unwrap());
     let mut results = sqlx::query!(
         r#"
-SELECT c.name,
-       r.version AS "version: Version"
-FROM crates AS c
-         JOIN releases AS r
-              ON c.id = r.crate_id
-         JOIN release_build_status AS rbs
+        SELECT
+            c.name AS "name: KrateName",
+            r.version AS "version: Version"
+        FROM crates AS c
+        JOIN releases AS r
+            ON c.id = r.crate_id
+        JOIN release_build_status AS rbs
             ON rbs.rid = r.id
-         JOIN builds AS b
-             ON b.rid = r.id
-             AND b.build_finished = rbs.last_build_time
-             AND b.rustc_nightly_date >= $1
-             AND b.rustc_nightly_date < $2
-
-
-"#,
+        JOIN builds AS b
+            ON b.rid = r.id
+            AND b.build_finished = rbs.last_build_time
+            AND b.rustc_nightly_date >= $1
+            AND b.rustc_nightly_date < $2
+        "#,
         start_nightly_date,
         end_nightly_date
     )
@@ -928,10 +511,7 @@ FROM crates AS c
     while let Some(row) = results.next().await {
         let row = row?;
 
-        if !build_queue
-            .has_build_queued(&row.name, &row.version)
-            .await?
-        {
+        if !queue.has_build_queued(&row.name, &row.version).await? {
             results_count += 1;
             info!(
                 name=%row.name,
@@ -939,7 +519,7 @@ FROM crates AS c
                 priority=PRIORITY_BROKEN_RUSTDOC,
                "queueing rebuild"
             );
-            build_queue
+            queue
                 .add_crate(&row.name, &row.version, PRIORITY_BROKEN_RUSTDOC, None)
                 .await?;
         }
@@ -951,26 +531,26 @@ FROM crates AS c
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::{FakeBuild, KRATE, TestEnvironment, V1, V2};
-    use chrono::Utc;
-    use docs_rs_types::BuildStatus;
+    use crate::test::{FakeBuild, TestEnvironment, V1, V2};
+    use docs_rs_build_queue::{BuildPackageSummary, PRIORITY_DEFAULT};
+    use docs_rs_headers::SurrogateKey;
+    use docs_rs_types::{
+        BuildStatus,
+        testing::{BAR, FOO},
+    };
     use pretty_assertions::assert_eq;
-    use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_added() -> Result<()> {
         let env = TestEnvironment::new().await?;
         let build_queue = env.async_build_queue();
-        let mut conn = env.async_db().async_conn().await;
 
         let krate = CrateVersion {
             name: "krate".parse()?,
             version: V1.to_string().parse()?,
             ..Default::default()
         };
-        build_queue
-            .process_version_added(&mut conn, &krate, None)
-            .await?;
+        process_version_added(&env.context, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -980,9 +560,7 @@ mod tests {
             version: V2.to_string().parse()?,
             ..Default::default()
         };
-        build_queue
-            .process_version_added(&mut conn, &krate, None)
-            .await?;
+        process_version_added(&env.context, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -997,7 +575,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_yank_status() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let build_queue = env.async_build_queue();
         let mut conn = env.async_db().async_conn().await;
 
         // Given a release that is yanked
@@ -1015,9 +592,7 @@ mod tests {
             yanked: true,
             ..Default::default()
         };
-        build_queue
-            .process_version_yank_status(&mut conn, &krate)
-            .await?;
+        process_version_yank_status(&env.context, &krate).await?;
 
         // And verify it's actually marked as yanked
         let row = sqlx::query!(
@@ -1037,9 +612,7 @@ mod tests {
             yanked: false,
             ..Default::default()
         };
-        build_queue
-            .process_version_yank_status(&mut conn, &krate)
-            .await?;
+        process_version_yank_status(&env.context, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT yanked
@@ -1057,7 +630,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_crate_deleted() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let build_queue = env.async_build_queue();
         let mut conn = env.async_db().async_conn().await;
 
         env.fake_release()
@@ -1066,9 +638,7 @@ mod tests {
             .version(V1)
             .create()
             .await?;
-        build_queue
-            .process_crate_deleted(&mut conn, "krate")
-            .await?;
+        process_crate_deleted(&env.context, "krate").await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -1085,7 +655,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_deleted() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let build_queue = env.async_build_queue();
         let mut conn = env.async_db().async_conn().await;
 
         let rid_1 = env
@@ -1107,9 +676,7 @@ mod tests {
             version: V2.to_string().parse()?,
             ..Default::default()
         };
-        build_queue
-            .process_version_deleted(&mut conn, &krate)
-            .await?;
+        process_version_deleted(&env.context, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -1126,8 +693,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_changes() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let build_queue = env.async_build_queue();
-        let mut conn = env.async_db().async_conn().await;
 
         env.fake_release()
             .await
@@ -1156,18 +721,17 @@ mod tests {
             version: V2.to_string().parse()?,
             ..Default::default()
         };
-        let added = build_queue
-            .process_changes(
-                &mut conn,
-                &vec![
-                    Change::Added(krate1),                         // Should be added correctly
-                    Change::Added(krate2),                         // Should be added correctly
-                    Change::VersionDeleted(krate_already_present), // Should be deleted correctly, without affecting the returned counter
-                    Change::VersionDeleted(non_existing_krate), // Should error out, but the error should be handled gracefully
-                ],
-                None,
-            )
-            .await;
+        let added = process_changes(
+            &env.context,
+            &vec![
+                Change::Added(krate1),                         // Should be added correctly
+                Change::Added(krate2),                         // Should be added correctly
+                Change::VersionDeleted(krate_already_present), // Should be deleted correctly, without affecting the returned counter
+                Change::VersionDeleted(non_existing_krate), // Should error out, but the error should be handled gracefully
+            ],
+            None,
+        )
+        .await;
 
         assert_eq!(added, 2);
         Ok(())
@@ -1399,10 +963,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         let mut conn = env.async_db().async_conn().await;
@@ -1441,10 +1005,10 @@ mod tests {
 
         let build_queue = env.async_build_queue();
         build_queue
-            .add_crate("foo1", &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&"foo1".parse().unwrap(), &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate("foo2", &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&"foo2".parse().unwrap(), &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         env.fake_release()
@@ -1468,254 +1032,26 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_add_duplicate_doesnt_fail_last_priority_wins() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let queue = env.async_build_queue();
-
-        queue.add_crate("some_crate", &V1, 0, None).await?;
-        queue.add_crate("some_crate", &V1, 9, None).await?;
-
-        let queued_crates = queue.queued_crates().await?;
-        assert_eq!(queued_crates.len(), 1);
-        assert_eq!(queued_crates[0].priority, 9);
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_add_duplicate_resets_attempts_and_priority() -> Result<()> {
-        let env =
-            TestEnvironment::with_config(TestEnvironment::base_config().build_attempts(5).build()?)
-                .await?;
-
-        let queue = env.async_build_queue();
-
-        let mut conn = env.async_db().async_conn().await;
-        sqlx::query!(
-            "
-                INSERT INTO queue (name, version, priority, attempt, last_attempt )
-                VALUES ('failed_crate', $1, 0, 99, NOW())",
-            V1 as _
-        )
-        .execute(&mut *conn)
-        .await?;
-
-        assert_eq!(queue.pending_count().await?, 0);
-
-        queue.add_crate("failed_crate", &V1, 9, None).await?;
-
-        assert_eq!(queue.pending_count().await?, 1);
-
-        let row = sqlx::query!(
-            "SELECT priority, attempt, last_attempt
-                     FROM queue
-                     WHERE name = $1 AND version = $2",
-            "failed_crate",
-            V1 as _
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert_eq!(row.priority, 9);
-        assert_eq!(row.attempt, 0);
-        assert!(row.last_attempt.is_none());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_has_build_queued() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let queue = env.async_build_queue();
-
-        queue.add_crate("dummy", &V1, 0, None).await?;
-
-        let mut conn = env.async_db().async_conn().await;
-        assert!(queue.has_build_queued("dummy", &V1).await.unwrap());
-
-        sqlx::query!("UPDATE queue SET attempt = 6")
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-
-        assert!(!queue.has_build_queued("dummy", &V1).await.unwrap());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_wait_between_build_attempts() -> Result<()> {
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .build_attempts(99)
-                .delay_between_build_attempts(Duration::from_secs(1))
-                .build()?,
-        )?;
-
-        let runtime = env.runtime();
-
-        let queue = env.build_queue();
-
-        queue.add_crate("krate", &V1, 0, None)?;
-
-        // first let it fail
-        queue.process_next_crate(|krate| {
-            assert_eq!(krate.name, "krate");
-            anyhow::bail!("simulate a failure");
-        })?;
-
-        queue.process_next_crate(|_| {
-            // this can't happen since we didn't wait between attempts
-            unreachable!();
-        })?;
-
-        runtime.block_on(async {
-            // fake the build-attempt timestamp so it's older
-            let mut conn = env.async_db().async_conn().await;
-            sqlx::query!(
-                "UPDATE queue SET last_attempt = $1",
-                Utc::now() - chrono::Duration::try_seconds(60).unwrap()
-            )
-            .execute(&mut *conn)
-            .await
-        })?;
-
-        let mut handled = false;
-        // now we can process it again
-        queue.process_next_crate(|krate| {
-            assert_eq!(krate.name, "krate");
-            handled = true;
-            Ok(BuildPackageSummary::default())
-        })?;
-
-        assert!(handled);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_and_process_crates() -> Result<()> {
-        const MAX_ATTEMPTS: u16 = 3;
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .build_attempts(MAX_ATTEMPTS)
-                .delay_between_build_attempts(Duration::ZERO)
-                .build()?,
-        )?;
-
-        let queue = env.build_queue();
-
-        let test_crates = [
-            ("low-priority", 1000),
-            ("high-priority-foo", -1000),
-            ("medium-priority", -10),
-            ("high-priority-bar", -1000),
-            ("standard-priority", 0),
-            ("high-priority-baz", -1000),
-        ];
-        for krate in &test_crates {
-            queue.add_crate(krate.0, &V1, krate.1, None)?;
-        }
-
-        let assert_next = |name| -> Result<()> {
-            queue.process_next_crate(|krate| {
-                assert_eq!(name, krate.name);
-                Ok(BuildPackageSummary::default())
-            })?;
-            Ok(())
-        };
-        let assert_next_and_fail = |name| -> Result<()> {
-            queue.process_next_crate(|krate| {
-                assert_eq!(name, krate.name);
-                anyhow::bail!("simulate a failure");
-            })?;
-            Ok(())
-        };
-
-        // The first processed item is the one with the highest priority added first.
-        assert_next("high-priority-foo")?;
-
-        // Simulate a failure in high-priority-bar.
-        assert_next_and_fail("high-priority-bar")?;
-
-        // Continue with the next high priority crate.
-        assert_next("high-priority-baz")?;
-
-        // After all the crates with the max priority are processed, before starting to process
-        // crates with a lower priority the failed crates with the max priority will be tried
-        // again.
-        assert_next("high-priority-bar")?;
-
-        // Continue processing according to the priority.
-        assert_next("medium-priority")?;
-        assert_next("standard-priority")?;
-
-        // Simulate the crate failing many times.
-        for _ in 0..MAX_ATTEMPTS {
-            assert_next_and_fail("low-priority")?;
-        }
-
-        // Since low-priority failed many times it will be removed from the queue. Because of
-        // that the queue should now be empty.
-        let mut called = false;
-        queue.process_next_crate(|_| {
-            called = true;
-            Ok(BuildPackageSummary::default())
-        })?;
-        assert!(!called, "there were still items in the queue");
-
-        let collected_metrics = env.collected_metrics();
-
-        assert_eq!(
-            collected_metrics
-                .get_metric("builder", "docsrs.builder.total_builds")?
-                .get_u64_counter()
-                .value(),
-            9
-        );
-
-        assert_eq!(
-            collected_metrics
-                .get_metric("builder", "docsrs.builder.failed_builds")?
-                .get_u64_counter()
-                .value(),
-            1
-        );
-
-        assert_eq!(
-            dbg!(
-                collected_metrics
-                    .get_metric("builder", "docsrs.builder.build_time")?
-                    .get_f64_histogram()
-                    .count()
-            ),
-            9
-        );
-
-        Ok(())
-    }
-
     #[test]
     fn test_invalidate_cdn_after_error() -> Result<()> {
         let env = TestEnvironment::new_with_runtime()?;
 
         let queue = env.build_queue();
 
-        queue.add_crate("will_fail", &V1, 0, None)?;
+        const WILL_FAIL: KrateName = KrateName::from_static("will_fail");
 
-        queue.process_next_crate(|krate| {
-            assert_eq!("will_fail", krate.name);
+        queue.add_crate(&WILL_FAIL, &V1, 0, None)?;
+
+        process_next_crate(&env.context, |krate| {
+            assert_eq!(WILL_FAIL, krate.name);
             anyhow::bail!("simulate a failure");
         })?;
 
         assert_eq!(
             env.runtime()
-                .block_on(env.cdn().purged_keys())
-                .unwrap()
-                .to_string(),
-            "crate-will_fail",
+                .block_on(env.cdn().unwrap().purged_keys())
+                .unwrap(),
+            SurrogateKey::from(WILL_FAIL).into()
         );
 
         Ok(())
@@ -1727,333 +1063,58 @@ mod tests {
 
         let queue = env.build_queue();
 
-        queue.add_crate("will_succeed", &V1, -1, None)?;
+        const WILL_SUCCEED: KrateName = KrateName::from_static("will_succeed");
+        queue.add_crate(&WILL_SUCCEED, &V1, -1, None)?;
 
-        queue.process_next_crate(|krate| {
-            assert_eq!("will_succeed", krate.name);
+        process_next_crate(&env.context, |krate| {
+            assert_eq!(WILL_SUCCEED, krate.name);
             Ok(BuildPackageSummary::default())
         })?;
 
         assert_eq!(
             env.runtime()
-                .block_on(env.cdn().purged_keys())
-                .unwrap()
-                .to_string(),
-            "crate-will_succeed",
+                .block_on(env.cdn().unwrap().purged_keys())
+                .unwrap(),
+            SurrogateKey::from(WILL_SUCCEED).into()
         );
 
         Ok(())
     }
 
-    #[test]
-    fn test_pending_count() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_last_seen_reference_in_db() -> Result<()> {
+        let env = TestEnvironment::new().await?;
 
-        let queue = env.build_queue();
+        let mut conn = env.async_db().async_conn().await;
+        let queue = env.async_build_queue();
+        queue.unlock().await?;
+        assert!(!queue.is_locked().await?);
 
-        assert_eq!(queue.pending_count()?, 0);
-        queue.add_crate("foo", &V1, 0, None)?;
-        assert_eq!(queue.pending_count()?, 1);
-        queue.add_crate("bar", &V1, 0, None)?;
-        assert_eq!(queue.pending_count()?, 2);
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("foo", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-        assert_eq!(queue.pending_count()?, 1);
-
-        drop(env);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_prioritized_count() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        assert_eq!(queue.prioritized_count()?, 0);
-        queue.add_crate("foo", &V1, 0, None)?;
-        assert_eq!(queue.prioritized_count()?, 1);
-        queue.add_crate("bar", &V1, -100, None)?;
-        assert_eq!(queue.prioritized_count()?, 2);
-        queue.add_crate("baz", &V1, 100, None)?;
-        assert_eq!(queue.prioritized_count()?, 2);
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("bar", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-        assert_eq!(queue.prioritized_count()?, 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_count_by_priority() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        assert!(queue.pending_count_by_priority()?.is_empty());
-
-        queue.add_crate("one", &V1, 1, None)?;
-        queue.add_crate("two", &V2, 2, None)?;
-        queue.add_crate("two_more", &V2, 2, None)?;
-
-        assert_eq!(
-            queue.pending_count_by_priority()?,
-            HashMap::from_iter(vec![(1, 1), (2, 2)])
-        );
-
-        while queue.pending_count()? > 0 {
-            queue.process_next_crate(|_| Ok(BuildPackageSummary::default()))?;
-        }
-        assert!(queue.pending_count_by_priority()?.is_empty());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_failed_count_for_reattempts() -> Result<()> {
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .build_attempts(MAX_ATTEMPTS)
-                .delay_between_build_attempts(Duration::ZERO)
-                .build()?,
-        )?;
-
-        const MAX_ATTEMPTS: u16 = 3;
-
-        let queue = env.build_queue();
-
-        assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("foo", &V1, -100, None)?;
-        assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("bar", &V1, 0, None)?;
-
-        for _ in 0..MAX_ATTEMPTS {
-            assert_eq!(queue.failed_count()?, 0);
-            queue.process_next_crate(|krate| {
-                assert_eq!("foo", krate.name);
-                Ok(BuildPackageSummary {
-                    should_reattempt: true,
-                    ..Default::default()
-                })
-            })?;
-        }
-        assert_eq!(queue.failed_count()?, 1);
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("bar", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-        assert_eq!(queue.failed_count()?, 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_failed_count_after_error() -> Result<()> {
-        let env = TestEnvironment::with_config_and_runtime(
-            TestEnvironment::base_config()
-                .build_attempts(MAX_ATTEMPTS)
-                .delay_between_build_attempts(Duration::ZERO)
-                .build()?,
-        )?;
-
-        const MAX_ATTEMPTS: u16 = 3;
-
-        let queue = env.build_queue();
-
-        assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("foo", &V1, -100, None)?;
-        assert_eq!(queue.failed_count()?, 0);
-        queue.add_crate("bar", &V1, 0, None)?;
-
-        for _ in 0..MAX_ATTEMPTS {
-            assert_eq!(queue.failed_count()?, 0);
-            queue.process_next_crate(|krate| {
-                assert_eq!("foo", krate.name);
-                anyhow::bail!("this failed");
-            })?;
-        }
-        assert_eq!(queue.failed_count()?, 1);
-
-        queue.process_next_crate(|krate| {
-            assert_eq!("bar", krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-        assert_eq!(queue.failed_count()?, 1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_queued_crates() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        let test_crates = [("bar", 0), ("foo", -10), ("baz", 10)];
-        for krate in &test_crates {
-            queue.add_crate(krate.0, &V1, krate.1, None)?;
-        }
-
-        assert_eq!(
-            vec![
-                ("foo".into(), V1, -10),
-                ("bar".into(), V1, 0),
-                ("baz".into(), V1, 10),
-            ],
-            queue
-                .queued_crates()?
-                .into_iter()
-                .map(|c| (c.name.clone(), c.version, c.priority))
-                .collect::<Vec<_>>()
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_last_seen_reference_in_db() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-        queue.unlock()?;
-        assert!(!queue.is_locked()?);
         // initial db ref is empty
-        assert_eq!(queue.last_seen_reference()?, None);
-        assert!(!queue.is_locked()?);
+        assert_eq!(last_seen_reference(&mut conn).await?, None);
+        assert!(!queue.is_locked().await?);
 
         let oid = crates_index_diff::gix::ObjectId::from_hex(
             b"ffffffffffffffffffffffffffffffffffffffff",
         )?;
-        queue.set_last_seen_reference(oid)?;
+        set_last_seen_reference(&mut conn, oid).await?;
 
-        assert_eq!(queue.last_seen_reference()?, Some(oid));
-        assert!(!queue.is_locked()?);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_broken_db_reference_breaks() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        env.runtime().block_on(async {
-            let mut conn = env.async_db().async_conn().await;
-            set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")
-                .await
-                .unwrap();
-        });
-
-        let queue = env.build_queue();
-        assert!(queue.last_seen_reference().is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_queue_lock() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-        // unlocked without config
-        assert!(!queue.is_locked()?);
-
-        queue.lock()?;
-        assert!(queue.is_locked()?);
-
-        queue.unlock()?;
-        assert!(!queue.is_locked()?);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_long_name() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        let name: String = "krate".repeat(100);
-
-        queue.add_crate(&name, &V1, 0, None)?;
-
-        queue.process_next_crate(|krate| {
-            assert_eq!(name, krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_add_long_version() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        let long_version = Version::parse(&format!(
-            "1.2.3-{}+{}",
-            "prerelease".repeat(100),
-            "build".repeat(100)
-        ))?;
-
-        queue.add_crate("krate", &long_version, 0, None)?;
-
-        queue.process_next_crate(|krate| {
-            assert_eq!(long_version, krate.version);
-            Ok(BuildPackageSummary::default())
-        })?;
+        assert_eq!(last_seen_reference(&mut conn).await?, Some(oid));
+        assert!(!queue.is_locked().await?);
 
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_delete_version_from_queue() -> Result<()> {
+    async fn test_broken_db_reference_breaks() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let queue = env.async_build_queue();
-        assert_eq!(queue.pending_count().await?, 0);
+        let mut conn = env.async_db().async_conn().await;
+        set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")
+            .await
+            .unwrap();
 
-        queue.add_crate(KRATE, &V1, 0, None).await?;
-        queue.add_crate(KRATE, &V2, 0, None).await?;
-
-        assert_eq!(queue.pending_count().await?, 2);
-        queue.remove_version_from_queue(KRATE, &V1).await?;
-
-        assert_eq!(queue.pending_count().await?, 1);
-
-        // only v2 remains
-        if let [k] = queue.queued_crates().await?.as_slice() {
-            assert_eq!(k.name, KRATE);
-            assert_eq!(k.version, V2);
-        } else {
-            panic!("expected only one queued crate");
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_delete_crate_from_queue() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let queue = env.async_build_queue();
-        assert_eq!(queue.pending_count().await?, 0);
-
-        queue.add_crate(KRATE, &V1, 0, None).await?;
-        queue.add_crate(KRATE, &V2, 0, None).await?;
-
-        assert_eq!(queue.pending_count().await?, 2);
-        queue.remove_crate_from_queue(KRATE).await?;
-
-        assert_eq!(queue.pending_count().await?, 0);
+        assert!(last_seen_reference(&mut conn).await.is_err());
 
         Ok(())
     }

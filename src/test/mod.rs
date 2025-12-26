@@ -3,7 +3,7 @@ pub(crate) mod headers;
 
 pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
 use crate::{
-    AsyncBuildQueue, BuildQueue, Config, Context,
+    Config, Context,
     config::ConfigBuilder,
     error::Result,
     web::{build_axum_app, cache, page::TemplateData},
@@ -12,6 +12,7 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::testing::TestDatabase;
 use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
@@ -493,11 +494,8 @@ impl TestEnvironment {
         &self.context.build_queue
     }
 
-    pub(crate) fn cdn(&self) -> &Cdn {
-        self.context
-            .cdn
-            .as_ref()
-            .expect("in test envs we always have the mock CDN")
+    pub(crate) fn cdn(&self) -> Option<&Cdn> {
+        self.context.cdn.as_deref()
     }
 
     pub(crate) fn config(&self) -> &Config {

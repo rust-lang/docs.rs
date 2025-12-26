@@ -11,6 +11,7 @@ use crate::{
     utils::{copy_dir_all, report_error},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
+use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
 use docs_rs_database::{
     Pool,
@@ -212,7 +213,7 @@ impl RustwideBuilder {
             registry_api: context.registry_api.clone(),
             repository_stats_updater: context.repository_stats_updater.clone(),
             workspace_initialize_time: Instant::now(),
-            builder_metrics: context.async_build_queue.builder_metrics(),
+            builder_metrics: context.builder_metrics.clone(),
         })
     }
 
@@ -1427,22 +1428,6 @@ pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
     pub(crate) successful: bool,
-}
-
-#[derive(Debug)]
-pub struct BuildPackageSummary {
-    pub successful: bool,
-    pub should_reattempt: bool,
-}
-
-#[cfg(test)]
-impl Default for BuildPackageSummary {
-    fn default() -> Self {
-        Self {
-            successful: true,
-            should_reattempt: false,
-        }
-    }
 }
 
 #[cfg(test)]

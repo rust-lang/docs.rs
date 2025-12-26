@@ -1,6 +1,5 @@
 use crate::{
-    AsyncBuildQueue, Config,
-    build_queue::PRIORITY_MANUAL_FROM_CRATES_IO,
+    Config,
     docbuilder::Limits,
     impl_axum_webpage,
     web::{
@@ -21,6 +20,7 @@ use axum_extra::{
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
+use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
@@ -222,7 +222,7 @@ mod tests {
     };
     use anyhow::Result;
     use axum::{body::Body, http::Request};
-    use docs_rs_types::BuildStatus;
+    use docs_rs_types::{BuildStatus, testing::FOO};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use tower::ServiceExt;
@@ -409,7 +409,7 @@ mod tests {
         let build_queue = env.async_build_queue();
 
         assert_eq!(build_queue.pending_count().await?, 0);
-        assert!(!build_queue.has_build_queued("foo", &V1).await?);
+        assert!(!build_queue.has_build_queued(&FOO, &V1).await?);
 
         {
             let app = env.web_app().await;
@@ -429,7 +429,7 @@ mod tests {
         }
 
         assert_eq!(build_queue.pending_count().await?, 1);
-        assert!(build_queue.has_build_queued("foo", &V1).await?);
+        assert!(build_queue.has_build_queued(&FOO, &V1).await?);
 
         {
             let app = env.web_app().await;
@@ -455,7 +455,7 @@ mod tests {
         }
 
         assert_eq!(build_queue.pending_count().await?, 1);
-        assert!(build_queue.has_build_queued("foo", &V1).await?);
+        assert!(build_queue.has_build_queued(&FOO, &V1).await?);
 
         Ok(())
     }

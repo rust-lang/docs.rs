@@ -6,13 +6,10 @@
     clippy::result_large_err,
 )]
 
-pub use self::build_queue::{
-    AsyncBuildQueue, BuildQueue, queue_rebuilds, queue_rebuilds_faulty_rustdoc,
-};
 pub use self::config::Config;
 pub use self::context::Context;
 pub use self::docbuilder::PackageKind;
-pub use self::docbuilder::{BuildPackageSummary, RustwideBuilder};
+pub use self::docbuilder::RustwideBuilder;
 pub use self::index::Index;
 pub use self::web::start_web_server;
 
@@ -21,7 +18,7 @@ pub use docs_rs_utils::{
 };
 pub use font_awesome_as_a_crate::icons;
 
-mod build_queue;
+pub mod build_queue;
 mod config;
 mod context;
 pub mod db;
