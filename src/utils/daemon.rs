@@ -3,9 +3,9 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    AsyncBuildQueue, Config, Context, Index, RustwideBuilder,
+    Context, Index, RustwideBuilder,
+    build_queue::{get_new_crates, queue_rebuilds},
     metrics::service::OtelServiceMetrics,
-    queue_rebuilds,
     utils::{queue_builder, report_error},
     web::start_web_server,
 };
@@ -20,17 +20,20 @@ use tracing::{debug, info, trace};
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub async fn watch_registry(build_queue: &AsyncBuildQueue, config: &Config) -> Result<(), Error> {
+pub async fn watch_registry(context: &Context) -> Result<(), Error> {
     let mut last_gc = Instant::now();
 
+    let config = context.config.clone();
+    let queue = context.async_build_queue.clone();
+
     loop {
-        if build_queue.is_locked().await? {
+        if queue.is_locked().await? {
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
-            let index = Index::from_config(config).await?;
-            match build_queue
-                .get_new_crates(&index)
+            let index = Index::from_config(&context.config).await?;
+
+            match get_new_crates(context, &index)
                 .await
                 .context("Failed to get new crates")
             {
@@ -47,15 +50,13 @@ pub async fn watch_registry(build_queue: &AsyncBuildQueue, config: &Config) -> R
     }
 }
 
-fn start_registry_watcher(context: &Context) -> Result<(), Error> {
-    let build_queue = context.async_build_queue.clone();
-    let config = context.config.clone();
-
-    context.runtime.spawn(async move {
+fn start_registry_watcher(context: Arc<Context>) -> Result<(), Error> {
+    let runtime = context.runtime.clone();
+    runtime.spawn(async move {
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(&build_queue, &config).await
+        watch_registry(&context).await
     });
 
     Ok(())
@@ -148,7 +149,7 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
 
     if enable_registry_watcher {
         // check new crates every minute
-        start_registry_watcher(&context)?;
+        start_registry_watcher(context.clone())?;
     }
 
     // build new crates every minute

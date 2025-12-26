@@ -3,6 +3,8 @@ mod feature;
 mod ids;
 mod krate_name;
 mod req_version;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 mod version;
 
 pub use build_status::BuildStatus;

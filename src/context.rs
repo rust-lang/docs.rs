@@ -1,5 +1,6 @@
-use crate::{AsyncBuildQueue, BuildQueue, Config};
+use crate::{Config, docbuilder::BuilderMetrics};
 use anyhow::Result;
+use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
 use docs_rs_database::Pool;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
@@ -12,6 +13,7 @@ use tokio::runtime;
 pub struct Context {
     pub config: Arc<Config>,
     pub async_build_queue: Arc<AsyncBuildQueue>,
+    pub builder_metrics: Arc<BuilderMetrics>, // temporary place until the refactor is finished
     pub build_queue: Arc<BuildQueue>,
     pub storage: Arc<Storage>,
     pub async_storage: Arc<AsyncStorage>,
@@ -73,9 +75,7 @@ impl Context {
         let cdn = cdn.map(Arc::new);
         let async_build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
-            config.clone(),
-            async_storage.clone(),
-            cdn.clone(),
+            config.build_queue.clone(),
             &meter_provider,
         ));
 
@@ -88,6 +88,7 @@ impl Context {
         Ok(Self {
             async_build_queue,
             build_queue,
+            builder_metrics: Arc::new(BuilderMetrics::new(&meter_provider)),
             storage,
             async_storage,
             cdn,

@@ -1,0 +1,30 @@
+[package]
+name = "docs_rs_build_queue"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+docs_rs_database = { path = "../docs_rs_database" }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_types = { path = "../docs_rs_types" }
+futures-util = { workspace = true }
+opentelemetry = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
+docs_rs_database = { path = "../docs_rs_database", features = ["testing"] }
+docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
+pretty_assertions = { workspace = true }
+
+[features]
+testing = [
+    "docs_rs_database/testing",
+    "docs_rs_opentelemetry/testing",
+    "docs_rs_types/testing",
+]

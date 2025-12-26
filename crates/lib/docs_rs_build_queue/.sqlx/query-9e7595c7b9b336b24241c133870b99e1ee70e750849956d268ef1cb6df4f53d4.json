@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE queue\n                         SET\n                            attempt = attempt + 1,\n                            last_attempt = NOW()\n                         WHERE id = $1\n                         RETURNING attempt;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempt",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9e7595c7b9b336b24241c133870b99e1ee70e750849956d268ef1cb6df4f53d4"
+}

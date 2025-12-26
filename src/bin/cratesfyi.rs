@@ -3,8 +3,9 @@ use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, Index, PackageKind, RustwideBuilder,
+    build_queue::{last_seen_reference, queue_rebuilds_faulty_rustdoc, set_last_seen_reference},
     db::{self, Overrides},
-    queue_rebuilds_faulty_rustdoc, start_web_server,
+    start_web_server,
     utils::{
         daemon::start_background_service_metric_collector, get_crate_pattern_and_priority,
         list_crate_priorities, queue_builder, remove_crate_priority, set_crate_priority,
@@ -15,7 +16,7 @@ use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_storage::add_path_into_database;
-use docs_rs_types::{CrateId, Version};
+use docs_rs_types::{CrateId, KrateName, Version};
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
@@ -130,10 +131,7 @@ impl CommandLine {
                 // metrics from the registry watcher, which should only run once, and all the time.
                 start_background_service_metric_collector(&ctx)?;
 
-                ctx.runtime.block_on(docs_rs::utils::watch_registry(
-                    &ctx.async_build_queue,
-                    &ctx.config,
-                ))?;
+                ctx.runtime.block_on(docs_rs::utils::watch_registry(&ctx))?;
             }
             Self::StartBuildServer => {
                 queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
@@ -214,36 +212,46 @@ impl QueueSubcommand {
                 crate_name,
                 crate_version,
                 build_priority,
-            } => ctx.build_queue.add_crate(
+            } => {
+                let crate_name: KrateName = crate_name.parse()?;
+                ctx.build_queue.add_crate(
                 &crate_name,
                 &crate_version,
                 build_priority,
                 ctx.config.registry_url.as_deref(),
-            )?,
+            )?},
 
             Self::GetLastSeenReference => {
-                if let Some(reference) = ctx.build_queue.last_seen_reference()? {
-                    println!("Last seen reference: {reference}");
-                } else {
-                    println!("No last seen reference available");
-                }
+                ctx.runtime.block_on(async move {
+                    let mut conn = ctx.pool.get_async().await?;
+                    if let Some(reference) = last_seen_reference(&mut conn).await? {
+                        println!("Last seen reference: {reference}");
+                    } else {
+                        println!("No last seen reference available");
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?
             }
 
             Self::SetLastSeenReference { reference, head } => {
+                ctx.runtime.block_on(async move {
                 let reference = match (reference, head) {
                     (Some(reference), false) => reference,
                     (None, true) => {
                         println!("Fetching changes to set reference to HEAD");
-                        ctx.runtime.block_on(async move {
-                            let index = Index::from_config(&ctx.config).await?;
-                            index.latest_commit_reference().await
-                        })?
+                        let index = Index::from_config(&ctx.config).await?;
+                        index.latest_commit_reference().await?
                     }
                     (_, _) => unreachable!(),
                 };
 
-                ctx.build_queue.set_last_seen_reference(reference)?;
+                let mut conn = ctx.pool.get_async().await?;
+
+                set_last_seen_reference(&mut conn, reference).await?;
                 println!("Set last seen reference: {reference}");
+                    Ok::<(), anyhow::Error>(())
+                })?
+
             }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,

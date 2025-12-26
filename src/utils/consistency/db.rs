@@ -36,7 +36,7 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Resu
              )
          ) AS inp
          ORDER BY name"#,
-        config.build_attempts as i32,
+        config.build_queue.build_attempts as i32,
     )
     .fetch_all(conn)
     .await?;
@@ -66,13 +66,16 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection, config: &Config) -> Resu
 mod tests {
     use super::*;
     use crate::test::{V1, V2, V3, async_wrapper};
+    use docs_rs_types::KrateName;
     use pretty_assertions::assert_eq;
+
+    const QUEUED: KrateName = KrateName::from_static("queued");
 
     #[test]
     fn test_load() {
         async_wrapper(|env| async move {
             env.async_build_queue()
-                .add_crate("queued", &V1, 0, None)
+                .add_crate(&QUEUED, &V1, 0, None)
                 .await?;
             env.fake_release()
                 .await

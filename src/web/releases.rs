@@ -1,9 +1,7 @@
 //! Releases web handlersrelease
 
 use crate::{
-    AsyncBuildQueue, Config,
-    build_queue::{PRIORITY_CONTINUOUS, QueuedCrate},
-    impl_axum_webpage,
+    Config, impl_axum_webpage,
     utils::report_error,
     web::{
         axum_redirect,
@@ -24,6 +22,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_registry_api::{self as registry_api, RegistryApi};
 use docs_rs_types::{KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
@@ -796,6 +795,7 @@ mod tests {
     use chrono::{Duration, TimeZone};
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_types::BuildStatus;
+    use docs_rs_types::testing::{BAR, BAZ, FOO};
     use kuchikiki::traits::TendrilSink;
     use mockito::Matcher;
     use reqwest::StatusCode;
@@ -1795,9 +1795,9 @@ mod tests {
             );
 
             let queue = env.async_build_queue();
-            queue.add_crate("foo", &V1, 0, None).await?;
-            queue.add_crate("bar", &V2, -10, None).await?;
-            queue.add_crate("baz", &V3, 10, None).await?;
+            queue.add_crate(&FOO, &V1, 0, None).await?;
+            queue.add_crate(&BAR, &V2, -10, None).await?;
+            queue.add_crate(&BAZ, &V3, 10, None).await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
             let items = full
@@ -1835,8 +1835,8 @@ mod tests {
 
             // we have two queued releases, where the build for one is already in progress
             let queue = env.async_build_queue();
-            queue.add_crate("foo", &V1, 0, None).await?;
-            queue.add_crate("bar", &V2, 0, None).await?;
+            queue.add_crate(&FOO, &V1, 0, None).await?;
+            queue.add_crate(&BAR, &V2, 0, None).await?;
 
             env.fake_release()
                 .await
@@ -1911,13 +1911,13 @@ mod tests {
             let web = env.web_app().await;
             let queue = env.async_build_queue();
             queue
-                .add_crate("foo", &V1, PRIORITY_CONTINUOUS, None)
+                .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
                 .await?;
             queue
-                .add_crate("bar", &V2, PRIORITY_CONTINUOUS + 1, None)
+                .add_crate(&BAR, &V2, PRIORITY_CONTINUOUS + 1, None)
                 .await?;
             queue
-                .add_crate("baz", &V3, PRIORITY_CONTINUOUS - 1, None)
+                .add_crate(&BAZ, &V3, PRIORITY_CONTINUOUS - 1, None)
                 .await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);

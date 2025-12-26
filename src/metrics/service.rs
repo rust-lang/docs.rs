@@ -1,5 +1,5 @@
-use crate::AsyncBuildQueue;
 use anyhow::{Error, Result};
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use opentelemetry::{KeyValue, metrics::Gauge};
 use std::collections::HashSet;

@@ -1,4 +1,5 @@
 use crate::Context;
+use crate::build_queue::build_next_queue_package;
 use crate::{docbuilder::RustwideBuilder, utils::report_error};
 use anyhow::{Context as _, Error};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -39,7 +40,7 @@ pub fn queue_builder(context: &Context, mut builder: RustwideBuilder) -> Result<
         // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
         debug!("Checking build queue");
         let res = catch_unwind(AssertUnwindSafe(|| {
-            match build_queue.build_next_queue_package(context, &mut builder) {
+            match build_next_queue_package(context, &mut builder) {
                 Ok(true) => {}
                 Ok(false) => {
                     debug!("Queue is empty, going back to sleep");

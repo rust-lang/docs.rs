@@ -1,6 +1,6 @@
 //! Utilities for interacting with the build queue
-use crate::build_queue::PRIORITY_DEFAULT;
 use crate::error::Result;
+use docs_rs_build_queue::PRIORITY_DEFAULT;
 use futures_util::stream::TryStreamExt;
 
 /// Get the build queue priority for a crate, returns the matching pattern too
