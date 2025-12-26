@@ -7,8 +7,7 @@ use axum::{
     extract::{FromRequestParts, MatchedPath},
     http::{Uri, request::Parts},
 };
-use docs_rs_storage::CompressionAlgorithm;
-use docs_rs_types::{BuildId, KrateName, ReqVersion};
+use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::{EscapedURI, url_decode};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};

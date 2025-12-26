@@ -204,8 +204,8 @@ mod tests {
     use super::*;
     use crate::test::{KRATE, V1, V2, async_wrapper, fake_release_that_failed_before_build};
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
-    use docs_rs_storage::{CompressionAlgorithm, RustdocJsonFormatVersion, rustdoc_json_path};
-    use docs_rs_types::ReleaseId;
+    use docs_rs_storage::{RustdocJsonFormatVersion, rustdoc_json_path};
+    use docs_rs_types::{CompressionAlgorithm, ReleaseId};
     use test_case::test_case;
 
     async fn crate_exists(conn: &mut sqlx::PgConnection, name: &str) -> Result<bool> {
@@ -232,7 +232,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             assert!(get_id(&mut conn, "some-package").await.is_ok());
 
             Ok(())
@@ -243,7 +243,7 @@ mod tests {
     #[test_case(false)]
     fn test_delete_crate(archive_storage: bool) {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
 
             // Create fake packages in the database
             let pkg1_v1_id = env
@@ -385,7 +385,7 @@ mod tests {
                     .await
             }
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let v1 = env
                 .fake_release()
                 .await
@@ -494,7 +494,7 @@ mod tests {
     fn test_delete_incomplete_version() {
         async_wrapper(|env| async move {
             let db = env.async_db();
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
 
             let (release_id, _) =
                 fake_release_that_failed_before_build(&mut conn, "a", V1, "some-error").await?;
@@ -511,7 +511,7 @@ mod tests {
     fn test_delete_incomplete_crate() {
         async_wrapper(|env| async move {
             let db = env.async_db();
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
 
             let (release_id, _) =
                 fake_release_that_failed_before_build(&mut conn, "a", V1, "some-error").await?;
@@ -530,7 +530,7 @@ mod tests {
         let env = crate::test::TestEnvironment::new().await?;
 
         let db = env.async_db();
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         assert!(!crate_exists(&mut conn, KRATE).await?);
         delete_crate(&mut conn, env.async_storage(), env.config(), KRATE).await?;
@@ -545,7 +545,7 @@ mod tests {
         let env = crate::test::TestEnvironment::new().await?;
 
         let db = env.async_db();
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         assert!(!crate_exists(&mut conn, KRATE).await?);
 

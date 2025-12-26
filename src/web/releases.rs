@@ -786,16 +786,20 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{finish_build, initialize_build, initialize_crate, initialize_release};
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, V0_1, V1, V2, V3,
         async_wrapper, fake_release_that_failed_before_build,
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
+    use docs_rs_database::releases::{
+        finish_build, initialize_build, initialize_crate, initialize_release,
+    };
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
-    use docs_rs_types::BuildStatus;
-    use docs_rs_types::testing::{BAR, BAZ, FOO};
+    use docs_rs_types::{
+        BuildStatus,
+        testing::{BAR, BAZ, FOO},
+    };
     use kuchikiki::traits::TendrilSink;
     use mockito::Matcher;
     use reqwest::StatusCode;
@@ -807,7 +811,7 @@ mod tests {
     fn test_release_list_with_incomplete_release_and_successful_build() {
         async_wrapper(|env| async move {
             let db = env.async_db();
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
 
             let crate_id = initialize_crate(&mut conn, "foo").await?;
             let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
@@ -886,10 +890,15 @@ mod tests {
                 .create()
                 .await?;
 
-            let releases =
-                get_releases(&mut *db.async_conn().await, 1, 10, Order::GithubStars, true)
-                    .await
-                    .unwrap();
+            let releases = get_releases(
+                &mut *db.async_conn().await?,
+                1,
+                10,
+                Order::GithubStars,
+                true,
+            )
+            .await
+            .unwrap();
             assert_eq!(
                 vec![
                     "bar", // 20 stars
@@ -968,7 +977,7 @@ mod tests {
             // crate in the db breaks this test.
             // That's why we reset the id-sequence to zero for this test.
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             sqlx::query!(r#"ALTER SEQUENCE crates_id_seq RESTART WITH 1"#)
                 .execute(&mut *conn)
                 .await?;
@@ -1043,7 +1052,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;
@@ -1105,7 +1118,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;
@@ -1193,8 +1210,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
-        config.registry_api.crates_io_api_call_retries = 0;
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            crates_io_api_call_retries: 0,
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let _m = crates_io
@@ -1243,8 +1263,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
-        config.registry_api.crates_io_api_call_retries = 0;
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            crates_io_api_call_retries: 0,
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let _m = crates_io
@@ -1273,7 +1296,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;
@@ -1325,7 +1352,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;
@@ -1377,7 +1408,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;
@@ -1424,7 +1459,7 @@ mod tests {
             .await?;
 
         // release that failed in the fetch-step, will miss some details
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         fake_release_that_failed_before_build(
             &mut conn,
             "failed_hard",
@@ -2093,7 +2128,11 @@ mod tests {
         let mut crates_io = mockito::Server::new_async().await;
 
         let mut config = TestEnvironment::base_config().build()?;
-        config.registry_api.registry_api_host = crates_io.url().parse().unwrap();
+        config.registry_api = docs_rs_registry_api::Config {
+            registry_api_host: crates_io.url().parse().unwrap(),
+            ..Default::default()
+        }
+        .into();
         let env = TestEnvironment::with_config(config).await?;
 
         let web = env.web_app().await;

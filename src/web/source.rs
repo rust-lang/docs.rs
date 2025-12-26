@@ -547,7 +547,7 @@ mod tests {
             let web = env.web_app().await;
             web.assert_success(path).await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             sqlx::query!(
                 "UPDATE releases
                      SET files = NULL

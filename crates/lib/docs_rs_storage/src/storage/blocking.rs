@@ -1,9 +1,6 @@
-use crate::{
-    blob::Blob, compression::CompressionAlgorithm, file::FileEntry,
-    storage::non_blocking::AsyncStorage, types::FileRange,
-};
+use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage, types::FileRange};
 use anyhow::Result;
-use docs_rs_types::{BuildId, Version};
+use docs_rs_types::{BuildId, CompressionAlgorithm, Version};
 use std::{fmt, path::Path, sync::Arc};
 use tokio::runtime;
 

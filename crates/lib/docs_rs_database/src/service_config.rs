@@ -65,7 +65,7 @@ mod tests {
         let test_metrics = TestMetrics::new();
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
         sqlx::query!("DELETE FROM config")
             .execute(&mut *conn)
             .await?;
@@ -83,7 +83,7 @@ mod tests {
         let test_metrics = TestMetrics::new();
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
         sqlx::query!("DELETE FROM config")
             .execute(&mut *conn)
             .await?;

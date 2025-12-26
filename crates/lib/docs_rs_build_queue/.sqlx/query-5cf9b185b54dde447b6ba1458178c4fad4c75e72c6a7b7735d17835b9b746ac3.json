@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases\n           SET release_time = $2,\n               dependencies = $3,\n               target_name = $4,\n               yanked = $5,\n               rustdoc_status = $6,\n               test_status = $7,\n               license = $8,\n               repository_url = $9,\n               homepage_url = $10,\n               description = $11,\n               description_long = $12,\n               readme = $13,\n               keywords = $14,\n               have_examples = $15,\n               downloads = $16,\n               files = $17,\n               doc_targets = $18,\n               is_library = $19,\n               documentation_url = $20,\n               default_target = $21,\n               features = $22,\n               repository_id = $23,\n               archive_storage = $24,\n               source_size = $25\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Json",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Json",
+        "Bool",
+        "Int4",
+        "Json",
+        "Json",
+        "Bool",
+        "Varchar",
+        "Varchar",
+        {
+          "Custom": {
+            "name": "feature[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "feature",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "subfeatures",
+                        "TextArray"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Int4",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5cf9b185b54dde447b6ba1458178c4fad4c75e72c6a7b7735d17835b9b746ac3"
+}

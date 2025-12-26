@@ -12,12 +12,11 @@ use anyhow::{Context as _, anyhow};
 use axum::body::Bytes;
 use axum::{Router, body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
-use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::testing::TestDatabase;
-use docs_rs_fastly::Cdn;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
-use docs_rs_storage::{AsyncStorage, Storage, StorageKind, testing::TestStorage};
+use docs_rs_storage::{AsyncStorage, StorageKind, testing::TestStorage};
 use docs_rs_types::Version;
 use fn_error_context::context;
 use http::{
@@ -415,15 +414,10 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) fn init_logger() {
-    rustwide::logging::init_with(tracing_log::LogTracer::new());
     docs_rs_logging::testing::init();
 }
 
 impl TestEnvironment {
-    pub(crate) fn new_with_runtime() -> Result<Self> {
-        Self::with_config_and_runtime(Self::base_config().build()?)
-    }
-
     pub(crate) async fn new() -> Result<Self> {
         Self::with_config(Self::base_config().build()?).await
     }
@@ -474,28 +468,28 @@ impl TestEnvironment {
     pub(crate) fn base_config() -> ConfigBuilder {
         Config::from_env()
             .expect("can't load base config from environment")
-            .database(docs_rs_database::Config::test_config().expect("can't load database config"))
+            .database(
+                docs_rs_database::Config::test_config()
+                    .expect("can't load database config")
+                    .into(),
+            )
             .storage(
                 docs_rs_storage::Config::test_config(StorageKind::Memory)
                     .expect("can't load storage config")
                     .into(),
             )
+            .builder(
+                docs_rs_builder::Config::test_config()
+                    .expect("can't load builder config")
+                    .into(),
+            )
             // set stale content serving so Cache::ForeverInCdn and Cache::ForeverInCdnAndStaleInBrowser
             // are actually different.
             .cache_control_stale_while_revalidate(Some(86400))
-            .include_default_targets(true)
     }
 
     pub(crate) fn async_build_queue(&self) -> &AsyncBuildQueue {
         &self.context.async_build_queue
-    }
-
-    pub(crate) fn build_queue(&self) -> &BuildQueue {
-        &self.context.build_queue
-    }
-
-    pub(crate) fn cdn(&self) -> Option<&Cdn> {
-        self.context.cdn.as_deref()
     }
 
     pub(crate) fn config(&self) -> &Config {
@@ -504,10 +498,6 @@ impl TestEnvironment {
 
     pub(crate) fn async_storage(&self) -> &AsyncStorage {
         &self.context.async_storage
-    }
-
-    pub(crate) fn storage(&self) -> &Storage {
-        &self.context.storage
     }
 
     pub(crate) fn runtime(&self) -> &runtime::Handle {

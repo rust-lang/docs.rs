@@ -73,8 +73,9 @@ ARG PROFILE_DIR=release
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry,sharing=locked \
     --mount=type=cache,target=/build/target,id=cargo-target,sharing=locked \
     mkdir /artifacts && \
-    cargo build --profile=$PROFILE && \
-    cp /build/target/$PROFILE_DIR/cratesfyi /artifacts/
+    cargo build --profile=$PROFILE --workspace && \
+    cp /build/target/$PROFILE_DIR/cratesfyi /artifacts/ && \
+    cp /build/target/$PROFILE_DIR/docs_rs_* /artifacts/
 
 ######################
 #  Web server stage  #
@@ -131,10 +132,15 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-build-server", "0.0.0.0:3000"]
+# copy the new binary, will also be used as default entrypoint.
+COPY --from=build /artifacts/docs_rs_builder /usr/local/bin/
 
-COPY --from=build /artifacts/cratesfyi /usr/local/bin
+# also copy the old legacy binary, so we can fall back to using it 
+# by just overwriting the entrypoint & CMD when running this container.
+COPY --from=build /artifacts/cratesfyi /usr/local/bin/
+
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_builder", "--"]
+CMD ["start"]
 
 
 ############################

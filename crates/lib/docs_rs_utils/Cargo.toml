@@ -16,3 +16,6 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 time = "0.3"
 tokio = { workspace = true }
+
+[features]
+testing = []

@@ -1,6 +1,8 @@
-use crate::{Config, docbuilder::BuilderMetrics};
+use crate::Config;
 use anyhow::Result;
 use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
+use docs_rs_builder::BuilderMetrics;
+use docs_rs_context::Context as NewContext;
 use docs_rs_database::Pool;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
@@ -23,6 +25,24 @@ pub struct Context {
     pub repository_stats_updater: Arc<RepositoryStatsUpdater>,
     pub runtime: runtime::Handle,
     pub meter_provider: AnyMeterProvider,
+}
+
+impl From<&Context> for NewContext {
+    fn from(value: &Context) -> Self {
+        Self {
+            meter_provider: value.meter_provider.clone(),
+            runtime: value.runtime.clone(),
+            config: (&*value.config).into(),
+            pool: Some(value.pool.clone()),
+            build_queue: Some(value.async_build_queue.clone()),
+            blocking_build_queue: Some(value.build_queue.clone()),
+            storage: Some(value.async_storage.clone()),
+            blocking_storage: Some(value.storage.clone()),
+            registry_api: Some(value.registry_api.clone()),
+            cdn: value.cdn.clone(),
+            repository_stats: Some(value.repository_stats_updater.clone()),
+        }
+    }
 }
 
 impl Context {

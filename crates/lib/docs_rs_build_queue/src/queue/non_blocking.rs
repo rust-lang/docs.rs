@@ -290,7 +290,7 @@ mod tests {
         let env = test_queue().await?;
         let queue = env.queue;
 
-        let mut conn = env.db.async_conn().await;
+        let mut conn = env.db.async_conn().await?;
         sqlx::query!(
             "
                 INSERT INTO queue (name, version, priority, attempt, last_attempt )
@@ -330,7 +330,7 @@ mod tests {
 
         queue.add_crate(&KRATE, &V1, 0, None).await?;
 
-        let mut conn = env.db.async_conn().await;
+        let mut conn = env.db.async_conn().await?;
         assert!(queue.has_build_queued(&KRATE, &V1).await.unwrap());
 
         sqlx::query!("UPDATE queue SET attempt = 6")

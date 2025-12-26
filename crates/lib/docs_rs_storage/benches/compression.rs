@@ -1,5 +1,6 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use docs_rs_storage::{CompressionAlgorithm, compress, decompress};
+use docs_rs_storage::{compress, decompress};
+use docs_rs_types::CompressionAlgorithm;
 use std::hint::black_box;
 
 pub fn regex_capture_matches(c: &mut Criterion) {

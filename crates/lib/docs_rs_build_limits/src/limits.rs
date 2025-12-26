@@ -89,7 +89,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieve_limits() -> anyhow::Result<()> {
         let db = db().await?;
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         let cfg = Config::default();
 
@@ -145,7 +145,7 @@ mod test {
     async fn targets_default_to_one_with_timeout() -> anyhow::Result<()> {
         let db = db().await?;
 
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
         let krate = KrateName::from_static("hexponent");
         Overrides::save(
             &mut conn,
@@ -170,7 +170,7 @@ mod test {
             build_default_memory_limit: Some(6 * GB),
         };
 
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         let limits = Limits::for_crate(&cfg, &mut conn, &KRATE).await?;
         assert_eq!(limits.memory, 6 * GB);
@@ -181,7 +181,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn overrides_dont_lower_memory_limit() -> Result<()> {
         let db = db().await?;
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         let cfg = Config::default();
 

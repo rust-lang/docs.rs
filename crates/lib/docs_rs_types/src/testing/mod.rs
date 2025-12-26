@@ -12,3 +12,5 @@ pub const V0_1: Version = Version::new(0, 1, 0);
 pub const V1: Version = Version::new(1, 0, 0);
 pub const V2: Version = Version::new(2, 0, 0);
 pub const V3: Version = Version::new(3, 0, 0);
+
+pub const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";

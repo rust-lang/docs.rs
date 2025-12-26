@@ -1,15 +1,15 @@
 use crate::{
-    Config, Context, Index, PackageKind, RustwideBuilder,
+    Config, Context, Index,
     db::{delete_crate, delete_version},
     error::Result,
-    utils::{get_crate_priority, report_error},
+    utils::report_error,
 };
 use anyhow::Context as _;
 use chrono::NaiveDate;
 use crates_index_diff::{Change, CrateVersion};
 use docs_rs_build_queue::{
-    AsyncBuildQueue, BuildPackageSummary, PRIORITY_BROKEN_RUSTDOC, PRIORITY_CONTINUOUS,
-    PRIORITY_MANUAL_FROM_CRATES_IO, QueuedCrate,
+    AsyncBuildQueue, PRIORITY_BROKEN_RUSTDOC, PRIORITY_CONTINUOUS, PRIORITY_MANUAL_FROM_CRATES_IO,
+    priority::get_crate_priority,
 };
 use docs_rs_database::{
     crate_details::update_latest_version_id,
@@ -17,10 +17,8 @@ use docs_rs_database::{
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
-use docs_rs_utils::retry;
 use fn_error_context::context;
 use futures_util::StreamExt;
-use std::time::Instant;
 use tracing::{debug, error, info, instrument, warn};
 
 pub async fn last_seen_reference(
@@ -319,87 +317,6 @@ async fn set_yanked_inner(
     Ok(())
 }
 
-/// wrapper around BuildQueue::process_next_crate to handle metrics and cdn invalidation
-fn process_next_crate(
-    context: &Context,
-    f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
-) -> Result<()> {
-    let queue = context.build_queue.clone();
-    let builder_metrics = context.builder_metrics.clone();
-    let cdn = context.cdn.clone();
-    let runtime = context.runtime.clone();
-    let config = context.config.build_queue.clone();
-
-    let next_attempt = queue.process_next_crate(|to_process| {
-        let res = {
-            let instant = Instant::now();
-            let res = f(to_process);
-            let elapsed = instant.elapsed().as_secs_f64();
-            builder_metrics.build_time.record(elapsed, &[]);
-            res
-        };
-
-        builder_metrics.total_builds.add(1, &[]);
-
-        runtime.block_on(queue_crate_invalidation(&to_process.name, cdn.as_deref()));
-
-        res
-    })?;
-
-    if let Some(next_attempt) = next_attempt
-        && next_attempt >= config.build_attempts as i32
-    {
-        builder_metrics.failed_builds.add(1, &[]);
-    }
-
-    Ok(())
-}
-
-pub(crate) fn build_next_queue_package(
-    context: &Context,
-    builder: &mut RustwideBuilder,
-) -> Result<bool> {
-    let mut processed = false;
-
-    let queue = context.build_queue.clone();
-
-    process_next_crate(context, |krate| {
-        processed = true;
-
-        let kind = krate
-            .registry
-            .as_ref()
-            .map(|r| PackageKind::Registry(r.as_str()))
-            .unwrap_or(PackageKind::CratesIo);
-
-        if let Err(err) = retry(
-            || {
-                builder
-                    .reinitialize_workspace_if_interval_passed(context)
-                    .context("Reinitialize workspace failed, locking queue")
-            },
-            3,
-        ) {
-            report_error(&err);
-            queue.lock()?;
-            return Err(err);
-        }
-
-        if let Err(err) = builder
-            .update_toolchain_and_add_essential_files()
-            .context("Updating toolchain failed, locking queue")
-        {
-            report_error(&err);
-            queue.lock()?;
-            return Err(err);
-        }
-
-        builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
-    })?;
-
-    Ok(processed)
-}
-
 /// Queue rebuilds as configured.
 ///
 /// The idea is to rebuild:
@@ -532,8 +449,7 @@ pub async fn queue_rebuilds_faulty_rustdoc(
 mod tests {
     use super::*;
     use crate::test::{FakeBuild, TestEnvironment, V1, V2};
-    use docs_rs_build_queue::{BuildPackageSummary, PRIORITY_DEFAULT};
-    use docs_rs_headers::SurrogateKey;
+    use docs_rs_build_queue::PRIORITY_DEFAULT;
     use docs_rs_types::{
         BuildStatus,
         testing::{BAR, FOO},
@@ -575,7 +491,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_yank_status() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
 
         // Given a release that is yanked
         let id = env
@@ -630,7 +546,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_crate_deleted() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
 
         env.fake_release()
             .await
@@ -655,7 +571,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_deleted() -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
 
         let rid_1 = env
             .fake_release()
@@ -759,7 +675,7 @@ mod tests {
         let build_queue = env.async_build_queue();
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         queue_rebuilds(&mut conn, env.config(), build_queue).await?;
 
         let queue = build_queue.queued_crates().await?;
@@ -811,7 +727,7 @@ mod tests {
         let build_queue = env.async_build_queue();
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         queue_rebuilds_faulty_rustdoc(
             &mut conn,
             build_queue,
@@ -873,7 +789,7 @@ mod tests {
         let build_queue = env.async_build_queue();
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         queue_rebuilds_faulty_rustdoc(
             &mut conn,
             build_queue,
@@ -928,7 +844,7 @@ mod tests {
         let build_queue = env.async_build_queue();
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         queue_rebuilds_faulty_rustdoc(
             &mut conn,
             build_queue,
@@ -969,7 +885,7 @@ mod tests {
             .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         sqlx::query!("UPDATE queue SET attempt = 99")
             .execute(&mut *conn)
             .await?;
@@ -1024,59 +940,10 @@ mod tests {
         let build_queue = env.async_build_queue();
         assert_eq!(build_queue.queued_crates().await?.len(), 2);
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         queue_rebuilds(&mut conn, env.config(), build_queue).await?;
 
         assert_eq!(build_queue.queued_crates().await?.len(), 2);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_invalidate_cdn_after_error() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        const WILL_FAIL: KrateName = KrateName::from_static("will_fail");
-
-        queue.add_crate(&WILL_FAIL, &V1, 0, None)?;
-
-        process_next_crate(&env.context, |krate| {
-            assert_eq!(WILL_FAIL, krate.name);
-            anyhow::bail!("simulate a failure");
-        })?;
-
-        assert_eq!(
-            env.runtime()
-                .block_on(env.cdn().unwrap().purged_keys())
-                .unwrap(),
-            SurrogateKey::from(WILL_FAIL).into()
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_invalidate_cdn_after_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
-
-        let queue = env.build_queue();
-
-        const WILL_SUCCEED: KrateName = KrateName::from_static("will_succeed");
-        queue.add_crate(&WILL_SUCCEED, &V1, -1, None)?;
-
-        process_next_crate(&env.context, |krate| {
-            assert_eq!(WILL_SUCCEED, krate.name);
-            Ok(BuildPackageSummary::default())
-        })?;
-
-        assert_eq!(
-            env.runtime()
-                .block_on(env.cdn().unwrap().purged_keys())
-                .unwrap(),
-            SurrogateKey::from(WILL_SUCCEED).into()
-        );
 
         Ok(())
     }
@@ -1085,7 +952,7 @@ mod tests {
     async fn test_last_seen_reference_in_db() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         let queue = env.async_build_queue();
         queue.unlock().await?;
         assert!(!queue.is_locked().await?);
@@ -1109,7 +976,7 @@ mod tests {
     async fn test_broken_db_reference_breaks() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")
             .await
             .unwrap();
