@@ -5,12 +5,12 @@ use crate::{
         initialize_build, initialize_crate, initialize_release, update_build_with_error,
         update_crate_data_in_database,
     },
-    docbuilder::Limits,
     error::Result,
     metrics::{BUILD_TIME_HISTOGRAM_BUCKETS, DOCUMENTATION_SIZE_BUCKETS},
     utils::{copy_dir_all, report_error},
 };
 use anyhow::{Context as _, Error, anyhow, bail};
+use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
 use docs_rs_database::{
@@ -25,7 +25,7 @@ use docs_rs_storage::{
     add_path_into_remote_archive, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
     rustdoc_json_path, source_archive_path,
 };
-use docs_rs_types::{BuildId, BuildStatus, CrateId, ReleaseId, Version};
+use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version};
 use docs_rs_utils::{retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use itertools::Itertools as _;
@@ -451,12 +451,13 @@ impl RustwideBuilder {
 
     #[instrument(skip(self))]
     fn get_limits(&self, krate: &str) -> Result<Limits> {
+        let krate: KrateName = krate.parse()?;
         self.runtime.block_on({
             let db = self.db.clone();
             let config = self.config.clone();
             async move {
                 let mut conn = db.get_async().await?;
-                Limits::for_crate(&config, &mut conn, krate).await
+                Limits::for_crate(&config.build_limits, &mut conn, &krate).await
             }
         })
     }

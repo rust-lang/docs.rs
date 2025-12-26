@@ -62,7 +62,6 @@ pub struct Config {
     pub(crate) inside_docker: bool,
     pub(crate) docker_image: Option<String>,
     pub(crate) build_cpu_limit: Option<u32>,
-    pub(crate) build_default_memory_limit: Option<usize>,
     pub(crate) include_default_targets: bool,
     pub(crate) disable_memory_limit: bool,
 
@@ -76,6 +75,7 @@ pub struct Config {
     pub(crate) repository_stats: docs_rs_repository_stats::Config,
     pub(crate) storage: Arc<docs_rs_storage::Config>,
     pub(crate) build_queue: Arc<docs_rs_build_queue::Config>,
+    pub(crate) build_limits: Arc<docs_rs_build_limits::Config>,
 }
 
 impl Config {
@@ -135,7 +135,6 @@ impl Config {
                 maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?.or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
             )
             .build_cpu_limit(maybe_env("DOCSRS_BUILD_CPU_LIMIT")?)
-            .build_default_memory_limit(maybe_env("DOCSRS_BUILD_DEFAULT_MEMORY_LIMIT")?)
             .include_default_targets(env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?)
             .disable_memory_limit(env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?)
             .build_workspace_reinitialization_interval(Duration::from_secs(env(
@@ -152,6 +151,7 @@ impl Config {
             .database(docs_rs_database::Config::from_environment()?)
             .repository_stats(docs_rs_repository_stats::Config::from_environment()?)
             .storage(Arc::new(docs_rs_storage::Config::from_environment()?))
-            .build_queue(Arc::new(docs_rs_build_queue::Config::from_environment()?)))
+            .build_queue(Arc::new(docs_rs_build_queue::Config::from_environment()?))
+            .build_limits(Arc::new(docs_rs_build_limits::Config::from_environment()?)))
     }
 }

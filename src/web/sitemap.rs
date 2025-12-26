@@ -1,7 +1,5 @@
 use crate::{
-    Config,
-    docbuilder::Limits,
-    impl_axum_webpage,
+    Config, impl_axum_webpage,
     utils::report_error,
     web::{
         AxumErrorPage,
@@ -21,6 +19,7 @@ use axum::{
 };
 use axum_extra::{TypedHeader, headers::ContentType};
 use chrono::{TimeZone, Utc};
+use docs_rs_build_limits::Limits;
 use docs_rs_database::service_config::{ConfigName, get_config};
 use docs_rs_mimes as mimes;
 use futures_util::{StreamExt as _, pin_mut};
@@ -175,7 +174,7 @@ pub(crate) async fn about_builds_handler(
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutBuilds {
         rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
-        limits: Limits::new(&config),
+        limits: Limits::new(&config.build_limits),
         active_tab: "builds",
     })
 }

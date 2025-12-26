@@ -13,9 +13,8 @@ pub use self::docbuilder::RustwideBuilder;
 pub use self::index::Index;
 pub use self::web::start_web_server;
 
-pub use docs_rs_utils::{
-    APP_USER_AGENT, BUILD_VERSION, DEFAULT_MAX_TARGETS, RUSTDOC_STATIC_STORAGE_PREFIX,
-};
+pub use docs_rs_build_limits::DEFAULT_MAX_TARGETS;
+pub use docs_rs_utils::{APP_USER_AGENT, BUILD_VERSION, RUSTDOC_STATIC_STORAGE_PREFIX};
 pub use font_awesome_as_a_crate::icons;
 
 pub mod build_queue;
