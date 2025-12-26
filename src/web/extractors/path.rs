@@ -7,7 +7,7 @@ use axum::{
     http::request::Parts,
 };
 use derive_more::Deref;
-use docs_rs_storage::{CompressionAlgorithm, compression_from_file_extension};
+use docs_rs_types::{CompressionAlgorithm, compression_from_file_extension};
 
 /// custom axum `Path` extractor that uses our own AxumNope::BadRequest
 /// as error response instead of a plain text "bad request"

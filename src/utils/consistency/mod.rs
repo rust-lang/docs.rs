@@ -159,7 +159,7 @@ mod tests {
     use sqlx::Row as _;
 
     async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         Ok(sqlx::query_scalar(sql).fetch_one(&mut *conn).await?)
     }
 
@@ -167,7 +167,7 @@ mod tests {
     where
         O: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
     {
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         Ok::<_, anyhow::Error>(
             sqlx::query(sql)
                 .fetch_all(&mut *conn)

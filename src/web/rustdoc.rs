@@ -37,10 +37,10 @@ use docs_rs_cargo_metadata::Dependency;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{
-    AsyncStorage, CompressionAlgorithm, PathNotFoundError, RustdocJsonFormatVersion, StreamingBlob,
-    rustdoc_archive_path, rustdoc_json_path,
+    AsyncStorage, PathNotFoundError, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
+    rustdoc_json_path,
 };
-use docs_rs_types::{KrateName, ReqVersion};
+use docs_rs_types::{CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::{Deserialize, Serialize};
@@ -1040,14 +1040,12 @@ pub(crate) async fn static_asset_handler(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        Config,
-        docbuilder::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json},
-        test::*,
-        web::cache::CachePolicy,
-    };
+    use crate::{Config, test::*, web::cache::CachePolicy};
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
+    use docs_rs_builder::{
+        RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
+    };
     use docs_rs_cargo_metadata::Dependency;
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
@@ -2396,7 +2394,7 @@ mod test {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             // https://stackoverflow.com/questions/18209625/how-do-i-modify-fields-inside-the-new-postgresql-json-datatype
             sqlx::query!(
                     r#"UPDATE releases SET dependencies = dependencies::jsonb #- '{0,2}' WHERE id = $1"#, id.0

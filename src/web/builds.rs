@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn build_list_empty_build() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
 
             let response = env
@@ -510,7 +510,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let limits = Overrides {
                 memory: Some(6 * 1024 * 1024 * 1024),
                 targets: Some(1),

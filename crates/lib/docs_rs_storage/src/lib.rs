@@ -13,9 +13,7 @@ pub(crate) mod types;
 pub(crate) mod utils;
 
 pub use blob::{Blob, BlobUpload, StreamingBlob};
-pub use compression::{
-    CompressionAlgorithm, compress, compress_async, compression_from_file_extension, decompress,
-};
+pub use compression::{compress, compress_async, decompress};
 pub use config::Config;
 pub use errors::{PathNotFoundError, SizeLimitReached};
 pub use file::FileEntry;

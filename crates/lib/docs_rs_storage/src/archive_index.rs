@@ -1,5 +1,6 @@
-use crate::{compression::CompressionAlgorithm, types::FileRange};
+use crate::types::FileRange;
 use anyhow::{Context as _, Result, bail};
+use docs_rs_types::CompressionAlgorithm;
 use itertools::Itertools as _;
 use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};
 use std::{fs, io, path::Path};

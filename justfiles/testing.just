@@ -22,7 +22,7 @@ sqlx-prepare *args: _ensure_db_and_s3_are_running
       {{ args }} \
       -- --all-targets --all-features
 
-  for subcrate in crates/lib/*; do
+  for subcrate in crates/lib/* crates/bin/*; do
     # NOTE: potential optimization: only run this command when `sqlx` 
     # is in the dependencies of the subcrate.
     (cd "${subcrate}" && cargo sqlx prepare \

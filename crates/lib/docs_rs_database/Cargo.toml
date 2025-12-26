@@ -7,15 +7,20 @@ build = "build.rs"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_registry_api= { path = "../docs_rs_registry_api" }
 docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 hex = "0.4.3"
+hostname = "0.4.0"
 opentelemetry = { workspace = true }
 rand = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+slug = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
@@ -23,8 +28,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-rand = { workspace = true }
+docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
+docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
+rand = { workspace = true }
+tempfile = { workspace = true }
 test-case = { workspace = true }
 
 [features]

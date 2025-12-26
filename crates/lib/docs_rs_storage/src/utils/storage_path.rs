@@ -1,8 +1,5 @@
-use crate::{
-    compression::{self, CompressionAlgorithm},
-    types::RustdocJsonFormatVersion,
-};
-use docs_rs_types::Version;
+use crate::types::RustdocJsonFormatVersion;
+use docs_rs_types::{CompressionAlgorithm, Version};
 
 pub fn rustdoc_archive_path(name: &str, version: &Version) -> String {
     format!("rustdoc/{name}/{version}.zip")
@@ -21,7 +18,7 @@ pub fn rustdoc_json_path(
 
     if let Some(alg) = compression_algorithm {
         path.push('.');
-        path.push_str(compression::file_extension_for(alg));
+        path.push_str(alg.file_extension());
     }
 
     path

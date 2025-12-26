@@ -120,7 +120,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let result = load(&mut conn, env.config()).await?;
 
             assert_eq!(

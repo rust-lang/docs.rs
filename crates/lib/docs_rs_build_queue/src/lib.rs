@@ -1,5 +1,6 @@
 mod config;
 mod metrics;
+pub mod priority;
 mod queue;
 mod types;
 

@@ -1,4 +1,5 @@
 use anyhow::{Context as _, Result, bail};
+use docs_rs_context::Config as NewConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -37,10 +38,6 @@ pub struct Config {
     // For unit-tests the number has to be higher.
     pub(crate) random_crate_search_view_size: u32,
 
-    // Where to collect metrics for the metrics initiative.
-    // When empty, we won't collect metrics.
-    pub(crate) compiler_metrics_collection_path: Option<PathBuf>,
-
     // Content Security Policy
     pub(crate) csp_report_only: bool,
 
@@ -54,28 +51,31 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    pub(crate) build_workspace_reinitialization_interval: Duration,
-
-    // Build params
-    pub(crate) rustwide_workspace: PathBuf,
-    pub(crate) temp_dir: PathBuf,
-    pub(crate) inside_docker: bool,
-    pub(crate) docker_image: Option<String>,
-    pub(crate) build_cpu_limit: Option<u32>,
-    pub(crate) include_default_targets: bool,
-    pub(crate) disable_memory_limit: bool,
-
     // automatic rebuild configuration
     pub(crate) max_queued_rebuilds: Option<u16>,
 
-    pub(crate) fastly: docs_rs_fastly::Config,
-    pub(crate) opentelemetry: docs_rs_opentelemetry::Config,
-    pub(crate) registry_api: docs_rs_registry_api::Config,
-    pub(crate) database: docs_rs_database::Config,
-    pub(crate) repository_stats: docs_rs_repository_stats::Config,
+    pub(crate) fastly: Arc<docs_rs_fastly::Config>,
+    pub(crate) opentelemetry: Arc<docs_rs_opentelemetry::Config>,
+    pub(crate) registry_api: Arc<docs_rs_registry_api::Config>,
+    pub(crate) database: Arc<docs_rs_database::Config>,
+    pub(crate) repository_stats: Arc<docs_rs_repository_stats::Config>,
     pub(crate) storage: Arc<docs_rs_storage::Config>,
     pub(crate) build_queue: Arc<docs_rs_build_queue::Config>,
     pub(crate) build_limits: Arc<docs_rs_build_limits::Config>,
+    pub builder: Arc<docs_rs_builder::Config>,
+}
+
+impl From<&Config> for NewConfig {
+    fn from(value: &Config) -> Self {
+        Self {
+            build_queue: Some(value.build_queue.clone()),
+            database: Some(value.database.clone()),
+            storage: Some(value.storage.clone()),
+            registry_api: Some(value.registry_api.clone()),
+            cdn: value.fastly.is_valid().then(|| value.fastly.clone()),
+            repository_stats: Some(value.repository_stats.clone()),
+        }
+    }
 }
 
 impl Config {
@@ -100,7 +100,6 @@ impl Config {
         }
 
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
-        let temp_dir = prefix.join("tmp");
 
         Ok(ConfigBuilder::default()
             .delay_between_registry_fetches(Duration::from_secs(env::<u64>(
@@ -124,34 +123,20 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .compiler_metrics_collection_path(maybe_env("DOCSRS_COMPILER_METRICS_PATH")?)
-            .temp_dir(temp_dir)
-            .rustwide_workspace(env(
-                "DOCSRS_RUSTWIDE_WORKSPACE",
-                PathBuf::from(".workspace"),
-            )?)
-            .inside_docker(env("DOCSRS_DOCKER", false)?)
-            .docker_image(
-                maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?.or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-            )
-            .build_cpu_limit(maybe_env("DOCSRS_BUILD_CPU_LIMIT")?)
-            .include_default_targets(env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?)
-            .disable_memory_limit(env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?)
-            .build_workspace_reinitialization_interval(Duration::from_secs(env(
-                "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
-                86400,
-            )?))
             .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?)
-            .fastly(
+            .fastly(Arc::new(
                 docs_rs_fastly::Config::from_environment()
                     .context("error reading fastly config from environment")?,
-            )
-            .opentelemetry(docs_rs_opentelemetry::Config::from_environment()?)
-            .registry_api(docs_rs_registry_api::Config::from_environment()?)
-            .database(docs_rs_database::Config::from_environment()?)
-            .repository_stats(docs_rs_repository_stats::Config::from_environment()?)
+            ))
+            .opentelemetry(Arc::new(docs_rs_opentelemetry::Config::from_environment()?))
+            .registry_api(Arc::new(docs_rs_registry_api::Config::from_environment()?))
+            .database(Arc::new(docs_rs_database::Config::from_environment()?))
+            .repository_stats(Arc::new(
+                docs_rs_repository_stats::Config::from_environment()?,
+            ))
             .storage(Arc::new(docs_rs_storage::Config::from_environment()?))
             .build_queue(Arc::new(docs_rs_build_queue::Config::from_environment()?))
-            .build_limits(Arc::new(docs_rs_build_limits::Config::from_environment()?)))
+            .build_limits(Arc::new(docs_rs_build_limits::Config::from_environment()?))
+            .builder(Arc::new(docs_rs_builder::Config::from_environment()?)))
     }
 }

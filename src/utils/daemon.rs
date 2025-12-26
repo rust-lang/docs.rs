@@ -3,13 +3,14 @@
 //! This daemon will start web server, track new packages and build them
 
 use crate::{
-    Context, Index, RustwideBuilder,
+    Context, Index,
     build_queue::{get_new_crates, queue_rebuilds},
     metrics::service::OtelServiceMetrics,
-    utils::{queue_builder, report_error},
+    utils::report_error,
     web::start_web_server,
 };
 use anyhow::{Context as _, Error, anyhow};
+use docs_rs_builder::{RustwideBuilder, queue_builder};
 use std::future::Future;
 use std::sync::Arc;
 use std::thread;
@@ -153,13 +154,14 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     }
 
     // build new crates every minute
-    let rustwide_builder = RustwideBuilder::init(&context)?;
+    let builder_config = context.config.builder.clone();
+    let new_context: docs_rs_context::Context = (&*context).into();
+    let new_context = Arc::new(new_context);
+    let rustwide_builder = RustwideBuilder::init(builder_config.clone(), &new_context)?;
+
     thread::Builder::new()
         .name("build queue reader".to_string())
-        .spawn({
-            let context = context.clone();
-            move || queue_builder(&context, rustwide_builder).unwrap()
-        })
+        .spawn(move || queue_builder(&new_context, &builder_config, rustwide_builder).unwrap())
         .unwrap();
 
     start_background_repository_stats_updater(&context)?;

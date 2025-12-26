@@ -1,74 +1,9 @@
 use anyhow::Error;
 use bzip2::read::{BzDecoder, BzEncoder};
+use docs_rs_types::CompressionAlgorithm;
 use flate2::read::{GzDecoder, GzEncoder};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    io::{self, Read},
-};
-use strum::{Display, EnumIter, EnumString, FromRepr};
+use std::io::{self, Read};
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite};
-
-pub type CompressionAlgorithms = HashSet<CompressionAlgorithm>;
-
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Default,
-    EnumString,
-    Display,
-    FromRepr,
-    EnumIter,
-)]
-pub enum CompressionAlgorithm {
-    #[default]
-    Zstd = 0,
-    Bzip2 = 1,
-    Gzip = 2,
-}
-
-impl CompressionAlgorithm {
-    pub fn file_extension(&self) -> &'static str {
-        file_extension_for(*self)
-    }
-}
-
-impl std::convert::TryFrom<i32> for CompressionAlgorithm {
-    type Error = i32;
-    fn try_from(i: i32) -> Result<Self, Self::Error> {
-        if i >= 0 {
-            match Self::from_repr(i as usize) {
-                Some(alg) => Ok(alg),
-                None => Err(i),
-            }
-        } else {
-            Err(i)
-        }
-    }
-}
-
-pub fn file_extension_for(algorithm: CompressionAlgorithm) -> &'static str {
-    match algorithm {
-        CompressionAlgorithm::Zstd => "zst",
-        CompressionAlgorithm::Bzip2 => "bz2",
-        CompressionAlgorithm::Gzip => "gz",
-    }
-}
-
-pub fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm> {
-    match ext {
-        "zst" => Some(CompressionAlgorithm::Zstd),
-        "bz2" => Some(CompressionAlgorithm::Bzip2),
-        "gz" => Some(CompressionAlgorithm::Gzip),
-        _ => None,
-    }
-}
 
 // public for benchmarking
 pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<Vec<u8>, Error> {
@@ -226,21 +161,6 @@ mod tests {
                     .is_some()
             );
         }
-    }
-
-    #[test_case(CompressionAlgorithm::Zstd, "Zstd")]
-    #[test_case(CompressionAlgorithm::Bzip2, "Bzip2")]
-    #[test_case(CompressionAlgorithm::Gzip, "Gzip")]
-    fn test_enum_display(alg: CompressionAlgorithm, expected: &str) {
-        assert_eq!(alg.to_string(), expected);
-    }
-
-    #[test_case(CompressionAlgorithm::Zstd, "zst")]
-    #[test_case(CompressionAlgorithm::Bzip2, "bz2")]
-    #[test_case(CompressionAlgorithm::Gzip, "gz")]
-    fn test_file_extensions(alg: CompressionAlgorithm, expected: &str) {
-        assert_eq!(file_extension_for(alg), expected);
-        assert_eq!(compression_from_file_extension(expected), Some(alg));
     }
 
     #[tokio::test]

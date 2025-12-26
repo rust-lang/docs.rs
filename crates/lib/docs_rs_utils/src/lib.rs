@@ -1,4 +1,6 @@
 pub mod rustc_version;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 use anyhow::{Context as _, Result};
 use std::fmt;

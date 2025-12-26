@@ -621,12 +621,11 @@ impl_axum_webpage! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::docbuilder::DocCoverage;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
     };
     use docs_rs_database::testing::TestDatabase;
-    use docs_rs_types::ReleaseId;
+    use docs_rs_types::{DocCoverage, ReleaseId};
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use serde_json::json;
@@ -645,7 +644,7 @@ mod test {
     }
 
     async fn version(v: Option<&str>, db: &TestDatabase) -> Option<Version> {
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await.unwrap();
         let version = match_version(
             &mut conn,
             "foo",
@@ -964,7 +963,7 @@ mod test {
                 "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
                 release_id.0
             )
-            .execute(&mut *db.async_conn().await)
+            .execute(&mut *db.async_conn().await?)
             .await?;
 
             assert_eq!(version(None, db).await, None);
@@ -1132,7 +1131,7 @@ mod test {
     fn metadata_from_crate() {
         async_wrapper(|env| async move {
             release("0.1.0", &env).await;
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let metadata = MetaData::from_crate(
                 &mut conn,
                 "foo",

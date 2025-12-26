@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn test_partial_build_result() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let (_, build_id) = fake_release_that_failed_before_build(
                 &mut conn,
                 "foo",
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_partial_build_result_plus_default_target_from_previous_build() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let (release_id, build_id) = fake_release_that_failed_before_build(
                 &mut conn,
                 "foo",
@@ -522,7 +522,7 @@ mod tests {
             .create()
             .await?;
 
-        let mut conn = env.async_db().async_conn().await;
+        let mut conn = env.async_db().async_conn().await?;
         let build_id = {
             let ids = build_ids_for_release(&mut conn, rid).await;
             assert_eq!(ids.len(), 1);

@@ -26,9 +26,9 @@ use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
-use log::warn;
 use serde_json::Value;
 use std::sync::Arc;
+use tracing::warn;
 
 // TODO: Add target name and versions
 #[derive(Debug, Clone, PartialEq)]
@@ -417,7 +417,7 @@ pub(crate) async fn crate_details_handler(
 
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
-        Err(e) => warn!("error fetching readme: {:?}", &e),
+        Err(e) => warn!(?e, "error fetching readme"),
     }
 
     let CrateDetails {
@@ -636,13 +636,14 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::update_build_status;
     use crate::test::{
         AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, async_wrapper,
         fake_release_that_failed_before_build,
     };
     use anyhow::Error;
-    use docs_rs_database::{crate_details::releases_for_crate, testing::TestDatabase};
+    use docs_rs_database::{
+        crate_details::releases_for_crate, releases::update_build_status, testing::TestDatabase,
+    };
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_types::KrateName;
     use http::StatusCode;
@@ -721,7 +722,7 @@ mod tests {
         expected_last_successful_build: Option<Version>,
     ) -> Result<(), Error> {
         let version = version.parse::<Version>()?;
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
         let details = crate_details(&mut conn, package, version, None).await;
 
         anyhow::ensure!(
@@ -737,7 +738,7 @@ mod tests {
     fn test_crate_details_documentation_url_is_none_when_url_is_docs_rs() {
         async_wrapper(|env| async move {
             let db = env.async_db();
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
 
             env.fake_release()
                 .await
@@ -961,7 +962,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             let mut details = crate_details(&mut conn, "foo", "0.2.0", None).await;
             for detail in &mut details.releases {
                 detail.release_time = None;
@@ -1135,7 +1136,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", *version, None).await;
                 assert_eq!(
@@ -1172,7 +1173,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1210,7 +1211,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1250,7 +1251,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1284,7 +1285,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             for &version in &["0.0.1", "0.0.2"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1387,7 +1388,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,
@@ -1448,7 +1449,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,
@@ -1472,7 +1473,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await;
+            let mut conn = db.async_conn().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,
@@ -1659,7 +1660,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             sqlx::query!("UPDATE releases SET features = NULL WHERE id = $1", id.0)
                 .execute(&mut *conn)
                 .await?;
@@ -1680,7 +1681,7 @@ mod tests {
     #[test]
     fn test_minimal_failed_release_doesnt_error_features() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
 
             let text_content = env
@@ -1704,7 +1705,7 @@ mod tests {
     #[test]
     fn test_minimal_failed_release_doesnt_error() {
         async_wrapper(|env| async move {
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
 
             let text_content = env
@@ -2088,7 +2089,7 @@ mod tests {
             check_readme("/crate/dummy/0.3.0".into(), "storage readme".into()).await;
             check_readme("/crate/dummy/0.4.0".into(), "storage meread".into()).await;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
             assert!(matches!(
                 details.fetch_readme(env.async_storage()).await,
@@ -2192,7 +2193,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
             sqlx::query!("DELETE FROM builds")
                 .execute(&mut *conn)
                 .await?;
@@ -2223,7 +2224,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
 
             assert_eq!(
                 release_build_status(&mut conn, "dummy", "0.1.0").await,
@@ -2248,7 +2249,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
 
             assert_eq!(
                 release_build_status(&mut conn, "dummy", "0.1.0").await,
@@ -2272,7 +2273,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let mut conn = env.async_db().async_conn().await;
+            let mut conn = env.async_db().async_conn().await?;
 
             assert_eq!(
                 release_build_status(&mut conn, "dummy", "0.1.0").await,

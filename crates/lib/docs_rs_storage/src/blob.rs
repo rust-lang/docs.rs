@@ -1,10 +1,8 @@
-use crate::{
-    compression::{CompressionAlgorithm, wrap_reader_for_decompression},
-    utils::sized_buffer::SizedBuffer,
-};
+use crate::{compression::wrap_reader_for_decompression, utils::sized_buffer::SizedBuffer};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
+use docs_rs_types::CompressionAlgorithm;
 use mime::Mime;
 use std::io;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};

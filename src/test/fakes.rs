@@ -1,20 +1,22 @@
-use crate::{
-    db::{initialize_build, initialize_crate, initialize_release, update_build_status},
-    docbuilder::{DocCoverage, RUSTDOC_JSON_COMPRESSION_ALGORITHMS},
-    error::Result,
-};
+use crate::error::Result;
 use anyhow::{Context, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
+use docs_rs_builder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS;
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
-use docs_rs_database::testing::TestDatabase;
+use docs_rs_database::{
+    releases::{initialize_build, initialize_crate, initialize_release, update_build_status},
+    testing::TestDatabase,
+};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_storage::{
-    AsyncStorage, CompressionAlgorithm, FileEntry, RustdocJsonFormatVersion,
-    add_path_into_database, add_path_into_remote_archive, compress, file_list_to_json,
-    rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+    AsyncStorage, FileEntry, RustdocJsonFormatVersion, add_path_into_database,
+    add_path_into_remote_archive, compress, file_list_to_json, rustdoc_archive_path,
+    rustdoc_json_path, source_archive_path,
 };
-use docs_rs_types::{BuildId, BuildStatus, ReleaseId, Version, VersionReq};
+use docs_rs_types::{
+    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, ReleaseId, Version, VersionReq,
+};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt, iter,
@@ -275,11 +277,6 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub(crate) fn keywords(mut self, keywords: Vec<String>) -> Self {
-        self.package.keywords = keywords;
-        self
-    }
-
     pub(crate) fn add_platform<S: Into<String>>(mut self, platform: S) -> Self {
         let platform = platform.into();
         let name = self.package.targets[0].name.clone();
@@ -500,7 +497,7 @@ impl<'a> FakeRelease<'a> {
             debug!(?files, "uploaded rustdoc files");
         }
 
-        let mut async_conn = db.async_conn().await;
+        let mut async_conn = db.async_conn().await?;
 
         let repository = match self.github_stats {
             Some(stats) => Some(stats.create(&mut async_conn).await?),
@@ -550,11 +547,11 @@ impl<'a> FakeRelease<'a> {
         // Many tests rely on the default-target being linux, so it should not
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
         // non-linux platforms.
-        let mut async_conn = db.async_conn().await;
+        let mut async_conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
         let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
 
-        crate::db::finish_release(
+        docs_rs_database::releases::finish_release(
             &mut async_conn,
             crate_id,
             release_id,
@@ -572,7 +569,7 @@ impl<'a> FakeRelease<'a> {
             24,
         )
         .await?;
-        crate::db::update_crate_data_in_database(
+        docs_rs_database::releases::update_crate_data_in_database(
             &mut async_conn,
             &package.name,
             &self.registry_crate_data,
@@ -584,7 +581,8 @@ impl<'a> FakeRelease<'a> {
                 .await?;
         }
         if let Some(coverage) = self.doc_coverage {
-            crate::db::add_doc_coverage(&mut async_conn, release_id, coverage).await?;
+            docs_rs_database::releases::add_doc_coverage(&mut async_conn, release_id, coverage)
+                .await?;
         }
 
         Ok(release_id)
@@ -685,9 +683,9 @@ impl FakeBuild {
         release_id: ReleaseId,
         default_target: &str,
     ) -> Result<()> {
-        let build_id = crate::db::initialize_build(&mut *conn, release_id).await?;
+        let build_id = docs_rs_database::releases::initialize_build(&mut *conn, release_id).await?;
 
-        crate::db::finish_build(
+        docs_rs_database::releases::finish_build(
             &mut *conn,
             build_id,
             &self.rustc_version,

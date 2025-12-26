@@ -7,9 +7,10 @@
 //! It's recommended that you use the S3 bucket in production to avoid running out of disk space.
 //! However, postgres is still available for testing and backwards compatibility.
 
-use crate::{compression::CompressionAlgorithm, storage::non_blocking::AsyncStorage};
+use crate::storage::non_blocking::AsyncStorage;
 use anyhow::Result;
 use docs_rs_mimes::detect_mime;
+use docs_rs_types::CompressionAlgorithm;
 use mime::Mime;
 use serde_json::Value;
 use std::path::{Path, PathBuf};

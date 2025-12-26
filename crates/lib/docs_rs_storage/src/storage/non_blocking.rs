@@ -5,7 +5,7 @@ use crate::{
     archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION},
     backends::{StorageBackend, StorageBackendMethods, s3::S3Backend},
     blob::{Blob, BlobUpload, StreamingBlob},
-    compression::{CompressionAlgorithm, compress, compress_async},
+    compression::{compress, compress_async},
     errors::PathNotFoundError,
     file::FileEntry,
     metrics::StorageMetrics,
@@ -19,7 +19,7 @@ use anyhow::Result;
 use dashmap::DashMap;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_types::{BuildId, Version};
+use docs_rs_types::{BuildId, CompressionAlgorithm, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::stream::BoxStream;
 use std::{

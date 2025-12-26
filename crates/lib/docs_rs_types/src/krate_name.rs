@@ -24,7 +24,7 @@ use std::{borrow::Cow, io::Write, str::FromStr};
 pub struct KrateName(Cow<'static, str>);
 
 impl KrateName {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub const fn from_static(s: &'static str) -> Self {
         KrateName(Cow::Borrowed(s))
     }

@@ -2,15 +2,18 @@ use anyhow::{Context as _, Result, anyhow};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
-    Config, Context, Index, PackageKind, RustwideBuilder,
+    Config, Context, Index,
     build_queue::{last_seen_reference, queue_rebuilds_faulty_rustdoc, set_last_seen_reference},
     db, start_web_server,
-    utils::{
-        daemon::start_background_service_metric_collector, get_crate_pattern_and_priority,
-        list_crate_priorities, queue_builder, remove_crate_priority, set_crate_priority,
-    },
+    utils::daemon::start_background_service_metric_collector,
 };
 use docs_rs_build_limits::Overrides;
+use docs_rs_build_queue::priority::{
+    get_crate_pattern_and_priority, list_crate_priorities, remove_crate_priority,
+    set_crate_priority,
+};
+use docs_rs_builder::{PackageKind, RustwideBuilder, blacklist, queue_builder};
+use docs_rs_context::Context as NewContext;
 use docs_rs_database::{
     crate_details,
     service_config::{ConfigName, get_config, set_config},
@@ -20,13 +23,11 @@ use docs_rs_types::{CrateId, KrateName, Version};
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
-use tracing_log::LogTracer;
 
 fn main() {
     // set the global log::logger for backwards compatibility
     // through rustwide.
-    rustwide::logging::init_with(LogTracer::new());
-
+    docs_rs_builder::logging::init();
     let guard = docs_rs_logging::init().expect("error initializing logging");
 
     if let Err(err) = CommandLine::parse().handle_args() {
@@ -134,7 +135,13 @@ impl CommandLine {
                 ctx.runtime.block_on(docs_rs::utils::watch_registry(&ctx))?;
             }
             Self::StartBuildServer => {
-                queue_builder(&ctx, RustwideBuilder::init(&ctx)?)?;
+                let builder_config = ctx.config.builder.clone();
+                let new_context = NewContext::from(&ctx);
+                queue_builder(
+                    &new_context,
+                    &builder_config,
+                    RustwideBuilder::init(builder_config.clone(), &new_context)?,
+                )?;
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
@@ -381,7 +388,9 @@ enum BuildSubcommand {
 
 impl BuildSubcommand {
     fn handle_args(self, ctx: Context) -> Result<()> {
-        let rustwide_builder = || -> Result<RustwideBuilder> { RustwideBuilder::init(&ctx) };
+        let rustwide_builder = || -> Result<RustwideBuilder> {
+            RustwideBuilder::init(ctx.config.builder.clone(), &NewContext::from(&ctx))
+        };
 
         match self {
             Self::Crate {
@@ -564,7 +573,12 @@ impl DatabaseSubcommand {
             Self::UpdateCrateRegistryFields { name } => ctx.runtime.block_on(async move {
                 let mut conn = ctx.pool.get_async().await?;
                 let registry_data = ctx.registry_api.get_crate_data(&name).await?;
-                db::update_crate_data_in_database(&mut conn, &name, &registry_data).await
+                docs_rs_database::releases::update_crate_data_in_database(
+                    &mut conn,
+                    &name,
+                    &registry_data,
+                )
+                .await
             })?,
 
             Self::AddDirectory { directory } => {
@@ -691,14 +705,14 @@ enum BlacklistSubcommand {
     Add {
         /// Crate name
         #[arg(name = "CRATE_NAME")]
-        crate_name: String,
+        crate_name: KrateName,
     },
 
     /// Remove a crate from the blacklist
     Remove {
         /// Crate name
         #[arg(name = "CRATE_NAME")]
-        crate_name: String,
+        crate_name: KrateName,
     },
 }
 
@@ -708,18 +722,21 @@ impl BlacklistSubcommand {
             let conn = &mut ctx.pool.get_async().await?;
             match self {
                 Self::List => {
-                    let crates = db::blacklist::list_crates(conn)
+                    let crates: Vec<_> = blacklist::list_crates(conn)
                         .await
-                        .context("failed to list crates on blacklist")?;
+                        .context("failed to list crates on blacklist")?
+                        .into_iter()
+                        .map(|k| k.to_string())
+                        .collect();
 
                     println!("{}", crates.join("\n"));
                 }
 
-                Self::Add { crate_name } => db::blacklist::add_crate(conn, &crate_name)
+                Self::Add { crate_name } => blacklist::add_crate(conn, &crate_name)
                     .await
                     .context("failed to add crate to blacklist")?,
 
-                Self::Remove { crate_name } => db::blacklist::remove_crate(conn, &crate_name)
+                Self::Remove { crate_name } => blacklist::remove_crate(conn, &crate_name)
                     .await
                     .context("failed to remove crate from blacklist")?,
             }

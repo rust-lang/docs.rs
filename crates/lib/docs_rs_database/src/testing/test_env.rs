@@ -75,11 +75,8 @@ impl TestDatabase {
         &self.pool
     }
 
-    pub async fn async_conn(&self) -> AsyncPoolClient {
-        self.pool
-            .get_async()
-            .await
-            .expect("failed to get a connection out of the pool")
+    pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
+        self.pool.get_async().await.map_err(Into::into)
     }
 }
 

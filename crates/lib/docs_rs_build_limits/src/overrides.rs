@@ -22,12 +22,21 @@ macro_rules! row_to_overrides {
 }
 
 impl Overrides {
-    pub async fn all(conn: &mut sqlx::PgConnection) -> Result<Vec<(String, Self)>> {
-        Ok(sqlx::query!("SELECT * FROM sandbox_overrides")
-            .fetch(conn)
-            .map_ok(|row| (row.crate_name, row_to_overrides!(row)))
-            .try_collect()
-            .await?)
+    pub async fn all(conn: &mut sqlx::PgConnection) -> Result<Vec<(KrateName, Self)>> {
+        Ok(sqlx::query!(
+            r#"
+            SELECT
+                crate_name as "crate_name: KrateName",
+                max_memory_bytes,
+                timeout_seconds,
+                max_targets
+            FROM sandbox_overrides
+            "#
+        )
+        .fetch(conn)
+        .map_ok(|row| (row.crate_name, row_to_overrides!(row)))
+        .try_collect()
+        .await?)
     }
 
     pub async fn for_crate(
@@ -86,7 +95,7 @@ impl Overrides {
         Ok(())
     }
 
-    pub async fn remove(conn: &mut sqlx::PgConnection, krate: &str) -> Result<()> {
+    pub async fn remove(conn: &mut sqlx::PgConnection, krate: &KrateName) -> Result<()> {
         sqlx::query!("DELETE FROM sandbox_overrides WHERE crate_name = $1", krate)
             .execute(conn)
             .await?;
@@ -113,7 +122,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieve_overrides() -> Result<()> {
         let db = db().await?;
-        let mut conn = db.async_conn().await;
+        let mut conn = db.async_conn().await?;
 
         let krate = KrateName::from_static("hexponent");
 

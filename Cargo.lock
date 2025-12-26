@@ -1030,6 +1030,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "bon"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebeb9aaf9329dff6ceb65c689ca3db33dbf15f324909c60e4e5eef5701ce31b1"
+dependencies = [
+ "bon-macros",
+ "rustversion",
+]
+
+[[package]]
+name = "bon-macros"
+version = "3.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77e9d642a7e3a318e37c2c9427b5a6a48aa1ad55dcd986f3034ab2239045a645"
+dependencies = [
+ "darling 0.21.3",
+ "ident_case",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.111",
+]
+
+[[package]]
 name = "borsh"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1917,7 +1942,9 @@ dependencies = [
  "derive_more 2.1.0",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
+ "docs_rs_builder",
  "docs_rs_cargo_metadata",
+ "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_fastly",
@@ -1931,19 +1958,16 @@ dependencies = [
  "docs_rs_types",
  "docs_rs_uri",
  "docs_rs_utils",
- "docsrs-metadata",
  "fn-error-context",
  "font-awesome-as-a-crate",
  "futures-util",
  "getrandom 0.3.4",
  "grass",
- "hostname",
  "http 1.4.0",
  "http-body-util",
  "indoc",
  "itertools 0.14.0",
  "kuchikiki",
- "log",
  "lol_html",
  "md5",
  "mime",
@@ -1959,14 +1983,12 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "rustwide",
  "sentry",
  "serde",
  "serde_json",
  "slug",
  "sqlx",
  "syntect",
- "sysinfo",
  "tempfile",
  "test-case",
  "thiserror 2.0.17",
@@ -1978,7 +2000,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-futures",
- "tracing-log",
  "url",
  "walkdir",
 ]
@@ -2009,12 +2030,55 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "docs_rs_types",
+ "docs_rs_utils",
  "futures-util",
  "opentelemetry",
  "pretty_assertions",
  "sqlx",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "docs_rs_builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "docs_rs_build_limits",
+ "docs_rs_build_queue",
+ "docs_rs_cargo_metadata",
+ "docs_rs_context",
+ "docs_rs_database",
+ "docs_rs_env_vars",
+ "docs_rs_fastly",
+ "docs_rs_headers",
+ "docs_rs_logging",
+ "docs_rs_opentelemetry",
+ "docs_rs_registry_api",
+ "docs_rs_repository_stats",
+ "docs_rs_storage",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "docsrs-metadata",
+ "futures-util",
+ "itertools 0.14.0",
+ "log",
+ "opentelemetry",
+ "pretty_assertions",
+ "regex",
+ "rustwide",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sysinfo",
+ "tempfile",
+ "test-case",
+ "thiserror 2.0.17",
+ "tokio",
+ "toml 0.9.10+spec-1.1.0",
+ "tracing",
+ "tracing-log",
 ]
 
 [[package]]
@@ -2030,22 +2094,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_context"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_build_queue",
+ "docs_rs_database",
+ "docs_rs_fastly",
+ "docs_rs_opentelemetry",
+ "docs_rs_registry_api",
+ "docs_rs_repository_stats",
+ "docs_rs_storage",
+ "tokio",
+]
+
+[[package]]
 name = "docs_rs_database"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "docs_rs_cargo_metadata",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
+ "docs_rs_registry_api",
  "docs_rs_types",
+ "docs_rs_utils",
  "futures-util",
  "hex",
+ "hostname",
  "opentelemetry",
  "rand 0.9.2",
  "serde",
  "serde_json",
+ "slug",
  "sqlx",
  "strum",
+ "tempfile",
  "test-case",
  "thiserror 2.0.17",
  "tokio",
@@ -2204,7 +2290,6 @@ dependencies = [
  "mime",
  "opentelemetry",
  "rand 0.9.2",
- "serde",
  "serde_json",
  "sqlx",
  "strum",
@@ -2225,11 +2310,13 @@ dependencies = [
  "anyhow",
  "crates_io_validation",
  "derive_more 2.1.0",
+ "pretty_assertions",
  "semver",
  "serde",
  "serde_json",
  "serde_with",
  "sqlx",
+ "strum",
  "test-case",
  "tokio",
 ]
@@ -6153,6 +6240,16 @@ checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
 dependencies = [
  "diff",
  "yansi",
+]
+
+[[package]]
+name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.111",
 ]
 
 [[package]]

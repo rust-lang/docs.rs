@@ -167,6 +167,7 @@ mod tests {
     use docs_rs_database::testing::TestDatabase;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::{KRATE, V1, V2};
+    use docs_rs_utils::block_on_async_with_conn;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
 
@@ -182,6 +183,12 @@ mod tests {
         queue: BuildQueue,
         metrics: TestMetrics,
         runtime: runtime::Runtime,
+    }
+
+    impl TestEnv {
+        pub(crate) fn runtime(&self) -> &runtime::Runtime {
+            &self.runtime
+        }
     }
 
     fn test_queue(config: Config) -> Result<TestEnv> {
@@ -219,7 +226,7 @@ mod tests {
             delay_between_build_attempts: Duration::from_secs(1),
         })?;
 
-        let queue = env.queue;
+        let queue = &env.queue;
 
         queue.add_crate(&KRATE, &V1, 0, None)?;
 
@@ -234,15 +241,14 @@ mod tests {
             unreachable!();
         })?;
 
-        env.runtime.block_on(async {
+        block_on_async_with_conn!(env, |mut conn| async {
             // fake the build-attempt timestamp so it's older
-            let mut conn = env.db.async_conn().await;
-            sqlx::query!(
+            Ok(sqlx::query!(
                 "UPDATE queue SET last_attempt = $1",
                 Utc::now() - chrono::Duration::try_seconds(60).unwrap()
             )
             .execute(&mut *conn)
-            .await
+            .await?)
         })?;
 
         let mut handled = false;
