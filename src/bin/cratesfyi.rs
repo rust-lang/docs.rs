@@ -4,13 +4,13 @@ use clap::{Parser, Subcommand, ValueEnum};
 use docs_rs::{
     Config, Context, Index, PackageKind, RustwideBuilder,
     build_queue::{last_seen_reference, queue_rebuilds_faulty_rustdoc, set_last_seen_reference},
-    db::{self, Overrides},
-    start_web_server,
+    db, start_web_server,
     utils::{
         daemon::start_background_service_metric_collector, get_crate_pattern_and_priority,
         list_crate_priorities, queue_builder, remove_crate_priority, set_crate_priority,
     },
 };
+use docs_rs_build_limits::Overrides;
 use docs_rs_database::{
     crate_details,
     service_config::{ConfigName, get_config, set_config},
@@ -639,6 +639,7 @@ impl LimitsSubcommand {
 
             match self {
                 Self::Get { crate_name } => {
+                    let crate_name: KrateName = crate_name.parse()?;
                     let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
                     println!("sandbox limit overrides for {crate_name} = {overrides:?}");
                 }
@@ -655,6 +656,7 @@ impl LimitsSubcommand {
                     targets,
                     timeout,
                 } => {
+                    let crate_name: KrateName = crate_name.parse()?;
                     let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
                     println!("previous sandbox limit overrides for {crate_name} = {overrides:?}");
                     let overrides = Overrides {
@@ -669,6 +671,7 @@ impl LimitsSubcommand {
                 }
 
                 Self::Remove { crate_name } => {
+                    let crate_name: KrateName = crate_name.parse()?;
                     let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;
                     println!("previous overrides for {crate_name} = {overrides:?}");
                     Overrides::remove(&mut conn, &crate_name).await?;

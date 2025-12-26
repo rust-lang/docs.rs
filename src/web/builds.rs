@@ -1,7 +1,5 @@
 use crate::{
-    Config,
-    docbuilder::Limits,
-    impl_axum_webpage,
+    Config, impl_axum_webpage,
     web::{
         MetaData,
         cache::CachePolicy,
@@ -20,6 +18,7 @@ use axum_extra::{
 };
 use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
+use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
@@ -87,7 +86,7 @@ pub(crate) async fn build_list_handler(
     Ok(BuildsPage {
         metadata,
         builds: get_builds(&mut conn, params.name(), &version).await?,
-        limits: Limits::for_crate(&config, &mut conn, params.name()).await?,
+        limits: Limits::for_crate(&config.build_limits, &mut conn, params.name()).await?,
         canonical_url: CanonicalUrl::from_uri(
             params
                 .clone()
@@ -213,7 +212,6 @@ async fn get_builds(
 #[cfg(test)]
 mod tests {
     use crate::{
-        db::Overrides,
         test::{
             AxumResponseTestExt, AxumRouterTestExt, FakeBuild, TestEnvironment, V1, V2,
             async_wrapper, fake_release_that_failed_before_build,
@@ -222,6 +220,7 @@ mod tests {
     };
     use anyhow::Result;
     use axum::{body::Body, http::Request};
+    use docs_rs_build_limits::Overrides;
     use docs_rs_types::{BuildStatus, testing::FOO};
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
@@ -517,7 +516,7 @@ mod tests {
                 targets: Some(1),
                 timeout: Some(std::time::Duration::from_secs(2 * 60 * 60)),
             };
-            Overrides::save(&mut conn, "foo", limits).await?;
+            Overrides::save(&mut conn, &FOO, limits).await?;
 
             let page = kuchikiki::parse_html().one(
                 env.web_app()

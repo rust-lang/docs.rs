@@ -56,6 +56,7 @@ url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
 
 [dependencies]
+docs_rs_build_limits = { path = "crates/lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata" }
 docs_rs_database = { path = "crates/lib/docs_rs_database" }
