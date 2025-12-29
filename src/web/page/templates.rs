@@ -156,7 +156,6 @@ pub mod filters {
 
         let mut chosen_time = &TIMES[0];
 
-        let mut value = value;
         for time in &TIMES[1..] {
             if value / 60.0 >= 1.0 {
                 chosen_time = time;
