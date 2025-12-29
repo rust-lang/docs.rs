@@ -22,14 +22,14 @@
                 <div class="pure-menu pure-menu-horizontal">
                     <ul class="pure-menu-list">
                         <li class="pure-menu-item">
-                            <a href="/releases" class="pure-menu-link{% if *tab == "recent" %} pure-menu-active{% endif %}">
+                            <a href="/releases" class="pure-menu-link{% if tab == "recent" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconLeaf.render_solid(false, false, "") }}
                                 <span class="title">Recent</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
-                            <a href="/releases/stars" class="pure-menu-link{% if *tab == "stars" %} pure-menu-active{% endif %}">
+                            <a href="/releases/stars" class="pure-menu-link{% if tab == "stars" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconStar.render_solid(false, false, "") }}
                                 <span class="title">Stars</span>
                             </a>
@@ -37,7 +37,7 @@
 
                         <li class="pure-menu-item">
                             <a href="/releases/recent-failures"
-                                class="pure-menu-link{% if *tab == "recent-failures" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if tab == "recent-failures" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
                                 <span class="title">Recent Failures</span>
                             </a>
@@ -45,7 +45,7 @@
 
                         <li class="pure-menu-item">
                             <a href="/releases/failures"
-                                class="pure-menu-link{% if *tab == "failures" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if tab == "failures" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconStar.render_regular(false, false, "") }}
                                 <span class="title">Failures By Stars</span>
                             </a>
@@ -53,14 +53,14 @@
 
                         <li class="pure-menu-item">
                             <a href="/releases/activity"
-                                class="pure-menu-link{% if *tab == "activity" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if tab == "activity" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconChartLine.render_solid(false, false, "") }}
                                 <span class="title">Activity</span>
                             </a>
                         </li>
 
                         <li class="pure-menu-item">
-                            <a href="/releases/queue" class="pure-menu-link{% if *tab == "queue" %} pure-menu-active{% endif %}">
+                            <a href="/releases/queue" class="pure-menu-link{% if tab == "queue" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconList.render_solid(false, false, "") }}
                                 <span class="title">Queue</span>
                             </a>
@@ -68,7 +68,7 @@
 
                         {%- if !owner.is_empty() -%}
                             <li class="pure-menu-item">
-                                <a href="#" class="pure-menu-link{% if *tab == "owner" %} pure-menu-active{% endif %}">
+                                <a href="#" class="pure-menu-link{% if tab == "owner" %} pure-menu-active{% endif %}">
                                     {{ crate::icons::IconUser.render_solid(false, false, "") }}
                                     <span class="title">{{ owner }}</span>
                                 </a>

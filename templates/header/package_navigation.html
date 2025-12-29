@@ -38,7 +38,7 @@
                     <ul class="pure-menu-list">
                         {# The crate information tab #}
                         <li class="pure-menu-item"><a href="{{ params.crate_details_url() }}"
-                                class="pure-menu-link{% if active_tab == &"crate" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if active_tab == "crate" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconCube.render_solid(false, false, "") }}
                                 <span class="title"> Crate</span>
                             </a>
@@ -47,7 +47,7 @@
                         {# The source view tab #}
                         <li class="pure-menu-item">
                             <a href="{{ params.source_url() }}"
-                                class="pure-menu-link{% if active_tab == &"source" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if active_tab == "source" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconFolderOpen.render_regular(false, false, "") }}
                                 <span class="title"> Source</span>
                             </a>
@@ -56,7 +56,7 @@
                         {# The builds tab #}
                         <li class="pure-menu-item">
                             <a href="{{ params.builds_url() }}"
-                                class="pure-menu-link{% if active_tab == &"builds" %} pure-menu-active{% endif %}">
+                                class="pure-menu-link{% if active_tab == "builds" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconGears.render_solid(false, false, "") }}
                                 <span class="title"> Builds</span>
                             </a>
@@ -65,7 +65,7 @@
                         {# The features tab #}
                         <li class="pure-menu-item">
                             <a href="{{ params.features_url() }}"
-                               class="pure-menu-link{% if active_tab == &"features" %} pure-menu-active{% endif %}">
+                               class="pure-menu-link{% if active_tab == "features" %} pure-menu-active{% endif %}">
                                 {{ crate::icons::IconFlag.render_solid(false, false, "") }}
                                 <span class="title">Feature flags</span>
                             </a>
