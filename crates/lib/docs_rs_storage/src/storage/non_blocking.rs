@@ -54,6 +54,10 @@ impl AsyncStorage {
         })
     }
 
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     #[instrument]
     pub async fn exists(&self, path: &str) -> Result<bool> {
         self.backend.exists(path).await

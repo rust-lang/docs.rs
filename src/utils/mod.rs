@@ -1,9 +1,8 @@
 //! Various utilities for docs.rs
 
-pub use self::daemon::{start_daemon, watch_registry};
+pub use self::daemon::start_daemon;
 pub(crate) use self::html::rewrite_rustdoc_html_stream;
 
-pub mod consistency;
 pub mod daemon;
 mod html;
 

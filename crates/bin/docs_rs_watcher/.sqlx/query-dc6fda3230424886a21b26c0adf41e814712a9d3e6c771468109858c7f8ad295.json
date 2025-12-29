@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            c.name AS \"name: KrateName\",\n            r.version AS \"version: Version\"\n        FROM crates AS c\n        JOIN releases AS r\n            ON c.id = r.crate_id\n        JOIN release_build_status AS rbs\n            ON rbs.rid = r.id\n        JOIN builds AS b\n            ON b.rid = r.id\n            AND b.build_finished = rbs.last_build_time\n            AND b.rustc_nightly_date >= $1\n            AND b.rustc_nightly_date < $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "dc6fda3230424886a21b26c0adf41e814712a9d3e6c771468109858c7f8ad295"
+}

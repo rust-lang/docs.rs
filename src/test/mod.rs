@@ -1,7 +1,7 @@
-mod fakes;
 pub(crate) mod headers;
 
-pub(crate) use self::fakes::{FakeBuild, fake_release_that_failed_before_build};
+pub(crate) use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
+
 use crate::{
     Config, Context,
     config::ConfigBuilder,
@@ -17,6 +17,7 @@ use docs_rs_database::testing::TestDatabase;
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
 use docs_rs_storage::{AsyncStorage, StorageKind, testing::TestStorage};
+use docs_rs_test_fakes::FakeRelease;
 use docs_rs_types::Version;
 use fn_error_context::context;
 use http::{
@@ -30,7 +31,6 @@ use tokio::runtime;
 use tower::ServiceExt;
 
 // testing krate name constants
-pub(crate) const KRATE: &str = "krate";
 // some versions as constants for tests
 pub(crate) const V0_1: Version = Version::new(0, 1, 0);
 pub(crate) const V1: Version = Version::new(1, 0, 0);
@@ -438,7 +438,7 @@ impl TestEnvironment {
         init_logger();
 
         // create index directory
-        fs::create_dir_all(config.registry_index_path.clone())?;
+        fs::create_dir_all(config.watcher.registry_index_path.clone())?;
 
         let test_metrics = TestMetrics::new();
         let test_db = TestDatabase::new(&config.database, test_metrics.provider())
@@ -519,7 +519,7 @@ impl TestEnvironment {
             .expect("could not build axum app")
     }
 
-    pub(crate) async fn fake_release(&self) -> fakes::FakeRelease<'_> {
-        fakes::FakeRelease::new(self.async_db(), self.context.async_storage.clone())
+    pub(crate) async fn fake_release(&self) -> FakeRelease<'_> {
+        FakeRelease::new(self.db.pool().clone(), self.context.async_storage.clone())
     }
 }
