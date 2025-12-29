@@ -24,8 +24,9 @@
 
     <h4 id="setting-a-readme"> <a href="#setting-a-readme">Setting a README</a> </h4>
     <p>
-        The README of a crate is taken from the <code>readme</code> field defined in
-        <code>Cargo.toml</code>. If this field is not set, no README will be displayed.
+        The README displayed on docs.rs follows Cargo’s <code>package.readme</code> rules.
+        If <code>readme</code> is not set, docs.rs will look for <code>README.md</code>, <code>README.txt</code>, or <code>README</code> in the crate root.
+        Set <code>readme = "path/to/file"</code> to use a custom file, <code>readme = true</code> to use <code>README.md</code>, or <code>readme = false</code> to disable the README.
     </p>
 
     <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
