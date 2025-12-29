@@ -8,19 +8,15 @@
 
 pub use self::config::Config;
 pub use self::context::Context;
-pub use self::index::Index;
 pub use self::web::start_web_server;
 
 pub use docs_rs_build_limits::DEFAULT_MAX_TARGETS;
 pub use docs_rs_utils::{APP_USER_AGENT, BUILD_VERSION, RUSTDOC_STATIC_STORAGE_PREFIX};
 pub use font_awesome_as_a_crate::icons;
 
-pub mod build_queue;
 mod config;
 mod context;
-pub mod db;
 mod error;
-pub mod index;
 pub mod metrics;
 #[cfg(test)]
 mod test;

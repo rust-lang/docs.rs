@@ -162,10 +162,15 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-registry-watcher", "0.0.0.0:3000", "--repository-stats-updater=enabled", "--cdn-invalidator=enabled", "--queue-rebuilds=enabled"]
+# copy the new binary, will also be used as default entrypoint.
+COPY --from=build /artifacts/docs_rs_watcher /usr/local/bin/
 
-COPY --from=build /artifacts/cratesfyi /usr/local/bin
+# also copy the old legacy binary, so we can fall back to using it 
+# by just overwriting the entrypoint & CMD when running this container.
+COPY --from=build /artifacts/cratesfyi /usr/local/bin/
+
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_watcher", "--"]
+CMD ["start", "--repository-stats-updater=true", "--queue-rebuilds=true"]
 
 ###############
 #  CLI stage  #

@@ -7,11 +7,6 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 #[builder(pattern = "owned")]
 pub struct Config {
     pub prefix: PathBuf,
-    pub registry_index_path: PathBuf,
-    pub registry_url: Option<String>,
-
-    /// How long to wait between registry checks
-    pub(crate) delay_between_registry_fetches: Duration,
 
     // Access token for APIs for crates.io (careful: use
     // constant_time_eq for comparisons!)
@@ -23,8 +18,6 @@ pub struct Config {
 
     // The most memory that can be used to parse an HTML file
     pub(crate) max_parse_memory: usize,
-    // Time between 'git gc --auto' calls in seconds
-    pub(crate) registry_gc_interval: u64,
 
     /// amount of threads for CPU intensive rendering
     pub(crate) render_threads: usize,
@@ -51,9 +44,6 @@ pub struct Config {
     // This only affects pages that depend on invalidations to work.
     pub(crate) cache_invalidatable_responses: bool,
 
-    // automatic rebuild configuration
-    pub(crate) max_queued_rebuilds: Option<u16>,
-
     pub(crate) fastly: Arc<docs_rs_fastly::Config>,
     pub(crate) opentelemetry: Arc<docs_rs_opentelemetry::Config>,
     pub(crate) registry_api: Arc<docs_rs_registry_api::Config>,
@@ -63,6 +53,7 @@ pub struct Config {
     pub(crate) build_queue: Arc<docs_rs_build_queue::Config>,
     pub(crate) build_limits: Arc<docs_rs_build_limits::Config>,
     pub builder: Arc<docs_rs_builder::Config>,
+    pub watcher: Arc<docs_rs_watcher::Config>,
 }
 
 impl From<&Config> for NewConfig {
@@ -102,18 +93,11 @@ impl Config {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
 
         Ok(ConfigBuilder::default()
-            .delay_between_registry_fetches(Duration::from_secs(env::<u64>(
-                "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
-                60,
-            )?))
-            .registry_index_path(env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?)
-            .registry_url(maybe_env("REGISTRY_URL")?)
             .prefix(prefix.clone())
             .cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
             // LOL HTML only uses as much memory as the size of the start tag!
             // https://github.com/rust-lang/docs.rs/pull/930#issuecomment-667729380
             .max_parse_memory(env("DOCSRS_MAX_PARSE_MEMORY", 5 * 1024 * 1024)?)
-            .registry_gc_interval(env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?)
             .render_threads(env("DOCSRS_RENDER_THREADS", num_cpus::get())?)
             .request_timeout(maybe_env::<u64>("DOCSRS_REQUEST_TIMEOUT")?.map(Duration::from_secs))
             .report_request_timeouts(env("DOCSRS_REPORT_REQUEST_TIMEOUTS", false)?)
@@ -123,7 +107,6 @@ impl Config {
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
             )?)
             .cache_invalidatable_responses(env("DOCSRS_CACHE_INVALIDATEABLE_RESPONSES", true)?)
-            .max_queued_rebuilds(maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?)
             .fastly(Arc::new(
                 docs_rs_fastly::Config::from_environment()
                     .context("error reading fastly config from environment")?,
@@ -137,6 +120,7 @@ impl Config {
             .storage(Arc::new(docs_rs_storage::Config::from_environment()?))
             .build_queue(Arc::new(docs_rs_build_queue::Config::from_environment()?))
             .build_limits(Arc::new(docs_rs_build_limits::Config::from_environment()?))
-            .builder(Arc::new(docs_rs_builder::Config::from_environment()?)))
+            .builder(Arc::new(docs_rs_builder::Config::from_environment()?))
+            .watcher(Arc::new(docs_rs_watcher::Config::from_environment()?)))
     }
 }

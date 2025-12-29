@@ -1,25 +1,21 @@
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
-use docs_rs::{
-    Config, Context, Index,
-    build_queue::{last_seen_reference, queue_rebuilds_faulty_rustdoc, set_last_seen_reference},
-    db, start_web_server,
-    utils::daemon::start_background_service_metric_collector,
-};
+use docs_rs::{Config, Context, start_web_server};
 use docs_rs_build_limits::Overrides;
 use docs_rs_build_queue::priority::{
     get_crate_pattern_and_priority, list_crate_priorities, remove_crate_priority,
     set_crate_priority,
 };
-use docs_rs_builder::{PackageKind, RustwideBuilder, blacklist, queue_builder};
+use docs_rs_builder::{RustwideBuilder, blacklist, queue_builder};
 use docs_rs_context::Context as NewContext;
 use docs_rs_database::{
     crate_details,
-    service_config::{ConfigName, get_config, set_config},
+    service_config::{ConfigName, set_config},
 };
 use docs_rs_storage::add_path_into_database;
 use docs_rs_types::{CrateId, KrateName, Version};
+use docs_rs_watcher::{queue_rebuilds_faulty_rustdoc, start_background_service_metric_collector};
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
@@ -114,29 +110,34 @@ impl CommandLine {
         let config = Config::from_env()?.build()?;
         let runtime = Arc::new(runtime::Builder::new_multi_thread().enable_all().build()?);
         let ctx = runtime.block_on(Context::from_config(config))?;
+        let new_context = Arc::new(NewContext::from(&ctx));
 
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx)?,
             Self::StartRegistryWatcher {
                 repository_stats_updater,
                 queue_rebuilds,
-            } => {
+            } => ctx.runtime.block_on(async move {
                 if repository_stats_updater == Toggle::Enabled {
-                    docs_rs::utils::daemon::start_background_repository_stats_updater(&ctx)?;
+                    docs_rs_watcher::start_background_repository_stats_updater(&new_context)
+                        .await?;
                 }
                 if queue_rebuilds == Toggle::Enabled {
-                    docs_rs::utils::daemon::start_background_queue_rebuild(&ctx)?;
+                    docs_rs_watcher::start_background_queue_rebuild(
+                        ctx.config.watcher.clone(),
+                        &new_context,
+                    )
+                    .await?;
                 }
 
                 // When people run the services separately, we assume that we can collect service
                 // metrics from the registry watcher, which should only run once, and all the time.
-                start_background_service_metric_collector(&ctx)?;
+                start_background_service_metric_collector(&new_context).await?;
 
-                ctx.runtime.block_on(docs_rs::utils::watch_registry(&ctx))?;
-            }
+                docs_rs_watcher::watch_registry(&ctx.config.watcher.clone(), &new_context).await
+            })?,
             Self::StartBuildServer => {
                 let builder_config = ctx.config.builder.clone();
-                let new_context = NewContext::from(&ctx);
                 queue_builder(
                     &new_context,
                     &builder_config,
@@ -185,21 +186,6 @@ enum QueueSubcommand {
         subcommand: PrioritySubcommand,
     },
 
-    /// Get the registry watcher's last seen reference
-    GetLastSeenReference,
-
-    /// Set the registry watcher's last seen reference
-    #[command(arg_required_else_help(true))]
-    SetLastSeenReference {
-        /// The reference to set to, required unless flag used
-        #[arg(conflicts_with("head"))]
-        reference: Option<crates_index_diff::gix::ObjectId>,
-
-        /// Fetch the current HEAD of the remote index and use it
-        #[arg(long, conflicts_with("reference"))]
-        head: bool,
-    },
-
     /// Queue rebuilds for broken nightly versions of rustdoc, either for a single date (start) or a range (start inclusive, end exclusive)
     RebuildBrokenNightly {
         /// Start date of nightly builds to rebuild (inclusive)
@@ -225,41 +211,9 @@ impl QueueSubcommand {
                 &crate_name,
                 &crate_version,
                 build_priority,
-                ctx.config.registry_url.as_deref(),
+                ctx.config.watcher.registry_url.as_deref(),
             )?},
 
-            Self::GetLastSeenReference => {
-                ctx.runtime.block_on(async move {
-                    let mut conn = ctx.pool.get_async().await?;
-                    if let Some(reference) = last_seen_reference(&mut conn).await? {
-                        println!("Last seen reference: {reference}");
-                    } else {
-                        println!("No last seen reference available");
-                    }
-                    Ok::<(), anyhow::Error>(())
-                })?
-            }
-
-            Self::SetLastSeenReference { reference, head } => {
-                ctx.runtime.block_on(async move {
-                let reference = match (reference, head) {
-                    (Some(reference), false) => reference,
-                    (None, true) => {
-                        println!("Fetching changes to set reference to HEAD");
-                        let index = Index::from_config(&ctx.config).await?;
-                        index.latest_commit_reference().await?
-                    }
-                    (_, _) => unreachable!(),
-                };
-
-                let mut conn = ctx.pool.get_async().await?;
-
-                set_last_seen_reference(&mut conn, reference).await?;
-                println!("Set last seen reference: {reference}");
-                    Ok::<(), anyhow::Error>(())
-                })?
-
-            }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx)?,
 
@@ -350,31 +304,6 @@ impl PrioritySubcommand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum BuildSubcommand {
-    /// Builds documentation for a crate
-    Crate {
-        /// Crate name
-        #[arg(name = "CRATE_NAME", requires("CRATE_VERSION"))]
-        crate_name: Option<String>,
-
-        /// Version of crate
-        #[arg(name = "CRATE_VERSION")]
-        crate_version: Option<Version>,
-
-        /// Build a crate at a specific path
-        #[arg(short = 'l', long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
-        local: Option<PathBuf>,
-    },
-
-    /// update the currently installed rustup toolchain
-    UpdateToolchain {
-        /// Update the toolchain only if no toolchain is currently installed
-        #[arg(name = "ONLY_FIRST_TIME", long = "only-first-time")]
-        only_first_time: bool,
-    },
-
-    /// Adds essential files for the installed version of rustc
-    AddEssentialFiles,
-
     SetToolchain {
         toolchain_name: String,
     },
@@ -388,67 +317,7 @@ enum BuildSubcommand {
 
 impl BuildSubcommand {
     fn handle_args(self, ctx: Context) -> Result<()> {
-        let rustwide_builder = || -> Result<RustwideBuilder> {
-            RustwideBuilder::init(ctx.config.builder.clone(), &NewContext::from(&ctx))
-        };
-
         match self {
-            Self::Crate {
-                crate_name,
-                crate_version,
-                local,
-            } => {
-                let mut builder = rustwide_builder()?;
-
-                builder.update_toolchain_and_add_essential_files()?;
-
-                if let Some(path) = local {
-                    builder
-                        .build_local_package(&path)
-                        .context("Building documentation failed")?;
-                } else {
-                    let registry_url = ctx.config.registry_url.as_ref();
-                    builder
-                        .build_package(
-                            &crate_name
-                                .with_context(|| anyhow!("must specify name if not local"))?,
-                            &crate_version
-                                .with_context(|| anyhow!("must specify version if not local"))?,
-                            registry_url
-                                .map(|s| PackageKind::Registry(s.as_str()))
-                                .unwrap_or(PackageKind::CratesIo),
-                            true,
-                        )
-                        .context("Building documentation failed")?;
-                }
-            }
-
-            Self::UpdateToolchain { only_first_time } => {
-                let rustc_version = ctx.runtime.block_on({
-                    let pool = ctx.pool.clone();
-                    async move {
-                        let mut conn = pool
-                            .get_async()
-                            .await
-                            .context("failed to get a database connection")?;
-
-                        get_config::<String>(&mut conn, ConfigName::RustcVersion).await
-                    }
-                })?;
-                if only_first_time && rustc_version.is_some() {
-                    println!("update-toolchain was already called in the past, exiting");
-                    return Ok(());
-                }
-
-                rustwide_builder()?.update_toolchain_and_add_essential_files()?;
-            }
-
-            Self::AddEssentialFiles => {
-                rustwide_builder()?
-                    .add_essential_files()
-                    .context("failed to add essential files")?;
-            }
-
             Self::SetToolchain { toolchain_name } => {
                 ctx.runtime.block_on(async move {
                     let mut conn = ctx
@@ -500,12 +369,6 @@ enum DatabaseSubcommand {
         directory: PathBuf,
     },
 
-    /// Remove documentation from the database
-    Delete {
-        #[command(subcommand)]
-        command: DeleteSubcommand,
-    },
-
     /// Blacklist operations
     Blacklist {
         #[command(subcommand)]
@@ -516,13 +379,6 @@ enum DatabaseSubcommand {
     Limits {
         #[command(subcommand)]
         command: LimitsSubcommand,
-    },
-
-    /// Compares the database with the index and resolves inconsistencies
-    Synchronize {
-        /// Don't actually resolve the inconsistencies, just log them
-        #[arg(long)]
-        dry_run: bool,
     },
 }
 
@@ -591,33 +447,9 @@ impl DatabaseSubcommand {
                     .context("Failed to add directory into database")?;
             }
 
-            Self::Delete {
-                command: DeleteSubcommand::Version { name, version },
-            } => ctx
-                .runtime
-                .block_on(async move {
-                    let mut conn = ctx.pool.get_async().await?;
-                    db::delete_version(&mut conn, &ctx.async_storage, &ctx.config, &name, &version)
-                        .await
-                })
-                .context("failed to delete the version")?,
-            Self::Delete {
-                command: DeleteSubcommand::Crate { name },
-            } => ctx
-                .runtime
-                .block_on(async move {
-                    let mut conn = ctx.pool.get_async().await?;
-                    db::delete_crate(&mut conn, &ctx.async_storage, &ctx.config, &name).await
-                })
-                .context("failed to delete the crate")?,
             Self::Blacklist { command } => command.handle_args(ctx)?,
 
             Self::Limits { command } => command.handle_args(ctx)?,
-
-            Self::Synchronize { dry_run } => {
-                ctx.runtime
-                    .block_on(docs_rs::utils::consistency::run_check(&ctx, dry_run))?;
-            }
         }
         Ok(())
     }

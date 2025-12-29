@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM crate_priorities WHERE pattern = $1 RETURNING priority",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "priority",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cd568b56b5d3e43427218845ee19c4e9d598f61cf18eab47b36205b1aa1be301"
+}
