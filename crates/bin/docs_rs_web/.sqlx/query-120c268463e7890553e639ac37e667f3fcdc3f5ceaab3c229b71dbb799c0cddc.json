@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO compression_rels (release, algorithm)\n             VALUES ($1, $2)\n             ON CONFLICT DO NOTHING;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "120c268463e7890553e639ac37e667f3fcdc3f5ceaab3c229b71dbb799c0cddc"
+}

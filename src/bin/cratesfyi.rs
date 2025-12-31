@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueEnum};
-use docs_rs::{Config, Context, start_web_server};
+use docs_rs::{Config, Context};
 use docs_rs_build_limits::Overrides;
 use docs_rs_build_queue::priority::{
     get_crate_pattern_and_priority, list_crate_priorities, remove_crate_priority,
@@ -16,6 +16,7 @@ use docs_rs_database::{
 use docs_rs_storage::add_path_into_database;
 use docs_rs_types::{CrateId, KrateName, Version};
 use docs_rs_watcher::{queue_rebuilds_faulty_rustdoc, start_background_service_metric_collector};
+use docs_rs_web::run_web_server;
 use futures_util::StreamExt;
 use std::{env, fmt::Write, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::runtime;
@@ -146,7 +147,11 @@ impl CommandLine {
             }
             Self::StartWebServer { socket_addr } => {
                 // Blocks indefinitely
-                start_web_server(Some(socket_addr), &ctx)?;
+                ctx.runtime.block_on(run_web_server(
+                    Some(socket_addr),
+                    ctx.config.web.clone(),
+                    new_context,
+                ))?;
             }
             Self::Daemon { registry_watcher } => {
                 docs_rs::utils::start_daemon(ctx, registry_watcher == Toggle::Enabled)?;
@@ -441,7 +446,7 @@ impl DatabaseSubcommand {
                 ctx.runtime
                     .block_on(add_path_into_database(
                         &ctx.async_storage,
-                        &ctx.config.prefix,
+                        &ctx.config.builder.prefix,
                         directory,
                     ))
                     .context("Failed to add directory into database")?;

@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT login, avatar, kind as \"kind: OwnerKind\"\n             FROM owners\n             INNER JOIN owner_rels ON owner_rels.oid = owners.id\n             WHERE cid = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "avatar",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind: OwnerKind",
+        "type_info": {
+          "Custom": {
+            "name": "owner_kind",
+            "kind": {
+              "Enum": [
+                "user",
+                "team"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d87220d3f4503e99fa17815db0058ab7883bf28f216d5b5fd720c56fd8889eed"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT relname\n             FROM pg_class\n             INNER JOIN pg_namespace ON\n                 pg_class.relnamespace = pg_namespace.oid\n             WHERE pg_class.relkind = 'S'\n                 AND pg_namespace.nspname = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "relname",
+        "type_info": "Name"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Name"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "96b68919f9016705a1a36ef11a5a659e7fb431beb0017fbcfd21132f105ce722"
+}

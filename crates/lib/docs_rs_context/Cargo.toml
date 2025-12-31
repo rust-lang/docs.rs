@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 bon = { workspace = true }
+docs_rs_build_limits  = { path = "../docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../docs_rs_build_queue" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_fastly = { path = "../docs_rs_fastly" }
@@ -14,3 +15,6 @@ docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
 docs_rs_storage = { path = "../docs_rs_storage" }
 tokio = { workspace = true }
+
+[features]
+testing = []

@@ -5,7 +5,6 @@ authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
-build = "build.rs"
 edition = "2024"
 
 [workspace]
@@ -27,7 +26,7 @@ askama = "0.15.1"
 async-stream = "0.3.5"
 axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }
 base64 = "0.22"
-bon = "3.8.1"
+bon = { version = "3.8.1", features = ["experimental-overwritable"] }
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4.0.22", features = [ "derive" ] }
 derive_more = { version = "2.0.0", features = ["display", "deref", "from", "into", "from_str"] }
@@ -66,80 +65,27 @@ walkdir = "2"
 docs_rs_build_limits = { path = "crates/lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue" }
 docs_rs_builder = { path = "crates/bin/docs_rs_builder" }
-docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata" }
 docs_rs_context = { path = "crates/lib/docs_rs_context" }
 docs_rs_database = { path = "crates/lib/docs_rs_database" }
-docs_rs_env_vars = { path = "crates/lib/docs_rs_env_vars" }
 docs_rs_fastly = { path = "crates/lib/docs_rs_fastly" }
-docs_rs_headers = { path = "crates/lib/docs_rs_headers" }
 docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
-docs_rs_mimes = { path = "crates/lib/docs_rs_mimes" }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "crates/lib/docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "crates/lib/docs_rs_repository_stats" }
 docs_rs_storage = { path = "crates/lib/docs_rs_storage" }
 docs_rs_types = { path = "crates/lib/docs_rs_types" }
-docs_rs_uri = { path = "crates/lib/docs_rs_uri" }
 docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
 docs_rs_watcher = { path = "crates/bin/docs_rs_watcher" }
+docs_rs_web = { path = "crates/bin/docs_rs_web" }
 
-sentry = { workspace = true }
-tracing = { workspace = true }
-regex = { workspace = true }
-clap = { workspace = true }
-rayon = { workspace = true }
-num_cpus = "1.15.0"
-reqwest = { workspace = true }
-slug = { workspace = true }
-sqlx = { workspace = true }
-url = { workspace = true }
 anyhow = { workspace = true }
-thiserror = { workspace = true }
-comrak = { version = "0.49.0", default-features = false }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
-toml = { workspace = true }
-opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
-base64 = { workspace = true }
-lol_html = "2.0.0"
-font-awesome-as-a-crate = { path = "crates/lib/font-awesome-as-a-crate" }
-getrandom = "0.3.1"
-itertools = { workspace = true }
-derive_more = { workspace = true }
-derive_builder = "0.20.2"
-
-# Async
-tokio = { workspace = true }
-tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
-tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
-futures-util = { workspace = true }
-async-stream = { workspace = true }
-http = { workspace = true }
-
-# Data serialization and deserialization
-serde = { workspace = true }
-serde_json = { workspace = true }
-postcard = { workspace = true }
-
-# axum dependencies
-axum = { version = "0.8.1", features = ["macros"] }
-axum-extra = { workspace = true }
-tower = "0.5.1"
-tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
-mime = { workspace = true }
-
-fn-error-context = "0.2.0"
-
-# Templating
-askama = { workspace = true }
-walkdir = { workspace = true }
-phf = "0.13.1"
-
-# Date and Time utilities
+tracing = { workspace = true }
 chrono = { workspace = true }
-
-# Transitive dependencies we don't use directly but need to have specific versions of
-constant_time_eq = "0.4.2"
+clap = { workspace = true }
+tokio = { workspace = true }
+derive_builder = "0.20.2"
+futures-util = { workspace = true }
+sqlx = { workspace = true }
 
 [dev-dependencies]
 docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue", features = ["testing"] }
@@ -150,33 +96,11 @@ docs_rs_fastly = { path = "crates/lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_headers = { path = "crates/lib/docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_storage = { path = "crates/lib/docs_rs_storage", features = ["testing"] }
-docs_rs_test_fakes = { path = "crates/lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "crates/lib/docs_rs_types", features = ["testing"] }
 
-kuchikiki = "0.8"
-http-body-util = "0.1.0"
 rand = { workspace = true }
-mockito = { workspace = true }
-test-case = { workspace = true }
 tower = { version = "0.5.1", features = ["util"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
-indoc = "2.0.0"
-pretty_assertions = { workspace = true }
-
-[build-dependencies]
-time = "0.3"
-md5 = "0.8.0"
-phf_codegen = "0.13"
-walkdir = "2"
-anyhow = { version = "1.0.42", features = ["backtrace"] }
-grass = { version = "0.13.1", default-features = false }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "phf", # used in build script output
-    "slug", # used in askama templates, can be moved to web binary
-]
 
 [[bin]]
 name = "cratesfyi"

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT crates.name,\n                    releases.target_name,\n                    MAX(releases.release_time) as \"release_time!\"\n             FROM crates\n             INNER JOIN releases ON releases.crate_id = crates.id\n             WHERE\n                rustdoc_status = true AND\n                crates.name ILIKE $1\n             GROUP BY crates.name, releases.target_name\n             ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "release_time!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "df1c002b7c4f5e2567eeefff56ee51003d90122f83429313966add5b224f5f6c"
+}
