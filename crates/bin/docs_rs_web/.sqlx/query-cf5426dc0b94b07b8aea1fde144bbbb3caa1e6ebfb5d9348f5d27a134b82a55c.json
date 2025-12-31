@@ -1,0 +1,244 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                crates.id AS \"crate_id: CrateId\",\n                releases.id AS \"release_id: ReleaseId\",\n                crates.name as \"name: KrateName\",\n                releases.version,\n                releases.description,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                release_build_status.build_status as \"build_status!: BuildStatus\",\n                -- this is the latest build ID that generated content\n                -- it's used to invalidate some blob storage related caches.\n                builds.id as \"latest_build_id?: BuildId\",\n                releases.rustdoc_status,\n                releases.archive_storage,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                repositories.host as \"repo_host?\",\n                repositories.stars as \"repo_stars?\",\n                repositories.forks as \"repo_forks?\",\n                repositories.issues as \"repo_issues?\",\n                repositories.name as \"repo_name?\",\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                releases.source_size as \"source_size?\",\n                builds.documentation_size as \"documentation_size?\",\n                -- we're using the rustc version here to set the correct CSS file\n                -- in the metadata.\n                -- So we're only interested in successful builds here.\n                builds.rustc_version as \"rustc_version?\",\n                doc_coverage.total_items,\n                doc_coverage.documented_items,\n                doc_coverage.total_items_needing_examples,\n                doc_coverage.items_with_examples\n            FROM releases\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            LEFT JOIN repositories ON releases.repository_id = repositories.id\n            LEFT JOIN LATERAL (\n                 SELECT rustc_version, documentation_size, id\n                 FROM builds\n                 WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = 'success'\n                 ORDER BY builds.build_finished\n                 DESC LIMIT 1\n             ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_id: CrateId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "release_id: ReleaseId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "dependencies",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 6,
+        "name": "readme",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "description_long",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "release_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "latest_build_id?: BuildId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "archive_storage",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "repository_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "homepage_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
+        "name": "keywords",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 16,
+        "name": "have_examples",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "target_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "repo_host?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 19,
+        "name": "repo_stars?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 20,
+        "name": "repo_forks?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
+        "name": "repo_issues?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 22,
+        "name": "repo_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 23,
+        "name": "is_library",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 24,
+        "name": "yanked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 25,
+        "name": "doc_targets",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 26,
+        "name": "license",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 27,
+        "name": "documentation_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 28,
+        "name": "default_target",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 29,
+        "name": "source_size?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 30,
+        "name": "documentation_size?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 31,
+        "name": "rustc_version?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 32,
+        "name": "total_items",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 33,
+        "name": "documented_items",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 34,
+        "name": "total_items_needing_examples",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 35,
+        "name": "items_with_examples",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "cf5426dc0b94b07b8aea1fde144bbbb3caa1e6ebfb5d9348f5d27a134b82a55c"
+}

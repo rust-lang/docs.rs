@@ -40,17 +40,17 @@ impl TestEnvironment {
         Ok(Self {
             config: Arc::new(config),
             context: Context::builder()
+                .with_runtime()
                 .await?
+                .with_meter_provider()?
                 .pool(db_config.into(), db.pool().clone())
                 .storage(storage_config.clone(), test_storage.storage())
-                .with_build_queue()
-                .await?
+                .with_build_queue()?
                 .maybe_cdn(
                     docs_rs_fastly::Config::from_environment()?.into(),
                     Some(Cdn::mock().into()),
                 )
-                .with_repository_stats()
-                .await?
+                .with_repository_stats()?
                 .build()?,
             db,
             storage: test_storage,
