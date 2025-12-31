@@ -97,12 +97,20 @@ RUN apt-get update \
 
 WORKDIR /srv/docsrs
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-web-server", "0.0.0.0:3000"]
+# copy the new binary, will also be used as default entrypoint.
+COPY --from=build /artifacts/docs_rs_web /usr/local/bin/
 
-COPY --from=build /artifacts/cratesfyi /usr/local/bin
-COPY static /srv/docsrs/static
-COPY vendor /srv/docsrs/vendor
+# also copy the old legacy binary, so we can fall back to using it 
+# by just overwriting the entrypoint & CMD when running this container.
+COPY --from=build /artifacts/cratesfyi /usr/local/bin/
+
+# copy necessary assets
+COPY crates/bin/docs_rs_web/static /srv/docsrs/static
+COPY crates/bin/docs_rs_web/vendor /srv/docsrs/vendor
+
+ENTRYPOINT ["/usr/bin/tini"]
+CMD ["/usr/local/bin/docs_rs_web", "--", "0.0.0.0:3000"]
+
 
 ########################
 #  Build server stage  #

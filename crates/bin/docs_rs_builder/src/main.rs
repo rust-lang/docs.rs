@@ -42,19 +42,17 @@ impl CommandLine {
         let config = Arc::new(Config::from_environment()?);
         let ctx = runtime.block_on(async {
             Context::builder()
+                .with_runtime()
                 .await?
+                .with_meter_provider()?
                 .with_pool()
                 .await?
                 .with_storage()
                 .await?
-                .with_cdn()
-                .await?
-                .with_build_queue()
-                .await?
-                .with_registry_api()
-                .await?
-                .with_repository_stats()
-                .await?
+                .with_cdn()?
+                .with_build_queue()?
+                .with_registry_api()?
+                .with_repository_stats()?
                 .build()
         })?;
 

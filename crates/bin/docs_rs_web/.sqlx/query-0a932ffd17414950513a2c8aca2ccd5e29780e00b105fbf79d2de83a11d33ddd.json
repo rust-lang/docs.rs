@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM owner_rels\n         WHERE\n            cid = $1 AND\n            NOT (oid = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a932ffd17414950513a2c8aca2ccd5e29780e00b105fbf79d2de83a11d33ddd"
+}

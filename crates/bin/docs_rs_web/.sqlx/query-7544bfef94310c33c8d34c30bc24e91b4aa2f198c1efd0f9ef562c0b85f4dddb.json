@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO release_build_status(rid, last_build_time, build_status)\n         SELECT\n         summary.id,\n         summary.last_build_time,\n         CASE\n           WHEN summary.success_count > 0 THEN 'success'::build_status\n           WHEN summary.failure_count > 0 THEN 'failure'::build_status\n           ELSE 'in_progress'::build_status\n         END as build_status\n\n         FROM (\n             SELECT\n               r.id,\n               MAX(b.build_finished) as last_build_time,\n               SUM(CASE WHEN b.build_status = 'success' THEN 1 ELSE 0 END) as success_count,\n               SUM(CASE WHEN b.build_status = 'failure' THEN 1 ELSE 0 END) as failure_count\n             FROM\n               releases as r\n               LEFT OUTER JOIN builds AS b on b.rid = r.id\n             WHERE\n               r.id = $1\n             GROUP BY r.id\n         ) as summary\n\n         ON CONFLICT (rid) DO UPDATE\n         SET\n             last_build_time = EXCLUDED.last_build_time,\n             build_status=EXCLUDED.build_status",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7544bfef94310c33c8d34c30bc24e91b4aa2f198c1efd0f9ef562c0b85f4dddb"
+}

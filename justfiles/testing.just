@@ -106,7 +106,12 @@ lint-dependencies:
 
 [group('testing')]
 lint-js *args:
-  deno run -A npm:eslint@9 static templates gui-tests eslint.config.js {{ args }}
+  deno run -A npm:eslint@9 \
+    crates/bin/docs_rs_web/static \
+    crates/bin/docs_rs_web/templates \
+    eslint.config.js \
+    gui-tests \
+    {{ args }}
   
 [group('testing')]
 run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web

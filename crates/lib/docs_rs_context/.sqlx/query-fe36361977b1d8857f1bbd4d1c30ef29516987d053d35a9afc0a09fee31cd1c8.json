@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                crate_name as \"crate_name: KrateName\",\n                max_memory_bytes,\n                timeout_seconds,\n                max_targets\n            FROM sandbox_overrides\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_name: KrateName",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "max_memory_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "timeout_seconds",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "max_targets",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "fe36361977b1d8857f1bbd4d1c30ef29516987d053d35a9afc0a09fee31cd1c8"
+}

@@ -12,19 +12,18 @@ use tokio::runtime;
 
 #[derive(bon::Builder)]
 #[builder(
-    start_fn(name = builder_internal, vis = "",),
     finish_fn(name = build_internal, vis = "",),
     on(_, into)
 )]
 pub struct Context {
-    #[builder(start_fn)]
-    pub runtime: runtime::Handle,
-
-    #[builder(start_fn)]
-    pub meter_provider: AnyMeterProvider,
-
     #[builder(field)]
     pub config: Config,
+
+    #[builder(getter)]
+    pub runtime: runtime::Handle,
+
+    #[builder(getter)]
+    pub meter_provider: AnyMeterProvider,
 
     #[builder(getter, setters(vis = "", name = pool_internal))]
     pub pool: Option<Pool>,
@@ -49,25 +48,9 @@ pub struct Context {
     pub repository_stats: Option<Arc<RepositoryStatsUpdater>>,
 }
 
-// builder
-impl Context {
-    pub async fn builder() -> Result<ContextBuilder> {
-        // this method is async to make it clear to the caller that
-        // it needs the runtime context.
-        Context::builder_with_runtime(runtime::Handle::try_current()?)
-    }
-
-    pub fn builder_with_runtime(runtime: runtime::Handle) -> Result<ContextBuilder> {
-        Ok(Context::builder_internal(
-            runtime,
-            get_meter_provider(&docs_rs_opentelemetry::Config::from_environment()?)?,
-        ))
-    }
-}
-
 use context_builder::{
     IsComplete, IsSet, IsUnset, SetBlockingBuildQueue, SetBlockingStorage, SetBuildQueue, SetCdn,
-    SetPool, SetRegistryApi, SetRepositoryStats, SetStorage, State,
+    SetMeterProvider, SetPool, SetRegistryApi, SetRepositoryStats, SetRuntime, SetStorage, State,
 };
 
 impl<S: State> ContextBuilder<S> {
@@ -111,8 +94,20 @@ impl<S: State> ContextBuilder<S> {
         Ok(ctx)
     }
 
-    fn meter_provider(&self) -> &AnyMeterProvider {
-        &self.meter_provider
+    pub async fn with_runtime(self) -> Result<ContextBuilder<SetRuntime<S>>>
+    where
+        S::Runtime: IsUnset,
+    {
+        Ok(self.runtime(runtime::Handle::try_current()?))
+    }
+
+    pub fn with_meter_provider(self) -> Result<ContextBuilder<SetMeterProvider<S>>>
+    where
+        S::MeterProvider: IsUnset,
+    {
+        Ok(self.meter_provider(get_meter_provider(
+            &docs_rs_opentelemetry::Config::from_environment()?,
+        )?))
     }
 
     pub fn pool(
@@ -129,10 +124,11 @@ impl<S: State> ContextBuilder<S> {
 
     pub async fn with_pool(self) -> Result<ContextBuilder<SetPool<S>>>
     where
+        S::MeterProvider: IsSet,
         S::Pool: IsUnset,
     {
         let config = Arc::new(docs_rs_database::Config::from_environment()?);
-        let pool = Pool::new(&config, self.meter_provider()).await?;
+        let pool = Pool::new(&config, self.get_meter_provider()).await?;
         Ok(self.pool(config, pool))
     }
 
@@ -142,22 +138,25 @@ impl<S: State> ContextBuilder<S> {
         storage: Arc<AsyncStorage>,
     ) -> ContextBuilder<SetBlockingStorage<SetStorage<S>>>
     where
+        S::Runtime: IsSet,
         S::Storage: IsUnset,
         S::BlockingStorage: IsUnset,
     {
         self.config.storage = Some(config);
-        let blocking_storage = Arc::new(Storage::new(storage.clone(), self.runtime.clone()));
+        let blocking_storage = Arc::new(Storage::new(storage.clone(), self.get_runtime().clone()));
         self.storage_internal(storage.clone())
             .blocking_storage_internal(blocking_storage)
     }
 
     pub async fn with_storage(self) -> Result<ContextBuilder<SetBlockingStorage<SetStorage<S>>>>
     where
+        S::Runtime: IsSet,
+        S::MeterProvider: IsSet,
         S::Storage: IsUnset,
         S::BlockingStorage: IsUnset,
     {
         let config = Arc::new(docs_rs_storage::Config::from_environment()?);
-        let storage = Arc::new(AsyncStorage::new(config.clone(), self.meter_provider()).await?);
+        let storage = Arc::new(AsyncStorage::new(config.clone(), self.get_meter_provider()).await?);
         Ok(self.storage(config, storage))
     }
 
@@ -173,14 +172,18 @@ impl<S: State> ContextBuilder<S> {
         self.maybe_cdn_internal(cdn)
     }
 
-    pub async fn with_cdn(self) -> Result<ContextBuilder<SetCdn<S>>>
+    pub fn with_cdn(self) -> Result<ContextBuilder<SetCdn<S>>>
     where
+        S::MeterProvider: IsSet,
         S::Cdn: IsUnset,
     {
         let config = Arc::new(docs_rs_fastly::Config::from_environment()?);
 
         let cdn = if config.is_valid() {
-            Some(Arc::new(Cdn::from_config(&config, self.meter_provider())?))
+            Some(Arc::new(Cdn::from_config(
+                &config,
+                self.get_meter_provider(),
+            )?))
         } else {
             None
         };
@@ -194,19 +197,20 @@ impl<S: State> ContextBuilder<S> {
         build_queue: Arc<AsyncBuildQueue>,
     ) -> ContextBuilder<SetBlockingBuildQueue<SetBuildQueue<S>>>
     where
+        S::Runtime: IsSet,
         S::BuildQueue: IsUnset,
         S::BlockingBuildQueue: IsUnset,
     {
         self.config.build_queue = Some(config);
-        let blocking_build_queue = BuildQueue::new(self.runtime.clone(), build_queue.clone());
+        let blocking_build_queue = BuildQueue::new(self.get_runtime().clone(), build_queue.clone());
         self.build_queue_internal(build_queue.clone())
             .blocking_build_queue_internal(Arc::new(blocking_build_queue))
     }
 
-    pub async fn with_build_queue(
-        self,
-    ) -> Result<ContextBuilder<SetBlockingBuildQueue<SetBuildQueue<S>>>>
+    pub fn with_build_queue(self) -> Result<ContextBuilder<SetBlockingBuildQueue<SetBuildQueue<S>>>>
     where
+        S::Runtime: IsSet,
+        S::MeterProvider: IsSet,
         S::Pool: IsSet,
         S::BuildQueue: IsUnset,
         S::BlockingBuildQueue: IsUnset,
@@ -217,7 +221,7 @@ impl<S: State> ContextBuilder<S> {
         let build_queue = Arc::new(AsyncBuildQueue::new(
             pool.clone(),
             config.clone(),
-            self.meter_provider(),
+            self.get_meter_provider(),
         ));
 
         Ok(self.build_queue(config, build_queue))
@@ -235,7 +239,7 @@ impl<S: State> ContextBuilder<S> {
         self.registry_api_internal(registry_api)
     }
 
-    pub async fn with_registry_api(self) -> Result<ContextBuilder<SetRegistryApi<S>>>
+    pub fn with_registry_api(self) -> Result<ContextBuilder<SetRegistryApi<S>>>
     where
         S::RegistryApi: IsUnset,
     {
@@ -257,7 +261,7 @@ impl<S: State> ContextBuilder<S> {
         self.repository_stats_internal(repository_stats)
     }
 
-    pub async fn with_repository_stats(self) -> Result<ContextBuilder<SetRepositoryStats<S>>>
+    pub fn with_repository_stats(self) -> Result<ContextBuilder<SetRepositoryStats<S>>>
     where
         S::Pool: IsSet,
         S::RepositoryStats: IsUnset,
@@ -268,6 +272,16 @@ impl<S: State> ContextBuilder<S> {
         let updater = RepositoryStatsUpdater::new(&config, pool.clone());
 
         Ok(self.repository_stats(config, updater.into()))
+    }
+
+    pub fn build_limits(mut self, config: Arc<docs_rs_build_limits::Config>) -> ContextBuilder<S> {
+        self.config.build_limits = Some(config);
+        self
+    }
+
+    pub fn with_build_limits(self) -> Result<ContextBuilder<S>> {
+        let config = docs_rs_build_limits::Config::from_environment()?;
+        Ok(self.build_limits(config.into()))
     }
 }
 
