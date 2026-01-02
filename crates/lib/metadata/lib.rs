@@ -155,7 +155,7 @@ impl Metadata {
     /// See <https://github.com/rust-lang/docs.rs/issues/2710>.
     pub fn unstable_cargo_flags(&self) -> Vec<String> {
         let mut flags = Vec::new();
-        let mut iter = self.cargo_args.iter().peekable();
+        let mut iter = self.cargo_args.iter();
         while let Some(arg) = iter.next() {
             if arg.starts_with("-Z") {
                 if arg == "-Z" {
