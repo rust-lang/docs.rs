@@ -52,17 +52,16 @@ impl CommandLine {
     async fn handle_args(self) -> Result<()> {
         let config = Arc::new(Config::from_environment()?);
         let ctx = Context::builder()
+            .with_runtime()
             .await?
+            .with_meter_provider()?
             .with_pool()
             .await?
             .with_storage()
             .await?
-            .with_cdn()
-            .await?
-            .with_build_queue()
-            .await?
-            .with_repository_stats()
-            .await?
+            .with_cdn()?
+            .with_build_queue()?
+            .with_repository_stats()?
             .build()?;
 
         match self {

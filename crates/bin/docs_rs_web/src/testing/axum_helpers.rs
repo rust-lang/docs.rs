@@ -1,0 +1,369 @@
+use crate::{Config, cache};
+use anyhow::{Context as _, Result, anyhow};
+use axum::body::Bytes;
+use axum::{body::Body, http::Request, response::Response as AxumResponse};
+use axum_extra::headers::{ETag, HeaderMapExt as _};
+use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
+use http::{
+    HeaderMap, HeaderName, HeaderValue, StatusCode,
+    header::{CACHE_CONTROL, CONTENT_TYPE},
+};
+use http_body_util::BodyExt;
+use serde::de::DeserializeOwned;
+use std::{collections::HashMap, panic};
+use tower::ServiceExt;
+
+pub(crate) fn assert_cache_headers_eq(
+    response: &axum::response::Response,
+    expected_headers: &cache::ResponseCacheHeaders,
+) {
+    assert_eq!(
+        expected_headers.cache_control.as_ref(),
+        response.headers().get(CACHE_CONTROL),
+        "cache control header mismatch"
+    );
+    assert_eq!(
+        expected_headers.surrogate_control.as_ref(),
+        response.headers().get(&SURROGATE_CONTROL),
+        "surrogate control header mismatch"
+    );
+    assert_eq!(
+        expected_headers.surrogate_keys.as_ref(),
+        response.headers().typed_get::<SurrogateKeys>().as_ref(),
+        "surrogate key header mismatch"
+    );
+}
+
+pub(crate) trait AxumResponseTestExt {
+    async fn text(self) -> Result<String>;
+    async fn bytes(self) -> Result<Bytes>;
+    async fn json<T: DeserializeOwned>(self) -> Result<T>;
+    fn redirect_target(&self) -> Option<&str>;
+    fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config);
+    fn error_for_status(self) -> Result<Self>
+    where
+        Self: Sized;
+}
+
+impl AxumResponseTestExt for axum::response::Response {
+    async fn text(self) -> Result<String> {
+        Ok(String::from_utf8_lossy(&(self.bytes().await?)).to_string())
+    }
+    async fn bytes(self) -> Result<Bytes> {
+        Ok(self.into_body().collect().await?.to_bytes())
+    }
+    async fn json<T: DeserializeOwned>(self) -> Result<T> {
+        let body = self.text().await?;
+        Ok(serde_json::from_str(&body)?)
+    }
+    fn redirect_target(&self) -> Option<&str> {
+        self.headers().get("Location")?.to_str().ok()
+    }
+    fn assert_cache_control(&self, cache_policy: cache::CachePolicy, config: &Config) {
+        assert!(config.cache_control_stale_while_revalidate.is_some());
+
+        // This method is only about asserting if the handler did set the right _policy_.
+        assert_cache_headers_eq(self, &cache_policy.render(config).unwrap());
+    }
+
+    fn error_for_status(self) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let status = self.status();
+        if status.is_client_error() || status.is_server_error() {
+            anyhow::bail!("got status code {}", status);
+        } else {
+            Ok(self)
+        }
+    }
+}
+
+pub(crate) trait AxumRouterTestExt {
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap);
+    async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_cached_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse>;
+    async fn assert_not_found(&self, path: &str) -> Result<()>;
+    async fn assert_conditional_get(
+        &self,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
+    ) -> Result<()>;
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()>;
+
+    async fn assert_success_cached(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse>;
+    async fn assert_success(&self, path: &str) -> Result<AxumResponse>;
+    async fn get(&self, path: &str) -> Result<AxumResponse>;
+    async fn post(&self, path: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_common(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse>;
+    async fn assert_redirect(&self, path: &str, expected_target: &str) -> Result<AxumResponse>;
+    async fn assert_redirect_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse>;
+    async fn assert_redirect_cached(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse>;
+}
+
+impl AxumRouterTestExt for axum::Router {
+    /// Make sure that a URL returns a status code between 200-299
+    async fn assert_success(&self, path: &str) -> Result<AxumResponse> {
+        let response = self.get(path).await?;
+
+        let status = response.status();
+        if status.is_redirection() {
+            panic!(
+                "expected success response from {path}, got redirect ({status}) to {:?}",
+                response.redirect_target()
+            );
+        }
+        if status.is_success() {
+            Ok(response)
+        } else {
+            let body = response.text().await?;
+            panic!("failed to GET {path}: {status}\n{body}");
+        }
+    }
+
+    async fn assert_conditional_get(
+        &self,
+        initial_path: &str,
+        uncached_response: &AxumResponse,
+    ) -> Result<()> {
+        let etag: ETag = uncached_response
+            .headers()
+            .typed_get()
+            .ok_or_else(|| anyhow!("missing ETag header"))?;
+
+        let if_none_match = IfNoneMatch::from(etag.clone());
+
+        // general rule:
+        //
+        // if a header influences how any client or intermediate proxy should treat the response,
+        // it should be repeated on the 304 response.
+        //
+        // This logic assumes _all_ headers have to be repeated, except for a few known ones.
+        const NON_CACHE_HEADERS: &[&HeaderName] = &[&CONTENT_TYPE];
+
+        // store original headers, to assert that they are repeated on the 304 response.
+        let original_headers: HashMap<HeaderName, HeaderValue> = uncached_response
+            .headers()
+            .iter()
+            .filter(|(k, _)| !NON_CACHE_HEADERS.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        {
+            let cached_response = self
+                .get_with_headers(initial_path, |headers| {
+                    headers.typed_insert(if_none_match);
+                })
+                .await?;
+            assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+
+            // most headers are repeated on the 304 response.
+            let cached_response_headers: HashMap<HeaderName, HeaderValue> = cached_response
+                .headers()
+                .iter()
+                .filter_map(|(k, v)| {
+                    if original_headers.contains_key(k) {
+                        Some((k.clone(), v.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            assert_eq!(original_headers, cached_response_headers);
+        }
+        Ok(())
+    }
+
+    async fn assert_success_and_conditional_get(&self, path: &str) -> Result<()> {
+        self.assert_conditional_get(path, &self.assert_success(path).await?)
+            .await
+    }
+
+    async fn assert_not_found(&self, path: &str) -> Result<()> {
+        let response = self.get(path).await?;
+
+        // for now, 404s should always have `no-cache`
+        assert_cache_headers_eq(&response, &cache::NO_CACHING);
+
+        assert_eq!(response.status(), 404, "GET {path} should have been a 404");
+        Ok(())
+    }
+
+    async fn assert_success_cached(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse> {
+        let response = self.get(path).await?;
+        let status = response.status();
+        assert!(
+            status.is_success(),
+            "failed to GET {path}: {status} (redirect: {})",
+            response.redirect_target().unwrap_or_default()
+        );
+        response.assert_cache_control(cache_policy, config);
+        Ok(response)
+    }
+
+    async fn get(&self, path: &str) -> Result<AxumResponse> {
+        Ok(self
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn get_with_headers<F>(&self, path: &str, f: F) -> Result<AxumResponse>
+    where
+        F: FnOnce(&mut HeaderMap),
+    {
+        let mut builder = Request::builder().uri(path);
+        f(builder.headers_mut().unwrap());
+
+        Ok(self
+            .clone()
+            .oneshot(builder.body(Body::empty()).unwrap())
+            .await?)
+    }
+
+    async fn get_and_follow_redirects(&self, path: &str) -> Result<AxumResponse> {
+        let mut path = path.to_owned();
+        for _ in 0..=10 {
+            let response = self.get(&path).await?;
+            if response.status().is_redirection()
+                && let Some(target) = response.redirect_target()
+            {
+                path = target.to_owned();
+                continue;
+            }
+            return Ok(response);
+        }
+        panic!("redirect loop");
+    }
+
+    async fn post(&self, path: &str) -> Result<AxumResponse> {
+        Ok(self
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await?)
+    }
+
+    async fn assert_redirect_common(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse> {
+        let response = self.get(path).await?;
+        let status = response.status();
+        if !status.is_redirection() {
+            anyhow::bail!("non-redirect from GET {path}: {status}");
+        }
+
+        let redirect_target = response
+            .redirect_target()
+            .context("missing 'Location' header")?;
+
+        // FIXME: not sure we need this
+        // if !expected_target.starts_with("http") {
+        //     // TODO: Should be able to use Url::make_relative,
+        //     // but https://github.com/servo/rust-url/issues/766
+        //     let base = format!("http://{}", web.server_addr());
+        //     redirect_target = redirect_target
+        //         .strip_prefix(&base)
+        //         .unwrap_or(redirect_target);
+        // }
+
+        if redirect_target != expected_target {
+            anyhow::bail!(
+                "got redirect to `{redirect_target}`, expected redirect to `{expected_target}`",
+            );
+        }
+
+        Ok(response)
+    }
+
+    async fn assert_redirect(&self, path: &str, expected_target: &str) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+
+        let response = self.get(expected_target).await?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to GET {expected_target}: {status}");
+        }
+
+        Ok(redirect_response)
+    }
+
+    async fn assert_redirect_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+    ) -> Result<AxumResponse> {
+        self.assert_redirect_common(path, expected_target).await
+    }
+
+    async fn assert_redirect_cached(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+        redirect_response.assert_cache_control(cache_policy, config);
+
+        let response = self.get(expected_target).await?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to GET {expected_target}: {status}");
+        }
+
+        Ok(redirect_response)
+    }
+
+    async fn assert_redirect_cached_unchecked(
+        &self,
+        path: &str,
+        expected_target: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<AxumResponse> {
+        let redirect_response = self.assert_redirect_common(path, expected_target).await?;
+        redirect_response.assert_cache_control(cache_policy, config);
+        Ok(redirect_response)
+    }
+}

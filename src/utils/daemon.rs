@@ -2,7 +2,7 @@
 //!
 //! This daemon will start web server, track new packages and build them
 
-use crate::{Context, web::start_web_server};
+use crate::Context;
 use anyhow::{Error, anyhow};
 use docs_rs_builder::{RustwideBuilder, queue_builder};
 use docs_rs_context::Context as NewContext;
@@ -10,6 +10,7 @@ use docs_rs_watcher::{
     start_background_queue_rebuild, start_background_repository_stats_updater,
     start_background_service_metric_collector, watch_registry,
 };
+use docs_rs_web::run_web_server;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -39,8 +40,15 @@ pub fn start_daemon(context: Context, enable_registry_watcher: bool) -> Result<(
     // Please check with an administrator before changing this (see #1172 for context).
     info!("Starting web server");
     let webserver_thread = thread::spawn({
+        let new_context = new_context.clone();
         let context = context.clone();
-        move || start_web_server(None, &context)
+        move || {
+            context.runtime.block_on(run_web_server(
+                None,
+                context.config.web.clone(),
+                new_context,
+            ))
+        }
     });
 
     if enable_registry_watcher {

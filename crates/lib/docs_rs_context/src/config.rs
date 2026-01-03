@@ -9,6 +9,7 @@ pub struct Config {
     pub registry_api: Option<Arc<docs_rs_registry_api::Config>>,
     pub cdn: Option<Arc<docs_rs_fastly::Config>>,
     pub repository_stats: Option<Arc<docs_rs_repository_stats::Config>>,
+    pub build_limits: Option<Arc<docs_rs_build_limits::Config>>,
 }
 
 impl Config {
@@ -49,6 +50,14 @@ impl Config {
             Ok(cdn)
         } else {
             Err(anyhow!("cdn config is missing"))
+        }
+    }
+
+    pub fn build_limits(&self) -> Result<&Arc<docs_rs_build_limits::Config>> {
+        if let Some(ref build_limits) = self.build_limits {
+            Ok(build_limits)
+        } else {
+            Err(anyhow!("build limits config is missing"))
         }
     }
 

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pattern, priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pattern",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "priority",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "90ff19a8b5452159a09930f450d614fd5f516c362bb2c195bcbea917775b9b54"
+}

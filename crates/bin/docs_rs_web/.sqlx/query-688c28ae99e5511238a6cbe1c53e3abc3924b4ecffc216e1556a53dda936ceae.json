@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blacklisted_crates (crate_name) VALUES ($1);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "688c28ae99e5511238a6cbe1c53e3abc3924b4ecffc216e1556a53dda936ceae"
+}
