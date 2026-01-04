@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_invalidate_cdn_after_error() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
         let queue = env.blocking_build_queue()?;
 
         let builder_metrics = BuilderMetrics::new(env.context.meter_provider());
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_invalidate_cdn_after_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
         let queue = env.blocking_build_queue()?;
         let builder_metrics = BuilderMetrics::new(env.context.meter_provider());
 

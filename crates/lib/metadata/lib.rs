@@ -146,6 +146,34 @@ pub struct Metadata {
     additional_targets: Vec<String>,
 }
 
+impl Metadata {
+    /// Return unstable cargo flags (`-Z*`) from `cargo_args`.
+    ///
+    /// These flags need to be passed to all cargo invocations (e.g., `cargo metadata`,
+    /// `cargo fetch`) to support unstable features like `bindeps`.
+    ///
+    /// See <https://github.com/rust-lang/docs.rs/issues/2710>.
+    pub fn unstable_cargo_flags(&self) -> Vec<String> {
+        let mut flags = Vec::new();
+        let mut iter = self.cargo_args.iter();
+        while let Some(arg) = iter.next() {
+            if arg.starts_with("-Z") {
+                if arg == "-Z" {
+                    // `-Z bindeps` style (two separate args)
+                    if let Some(value) = iter.next() {
+                        flags.push("-Z".to_string());
+                        flags.push(value.clone());
+                    }
+                } else {
+                    // `-Zbindeps` style (single arg)
+                    flags.push(arg.clone());
+                }
+            }
+        }
+        flags
+    }
+}
+
 /// The targets that should be built for a crate.
 ///
 /// The `default_target` is the target to be used as the home page for that crate.
@@ -521,6 +549,56 @@ mod test_parsing {
         let metadata = Metadata::from_str(manifest).unwrap();
         assert!(!metadata.proc_macro);
     }
+
+    #[test]
+    fn test_unstable_cargo_flags() {
+        // Test `-Zbindeps` style (single arg)
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Zbindeps", "--some-other-arg"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
+
+        // Test `-Z bindeps` style (two separate args)
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Z", "bindeps", "--other"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
+
+        // Test multiple unstable flags
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Zbindeps", "-Z", "build-std", "--offline"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(
+            metadata.unstable_cargo_flags(),
+            vec!["-Zbindeps", "-Z", "build-std"]
+        );
+
+        // Test no unstable flags
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["--offline", "--locked"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.unstable_cargo_flags().is_empty());
+
+        // Test empty cargo-args
+        let metadata = Metadata::default();
+        assert!(metadata.unstable_cargo_flags().is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -859,11 +937,8 @@ mod test_calculations {
         let metadata = Metadata::from_str(manifest).unwrap();
         assert_eq!(metadata.cargo_args, vec!["-Zbindeps"]);
 
-        // The problem: these unstable flags should be extracted and passed
-        // to cargo metadata/fetch, but currently they are only used in cargo rustdoc.
-        // This causes builds to fail for crates using bindeps.
-        // FIXME: After fix, unstable_cargo_flags() should return ["-Zbindeps"]
-        // assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
+        // After fix: unstable_cargo_flags() correctly extracts and returns the flags
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
     }
 
     #[test]
@@ -879,7 +954,7 @@ mod test_calculations {
         let metadata = Metadata::from_str(manifest).unwrap();
         assert_eq!(metadata.cargo_args, vec!["-Z", "bindeps"]);
 
-        // FIXME: After fix, unstable_cargo_flags() should return ["-Z", "bindeps"]
-        // assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
+        // After fix: unstable_cargo_flags() correctly extracts and returns the flags
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
     }
 }

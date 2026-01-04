@@ -114,9 +114,16 @@ fn load_metadata_from_rustwide(
     workspace: &Workspace,
     toolchain: &Toolchain,
     source_dir: &Path,
+    unstable_flags: &[String],
 ) -> Result<CargoMetadata> {
+    let mut args = vec!["metadata", "--format-version", "1"];
+    // Add unstable flags (e.g., `-Z bindeps`) to support crates using unstable cargo features.
+    // See https://github.com/rust-lang/docs.rs/issues/2710
+    let unstable_flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
+    args.extend(unstable_flags_refs);
+
     let res = Command::new(workspace, toolchain.cargo())
-        .args(&["metadata", "--format-version", "1"])
+        .args(&args)
         .cd(source_dir)
         .log_output(false)
         .run_capture()?;
@@ -500,10 +507,15 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = load_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
-            .map_err(|err| {
-                err.context(format!("failed to load local package {}", path.display()))
-            })?;
+        // Read docsrs metadata first to get unstable cargo flags (e.g., `-Z bindeps`)
+        let docsrs_metadata = Metadata::from_crate_root(path).unwrap_or_default();
+        let unstable_flags = docsrs_metadata.unstable_cargo_flags();
+
+        let metadata =
+            load_metadata_from_rustwide(&self.workspace, &self.toolchain, path, &unstable_flags)
+                .map_err(|err| {
+                    err.context(format!("failed to load local package {}", path.display()))
+                })?;
         let package = metadata.root();
         self.build_package(
             &package.name,
@@ -686,18 +698,28 @@ impl RustwideBuilder {
                 if !res.result.successful && cargo_lock.exists() {
                     info!("removing lockfile and reattempting build");
                     std::fs::remove_file(cargo_lock)?;
+
+                    // Get unstable cargo flags for commands that need them (e.g., `-Z bindeps`)
+                    let unstable_flags = metadata.unstable_cargo_flags();
+
                     {
                         let _span = info_span!("cargo_generate_lockfile").entered();
+                        let mut args = vec!["generate-lockfile"];
+                        let flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
+                        args.extend(flags_refs.iter());
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
-                            .args(&["generate-lockfile"])
+                            .args(&args)
                             .run_capture()?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
+                        let mut args = vec!["fetch", "--locked"];
+                        let flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
+                        args.extend(flags_refs.iter());
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
-                            .args(&["fetch", "--locked"])
+                            .args(&args)
                             .run_capture()?;
                     }
                     res =
@@ -1108,6 +1130,7 @@ impl RustwideBuilder {
             &self.workspace,
             &self.toolchain,
             &build.host_source_dir(),
+            &metadata.unstable_cargo_flags(),
         )?;
 
         let mut rustdoc_flags = vec![
@@ -1421,7 +1444,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_crate() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = DUMMY_CRATE_NAME;
         let crate_path = crate_.replace('-', "_");
@@ -1641,7 +1664,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_binary_crate() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // some binary crate
         let crate_ = "heater";
@@ -1703,7 +1726,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_failed_build_with_existing_successful_release() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // rand 0.8.5 fails to build with recent nightly versions
         // https://github.com/rust-lang/docs.rs/issues/26750
@@ -1800,7 +1823,7 @@ mod tests {
     #[test_case("thiserror-impl", Version::new(1, 0, 26))]
     #[ignore]
     fn test_proc_macro(crate_: &str, version: Version) -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -1826,7 +1849,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_cross_compile_non_host_default() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "windows-win";
         let version = Version::new(2, 4, 1);
@@ -1927,7 +1950,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_rustflags_are_passed_to_build_script() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "proc-macro2";
         let version = Version::new(1, 0, 95);
@@ -1944,7 +1967,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_sources_are_added_even_for_build_failures_before_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // https://github.com/rust-lang/docs.rs/issues/2523
         // package with invalid cargo metadata.
@@ -1975,7 +1998,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_failures_before_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // https://github.com/rust-lang/docs.rs/issues/2491
         // package without Cargo.toml, so fails directly in the fetch stage.
@@ -2021,7 +2044,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_implicit_features_for_optional_dependencies() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "serde";
         let version = Version::new(1, 0, 152);
@@ -2046,7 +2069,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2075,7 +2098,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_std() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2090,7 +2113,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_workspace_reinitialize_at_once() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2133,7 +2156,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_new_builder_detects_existing_rustc() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2183,7 +2206,7 @@ mod tests {
             );
         }
 
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2229,54 +2252,33 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // This test demonstrates the issue - it will fail without the fix
-    fn test_bindeps_crate_fails_without_unstable_flags() -> Result<()> {
-        // This test demonstrates issue #2710: crates using unstable cargo features
-        // like `bindeps` fail to build because the unstable flags from `cargo-args`
-        // are not passed to `cargo metadata` and `cargo fetch` commands.
+    #[ignore] // Requires full build environment
+    fn test_bindeps_crate_builds_with_unstable_flags() -> Result<()> {
+        // This test verifies that the fix for issue #2710 works: crates using
+        // unstable cargo features like `bindeps` can now build because the unstable
+        // flags from `cargo-args` are correctly passed to `cargo metadata` and
+        // `cargo fetch` commands.
         //
-        // The test crate has `cargo-args = ["-Zbindeps"]` in its Cargo.toml,
-        // but `load_metadata_from_rustwide` doesn't accept these flags,
-        // causing `cargo metadata` to fail.
-        //
-        // Without the fix: This test will fail because cargo metadata fails
-        // With the fix: This test should pass
+        // The test crate has `cargo-args = ["-Zbindeps"]` in its Cargo.toml.
+        // With the fix, `load_metadata_from_rustwide` accepts unstable flags and
+        // passes them to `cargo metadata`, allowing the build to succeed.
 
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
-        // This should fail without the fix because cargo metadata is called
-        // without the `-Zbindeps` flag, even though it's in cargo-args
+        // With the fix, cargo metadata is called with the `-Zbindeps` flag
+        // from cargo-args, allowing the build to succeed
         let result = builder.build_local_package(Path::new("tests/crates/bindeps-test"));
 
-        // Without fix: this will fail (demonstrating the issue)
-        // With fix: this should succeed
-        assert!(
-            result.is_err(),
-            "build should fail without unstable flags fix - this demonstrates issue #2710"
-        );
+        assert!(result.is_ok(), "build should succeed with bindeps fix");
+        if let Ok(summary) = result {
+            assert!(
+                summary.successful,
+                "build should be successful with bindeps fix"
+            );
+        }
 
         Ok(())
-    }
-
-    #[test]
-    fn test_load_metadata_signature_doesnt_accept_unstable_flags() {
-        // This test demonstrates the problem: `load_metadata_from_rustwide`
-        // doesn't accept unstable flags parameter, so flags from `cargo-args`
-        // cannot be passed to `cargo metadata`.
-        //
-        // Current signature: load_metadata_from_rustwide(workspace, toolchain, source_dir)
-        // Needed signature: load_metadata_from_rustwide(workspace, toolchain, source_dir, unstable_flags)
-        //
-        // This is a compile-time check - the function signature doesn't allow
-        // passing unstable flags, which is the root cause of issue #2710.
-        //
-        // FIXME: After fix, this test should be updated to verify that
-        // unstable flags ARE passed to cargo metadata.
-
-        // This test just documents the problem - the actual fix requires
-        // changing the function signature to accept unstable_flags parameter
-        assert!(true, "This test documents the problem - see issue #2710");
     }
 }
