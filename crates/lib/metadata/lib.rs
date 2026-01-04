@@ -843,4 +843,43 @@ mod test_calculations {
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
     }
+
+    #[test]
+    fn test_bindeps_cargo_args_parsing() {
+        use std::str::FromStr;
+        // Test that cargo-args with -Zbindeps is correctly parsed.
+        // This test demonstrates the issue: these flags are parsed but not
+        // passed to cargo metadata/fetch commands (see #2710).
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Zbindeps"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.cargo_args, vec!["-Zbindeps"]);
+
+        // The problem: these unstable flags should be extracted and passed
+        // to cargo metadata/fetch, but currently they are only used in cargo rustdoc.
+        // This causes builds to fail for crates using bindeps.
+        // FIXME: After fix, unstable_cargo_flags() should return ["-Zbindeps"]
+        // assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
+    }
+
+    #[test]
+    fn test_bindeps_separate_args_parsing() {
+        use std::str::FromStr;
+        // Test -Z bindeps style (two separate args)
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Z", "bindeps"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.cargo_args, vec!["-Z", "bindeps"]);
+
+        // FIXME: After fix, unstable_cargo_flags() should return ["-Z", "bindeps"]
+        // assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
+    }
 }

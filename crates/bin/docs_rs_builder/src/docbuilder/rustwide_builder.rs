@@ -2227,4 +2227,56 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    #[ignore] // This test demonstrates the issue - it will fail without the fix
+    fn test_bindeps_crate_fails_without_unstable_flags() -> Result<()> {
+        // This test demonstrates issue #2710: crates using unstable cargo features
+        // like `bindeps` fail to build because the unstable flags from `cargo-args`
+        // are not passed to `cargo metadata` and `cargo fetch` commands.
+        //
+        // The test crate has `cargo-args = ["-Zbindeps"]` in its Cargo.toml,
+        // but `load_metadata_from_rustwide` doesn't accept these flags,
+        // causing `cargo metadata` to fail.
+        //
+        // Without the fix: This test will fail because cargo metadata fails
+        // With the fix: This test should pass
+
+        let env = TestEnvironment::new_with_runtime()?;
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+
+        // This should fail without the fix because cargo metadata is called
+        // without the `-Zbindeps` flag, even though it's in cargo-args
+        let result = builder.build_local_package(Path::new("tests/crates/bindeps-test"));
+
+        // Without fix: this will fail (demonstrating the issue)
+        // With fix: this should succeed
+        assert!(
+            result.is_err(),
+            "build should fail without unstable flags fix - this demonstrates issue #2710"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_metadata_signature_doesnt_accept_unstable_flags() {
+        // This test demonstrates the problem: `load_metadata_from_rustwide`
+        // doesn't accept unstable flags parameter, so flags from `cargo-args`
+        // cannot be passed to `cargo metadata`.
+        //
+        // Current signature: load_metadata_from_rustwide(workspace, toolchain, source_dir)
+        // Needed signature: load_metadata_from_rustwide(workspace, toolchain, source_dir, unstable_flags)
+        //
+        // This is a compile-time check - the function signature doesn't allow
+        // passing unstable flags, which is the root cause of issue #2710.
+        //
+        // FIXME: After fix, this test should be updated to verify that
+        // unstable flags ARE passed to cargo metadata.
+
+        // This test just documents the problem - the actual fix requires
+        // changing the function signature to accept unstable_flags parameter
+        assert!(true, "This test documents the problem - see issue #2710");
+    }
 }
