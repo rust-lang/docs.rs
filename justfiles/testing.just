@@ -92,17 +92,33 @@ lint: format lint-dependencies
   fi
 
 [group('testing')]
-lint-dependencies:
+[arg("udeps", long="udeps")]
+lint-dependencies udeps="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+
   # check unused deps with cargo machete is fast, 
   # but has many false positives. 
   # While it can also recurse into subdirs, it would 
   # also stumble onto our broken crates in `/tests/crates/*`, 
   # where I also don't want to add machete-metadata.
-  @fd \
+  fd \
     --glob 'Cargo.toml' \
     --type file \
     --exclude tests \
     -X cargo machete {}
+
+  # optionally check unused deps with cargo udeps.
+  # Optional, since udeps is much slower because it 
+  # needs to additionally compile the workspace with nightly
+
+  if [ "{{ udeps }}" = "true" ]; then
+    echo "check for unused normal dependencies"
+    cargo +nightly udeps --workspace
+
+    echo "check for unused dev dependencies"
+    cargo +nightly udeps --workspace --all-targets
+  fi
 
 [group('testing')]
 lint-js *args:

@@ -2390,7 +2390,6 @@ dependencies = [
  "docs_rs_utils",
  "futures-util",
  "itertools 0.14.0",
- "mockito",
  "opentelemetry",
  "pretty_assertions",
  "rayon",

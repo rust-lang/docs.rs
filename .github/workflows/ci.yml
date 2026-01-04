@@ -110,14 +110,16 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,fd-find,cargo-machete
+          tool: just,fd-find,cargo-machete,cargo-udeps
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: ${{ env.RUST_CACHE_KEY }}
+          prefix-key: linters-${{ env.RUST_CACHE_KEY }}
 
-      - run: just lint lint-dependencies
+      - run: |
+          just lint
+          just lint-dependencies --udeps=true
 
   lint-js:
     name: js linters
