@@ -34,6 +34,5 @@ docs_rs_fastly = { path = "../../lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
-mockito = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
