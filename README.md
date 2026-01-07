@@ -28,8 +28,6 @@ The recommended way to develop docs.rs is a combination of `cargo run` for
 the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
 This gives you reasonable incremental build times without having to add new users and packages to your host machine.
 
-```
-
 ### Dependencies
 
 Docs.rs requires at least the following native C dependencies.
