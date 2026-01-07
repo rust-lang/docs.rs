@@ -1,0 +1,19 @@
+[package]
+name = "cratesfyi"
+version = "0.6.0"
+authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+docs_rs_builder = { path = "../docs_rs_builder" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
+docs_rs_utils = { path = "../../lib/docs_rs_utils" }
+docs_rs_watcher = { path = "../docs_rs_watcher" }
+docs_rs_web = { path = "../docs_rs_web" }
+tokio = { workspace = true }
+tracing = { workspace = true }

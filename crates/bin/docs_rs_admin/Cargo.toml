@@ -1,0 +1,24 @@
+[package]
+name = "docs_rs_admin"
+version = "0.6.0"
+authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
+docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
+docs_rs_builder = { path = "../docs_rs_builder" }
+docs_rs_watcher = { path = "../docs_rs_watcher" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
+docs_rs_database = { path = "../../lib/docs_rs_database" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
+docs_rs_types = { path = "../../lib/docs_rs_types" }
+docs_rs_utils = { path = "../../lib/docs_rs_utils" }
+futures-util = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }

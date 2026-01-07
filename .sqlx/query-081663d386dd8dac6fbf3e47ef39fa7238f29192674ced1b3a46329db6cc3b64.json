@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    kw.name as \"name!\",\n                    kw.slug as \"slug!\"\n                 FROM keywords as kw\n                 INNER JOIN keyword_rels as kwr on kw.id = kwr.kid\n                 WHERE kwr.rid = $1\n                 ORDER BY kw.name,kw.slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "slug!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "081663d386dd8dac6fbf3e47ef39fa7238f29192674ced1b3a46329db6cc3b64"
+}

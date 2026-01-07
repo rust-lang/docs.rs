@@ -1,6 +1,8 @@
 use docs_rs_env_vars::{env, maybe_env};
 use url::Url;
 
+const FASTLY_API_HOST: &str = "https://api.fastly.com";
+
 #[derive(Debug)]
 pub struct Config {
     /// Fastly API host, typically only overwritten for testing
@@ -16,13 +18,26 @@ pub struct Config {
 impl Config {
     pub fn from_environment() -> anyhow::Result<Self> {
         Ok(Self {
-            api_host: env(
-                "DOCSRS_FASTLY_API_HOST",
-                "https://api.fastly.com".parse().unwrap(),
-            )?,
+            api_host: env("DOCSRS_FASTLY_API_HOST", FASTLY_API_HOST.parse().unwrap())?,
             api_token: maybe_env("DOCSRS_FASTLY_API_TOKEN")?,
             service_sid: maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?,
         })
+    }
+
+    /// test config
+    /// assumes we're using the mock CDN, but generates a config where
+    /// `is_valid` is true.`
+    #[cfg(any(test, feature = "testing"))]
+    pub fn test_config() -> Self {
+        let cfg = Self {
+            api_host: FASTLY_API_HOST.parse().unwrap(),
+            api_token: Some("some_token".into()),
+            service_sid: Some("some_sid".into()),
+        };
+
+        debug_assert!(cfg.is_valid());
+
+        cfg
     }
 
     pub fn is_valid(&self) -> bool {

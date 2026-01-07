@@ -204,6 +204,8 @@ RUN apt-get update \
 
 WORKDIR /srv/docsrs
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-
+COPY --from=build /artifacts/docs_rs_admin /usr/local/bin/
 COPY --from=build /artifacts/cratesfyi /usr/local/bin
+
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_admin", "--"]
+

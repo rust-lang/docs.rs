@@ -1,0 +1,87 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             releases.id as \"id: ReleaseId\",\n             releases.version as \"version: Version\",\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.release_time,\n             releases.target_name,\n             releases.default_target,\n             releases.doc_targets\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             releases.crate_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ReleaseId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "yanked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_library",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "release_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "target_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "default_target",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "doc_targets",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4894c7d8c4e354dca1d952362b2e0cb25441e8e65b273e01ed86d2d3ecebfe84"
+}

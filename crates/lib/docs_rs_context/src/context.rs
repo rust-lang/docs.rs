@@ -172,7 +172,7 @@ impl<S: State> ContextBuilder<S> {
         self.maybe_cdn_internal(cdn)
     }
 
-    pub fn with_cdn(self) -> Result<ContextBuilder<SetCdn<S>>>
+    pub fn with_maybe_cdn(self) -> Result<ContextBuilder<SetCdn<S>>>
     where
         S::MeterProvider: IsSet,
         S::Cdn: IsUnset,
@@ -347,12 +347,12 @@ impl Context {
         }
     }
 
-    pub fn cdn(&self) -> Result<&Arc<Cdn>> {
-        if let Some(ref cdn) = self.cdn {
-            Ok(cdn)
-        } else {
-            Err(anyhow!("CDN is not initialized"))
-        }
+    /// return configured CDN or None.
+    ///
+    /// Compared to other parts of the context, the CDN is truly optional
+    /// and all code using it must handle the None case.
+    pub fn cdn(&self) -> Option<&Arc<Cdn>> {
+        self.cdn.as_ref()
     }
 
     pub fn repository_stats(&self) -> Result<&Arc<RepositoryStatsUpdater>> {

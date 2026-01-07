@@ -55,8 +55,10 @@ impl TestEnvironment {
                     .pool(db_config.into(), db.pool().clone())
                     .storage(storage_config.clone(), test_storage.storage())
                     .with_build_queue()?
+                    .with_registry_api()?
+                    .with_repository_stats()?
                     .maybe_cdn(
-                        docs_rs_fastly::Config::from_environment()?.into(),
+                        Arc::new(docs_rs_fastly::Config::test_config()),
                         Some(Cdn::mock().into()),
                     )
                     .build()
@@ -76,8 +78,8 @@ impl TestEnvironment {
         self.context.blocking_storage()
     }
 
-    pub(crate) fn cdn(&self) -> Result<&Arc<Cdn>> {
-        self.context.cdn()
+    pub(crate) fn cdn(&self) -> &Arc<Cdn> {
+        self.context.cdn().expect("we always have a CDN in tests")
     }
 
     pub(crate) fn blocking_build_queue(&self) -> Result<&Arc<BuildQueue>> {

@@ -59,7 +59,7 @@ impl CommandLine {
             .await?
             .with_storage()
             .await?
-            .with_cdn()?
+            .with_maybe_cdn()?
             .with_build_queue()?
             .with_repository_stats()?
             .build()?;

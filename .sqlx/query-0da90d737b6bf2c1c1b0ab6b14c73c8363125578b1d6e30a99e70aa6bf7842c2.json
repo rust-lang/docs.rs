@@ -1,0 +1,57 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                rustc_version,\n                docsrs_version,\n                build_status as \"build_status: BuildStatus\",\n                documentation_size,\n                errors\n                FROM builds\n                WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rustc_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "docsrs_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "build_status: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "documentation_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "errors",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0da90d737b6bf2c1c1b0ab6b14c73c8363125578b1d6e30a99e70aa6bf7842c2"
+}
