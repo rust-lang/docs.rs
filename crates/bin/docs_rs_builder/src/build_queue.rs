@@ -15,7 +15,7 @@ fn process_next_crate(
     f: impl FnOnce(&QueuedCrate) -> Result<BuildPackageSummary>,
 ) -> Result<()> {
     let queue = context.blocking_build_queue()?.clone();
-    let cdn = context.cdn()?;
+    let cdn = context.cdn();
     let runtime = context.runtime().clone();
     let queue_config = context.config().build_queue()?;
 
@@ -30,7 +30,9 @@ fn process_next_crate(
 
         builder_metrics.total_builds.add(1, &[]);
 
-        runtime.block_on(cdn.queue_crate_invalidation(&to_process.name))?;
+        if let Some(cdn) = cdn {
+            runtime.block_on(cdn.queue_crate_invalidation(&to_process.name))?;
+        }
 
         res
     })?;
@@ -104,9 +106,7 @@ mod tests {
         })?;
 
         assert_eq!(
-            env.runtime()
-                .block_on(env.cdn().unwrap().purged_keys())
-                .unwrap(),
+            env.runtime().block_on(env.cdn().purged_keys()).unwrap(),
             SurrogateKey::from(WILL_FAIL).into()
         );
 
@@ -128,9 +128,7 @@ mod tests {
         })?;
 
         assert_eq!(
-            env.runtime()
-                .block_on(env.cdn().unwrap().purged_keys())
-                .unwrap(),
+            env.runtime().block_on(env.cdn().purged_keys()).unwrap(),
             SurrogateKey::from(WILL_SUCCEED).into()
         );
 

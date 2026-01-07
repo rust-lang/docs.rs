@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO keyword_rels (rid, kid)\n        SELECT $1 as rid, id as kid\n        FROM keywords\n        WHERE slug = ANY($2)\n        ON CONFLICT DO NOTHING;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3aac87e4968ad4d83991de6b4ec164c44f00495b3a9a2e9b5ae460697a19278f"
+}

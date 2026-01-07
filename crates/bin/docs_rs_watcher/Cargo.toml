@@ -1,6 +1,9 @@
 [package]
 name = "docs_rs_watcher"
-version = "0.1.0"
+version = "0.6.0"
+authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [dependencies]

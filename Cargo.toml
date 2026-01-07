@@ -1,23 +1,25 @@
-[package]
-name = "docs-rs"
-version = "0.6.0"
-authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
-readme = "README.md"
-license = "MIT"
-repository = "https://github.com/rust-lang/docs.rs"
-edition = "2024"
-
 [workspace]
 resolver = "2" 
+
 members = [
     "crates/bin/*",
     "crates/lib/*",
 ]
+
+default-members = [
+  "crates/bin/docs_rs_admin",
+  "crates/bin/docs_rs_builder",
+  "crates/bin/docs_rs_watcher",
+  "crates/bin/docs_rs_web",
+]
+
 exclude = [
-    "ignored",
-    "tests",
-    ".workspace",
     ".rustwide-docker",
+    ".workspace",
+    "crates/bin/docs_rs_builder/.rustwide-docker",
+    "crates/bin/docs_rs_builder/.workspace",
+    "crates/bin/docs_rs_builder/tests/crates",
+    "ignored",
 ]
 
 [workspace.dependencies]
@@ -60,49 +62,3 @@ toml = "0.9.2"
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
-
-[dependencies]
-docs_rs_build_limits = { path = "crates/lib/docs_rs_build_limits" }
-docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue" }
-docs_rs_builder = { path = "crates/bin/docs_rs_builder" }
-docs_rs_context = { path = "crates/lib/docs_rs_context" }
-docs_rs_database = { path = "crates/lib/docs_rs_database" }
-docs_rs_fastly = { path = "crates/lib/docs_rs_fastly" }
-docs_rs_logging = { path = "crates/lib/docs_rs_logging" }
-docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry" }
-docs_rs_registry_api = { path = "crates/lib/docs_rs_registry_api" }
-docs_rs_repository_stats = { path = "crates/lib/docs_rs_repository_stats" }
-docs_rs_storage = { path = "crates/lib/docs_rs_storage" }
-docs_rs_types = { path = "crates/lib/docs_rs_types" }
-docs_rs_utils = { path = "crates/lib/docs_rs_utils" }
-docs_rs_watcher = { path = "crates/bin/docs_rs_watcher" }
-docs_rs_web = { path = "crates/bin/docs_rs_web" }
-
-anyhow = { workspace = true }
-tracing = { workspace = true }
-chrono = { workspace = true }
-clap = { workspace = true }
-tokio = { workspace = true }
-derive_builder = "0.20.2"
-futures-util = { workspace = true }
-sqlx = { workspace = true }
-
-[dev-dependencies]
-docs_rs_build_queue = { path = "crates/lib/docs_rs_build_queue", features = ["testing"] }
-docs_rs_builder = { path = "crates/bin/docs_rs_builder", features = ["testing"] }
-docs_rs_cargo_metadata = { path = "crates/lib/docs_rs_cargo_metadata", features = ["testing"] }
-docs_rs_database = { path = "crates/lib/docs_rs_database", features = ["testing"] }
-docs_rs_fastly = { path = "crates/lib/docs_rs_fastly", features = ["testing"] }
-docs_rs_headers = { path = "crates/lib/docs_rs_headers", features = ["testing"] }
-docs_rs_opentelemetry = { path = "crates/lib/docs_rs_opentelemetry", features = ["testing"] }
-docs_rs_storage = { path = "crates/lib/docs_rs_storage", features = ["testing"] }
-docs_rs_types = { path = "crates/lib/docs_rs_types", features = ["testing"] }
-
-rand = { workspace = true }
-tower = { version = "0.5.1", features = ["util"] }
-opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "testing"] }
-
-[[bin]]
-name = "cratesfyi"
-test = false
-doc = false

@@ -49,10 +49,11 @@ impl CommandLine {
                 .await?
                 .with_storage()
                 .await?
-                .with_cdn()?
+                .with_maybe_cdn()?
                 .with_build_queue()?
                 .with_registry_api()?
                 .with_repository_stats()?
+                .with_build_limits()?
                 .build()
         })?;
 
