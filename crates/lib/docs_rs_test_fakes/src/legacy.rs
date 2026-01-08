@@ -1,17 +1,16 @@
 use anyhow::{Context as _, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
-use docs_rs_builder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS;
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
     Pool,
     releases::{initialize_build, initialize_crate, initialize_release, update_build_status},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
+use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
-    AsyncStorage, FileEntry, RustdocJsonFormatVersion, add_path_into_database,
-    add_path_into_remote_archive, compress, file_list_to_json, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    AsyncStorage, FileEntry, add_path_into_database, add_path_into_remote_archive, compress,
+    file_list_to_json, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, ReleaseId, Version, VersionReq,

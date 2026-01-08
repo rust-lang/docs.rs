@@ -1,20 +1,23 @@
+mod rebuilds;
+#[cfg(test)]
+pub(crate) mod testing;
+
 use anyhow::{Context as _, Result};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
-use docs_rs_build_limits::Overrides;
+use docs_rs_build_limits::{Overrides, blacklist};
 use docs_rs_build_queue::priority::{
     get_crate_pattern_and_priority, list_crate_priorities, remove_crate_priority,
     set_crate_priority,
 };
-use docs_rs_builder::blacklist;
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
     service_config::{ConfigName, set_config},
 };
 use docs_rs_types::{CrateId, KrateName, Version};
-use docs_rs_watcher::queue_rebuilds_faulty_rustdoc;
 use futures_util::StreamExt;
+use rebuilds::queue_rebuilds_faulty_rustdoc;
 
 #[tokio::main]
 async fn main() -> Result<()> {

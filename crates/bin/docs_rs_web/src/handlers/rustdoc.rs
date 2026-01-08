@@ -36,9 +36,9 @@ use axum_extra::{
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
+use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_storage::{
-    AsyncStorage, PathNotFoundError, RustdocJsonFormatVersion, StreamingBlob, rustdoc_archive_path,
-    rustdoc_json_path,
+    AsyncStorage, PathNotFoundError, StreamingBlob, rustdoc_archive_path, rustdoc_json_path,
 };
 use docs_rs_types::{CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
@@ -1043,11 +1043,11 @@ mod test {
     use crate::{Config, cache::CachePolicy, testing::*};
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
-    use docs_rs_builder::{
-        RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
-    };
     use docs_rs_cargo_metadata::Dependency;
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
+    use docs_rs_rustdoc_json::{
+        RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
+    };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::Version;
     use docs_rs_uri::encode_url_path;

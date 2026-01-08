@@ -1897,20 +1897,24 @@ name = "docs_rs_admin"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "bon",
  "chrono",
  "clap",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
- "docs_rs_builder",
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_logging",
+ "docs_rs_opentelemetry",
+ "docs_rs_storage",
+ "docs_rs_test_fakes",
  "docs_rs_types",
  "docs_rs_utils",
- "docs_rs_watcher",
  "futures-util",
+ "pretty_assertions",
  "sqlx",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1923,8 +1927,10 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_types",
  "futures-util",
+ "pretty_assertions",
  "serde",
  "sqlx",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
 ]
@@ -1966,24 +1972,22 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
+ "docs_rs_rustdoc_json",
  "docs_rs_storage",
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
- "futures-util",
  "itertools 0.14.0",
  "log",
  "opentelemetry",
  "pretty_assertions",
  "regex",
  "rustwide",
- "serde",
  "serde_json",
  "sqlx",
  "sysinfo",
  "tempfile",
  "test-case",
- "thiserror 2.0.17",
  "tokio",
  "toml 0.9.10+spec-1.1.0",
  "tracing",
@@ -2174,6 +2178,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_rustdoc_json"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_types",
+ "serde",
+ "serde_json",
+ "strum",
+ "test-case",
+]
+
+[[package]]
 name = "docs_rs_storage"
 version = "0.1.0"
 dependencies = [
@@ -2192,6 +2208,7 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_mimes",
  "docs_rs_opentelemetry",
+ "docs_rs_rustdoc_json",
  "docs_rs_types",
  "docs_rs_utils",
  "flate2",
@@ -2221,10 +2238,10 @@ dependencies = [
  "anyhow",
  "base64",
  "chrono",
- "docs_rs_builder",
  "docs_rs_cargo_metadata",
  "docs_rs_database",
  "docs_rs_registry_api",
+ "docs_rs_rustdoc_json",
  "docs_rs_storage",
  "docs_rs_types",
  "serde_json",
@@ -2281,7 +2298,6 @@ name = "docs_rs_watcher"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "chrono",
  "clap",
  "crates-index",
  "crates-index-diff",
@@ -2293,6 +2309,7 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_repository_stats",
+ "docs_rs_rustdoc_json",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",
@@ -2326,7 +2343,6 @@ dependencies = [
  "derive_more 2.1.1",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
- "docs_rs_builder",
  "docs_rs_cargo_metadata",
  "docs_rs_context",
  "docs_rs_database",
@@ -2336,6 +2352,7 @@ dependencies = [
  "docs_rs_mimes",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
+ "docs_rs_rustdoc_json",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",

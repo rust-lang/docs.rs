@@ -31,6 +31,7 @@ docs_rs_logging = { path = "../../lib/docs_rs_logging" }
 docs_rs_mimes = { path = "../../lib/docs_rs_mimes" }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
+docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_types = { path = "../../lib/docs_rs_types" }
 docs_rs_uri = { path = "../../lib/docs_rs_uri" }
@@ -75,7 +76,6 @@ time = "0.3"
 walkdir = { workspace = true }
 
 [dev-dependencies]
-docs_rs_builder = { path = "../docs_rs_builder" }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
