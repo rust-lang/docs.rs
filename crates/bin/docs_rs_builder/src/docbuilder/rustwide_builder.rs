@@ -1,8 +1,6 @@
-use crate::{
-    Config, blacklist::is_blacklisted, metrics::BuilderMetrics, utils::copy::copy_dir_all,
-};
+use crate::{Config, metrics::BuilderMetrics, utils::copy::copy_dir_all};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
-use docs_rs_build_limits::Limits;
+use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
 use docs_rs_context::Context;
@@ -16,13 +14,16 @@ use docs_rs_database::{
 };
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_rustdoc_json::{
+    RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion,
+    read_format_version_from_rustdoc_json,
+};
 use docs_rs_storage::{
-    AsyncStorage, RustdocJsonFormatVersion, Storage, add_path_into_database,
-    add_path_into_remote_archive, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    AsyncStorage, Storage, add_path_into_database, add_path_into_remote_archive, compress,
+    file_list_to_json, get_file_list, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version,
     doc_coverage::{self, DocCoverage},
 };
 use docs_rs_utils::{RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version};
@@ -35,7 +36,6 @@ use rustwide::{
     logging::{self, LogStorage},
     toolchain::ToolchainError,
 };
-use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
@@ -51,27 +51,6 @@ const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
-
-pub const RUSTDOC_JSON_COMPRESSION_ALGORITHMS: &[CompressionAlgorithm] =
-    &[CompressionAlgorithm::Zstd, CompressionAlgorithm::Gzip];
-
-/// read the format version from a rustdoc JSON file.
-pub fn read_format_version_from_rustdoc_json(
-    reader: impl std::io::Read,
-) -> Result<RustdocJsonFormatVersion> {
-    let reader = BufReader::new(reader);
-
-    #[derive(Deserialize)]
-    struct RustdocJson {
-        format_version: u16,
-    }
-
-    let rustdoc_json: RustdocJson = serde_json::from_reader(reader)?;
-
-    Ok(RustdocJsonFormatVersion::Version(
-        rustdoc_json.format_version,
-    ))
-}
 
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
     let name: String = get_config(conn, ConfigName::Toolchain)

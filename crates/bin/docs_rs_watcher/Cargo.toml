@@ -8,7 +8,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
 crates-index-diff = { version = "29.0.0", features = [ "max-performance" ]}
@@ -34,6 +33,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly", features = ["testing"] }
+docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }

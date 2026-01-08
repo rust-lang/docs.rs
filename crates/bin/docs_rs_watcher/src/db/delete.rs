@@ -202,7 +202,8 @@ mod tests {
     use crate::testing::TestEnvironment;
 
     use super::*;
-    use docs_rs_storage::{RustdocJsonFormatVersion, rustdoc_json_path};
+    use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
+    use docs_rs_storage::rustdoc_json_path;
     use docs_rs_test_fakes::{CrateOwner, OwnerKind, fake_release_that_failed_before_build};
     use docs_rs_types::{
         CompressionAlgorithm, ReleaseId,

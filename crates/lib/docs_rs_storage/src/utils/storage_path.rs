@@ -1,4 +1,4 @@
-use crate::types::RustdocJsonFormatVersion;
+use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_types::{CompressionAlgorithm, Version};
 
 pub fn rustdoc_archive_path(name: &str, version: &Version) -> String {
