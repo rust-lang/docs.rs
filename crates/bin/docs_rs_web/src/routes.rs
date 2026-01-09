@@ -355,7 +355,9 @@ async fn fallback() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use crate::cache::CachePolicy;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use reqwest::StatusCode;
 
     #[test]

@@ -118,7 +118,7 @@ pub(crate) async fn request_recorder(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{AxumRouterTestExt, async_wrapper};
+    use crate::testing::{AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper};
     use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;

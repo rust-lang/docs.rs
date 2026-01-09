@@ -257,6 +257,7 @@ mod tests {
     use anyhow::{Context as _, Result};
     use axum::{Router, body::Body, routing::get};
     use axum_extra::headers::CacheControl;
+    use docs_rs_config::AppConfig as _;
     use http::Request;
     use test_case::{test_case, test_matrix};
     use tower::{ServiceBuilder, ServiceExt as _};

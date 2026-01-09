@@ -1338,7 +1338,8 @@ pub(crate) struct BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::TestEnvironment;
+    use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
+    use docs_rs_config::AppConfig as _;
     use docs_rs_utils::block_on_async_with_conn;
     // use crate::test::{AxumRouterTestExt, TestEnvironment};
     use docs_rs_registry_api::ReleaseData;
@@ -1380,7 +1381,7 @@ mod tests {
 
         for path in paths {
             let full_path = env
-                .config
+                .config()
                 .rustwide_workspace
                 .join("cargo-home/registry")
                 .join(path);
@@ -1400,14 +1401,14 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_crate() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = DUMMY_CRATE_NAME;
         let crate_path = crate_.replace('-', "_");
         let version = DUMMY_CRATE_VERSION;
         let default_target = "x86_64-unknown-linux-gnu";
 
-        let storage = env.context.blocking_storage()?;
+        let storage = env.blocking_storage()?;
         let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
         let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
         storage.store_one(&old_rustdoc_file, Vec::new())?;
@@ -1517,7 +1518,7 @@ mod tests {
         // Non-dist toolchains only have a single target, and of course
         // if include_default_targets is false we won't have this full list
         // of targets.
-        if builder.toolchain.as_dist().is_some() && env.config.include_default_targets {
+        if builder.toolchain.as_dist().is_some() && env.config().include_default_targets {
             assert_eq!(
                 targets,
                 vec![
@@ -1592,7 +1593,7 @@ mod tests {
         let mut config = Config::test_config()?;
         config.compiler_metrics_collection_path = Some(metrics_dir.clone());
         config.include_default_targets = false;
-        let env = TestEnvironment::with_config_and_runtime(config)?;
+        let env = TestEnvironment::builder().config(config).build()?;
 
         let crate_ = DUMMY_CRATE_NAME;
         let version = DUMMY_CRATE_VERSION;
@@ -1620,13 +1621,13 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_binary_crate() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // some binary crate
         let crate_ = "heater";
         let version = Version::new(0, 2, 3);
 
-        let storage = env.storage()?;
+        let storage = env.blocking_storage()?;
         let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
         let old_source_file = format!("sources/{crate_}/{version}/some_source_file");
         storage.store_one(&old_rustdoc_file, Vec::new())?;
@@ -1682,7 +1683,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_failed_build_with_existing_successful_release() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // rand 0.8.5 fails to build with recent nightly versions
         // https://github.com/rust-lang/docs.rs/issues/26750
@@ -1779,7 +1780,7 @@ mod tests {
     #[test_case("thiserror-impl", Version::new(1, 0, 26))]
     #[ignore]
     fn test_proc_macro(crate_: &str, version: Version) -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -1789,7 +1790,7 @@ mod tests {
                 .successful
         );
 
-        let storage = env.storage()?;
+        let storage = env.blocking_storage()?;
 
         // doc archive exists
         let doc_archive = rustdoc_archive_path(crate_, &version);
@@ -1805,7 +1806,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_cross_compile_non_host_default() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "windows-win";
         let version = Version::new(2, 4, 1);
@@ -1820,7 +1821,7 @@ mod tests {
                 .successful
         );
 
-        let storage = env.storage()?;
+        let storage = env.blocking_storage()?;
 
         // doc archive exists
         let doc_archive = rustdoc_archive_path(crate_, &version);
@@ -1855,7 +1856,7 @@ mod tests {
     fn test_locked_fails_unlocked_needs_new_deps() -> Result<()> {
         let mut config = Config::test_config()?;
         config.include_default_targets = false;
-        let env = TestEnvironment::with_config_and_runtime(config)?;
+        let env = TestEnvironment::builder().config(config).build()?;
 
         // if the corrected dependency of the crate was already downloaded we need to remove it
         remove_cache_files(&env, "rand_core", &Version::new(0, 5, 1))?;
@@ -1883,7 +1884,7 @@ mod tests {
     fn test_locked_fails_unlocked_needs_new_unknown_deps() -> Result<()> {
         let mut config = Config::test_config()?;
         config.include_default_targets = false;
-        let env = TestEnvironment::with_config_and_runtime(config)?;
+        let env = TestEnvironment::builder().config(config).build()?;
 
         // if the corrected dependency of the crate was already downloaded we need to remove it
         remove_cache_files(&env, "value-bag-sval2", &Version::new(1, 4, 1))?;
@@ -1906,7 +1907,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_rustflags_are_passed_to_build_script() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "proc-macro2";
         let version = Version::new(1, 0, 95);
@@ -1923,7 +1924,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_sources_are_added_even_for_build_failures_before_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // https://github.com/rust-lang/docs.rs/issues/2523
         // package with invalid cargo metadata.
@@ -1944,7 +1945,7 @@ mod tests {
         // source archive exists
         let source_archive = source_archive_path(crate_, &version);
         assert!(
-            env.storage()?.exists(&source_archive)?,
+            env.blocking_storage()?.exists(&source_archive)?,
             "archive doesnt exist: {source_archive}"
         );
 
@@ -1954,7 +1955,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_failures_before_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         // https://github.com/rust-lang/docs.rs/issues/2491
         // package without Cargo.toml, so fails directly in the fetch stage.
@@ -2000,7 +2001,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_implicit_features_for_optional_dependencies() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let crate_ = "serde";
         let version = Version::new(1, 0, 152);
@@ -2025,7 +2026,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2054,7 +2055,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_build_std() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2069,7 +2070,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_workspace_reinitialize_at_once() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2087,7 +2088,7 @@ mod tests {
     fn test_workspace_reinitialize_after_interval() -> Result<()> {
         let mut config = Config::test_config()?;
         config.build_workspace_reinitialization_interval = Duration::from_secs(1);
-        let env = TestEnvironment::with_config_and_runtime(config)?;
+        let env = TestEnvironment::builder().config(config).build()?;
 
         use std::thread::sleep;
         use std::time::Duration;
@@ -2112,7 +2113,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_new_builder_detects_existing_rustc() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2162,7 +2163,7 @@ mod tests {
             );
         }
 
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;

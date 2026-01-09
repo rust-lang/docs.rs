@@ -164,7 +164,8 @@ mod tests {
 
     use super::*;
     use chrono::Utc;
-    use docs_rs_database::testing::TestDatabase;
+    use docs_rs_config::AppConfig as _;
+    use docs_rs_database::{AsyncPoolClient, testing::TestDatabase};
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::{KRATE, V1, V2};
     use docs_rs_utils::block_on_async_with_conn;
@@ -188,6 +189,10 @@ mod tests {
     impl TestEnv {
         pub(crate) fn runtime(&self) -> &runtime::Runtime {
             &self.runtime
+        }
+
+        pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
+            self.db.async_conn().await
         }
     }
 

@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
@@ -30,6 +31,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
@@ -40,5 +42,6 @@ test-case = { workspace = true }
 [features]
 testing = [
     "dep:rand",
+    "docs_rs_config/testing",
     "docs_rs_opentelemetry/testing",
 ]

@@ -274,7 +274,9 @@ fn get_sorted_features(raw_features: Vec<DbFeature>) -> (Vec<Feature>, HashSet<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
     use std::str::FromStr as _;

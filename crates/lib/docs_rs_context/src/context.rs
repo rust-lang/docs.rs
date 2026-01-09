@@ -1,6 +1,7 @@
 use crate::config::Config;
 use anyhow::{Result, anyhow, bail};
 use docs_rs_build_queue::{AsyncBuildQueue, BuildQueue};
+use docs_rs_config::AppConfig as _;
 use docs_rs_database::Pool;
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};

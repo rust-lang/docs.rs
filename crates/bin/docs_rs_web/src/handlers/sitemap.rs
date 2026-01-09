@@ -220,7 +220,9 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use axum::http::StatusCode;
 
     #[test]

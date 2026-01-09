@@ -182,7 +182,10 @@ pub(crate) async fn build_details_handler(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        async_wrapper,
+    };
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{BuildId, ReleaseId, testing::V0_1};
     use kuchikiki::traits::TendrilSink;

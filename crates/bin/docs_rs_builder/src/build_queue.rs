@@ -91,16 +91,16 @@ mod tests {
 
     #[test]
     fn test_invalidate_cdn_after_error() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
         let queue = env.blocking_build_queue()?;
 
-        let builder_metrics = BuilderMetrics::new(env.context.meter_provider());
+        let builder_metrics = BuilderMetrics::new(env.meter_provider());
 
         const WILL_FAIL: KrateName = KrateName::from_static("will_fail");
 
         queue.add_crate(&WILL_FAIL, &V1, 0, None)?;
 
-        process_next_crate(&env.context, &builder_metrics, |krate| {
+        process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_FAIL, krate.name);
             anyhow::bail!("simulate a failure");
         })?;
@@ -115,14 +115,14 @@ mod tests {
 
     #[test]
     fn test_invalidate_cdn_after_build() -> Result<()> {
-        let env = TestEnvironment::new_with_runtime()?;
+        let env = TestEnvironment::new()?;
         let queue = env.blocking_build_queue()?;
-        let builder_metrics = BuilderMetrics::new(env.context.meter_provider());
+        let builder_metrics = BuilderMetrics::new(env.meter_provider());
 
         const WILL_SUCCEED: KrateName = KrateName::from_static("will_succeed");
         queue.add_crate(&WILL_SUCCEED, &V1, -1, None)?;
 
-        process_next_crate(&env.context, &builder_metrics, |krate| {
+        process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_SUCCEED, krate.name);
             Ok(BuildPackageSummary::default())
         })?;

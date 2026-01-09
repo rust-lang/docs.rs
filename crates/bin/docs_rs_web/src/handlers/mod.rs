@@ -226,7 +226,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        async_wrapper,
+    };
     use docs_rs_types::{DocCoverage, ReleaseId, Version};
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;

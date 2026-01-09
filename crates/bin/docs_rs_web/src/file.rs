@@ -249,11 +249,13 @@ mod tests {
         let env = Rc::new(
             TestEnvironment::builder()
                 .storage_config(
-                    docs_rs_storage::Config::test_config(StorageKind::Memory)?.set(|mut cfg| {
-                        cfg.max_file_size = MAX_SIZE;
-                        cfg.max_file_size_html = MAX_HTML_SIZE;
-                        cfg
-                    }),
+                    docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
+                        |mut cfg| {
+                            cfg.max_file_size = MAX_SIZE;
+                            cfg.max_file_size_html = MAX_HTML_SIZE;
+                            cfg
+                        },
+                    ),
                 )
                 .build()
                 .await?,

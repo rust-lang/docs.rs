@@ -1469,6 +1469,7 @@ dependencies = [
  "anyhow",
  "clap",
  "docs_rs_builder",
+ "docs_rs_config",
  "docs_rs_context",
  "docs_rs_logging",
  "docs_rs_utils",
@@ -1902,6 +1903,7 @@ dependencies = [
  "clap",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
+ "docs_rs_config",
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_logging",
@@ -1922,6 +1924,7 @@ name = "docs_rs_build_limits"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
@@ -1941,6 +1944,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
@@ -1963,6 +1967,7 @@ dependencies = [
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
+ "docs_rs_config",
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",
@@ -2007,6 +2012,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "docs_rs_context"
 version = "0.1.0"
 dependencies = [
@@ -2014,12 +2026,15 @@ dependencies = [
  "bon",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
+ "docs_rs_config",
  "docs_rs_database",
  "docs_rs_fastly",
+ "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
  "docs_rs_storage",
+ "docs_rs_test_fakes",
  "tokio",
 ]
 
@@ -2030,6 +2045,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "docs_rs_cargo_metadata",
+ "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
@@ -2066,6 +2082,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_headers",
  "docs_rs_opentelemetry",
@@ -2128,6 +2145,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "derive_more 2.1.1",
+ "docs_rs_config",
  "docs_rs_env_vars",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -2144,6 +2162,7 @@ dependencies = [
  "anyhow",
  "bon",
  "chrono",
+ "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_types",
  "docs_rs_utils",
@@ -2162,6 +2181,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "docs_rs_cargo_metadata",
+ "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_utils",
@@ -2203,6 +2223,7 @@ dependencies = [
  "chrono",
  "criterion",
  "dashmap",
+ "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_headers",
  "docs_rs_logging",
@@ -2302,6 +2323,7 @@ dependencies = [
  "crates-index",
  "crates-index-diff",
  "docs_rs_build_queue",
+ "docs_rs_config",
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",
@@ -2344,6 +2366,7 @@ dependencies = [
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
+ "docs_rs_config",
  "docs_rs_context",
  "docs_rs_database",
  "docs_rs_env_vars",

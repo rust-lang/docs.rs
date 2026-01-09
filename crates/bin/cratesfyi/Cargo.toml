@@ -10,6 +10,7 @@ edition = "2024"
 anyhow = { workspace = true }
 clap = { workspace = true }
 docs_rs_builder = { path = "../docs_rs_builder" }
+docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_logging = { path = "../../lib/docs_rs_logging" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }

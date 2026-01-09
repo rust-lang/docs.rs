@@ -8,20 +8,22 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
-docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_headers = { path = "../docs_rs_headers" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
+docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 http = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
 reqwest = { workspace = true }
+tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
-tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_headers = { path = "../docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 mockito = { workspace = true }

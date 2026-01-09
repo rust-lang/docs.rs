@@ -215,7 +215,10 @@ mod tests {
     use crate::{
         Config,
         cache::CachePolicy,
-        testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
+        testing::{
+            AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+            async_wrapper,
+        },
     };
     use anyhow::Result;
     use axum::{body::Body, http::Request};
@@ -308,7 +311,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_trigger_rebuild_missing_config() -> Result<()> {
         let env = TestEnvironment::builder()
-            .web_config(
+            .config(
                 Config::builder()
                     .test_config()?
                     .maybe_cratesio_token(None)
@@ -358,7 +361,7 @@ mod tests {
     async fn build_trigger_rebuild_with_config() -> Result<()> {
         let correct_token = "foo137";
         let env = TestEnvironment::builder()
-            .web_config(
+            .config(
                 Config::builder()
                     .test_config()?
                     .cratesio_token(correct_token.into())

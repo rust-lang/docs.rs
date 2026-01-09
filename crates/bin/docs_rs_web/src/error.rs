@@ -247,7 +247,9 @@ pub(crate) type JsonAxumResult<T> = Result<T, JsonAxumNope>;
 mod tests {
     use super::{AxumNope, EscapedURI, IntoResponse};
     use crate::cache::CachePolicy;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use kuchikiki::traits::TendrilSink;
 
     #[test]

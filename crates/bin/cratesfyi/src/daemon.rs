@@ -1,5 +1,6 @@
 use anyhow::{Error, anyhow};
 use docs_rs_builder::{RustwideBuilder, queue_builder};
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_watcher::{
     start_background_queue_rebuild, start_background_repository_stats_updater,
