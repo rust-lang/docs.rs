@@ -1,3 +1,5 @@
+use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
 use std::time::Duration;
 
@@ -16,8 +18,8 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         let mut config = Self::default();
 
         if let Some(attempts) = maybe_env::<u16>("DOCSRS_BUILD_ATTEMPTS")? {

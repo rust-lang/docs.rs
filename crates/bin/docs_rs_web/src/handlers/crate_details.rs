@@ -634,11 +634,13 @@ pub(crate) async fn get_all_platforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper};
-    use anyhow::Error;
-    use docs_rs_database::{
-        crate_details::releases_for_crate, releases::update_build_status, testing::TestDatabase,
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        async_wrapper,
     };
+    use anyhow::Error;
+    use docs_rs_database::Pool;
+    use docs_rs_database::{crate_details::releases_for_crate, releases::update_build_status};
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::KrateName;
@@ -709,13 +711,13 @@ mod tests {
     }
 
     async fn assert_last_successful_build_equals(
-        db: &TestDatabase,
+        pool: &Pool,
         package: &str,
         version: &str,
         expected_last_successful_build: Option<Version>,
     ) -> Result<(), Error> {
         let version = version.parse::<Version>()?;
-        let mut conn = db.async_conn().await?;
+        let mut conn = pool.get_async().await?;
         let details = crate_details(&mut conn, package, version, None).await;
 
         anyhow::ensure!(
@@ -730,8 +732,7 @@ mod tests {
     #[test]
     fn test_crate_details_documentation_url_is_none_when_url_is_docs_rs() {
         async_wrapper(|env| async move {
-            let db = &env.db;
-            let mut conn = db.async_conn().await?;
+            let mut conn = env.async_conn().await?;
 
             env.fake_release()
                 .await
@@ -773,7 +774,7 @@ mod tests {
     #[test]
     fn test_last_successful_build_when_last_releases_failed_or_yanked() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -824,7 +825,7 @@ mod tests {
     #[test]
     fn test_last_successful_build_when_all_releases_failed_or_yanked() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -858,7 +859,7 @@ mod tests {
     #[test]
     fn test_last_successful_build_with_intermittent_releases_failed_or_yanked() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -899,7 +900,7 @@ mod tests {
     #[test]
     fn test_releases_should_be_sorted() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             // Add new releases of 'foo' out-of-order since CrateDetails should sort them descending
             env.fake_release()
@@ -955,7 +956,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             let mut details = crate_details(&mut conn, "foo", "0.2.0", None).await;
             for detail in &mut details.releases {
                 detail.release_time = None;
@@ -1108,7 +1109,7 @@ mod tests {
     #[test]
     fn test_latest_version() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1129,7 +1130,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             for version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", *version, None).await;
                 assert_eq!(
@@ -1145,7 +1146,7 @@ mod tests {
     #[test]
     fn test_latest_version_ignores_prerelease() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1166,7 +1167,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1182,7 +1183,7 @@ mod tests {
     #[test]
     fn test_latest_version_ignores_yanked() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1204,7 +1205,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1220,7 +1221,7 @@ mod tests {
     #[test]
     fn test_latest_version_only_yanked() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1244,7 +1245,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             for &version in &["0.0.1", "0.0.2", "0.0.3"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1260,7 +1261,7 @@ mod tests {
     #[test]
     fn test_latest_version_in_progress() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1278,7 +1279,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             for &version in &["0.0.1", "0.0.2"] {
                 let details = crate_details(&mut conn, "foo", version, None).await;
                 assert_eq!(
@@ -1367,7 +1368,7 @@ mod tests {
     #[test]
     fn test_updating_owners() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -1381,7 +1382,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,
@@ -1442,7 +1443,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,
@@ -1466,7 +1467,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let mut conn = db.async_conn().await?;
+            let mut conn = db.get_async().await?;
             let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
             assert_eq!(
                 details.owners,

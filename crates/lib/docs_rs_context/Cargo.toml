@@ -10,13 +10,23 @@ anyhow = { workspace = true }
 bon = { workspace = true }
 docs_rs_build_limits  = { path = "../docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../docs_rs_build_queue" }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_fastly = { path = "../docs_rs_fastly" }
+docs_rs_logging = { path = "../docs_rs_logging", optional = true }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
 docs_rs_storage = { path = "../docs_rs_storage" }
+docs_rs_test_fakes = { path = "../docs_rs_test_fakes", optional = true }
 tokio = { workspace = true }
 
 [features]
-testing = []
+testing = [
+    "dep:docs_rs_logging",
+    "dep:docs_rs_test_fakes",
+    "docs_rs_database/testing",
+    "docs_rs_fastly/testing",
+    "docs_rs_logging/testing",
+    "docs_rs_storage/testing",
+]

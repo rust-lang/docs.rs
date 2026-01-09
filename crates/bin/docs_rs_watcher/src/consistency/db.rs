@@ -126,7 +126,7 @@ mod tests {
             .await?;
 
         let mut conn = env.async_conn().await?;
-        let result = load(&mut conn, env.context.config().build_queue()?).await?;
+        let result = load(&mut conn, env.context().config().build_queue()?).await?;
 
         assert_eq!(
             result,

@@ -132,7 +132,9 @@ pub(crate) fn build_static_router() -> AxumRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use axum::{Router, body::Body};
     use docs_rs_headers::compute_etag;
     use http::{

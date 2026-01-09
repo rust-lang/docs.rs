@@ -1,4 +1,5 @@
 use crate::types::StorageKind;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{
     io,
@@ -58,8 +59,8 @@ pub struct Config {
     pub local_archive_cache_expected_count: usize,
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> anyhow::Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
 
         Ok(Self {
@@ -84,6 +85,21 @@ impl Config {
         })
     }
 
+    #[cfg(any(feature = "testing", test))]
+    fn test_config() -> anyhow::Result<Self> {
+        Self::test_config_with_kind(StorageKind::Memory)
+    }
+}
+
+impl Config {
+    #[cfg(any(feature = "testing", test))]
+    pub fn set<F>(self, f: F) -> Self
+    where
+        F: FnOnce(Self) -> Self,
+    {
+        f(self)
+    }
+
     pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
         static HTML: &str = "html";
 
@@ -97,7 +113,7 @@ impl Config {
     }
 
     #[cfg(any(feature = "testing", test))]
-    pub fn test_config(kind: StorageKind) -> anyhow::Result<Self> {
+    pub fn test_config_with_kind(kind: StorageKind) -> anyhow::Result<Self> {
         let mut config = Self::from_environment()?;
         config.storage_backend = kind;
 
@@ -109,13 +125,5 @@ impl Config {
         config.s3_bucket_is_temporary = true;
 
         Ok(config)
-    }
-
-    #[cfg(any(feature = "testing", test))]
-    pub fn set<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Self) -> Self,
-    {
-        f(self)
     }
 }

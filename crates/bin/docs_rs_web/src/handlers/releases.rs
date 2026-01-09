@@ -783,7 +783,10 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        async_wrapper,
+    };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
     use docs_rs_database::releases::{
@@ -839,7 +842,7 @@ mod tests {
     #[test]
     fn get_releases_by_stars() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             env.fake_release()
                 .await
@@ -884,15 +887,10 @@ mod tests {
                 .create()
                 .await?;
 
-            let releases = get_releases(
-                &mut *db.async_conn().await?,
-                1,
-                10,
-                Order::GithubStars,
-                true,
-            )
-            .await
-            .unwrap();
+            let releases =
+                get_releases(&mut *db.get_async().await?, 1, 10, Order::GithubStars, true)
+                    .await
+                    .unwrap();
             assert_eq!(
                 vec![
                     "bar", // 20 stars

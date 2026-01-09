@@ -12,6 +12,7 @@ clap = { workspace = true }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
 crates-index-diff = { version = "29.0.0", features = [ "max-performance" ]}
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
+docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
@@ -31,6 +32,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
+docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }

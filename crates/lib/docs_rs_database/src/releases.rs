@@ -602,6 +602,7 @@ mod test {
     use crate::{Config, testing::TestDatabase};
     use chrono::NaiveDate;
     use docs_rs_cargo_metadata::CargoMetadata;
+    use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_registry_api::OwnerKind;
     use docs_rs_types::{

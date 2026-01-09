@@ -73,6 +73,7 @@ pub async fn remove_crate_priority(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use docs_rs_config::AppConfig as _;
     use docs_rs_database::{Config, testing::TestDatabase};
     use docs_rs_opentelemetry::testing::TestMetrics;
 

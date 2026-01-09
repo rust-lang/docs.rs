@@ -267,6 +267,7 @@ mod tests {
         updater::{RepositoryForge, repository_name},
     };
     use anyhow::Result;
+    use docs_rs_config::AppConfig as _;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 

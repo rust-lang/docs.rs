@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_watcher::{Config, Index, index_watcher};

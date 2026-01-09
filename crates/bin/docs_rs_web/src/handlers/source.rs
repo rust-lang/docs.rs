@@ -363,7 +363,10 @@ pub(crate) async fn source_browser_handler(
 mod tests {
     use crate::{
         cache::CachePolicy,
-        testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, async_wrapper},
+        testing::{
+            AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+            async_wrapper,
+        },
     };
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
@@ -856,11 +859,13 @@ mod tests {
     async fn large_file_test() -> Result<()> {
         let env = TestEnvironment::builder()
             .storage_config(
-                docs_rs_storage::Config::test_config(StorageKind::Memory)?.set(|mut cfg| {
-                    cfg.max_file_size = 1;
-                    cfg.max_file_size_html = 1;
-                    cfg
-                }),
+                docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
+                    |mut cfg| {
+                        cfg.max_file_size = 1;
+                        cfg.max_file_size_html = 1;
+                        cfg
+                    },
+                ),
             )
             .build()
             .await?;

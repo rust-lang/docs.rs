@@ -229,7 +229,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::testing::{AxumResponseTestExt, AxumRouterTestExt, async_wrapper};
+    use crate::testing::{
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    };
     use docs_rs_types::testing::V1;
 
     #[test]

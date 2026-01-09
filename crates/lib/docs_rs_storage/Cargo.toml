@@ -15,6 +15,7 @@ aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 bzip2 = "0.6.0"
 chrono = { workspace = true }
 dashmap = "6.0.0"
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_headers = { path = "../docs_rs_headers" }
 docs_rs_logging = { path = "../docs_rs_logging", optional = true }
@@ -43,6 +44,7 @@ zstd = "0.13.0"
 
 [dev-dependencies]
 criterion = "0.8.0"
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_logging = { path = "../docs_rs_logging", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 rand = { workspace = true }
@@ -52,6 +54,7 @@ test-case = { workspace = true }
 testing = [
     "dep:rand",
     "dep:docs_rs_logging",
+    "docs_rs_config/testing",
     "docs_rs_logging/testing",
     "docs_rs_opentelemetry/testing",
 ]

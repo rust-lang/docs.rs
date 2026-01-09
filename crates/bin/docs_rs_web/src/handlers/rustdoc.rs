@@ -1347,7 +1347,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn cache_headers_on_version() -> Result<()> {
         let env = TestEnvironment::builder()
-            .web_config(
+            .config(
                 Config::builder()
                     .test_config()?
                     .cache_control_stale_while_revalidate(2592000)

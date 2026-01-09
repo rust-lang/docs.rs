@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use clap::Parser;
+use docs_rs_config::AppConfig as _;
 use docs_rs_web::{Config, run_web_server};
 use std::{net::SocketAddr, sync::Arc};
 

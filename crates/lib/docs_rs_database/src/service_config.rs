@@ -48,6 +48,7 @@ where
 mod tests {
     use super::*;
     use crate::{Config, testing::TestDatabase};
+    use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use serde_json::Value;
     use test_case::test_case;

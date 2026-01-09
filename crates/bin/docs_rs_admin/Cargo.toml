@@ -24,6 +24,8 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 bon = { workspace = true }
+docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
+docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }

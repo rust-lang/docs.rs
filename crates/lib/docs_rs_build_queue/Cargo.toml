@@ -8,6 +8,7 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
@@ -27,6 +28,7 @@ pretty_assertions = { workspace = true }
 
 [features]
 testing = [
+    "docs_rs_config/testing",
     "docs_rs_database/testing",
     "docs_rs_opentelemetry/testing",
     "docs_rs_types/testing",

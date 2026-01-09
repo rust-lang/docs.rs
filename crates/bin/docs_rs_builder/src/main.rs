@@ -1,6 +1,7 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use docs_rs_builder::{Config, PackageKind, RustwideBuilder, queue_builder};
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
 use docs_rs_env_vars::maybe_env;

@@ -1,3 +1,5 @@
+use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{path::PathBuf, time::Duration};
 
@@ -18,8 +20,8 @@ pub struct Config {
     pub repository: docs_rs_repository_stats::Config,
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         Ok(Self {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
@@ -32,10 +34,5 @@ impl Config {
             max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
             repository: docs_rs_repository_stats::Config::from_environment()?,
         })
-    }
-
-    #[cfg(test)]
-    pub fn test_config() -> anyhow::Result<Self> {
-        Self::from_environment()
     }
 }

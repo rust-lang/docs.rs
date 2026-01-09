@@ -3,7 +3,7 @@ pub(crate) mod headers;
 mod test_env;
 
 pub(crate) use axum_helpers::{AxumResponseTestExt, AxumRouterTestExt, assert_cache_headers_eq};
-pub(crate) use test_env::TestEnvironment;
+pub(crate) use test_env::{TestEnvironment, TestEnvironmentExt};
 
 use std::rc::Rc;
 use tokio::runtime;

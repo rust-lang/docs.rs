@@ -344,7 +344,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env.context, &krate, None).await?;
+        process_version_added(&env, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -355,7 +355,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env.context, &krate, None).await?;
+        process_version_added(&env, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -387,7 +387,7 @@ mod tests {
             version: V1,
             yanked: true,
         };
-        process_version_yank_status(&env.context, &krate).await?;
+        process_version_yank_status(&env, &krate).await?;
 
         // And verify it's actually marked as yanked
         let row = sqlx::query!(
@@ -406,7 +406,7 @@ mod tests {
             version: V1,
             yanked: false,
         };
-        process_version_yank_status(&env.context, &krate).await?;
+        process_version_yank_status(&env, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT yanked
@@ -433,7 +433,7 @@ mod tests {
             .create()
             .await?;
 
-        process_crate_deleted(&env.context, &KRATE).await?;
+        process_crate_deleted(&env, &KRATE).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -471,7 +471,7 @@ mod tests {
             version: V2,
             ..Default::default()
         };
-        process_version_deleted(&env.context, &krate).await?;
+        process_version_deleted(&env, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -517,7 +517,7 @@ mod tests {
             ..Default::default()
         };
         let added = process_changes(
-            &env.context,
+            &env,
             &vec![
                 // Should be added correctly
                 Change::Added(krate1.into()),

@@ -252,7 +252,7 @@ pub(crate) async fn match_version(
 mod tests {
     use super::*;
     use crate::testing::{TestEnvironment, async_wrapper};
-    use docs_rs_database::testing::TestDatabase;
+    use docs_rs_database::Pool;
     use docs_rs_test_fakes::FakeBuild;
     use docs_rs_types::ReleaseId;
     use std::str::FromStr as _;
@@ -268,8 +268,8 @@ mod tests {
             .unwrap()
     }
 
-    async fn version(v: Option<&str>, db: &TestDatabase) -> Option<Version> {
-        let mut conn = db.async_conn().await.unwrap();
+    async fn version(v: Option<&str>, pool: &Pool) -> Option<Version> {
+        let mut conn = pool.get_async().await.unwrap();
         let version = match_version(
             &mut conn,
             "foo",
@@ -297,7 +297,7 @@ mod tests {
     // https://github.com/rust-lang/docs.rs/issues/223
     fn prereleases_are_not_considered_for_semver() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
             let version = |v| version(v, db);
             let release = |v| release(v, &env);
 
@@ -325,7 +325,7 @@ mod tests {
     // https://github.com/rust-lang/docs.rs/issues/1682
     fn prereleases_are_considered_when_others_dont_match() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             // normal release
             release("1.0.0", &env).await;
@@ -350,7 +350,7 @@ mod tests {
     // vaguely related to https://github.com/rust-lang/docs.rs/issues/395
     fn metadata_has_no_effect() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             release("0.1.0+4.1", &env).await;
             release("0.1.1", &env).await;
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn in_progress_releases_are_ignored_when_others_match() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             // normal release
             release("1.0.0", &env).await;
@@ -400,7 +400,7 @@ mod tests {
     // https://github.com/rust-lang/docs.rs/issues/221
     fn yanked_crates_are_not_considered() {
         async_wrapper(|env| async move {
-            let db = &env.db;
+            let db = env.pool()?;
 
             let release_id = release("0.3.0", &env).await;
 
@@ -408,7 +408,7 @@ mod tests {
                 "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
                 release_id.0
             )
-            .execute(&mut *db.async_conn().await?)
+            .execute(&mut *db.get_async().await?)
             .await?;
 
             assert_eq!(version(None, db).await, None);

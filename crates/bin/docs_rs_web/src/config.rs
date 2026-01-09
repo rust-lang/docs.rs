@@ -1,4 +1,5 @@
 use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
 use std::time::Duration;
 
@@ -82,13 +83,13 @@ impl<S: State> ConfigBuilder<S> {
     }
 }
 
-impl Config {
-    pub fn from_environment() -> Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         Ok(Self::builder().load_environment()?.build())
     }
 
     #[cfg(test)]
-    pub fn test_config() -> Result<Self> {
+    fn test_config() -> Result<Self> {
         Ok(Self::builder().test_config()?.build())
     }
 }
