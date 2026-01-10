@@ -10,7 +10,7 @@ edition = "2024"
 anyhow = { workspace = true }
 clap = { workspace = true }
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
-crates-index-diff = { version = "29.0.0", features = [ "max-performance" ]}
+crates-index-diff = { version = "29.0.0", features = [ "max-performance" ] }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }

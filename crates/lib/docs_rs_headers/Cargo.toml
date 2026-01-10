@@ -5,6 +5,9 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
+[features]
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 askama = { workspace = true }
@@ -23,6 +26,3 @@ axum-extra = { workspace = true }
 serde_json = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
-
-[features]
-testing = []

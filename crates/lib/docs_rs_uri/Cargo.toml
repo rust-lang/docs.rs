@@ -10,8 +10,8 @@ askama = { workspace = true }
 http = { workspace = true }
 percent-encoding = "2.2.0"
 serde_with = { workspace = true }
-url = { workspace = true }
 thiserror = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }

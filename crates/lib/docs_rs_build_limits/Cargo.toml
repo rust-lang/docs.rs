@@ -11,10 +11,10 @@ docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
 futures-util = { workspace = true }
-serde = { workspace = true}
+serde = { workspace = true }
 sqlx = { workspace = true }
-tracing = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 docs_rs_database = { path = "../docs_rs_database", features = ["testing"] }

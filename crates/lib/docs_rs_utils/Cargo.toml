@@ -6,6 +6,9 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 build = "build.rs"
 
+[features]
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
@@ -18,6 +21,3 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 time = "0.3"
 tokio = { workspace = true }
-
-[features]
-testing = []

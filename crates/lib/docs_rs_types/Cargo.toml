@@ -5,6 +5,11 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
+[features]
+# NOTE: we could make serde & sqlx optional features, some 
+# of the subcrates don't need one or both of them.
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 crates_io_validation = { path = "../crates_io_validation" }
@@ -17,11 +22,6 @@ sqlx = { workspace = true }
 strum = { workspace = true }
 
 [dev-dependencies]
+pretty_assertions = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
-pretty_assertions = { workspace = true }
-
-[features]
-# NOTE: we could make serde & sqlx optional features, some 
-# of the subcrates don't need one or both of them.
-testing = []
