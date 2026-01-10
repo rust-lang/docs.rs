@@ -9,8 +9,8 @@ edition = "2024"
 anyhow = { workspace = true }
 async-trait  = "0.1.89"
 chrono = { workspace = true }
-docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_utils = { path = "../docs_rs_utils" }

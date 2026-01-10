@@ -7,6 +7,13 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 build = "build.rs"
 
+[package.metadata.cargo-machete]
+ignored = [
+    "phf",
+    # used in build script output
+    "slug", # used in askama templates, can be moved to web binary
+]
+
 [dependencies]
 anyhow = { workspace = true }
 askama = { workspace = true }
@@ -64,7 +71,7 @@ toml = { workspace = true }
 tower = "0.5.1"
 tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
 tracing = { workspace = true }
-tracing-futures= { version = "0.2.5", features = ["std-future", "futures-03"] }
+tracing-futures = { version = "0.2.5", features = ["std-future", "futures-03"] }
 url = { workspace = true }
 
 [build-dependencies]
@@ -92,10 +99,4 @@ opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    "phf", # used in build script output
-    "slug", # used in askama templates, can be moved to web binary
-]
 

@@ -5,6 +5,9 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
+[features]
+testing = ["dep:tokio"]
+
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
@@ -28,6 +31,3 @@ docs_rs_headers = { path = "../docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 mockito = { workspace = true }
 tokio = { workspace = true }
-
-[features]
-testing = ["dep:tokio"]

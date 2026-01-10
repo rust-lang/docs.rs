@@ -6,14 +6,21 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 build = "build.rs"
 
+[features]
+testing = [
+    "dep:rand",
+    "docs_rs_config/testing",
+    "docs_rs_opentelemetry/testing",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
-docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
-docs_rs_registry_api= { path = "../docs_rs_registry_api" }
+docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
@@ -31,17 +38,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata", features = ["testing"] }
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 rand = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
-
-[features]
-testing = [
-    "dep:rand",
-    "docs_rs_config/testing",
-    "docs_rs_opentelemetry/testing",
-]

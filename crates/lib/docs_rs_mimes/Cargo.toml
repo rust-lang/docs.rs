@@ -6,8 +6,8 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [dependencies]
-mime_guess = "2"
 mime = { workspace = true }
+mime_guess = "2"
 
 [dev-dependencies]
 test-case = { workspace = true }

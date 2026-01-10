@@ -1,16 +1,13 @@
 [workspace]
 resolver = "2" 
 
-members = [
-    "crates/bin/*",
-    "crates/lib/*",
-]
+members = ["crates/bin/*", "crates/lib/*"]
 
 default-members = [
-  "crates/bin/docs_rs_admin",
-  "crates/bin/docs_rs_builder",
-  "crates/bin/docs_rs_watcher",
-  "crates/bin/docs_rs_web",
+    "crates/bin/docs_rs_admin",
+    "crates/bin/docs_rs_builder",
+    "crates/bin/docs_rs_watcher",
+    "crates/bin/docs_rs_web",
 ]
 
 exclude = [
@@ -23,7 +20,7 @@ exclude = [
 ]
 
 [workspace.dependencies]
-anyhow = { version = "1.0.42", features = ["backtrace"]}
+anyhow = { version = "1.0.42", features = ["backtrace"] }
 askama = "0.15.1"
 async-stream = "0.3.5"
 axum-extra = { version = "0.12.0", features = ["typed-header", "routing", "middleware"] }

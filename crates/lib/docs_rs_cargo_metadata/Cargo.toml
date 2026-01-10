@@ -5,6 +5,9 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
+[features]
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 derive_more = { workspace = true }
@@ -14,6 +17,3 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }
-
-[features]
-testing = []

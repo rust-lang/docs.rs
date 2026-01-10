@@ -5,6 +5,15 @@ license = "MIT"
 repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
+[features]
+testing = [
+    "dep:rand",
+    "dep:docs_rs_logging",
+    "docs_rs_config/testing",
+    "docs_rs_logging/testing",
+    "docs_rs_opentelemetry/testing",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
@@ -39,7 +48,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
-zip = {version = "7.0.0", default-features = false, features = ["bzip2"]}
+zip = { version = "7.0.0", default-features = false, features = ["bzip2"] }
 zstd = "0.13.0"
 
 [dev-dependencies]
@@ -49,15 +58,6 @@ docs_rs_logging = { path = "../docs_rs_logging", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 rand = { workspace = true }
 test-case = { workspace = true }
-
-[features]
-testing = [
-    "dep:rand",
-    "dep:docs_rs_logging",
-    "docs_rs_config/testing",
-    "docs_rs_logging/testing",
-    "docs_rs_opentelemetry/testing",
-]
 
 [[bench]]
 name = "compression"
