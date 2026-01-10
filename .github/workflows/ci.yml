@@ -110,7 +110,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,fd-find,cargo-machete,cargo-udeps
+          tool: just,fd-find,cargo-machete,cargo-udeps,cargo-sort
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

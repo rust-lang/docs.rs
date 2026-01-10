@@ -86,10 +86,22 @@ lint: format lint-dependencies
   set -euo pipefail
 
   if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    just sort-cargo-toml --check
     just clippy
   else
+    just sort-cargo-toml 
     just clippy-fix
   fi
+
+[group('testing')]
+sort-cargo-toml *args:
+  # for now manually, `cargo sort --workspace` is broken right now for docs.rs
+  # https://github.com/DevinR528/cargo-sort/pull/121
+  cargo sort {{ args }} \
+    ./Cargo.toml \
+    ./crates/bin/* \
+    ./crates/lib/*
+
 
 [group('testing')]
 [arg("udeps", long="udeps")]
