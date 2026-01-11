@@ -21,7 +21,7 @@ use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
 use docs_rs_headers::CanonicalUrl;
-use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
@@ -32,6 +32,7 @@ pub(crate) struct Build {
     docsrs_version: Option<String>,
     build_status: BuildStatus,
     build_time: Option<DateTime<Utc>>,
+    build_duration: Option<Duration>,
     errors: Option<String>,
 }
 
@@ -195,6 +196,19 @@ async fn get_builds(
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
             COALESCE(builds.build_finished, builds.build_started) as build_time,
+            CASE
+                WHEN builds.build_started IS NULL
+                    -- for old builds, `build_started` is empty.
+                    THEN NULL
+                ELSE
+                    CASE
+                        -- for in-progress builds we show the duration until now
+                        WHEN builds.build_finished IS NULL
+                            THEN (CURRENT_TIMESTAMP - builds.build_started)
+                        -- for finished builds we can show the full duration
+                        ELSE (builds.build_finished - builds.build_started)
+                    END
+            END AS "build_duration?: Duration",
             builds.errors
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -530,14 +544,14 @@ mod tests {
             };
             Overrides::save(&mut conn, &FOO, limits).await?;
 
-            let page = kuchikiki::parse_html().one(
+            let page = kuchikiki::parse_html().one(dbg!(
                 env.web_app()
                     .await
-                    .get(&format!("/crate/foo/{V1}/builds"))
+                    .assert_success(&format!("/crate/foo/{V1}/builds"))
                     .await?
                     .text()
-                    .await?,
-            );
+                    .await?
+            ));
 
             let header = page.select(".about h4").unwrap().next().unwrap();
             assert_eq!(header.text_contents(), "foo's sandbox limits");
@@ -550,7 +564,7 @@ mod tests {
             let values: Vec<_> = values.iter().map(|v| &**v).collect();
 
             assert!(values.contains(&"6.44 GB"));
-            assert!(values.contains(&"2 hours"));
+            assert!(values.contains(&"2h"));
             assert!(values.contains(&"102.4 kB"));
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
