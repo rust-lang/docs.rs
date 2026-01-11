@@ -94,6 +94,7 @@ pub mod filters {
     use chrono::{DateTime, Utc};
     use std::borrow::Cow;
     use std::fmt::Display;
+    use std::time::Duration;
 
     pub fn escape_html_inner(input: &str) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
@@ -144,27 +145,26 @@ pub mod filters {
     }
 
     #[askama::filter_fn]
-    pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
-        const TIMES: &[&str] = &["seconds", "minutes", "hours"];
+    pub fn format_duration(duration: &Duration, _: &dyn Values) -> askama::Result<Safe<String>> {
+        let mut secs = duration.as_secs();
 
-        let mut chosen_time = &TIMES[0];
+        let hours = secs / 3_600;
+        secs %= 3_600;
+        let minutes = secs / 60;
+        let seconds = secs % 60;
 
-        for time in &TIMES[1..] {
-            if value / 60.0 >= 1.0 {
-                chosen_time = time;
-                value /= 60.0;
-            } else {
-                break;
-            }
+        let mut parts = Vec::new();
+        if hours > 0 {
+            parts.push(format!("{hours}h"));
+        }
+        if minutes > 0 {
+            parts.push(format!("{minutes}m"));
+        }
+        if seconds > 0 || parts.is_empty() {
+            parts.push(format!("{seconds}s"));
         }
 
-        // TODO: This formatting section can be optimized, two string allocations aren't needed
-        let mut value = format!("{value:.1}");
-        if value.ends_with(".0") {
-            value.truncate(value.len() - 2);
-        }
-
-        Ok(format!("{value} {chosen_time}"))
+        Ok(Safe(parts.join(" ")))
     }
 
     /// Dedent a string by removing all leading whitespace
@@ -292,4 +292,26 @@ fn render(
     );
 
     askama::filters::Safe(icon)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{any::Any, collections::HashMap, time::Duration};
+    use test_case::test_case;
+
+    #[test_case(Duration::from_secs(0) => "0s"; "zero")]
+    #[test_case(Duration::from_secs(1) => "1s"; "simple")]
+    #[test_case(Duration::from_micros(2123456) => "2s"; "cuts microseconds")]
+    #[test_case(Duration::from_secs(3723) => "1h 2m 3s"; "hours minutes seconds")]
+    #[test_case(Duration::from_secs(120) => "2m"; "just minutes")]
+    #[test_case(Duration::from_secs(2123456) => "589h 50m 56s"; "big")]
+    fn test_format_duration(duration: Duration) -> String {
+        let values: HashMap<&str, Box<dyn Any>> = HashMap::new();
+
+        filters::format_duration::default()
+            .execute(&duration, &values)
+            .unwrap()
+            .to_string()
+    }
 }
