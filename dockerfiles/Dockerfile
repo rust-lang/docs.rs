@@ -178,7 +178,7 @@ COPY --from=build /artifacts/docs_rs_watcher /usr/local/bin/
 COPY --from=build /artifacts/cratesfyi /usr/local/bin/
 
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_watcher", "--"]
-CMD ["start", "--repository-stats-updater=true", "--queue-rebuilds=true"]
+CMD ["start", "--repository-stats-updater", "--queue-rebuilds"]
 
 ###############
 #  CLI stage  #
