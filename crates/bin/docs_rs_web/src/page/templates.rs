@@ -94,6 +94,7 @@ pub mod filters {
     use chrono::{DateTime, Utc};
     use std::borrow::Cow;
     use std::fmt::Display;
+    use std::time::Duration;
 
     pub fn escape_html_inner(input: &str) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
@@ -150,27 +151,10 @@ pub mod filters {
     }
 
     #[askama::filter_fn]
-    pub fn format_secs(mut value: f32, _: &dyn Values) -> askama::Result<String> {
-        const TIMES: &[&str] = &["seconds", "minutes", "hours"];
-
-        let mut chosen_time = &TIMES[0];
-
-        for time in &TIMES[1..] {
-            if value / 60.0 >= 1.0 {
-                chosen_time = time;
-                value /= 60.0;
-            } else {
-                break;
-            }
-        }
-
-        // TODO: This formatting section can be optimized, two string allocations aren't needed
-        let mut value = format!("{value:.1}");
-        if value.ends_with(".0") {
-            value.truncate(value.len() - 2);
-        }
-
-        Ok(format!("{value} {chosen_time}"))
+    pub fn format_duration(duration: &Duration, _: &dyn Values) -> askama::Result<Safe<String>> {
+        // we only want seconds precision when rendering the durations.
+        let duration = Duration::from_secs(duration.as_secs());
+        Ok(Safe(humantime::format_duration(duration).to_string()))
     }
 
     /// Dedent a string by removing all leading whitespace
@@ -298,4 +282,23 @@ fn render(
     );
 
     askama::filters::Safe(icon)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{any::Any, collections::HashMap, time::Duration};
+    use test_case::test_case;
+
+    #[test_case(Duration::from_secs(1) => "1s"; "simple")]
+    #[test_case(Duration::from_micros(2123456) => "2s"; "cuts microseconds")]
+    #[test_case(Duration::from_secs(2123456) => "24days 13h 50m 56s"; "big")]
+    fn test_format_duration(duration: Duration) -> String {
+        let values: HashMap<&str, Box<dyn Any>> = HashMap::new();
+
+        filters::format_duration::default()
+            .execute(&duration, &values)
+            .unwrap()
+            .to_string()
+    }
 }
