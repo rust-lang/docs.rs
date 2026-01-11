@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                dr.avg_duration AS \"avg_build_duration_release?: Duration\",\n                dc.avg_duration AS \"avg_build_duration_crate?: Duration\"\n            FROM\n                build_durations_release AS dr\n            INNER JOIN build_durations_crate AS dc on dr.crate_id = dc.crate_id\n            WHERE rid = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avg_build_duration_release?: Duration",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 1,
+        "name": "avg_build_duration_crate?: Duration",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "2d8f2d5c887fef11e3184d48181cb7a54564002de4c5728b254488f9a2470d1d"
+}

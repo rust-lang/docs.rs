@@ -41,7 +41,7 @@
 
             <tr>
                 <td>Maximum rustdoc execution time</td>
-                <td>{{ limits.timeout.as_secs_f32()|format_secs }}</td>
+                <td>{{ limits.timeout|format_duration }}</td>
             </tr>
 
             <tr>
