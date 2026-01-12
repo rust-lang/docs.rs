@@ -48,7 +48,6 @@ font-awesome-as-a-crate = { path = "../../lib/font-awesome-as-a-crate" }
 futures-util = { workspace = true }
 getrandom = "0.3.1"
 http = { workspace = true }
-humantime = "2.3.0"
 itertools = { workspace = true }
 lol_html = "2.0.0"
 mime = { workspace = true }
@@ -100,4 +99,3 @@ opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }
-

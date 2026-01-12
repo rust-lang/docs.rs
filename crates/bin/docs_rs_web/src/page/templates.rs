@@ -152,9 +152,25 @@ pub mod filters {
 
     #[askama::filter_fn]
     pub fn format_duration(duration: &Duration, _: &dyn Values) -> askama::Result<Safe<String>> {
-        // we only want seconds precision when rendering the durations.
-        let duration = Duration::from_secs(duration.as_secs());
-        Ok(Safe(humantime::format_duration(duration).to_string()))
+        let mut secs = duration.as_secs();
+
+        let hours = secs / 3_600;
+        secs %= 3_600;
+        let minutes = secs / 60;
+        let seconds = secs % 60;
+
+        let mut parts = Vec::new();
+        if hours > 0 {
+            parts.push(format!("{hours}h"));
+        }
+        if minutes > 0 {
+            parts.push(format!("{minutes}m"));
+        }
+        if seconds > 0 || parts.is_empty() {
+            parts.push(format!("{seconds}s"));
+        }
+
+        Ok(Safe(parts.join(" ")))
     }
 
     /// Dedent a string by removing all leading whitespace
@@ -290,9 +306,12 @@ mod tests {
     use std::{any::Any, collections::HashMap, time::Duration};
     use test_case::test_case;
 
+    #[test_case(Duration::from_secs(0) => "0s"; "zero")]
     #[test_case(Duration::from_secs(1) => "1s"; "simple")]
     #[test_case(Duration::from_micros(2123456) => "2s"; "cuts microseconds")]
-    #[test_case(Duration::from_secs(2123456) => "24days 13h 50m 56s"; "big")]
+    #[test_case(Duration::from_secs(3723) => "1h 2m 3s"; "hours minutes seconds")]
+    #[test_case(Duration::from_secs(120) => "2m"; "just minutes")]
+    #[test_case(Duration::from_secs(2123456) => "589h 50m 56s"; "big")]
     fn test_format_duration(duration: Duration) -> String {
         let values: HashMap<&str, Box<dyn Any>> = HashMap::new();
 
