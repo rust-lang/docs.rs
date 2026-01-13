@@ -16,7 +16,30 @@ use axum_extra::{
 use docs_rs_headers::IfNoneMatch;
 use docs_rs_mimes::APPLICATION_OPENSEARCH_XML;
 use http::{StatusCode, Uri};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 use tower_http::services::ServeDir;
+
+const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
+/// Find the path to one of the static dirs.
+///
+/// First, check if a directory with the given name exists in the CWD.
+/// When it doesn't exist, we fall back to the CARGO_MANIFEST_DIR as root.
+///
+/// This allows running the server from the project root.
+fn static_dir(name: &str) -> PathBuf {
+    if let Ok(cwd) = env::current_dir() {
+        let candidate = cwd.join(name);
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+
+    Path::new(MANIFEST_DIR).join(name)
+}
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
 const STYLE_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/style.css"));
@@ -130,11 +153,13 @@ pub(crate) fn build_static_router() -> AxumRouter {
             get_static(|| async { build_static_css_response(RUSTDOC_2025_08_20_CSS) }),
         )
         .fallback_service(
-            get_service(ServeDir::new("static").fallback(ServeDir::new("vendor")))
-                .layer(middleware::from_fn(set_needed_static_headers))
-                .layer(middleware::from_fn(|request, next| async {
-                    request_recorder(request, next, Some("static resource")).await
-                })),
+            get_service(
+                ServeDir::new(static_dir("static")).fallback(ServeDir::new(static_dir("vendor"))),
+            )
+            .layer(middleware::from_fn(set_needed_static_headers))
+            .layer(middleware::from_fn(|request, next| async {
+                request_recorder(request, next, Some("static resource")).await
+            })),
         )
         .layer(middleware::from_fn(conditional_get))
 }
@@ -313,12 +338,13 @@ mod tests {
             let web = env.web_app().await;
 
             for root in STATIC_SEARCH_PATHS {
-                for entry in walkdir::WalkDir::new(root) {
+                let root = static_dir(root);
+                for entry in walkdir::WalkDir::new(&root) {
                     let entry = entry?;
                     if !entry.file_type().is_file() {
                         continue;
                     }
-                    let file = entry.path().strip_prefix(root).unwrap();
+                    let file = entry.path().strip_prefix(&root).unwrap();
                     let path = entry.path();
 
                     let url = format!("/-/static/{}", file.to_str().unwrap());
