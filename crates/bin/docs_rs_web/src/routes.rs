@@ -3,10 +3,12 @@ use crate::{
     error::AxumNope,
     handlers::{
         about, build_details, builds, crate_details, features, releases, rustdoc, sitemap, source,
-        statics::build_static_router, status,
+        statics::{build_static_router, static_root_dir},
+        status,
     },
     metrics::request_recorder,
 };
+use anyhow::Result;
 use askama::Template;
 use axum::{
     Extension, Router as AxumRouter,
@@ -98,7 +100,7 @@ fn cached_permanent_redirect(uri: &str) -> impl IntoResponse {
     )
 }
 
-pub(crate) fn build_axum_routes() -> AxumRouter {
+pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
     // hint for naming axum routes:
     // when routes overlap, the route parameters at the same position
     // have to use the same name:
@@ -112,7 +114,7 @@ pub(crate) fn build_axum_routes() -> AxumRouter {
     // - `/{name}/{version}/settings.html`
     // - `/{crate}/{version}/{target}`
     //
-    AxumRouter::new()
+    Ok(AxumRouter::new()
         // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
         // must live at the site root:
         //   https://developers.google.com/search/reference/robots_txt#handling-http-result-codes
@@ -127,7 +129,7 @@ pub(crate) fn build_axum_routes() -> AxumRouter {
         )
         // `.nest` with fallbacks is currently broken, `.nest_service works
         // https://github.com/tokio-rs/axum/issues/3138
-        .nest_service("/-/static", build_static_router())
+        .nest_service("/-/static", build_static_router(static_root_dir()?))
         .route(
             "/opensearch.xml",
             get_static(|| async { cached_permanent_redirect("/-/static/opensearch.xml") }),
@@ -345,7 +347,7 @@ pub(crate) fn build_axum_routes() -> AxumRouter {
             "/{name}/{version}/{target}/{*path}",
             get_rustdoc(rustdoc::rustdoc_html_server_handler),
         )
-        .fallback(fallback)
+        .fallback(fallback))
 }
 
 async fn fallback() -> impl IntoResponse {
