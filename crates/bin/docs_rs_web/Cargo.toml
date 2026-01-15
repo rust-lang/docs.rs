@@ -97,5 +97,6 @@ kuchikiki = "0.8"
 mockito = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }

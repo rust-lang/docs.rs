@@ -2,6 +2,7 @@ use crate::{
     cache::CachePolicy, cache::STATIC_ASSET_CACHE_POLICY, metrics::request_recorder,
     routes::get_static,
 };
+use anyhow::{Result, bail};
 use axum::{
     Router as AxumRouter,
     extract::{Extension, Request},
@@ -23,22 +24,37 @@ use std::{
 use tower_http::services::ServeDir;
 
 const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const STATIC_DIR_NAME: &str = "static";
+const VENDOR_DIR_NAME: &str = "vendor";
+const STATIC_DIR_NAMES: &[&str] = &[STATIC_DIR_NAME, VENDOR_DIR_NAME];
 
-/// Find the path to one of the static dirs.
+/// Find the root directory for serving our static assets.
 ///
-/// First, check if a directory with the given name exists in the CWD.
-/// When it doesn't exist, we fall back to the CARGO_MANIFEST_DIR as root.
+/// We have two directories we expect: `vendor` and `static`.
 ///
+/// First we check if they exist in the current working directory:
+/// this works
+/// * inside the docker container, or
+/// * any production deploy,
+/// * when running `cargo run` from inside the `docs_rs_web` subcrate.
+///
+/// If they don't exist there, we try to find the folders in
+/// `CARGO_MANIFEST_DIR`.
 /// This allows running the server from the project root.
-fn static_dir(name: &str) -> PathBuf {
-    if let Ok(cwd) = env::current_dir() {
-        let candidate = cwd.join(name);
-        if candidate.is_dir() {
-            return candidate;
+pub(crate) fn static_root_dir() -> Result<PathBuf> {
+    let manifest_dir = PathBuf::from(MANIFEST_DIR);
+    for candidate in [env::current_dir()?, manifest_dir] {
+        if STATIC_DIR_NAMES
+            .iter()
+            .all(|name| candidate.join(name).is_dir())
+        {
+            return Ok(candidate);
         }
     }
 
-    Path::new(MANIFEST_DIR).join(name)
+    bail!(
+        "Could not find static root directory containing '{STATIC_DIR_NAME}' and '{VENDOR_DIR_NAME}' folders"
+    );
 }
 
 const VENDORED_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/vendored.css"));
@@ -130,7 +146,8 @@ async fn conditional_get(
     res
 }
 
-pub(crate) fn build_static_router() -> AxumRouter {
+pub(crate) fn build_static_router(root: impl AsRef<Path>) -> AxumRouter {
+    let root = root.as_ref();
     AxumRouter::new()
         .route(
             "/vendored.css",
@@ -154,7 +171,8 @@ pub(crate) fn build_static_router() -> AxumRouter {
         )
         .fallback_service(
             get_service(
-                ServeDir::new(static_dir("static")).fallback(ServeDir::new(static_dir("vendor"))),
+                ServeDir::new(root.join(STATIC_DIR_NAME))
+                    .fallback(ServeDir::new(root.join(VENDOR_DIR_NAME))),
             )
             .layer(middleware::from_fn(set_needed_static_headers))
             .layer(middleware::from_fn(|request, next| async {
@@ -167,8 +185,13 @@ pub(crate) fn build_static_router() -> AxumRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{
-        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+    use crate::{
+        handlers::apply_middleware,
+        page::TemplateData,
+        testing::{
+            AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+            async_wrapper,
+        },
     };
     use axum::{Router, body::Body};
     use docs_rs_headers::compute_etag;
@@ -176,11 +199,9 @@ mod tests {
         HeaderMap,
         header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},
     };
-    use std::fs;
+    use std::{fs, sync::Arc};
     use test_case::test_case;
     use tower::ServiceExt as _;
-
-    const STATIC_SEARCH_PATHS: &[&str] = &["static", "vendor"];
 
     fn content_length(resp: &Response) -> u64 {
         resp.headers()
@@ -337,8 +358,8 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
 
-            for root in STATIC_SEARCH_PATHS {
-                let root = static_dir(root);
+            for root in STATIC_DIR_NAMES {
+                let root = static_root_dir()?.join(root);
                 for entry in walkdir::WalkDir::new(&root) {
                     let entry = entry?;
                     if !entry.file_type().is_file() {
@@ -374,6 +395,48 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn static_files_should_exist_but_is_locally_deleted() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        /// build a small axum app with middleware, but just with the static router only.
+        async fn build_static_app(env: &TestEnvironment, root: impl AsRef<Path>) -> Result<Router> {
+            let template_data = Arc::new(TemplateData::new(1).unwrap());
+            apply_middleware(
+                build_static_router(root),
+                env.config().clone(),
+                env.context().clone(),
+                Some(template_data),
+            )
+            .await
+        }
+
+        const PATH: &str = "/menu.js";
+        {
+            // Sanity check if we have a path that should exist
+            let web = env.web_app().await;
+            web.assert_success(&format!("/-/static{PATH}")).await?;
+
+            // and if our static router thing works theoretically
+            let static_app = build_static_app(&env, &static_root_dir()?).await?;
+            static_app.assert_success(PATH).await?;
+        }
+
+        // set up a broken static router.
+        // The compile-time generated etag map says `menu.js` should exist,
+        // but in the given root for static files, it's missing.
+        let tempdir = tempfile::tempdir()?;
+        let static_app = build_static_app(&env, &tempdir).await?;
+
+        // before bugfix, this would add caching headers, and
+        // trigger a `debug_assert`.
+        // The 404 is what we expect.
+        // `assert_not_found` also asserts if no-caching headers are set.
+        static_app.assert_not_found(PATH).await?;
+
+        Ok(())
     }
 
     #[test]

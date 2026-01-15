@@ -118,7 +118,7 @@ pub(crate) async fn build_axum_app(
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
     apply_middleware(
-        routes::build_axum_routes(),
+        routes::build_axum_routes()?,
         config,
         context,
         Some(template_data),
