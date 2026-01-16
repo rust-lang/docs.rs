@@ -12,12 +12,13 @@ pub(crate) async fn security_middleware(
     req: AxumHttpRequest,
     next: Next,
 ) -> AxumResponse {
-    let path = uri.path();
-
-    if let Err(err) = url_decode(path) {
-        warn!(%uri, ?err, "invalid UTF-8 in request path");
-        return StatusCode::NOT_ACCEPTABLE.into_response();
-    }
+    let path = match url_decode(uri.path()) {
+        Ok(path) => path,
+        Err(err) => {
+            warn!(%uri, ?err, "invalid UTF-8 in request path");
+            return StatusCode::NOT_ACCEPTABLE.into_response();
+        }
+    };
 
     if path.contains("/../") || path.ends_with("/..") {
         warn!(%uri, "detected path traversal attempt");
@@ -44,6 +45,7 @@ mod tests {
     #[test_case("/../"; "relative path with slash")]
     #[test_case("/.."; "relative path")]
     #[test_case("/asdf/../"; "relative path 2")]
+    #[test_case("/tiny_http/latest/tiny_http%2f%2e%2e"; "encoded")]
     async fn test_invalid_path(path: &str) -> Result<()> {
         let app = Router::new()
             .route("/{*inner}", get(|| async { StatusCode::OK }))
