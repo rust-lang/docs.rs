@@ -1,0 +1,13 @@
+[package]
+name = "docs_rs_integration_tests"
+version = "0.1.0"
+edition = "2024"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+docs_rs_config = { path = "../crates/lib/docs_rs_config", features = ["testing"] }
+docs_rs_context = { path = "../crates/lib/docs_rs_context", features = ["testing"] }
+docs_rs_web = { path = "../crates/bin/docs_rs_web" }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

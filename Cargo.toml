@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2" 
 
-members = ["crates/bin/*", "crates/lib/*"]
+members = ["crates/bin/*", "crates/lib/*", "integration_tests"]
 
 default-members = [
     "crates/bin/docs_rs_admin",

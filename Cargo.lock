@@ -2156,6 +2156,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_integration_tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_config",
+ "docs_rs_context",
+ "docs_rs_web",
+ "reqwest 0.13.1",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "docs_rs_logging"
 version = "0.1.0"
 dependencies = [
