@@ -428,8 +428,9 @@ impl AsyncStorage {
     pub async fn store_all_in_archive(
         &self,
         archive_path: &str,
-        root_dir: &Path,
+        root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        let root_dir = root_dir.as_ref();
         let (mut zip_content,    file_paths) =
             spawn_blocking({
                 let archive_path = archive_path.to_owned();
@@ -523,9 +524,11 @@ impl AsyncStorage {
     #[instrument(skip(self))]
     pub async fn store_all(
         &self,
-        prefix: &Path,
-        root_dir: &Path,
+        prefix: impl AsRef<Path> + fmt::Debug,
+        root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        let prefix = prefix.as_ref();
+        let root_dir = root_dir.as_ref();
         let alg = CompressionAlgorithm::default();
 
         let (blobs, file_paths_and_mimes) = spawn_blocking({

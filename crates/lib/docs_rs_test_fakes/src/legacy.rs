@@ -9,8 +9,8 @@ use docs_rs_database::{
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
-    AsyncStorage, FileEntry, add_path_into_database, add_path_into_remote_archive, compress,
-    file_list_to_json, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+    AsyncStorage, FileEntry, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
+    source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, ReleaseId, Version, VersionReq,
@@ -411,20 +411,20 @@ impl<'a> FakeRelease<'a> {
                     FileKind::Sources => source_archive_path(&package.name, &package.version),
                 };
                 debug!("store in archive: {:?}", archive);
-                let (files_list, new_alg) =
-                    add_path_into_remote_archive(storage, &archive, source_directory).await?;
-                Ok((files_list, new_alg))
+                Ok(storage
+                    .store_all_in_archive(&archive, source_directory)
+                    .await?)
             } else {
                 let prefix = match kind {
                     FileKind::Rustdoc => "rustdoc",
                     FileKind::Sources => "sources",
                 };
-                add_path_into_database(
-                    storage,
-                    format!("{}/{}/{}/", prefix, package.name, package.version),
-                    source_directory,
-                )
-                .await
+                storage
+                    .store_all(
+                        format!("{}/{}/{}/", prefix, package.name, package.version),
+                        source_directory,
+                    )
+                    .await
             }
         }
 
