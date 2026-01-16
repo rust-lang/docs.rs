@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use clap::Parser;
 use docs_rs_config::AppConfig as _;
-use docs_rs_web::{Config, run_web_server};
+use docs_rs_web::{Config, build_context, run_web_server};
 use std::{net::SocketAddr, sync::Arc};
 
 #[derive(Parser)]
@@ -20,22 +20,7 @@ async fn main() -> anyhow::Result<()> {
     let _guard = docs_rs_logging::init().context("error initializing logging")?;
 
     let args = Cli::parse();
-
-    let context = Arc::new(
-        docs_rs_context::Context::builder()
-            .with_runtime()
-            .await?
-            .with_meter_provider()?
-            .with_pool()
-            .await?
-            .with_build_queue()?
-            .with_storage()
-            .await?
-            .with_registry_api()?
-            .with_build_limits()?
-            .build()?,
-    );
-
+    let context = build_context().await?;
     let config = Arc::new(Config::from_environment()?);
 
     run_web_server(Some(args.socket_addr), config, context).await?;
