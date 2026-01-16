@@ -16,6 +16,10 @@ use tracing::error;
 /// This enables us to use the fastly "soft purge" for everything.
 pub const SURROGATE_KEY_ALL: SurrogateKey = SurrogateKey::from_static("all");
 
+/// A surrogate key that we apply to content that is static and should be
+/// invalidated everything we deploy a new version of docs.rs.
+pub const SURROGATE_KEY_DOCSRS_STATIC: SurrogateKey = SurrogateKey::from_static("docs-rs-static");
+
 /// cache poicy for static assets like rustdoc files or build assets.
 pub const STATIC_ASSET_CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
 
