@@ -19,8 +19,8 @@ use docs_rs_rustdoc_json::{
     read_format_version_from_rustdoc_json,
 };
 use docs_rs_storage::{
-    AsyncStorage, Storage, add_path_into_database, add_path_into_remote_archive, compress,
-    file_list_to_json, get_file_list, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+    AsyncStorage, Storage, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
+    rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version,
@@ -454,17 +454,13 @@ impl RustwideBuilder {
                 // available at --static-root-path, we add files from that subdirectory, if present.
                 let static_files = dest.as_ref().join("static.files");
                 if static_files.try_exists()? {
-                    self.runtime.block_on(add_path_into_database(
-                        &self.storage,
-                        RUSTDOC_STATIC_STORAGE_PREFIX,
-                        &static_files,
-                    ))?;
+                    self.runtime.block_on(
+                        self.storage
+                            .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &static_files),
+                    )?;
                 } else {
-                    self.runtime.block_on(add_path_into_database(
-                        &self.storage,
-                        RUSTDOC_STATIC_STORAGE_PREFIX,
-                        &dest,
-                    ))?;
+                    self.runtime
+                        .block_on(self.storage.store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &dest))?;
                 }
 
                 self.runtime.block_on(async {
@@ -629,8 +625,8 @@ impl RustwideBuilder {
                 debug!("adding sources into database");
                 let files_list = {
                     let (files_list, new_alg) =
-                        self.runtime.block_on(add_path_into_remote_archive(
-                            &self.storage,
+                        self.runtime.block_on(
+                        self.storage.store_all_in_archive(
                             &source_archive_path(name, version),
                             build.host_source_dir(),
                         ))?;
@@ -724,8 +720,8 @@ impl RustwideBuilder {
                         target_build_logs.insert(target, target_res.build_log);
                     }
                     let (file_list, new_alg) =
-                        self.runtime.block_on(add_path_into_remote_archive(
-                            &self.storage,
+                        self.runtime.block_on(
+                        self.storage.store_all_in_archive(
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;
