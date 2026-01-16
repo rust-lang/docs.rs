@@ -1,5 +1,6 @@
 //! Web interface of docs.rs
 
+pub(crate) mod about;
 pub(crate) mod build_details;
 pub(crate) mod builds;
 pub(crate) mod crate_details;
