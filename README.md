@@ -66,19 +66,19 @@ docker compose up --wait db s3
 # allow downloads from the s3 container to support the /crate/.../download endpoint
 mcli policy set download docsrs/rust-docs-rs
 # Setup the database you just created
-cargo run -- database migrate
+cargo run --bin docs_rs_admin -- database migrate
 # Update the currently used toolchain to the latest nightly
 # This also sets up the docs.rs build environment.
 # This will take a while the first time but will be cached afterwards.
-cargo run -- build update-toolchain
+cargo run --bin docs_rs_builder -- build update-toolchain
 # Build a sample crate to make sure it works
-cargo run -- build crate regex 1.3.1
+cargo run --bin docs_rs_builder -- build crate regex 1.3.1
 # This starts the web server but does not build any crates.
 # It does not automatically run the migrations, so you need to do that manually (see above).
-cargo run -- start-web-server
+cargo run --bin docs_rs_web
 # If you want the server to automatically restart when code or templates change
 # you can use `cargo-watch`:
-cargo watch -x "run -- start-web-server"
+cargo watch -x "run --bin docs_rs_web"
 ```
 
 If you need to store big files in the repository's directory it's recommended to
@@ -243,7 +243,7 @@ See `cargo run -- --help` for a full list of commands.
 
 ```sh
 # This command will start web interface of docs.rs on http://localhost:3000
-cargo run -- start-web-server
+cargo run --bin docs_rs_webserver start-web-server
 ```
 
 #### `build` subcommand
@@ -252,14 +252,14 @@ cargo run -- start-web-server
 # Builds <CRATE_NAME> <CRATE_VERSION> and adds it into database
 # This is the main command to build and add a documentation into docs.rs.
 # For example, `docker compose run --rm builder-a build crate regex 1.1.6`
-cargo run -- build crate <CRATE_NAME> <CRATE_VERSION>
+cargo run --bin docs_rs_builder -- build crate <CRATE_NAME> <CRATE_VERSION>
 
 # alternatively, within docker-compose containers
 docker compose run --rm builder-a build crate <CRATE_NAME> <CRATE_VERSION>
 
 # Builds every crate on crates.io and adds them into database
 # (beware: this may take months to finish)
-cargo run -- build world
+cargo run --bin docs_rs_builder -- build world
 
 # Builds a local package you have at <SOURCE> and adds it to the database.
 # The package does not have to be on crates.io.
@@ -268,21 +268,18 @@ cargo run -- build world
 # In certain scenarios it might be necessary to first package the respective
 # crate by using the `cargo package` command.
 # See also /docs/build-workspaces.md
-cargo run -- build crate --local /path/to/source
+cargo run --bin docs_rs_builder -- build crate --local /path/to/source
 ```
 
 #### `database` subcommand
 
 ```sh
-# Adds a directory into database to serve with `staticfile` crate.
-cargo run -- database add-directory <DIRECTORY> [PREFIX]
-
 # Updates repository stats for crates.
 # You need to set the DOCSRS_GITHUB_ACCESSTOKEN
 # environment variable in order to run this command.
 # Set DOCSRS_GITLAB_ACCESSTOKEN to raise the rate limit for GitLab repositories,
 # or leave it blank to fetch repositories at a slower rate.
-cargo run -- database update-repository-fields
+cargo run --bin docs_rs_admin -- database update-repository-fields
 ```
 
 If you want to explore or edit database manually, you can connect to the database
@@ -297,29 +294,21 @@ The database contains a blacklist of crates that should not be built.
 
 ```sh
 # List the crates on the blacklist
-cargo run -- database blacklist list
+cargo run --bin docs_rs_admin -- database blacklist list
 
 # Adds <CRATE_NAME> to the blacklist
-cargo run -- database blacklist add <CRATE_NAME>
+cargo run --bin docs_rs_admin -- database blacklist add <CRATE_NAME>
 
 # Removes <CRATE_NAME> from the blacklist
-cargo run -- database blacklist remove <CRATE_NAME>
+cargo run --bin docs_rs_admin -- database blacklist remove <CRATE_NAME>
 ```
 
 If you want to revert to a precise migration, you can run:
 
 ```sh
-cargo run -- database migrate <migration number>
+cargo run --bin docs_rs_admin -- database migrate <migration number>
 ```
 
-#### `daemon` subcommand
-
-```sh
-# Run a persistent daemon which queues builds and starts a web server.
-cargo run -- daemon --registry-watcher=disabled
-# Add crates to the queue
-cargo run -- queue add <CRATE> <VERSION>
-```
 
 ### Updating vendored sources
 
