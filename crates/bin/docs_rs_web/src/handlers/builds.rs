@@ -21,7 +21,7 @@ use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
 use docs_rs_headers::CanonicalUrl;
-use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildId, BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
@@ -32,7 +32,6 @@ pub(crate) struct Build {
     docsrs_version: Option<String>,
     build_status: BuildStatus,
     build_time: Option<DateTime<Utc>>,
-    build_duration: Option<Duration>,
     errors: Option<String>,
 }
 
@@ -196,10 +195,8 @@ async fn get_builds(
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
             COALESCE(builds.build_finished, builds.build_started) as build_time,
-            durations.duration AS "build_duration?: Duration",
             builds.errors
          FROM builds
-         INNER JOIN build_durations AS durations ON durations.build_id = builds.id
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
@@ -533,14 +530,14 @@ mod tests {
             };
             Overrides::save(&mut conn, &FOO, limits).await?;
 
-            let page = kuchikiki::parse_html().one(dbg!(
+            let page = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
-                    .assert_success(&format!("/crate/foo/{V1}/builds"))
+                    .get(&format!("/crate/foo/{V1}/builds"))
                     .await?
                     .text()
-                    .await?
-            ));
+                    .await?,
+            );
 
             let header = page.select(".about h4").unwrap().next().unwrap();
             assert_eq!(header.text_contents(), "foo's sandbox limits");
@@ -553,7 +550,7 @@ mod tests {
             let values: Vec<_> = values.iter().map(|v| &**v).collect();
 
             assert!(values.contains(&"6.44 GB"));
-            assert!(values.contains(&"2h"));
+            assert!(values.contains(&"2 hours"));
             assert!(values.contains(&"102.4 kB"));
             assert!(values.contains(&"blocked"));
             assert!(values.contains(&"1"));
