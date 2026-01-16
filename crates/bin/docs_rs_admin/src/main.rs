@@ -2,7 +2,7 @@ mod rebuilds;
 #[cfg(test)]
 pub(crate) mod testing;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
@@ -15,9 +15,12 @@ use docs_rs_database::{
     crate_details,
     service_config::{ConfigName, set_config},
 };
+use docs_rs_fastly::CdnBehaviour as _;
+use docs_rs_headers::SurrogateKey;
 use docs_rs_types::{CrateId, KrateName, Version};
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
+use std::iter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -55,6 +58,11 @@ enum CommandLine {
         #[command(subcommand)]
         subcommand: QueueSubcommand,
     },
+
+    Cdn {
+        #[command(subcommand)]
+        subcommand: CdnSubcommand,
+    },
 }
 
 impl CommandLine {
@@ -68,12 +76,14 @@ impl CommandLine {
             .with_build_queue()?
             .with_repository_stats()?
             .with_registry_api()?
+            .with_maybe_cdn()?
             .build()?;
 
         match self {
             Self::Build { subcommand } => subcommand.handle_args(ctx).await?,
             Self::Database { subcommand } => subcommand.handle_args(ctx).await?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx).await?,
+            Self::Cdn { subcommand } => subcommand.handle_args(ctx).await?,
         }
 
         Ok(())
@@ -467,6 +477,33 @@ impl BlacklistSubcommand {
             Self::Remove { crate_name } => blacklist::remove_crate(&mut conn, &crate_name)
                 .await
                 .context("failed to remove crate from blacklist")?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+enum CdnSubcommand {
+    /// purge pages with a surrogate key from the CDN
+    Purge {
+        /// Name of crate to build
+        #[arg(name = "SURROGATE_KEY")]
+        surrogate_key: SurrogateKey,
+    },
+}
+
+impl CdnSubcommand {
+    async fn handle_args(self, ctx: Context) -> Result<()> {
+        match self {
+            Self::Purge { surrogate_key } => {
+                if let Some(cdn) = ctx.cdn() {
+                    cdn.purge_surrogate_keys(iter::once(surrogate_key))
+                        .await
+                        .context("failed to purge CDN by surrogate key")?;
+                } else {
+                    bail!("CDN is not configured, cannot purge");
+                }
+            }
         }
         Ok(())
     }

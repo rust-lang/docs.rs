@@ -1,5 +1,5 @@
 use crate::{
-    cache::CachePolicy,
+    cache::{CachePolicy, SURROGATE_KEY_DOCSRS_STATIC},
     error::{AxumErrorPage, AxumResult},
     extractors::{DbConnection, Path},
     impl_axum_webpage,
@@ -48,7 +48,10 @@ macro_rules! about_page {
         #[template(path = $template)]
         struct $ty;
 
-        impl_axum_webpage! { $ty }
+        impl_axum_webpage! {
+            $ty,
+            cache_policy = |_| CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into())
+        }
     };
 }
 
@@ -95,17 +98,6 @@ mod tests {
     use anyhow::Result;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn about_build_is_cached() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        let web = env.web_app().await;
-
-        let response = web.assert_success("/about/builds").await?;
-        response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn about_page() -> Result<()> {
         let env = TestEnvironment::new().await?;
         let web = env.web_app().await;
@@ -120,7 +112,16 @@ mod tests {
             }
             let filename = file_path.file_stem().unwrap().to_str().unwrap();
             let path = format!("/about/{filename}");
-            web.assert_success(&path).await?;
+            let response = web.assert_success(&path).await?;
+
+            if filename == "builds" {
+                response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
+            } else {
+                response.assert_cache_control(
+                    CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                    env.config(),
+                );
+            }
         }
         web.assert_success("/about").await?;
         Ok(())

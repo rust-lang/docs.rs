@@ -204,6 +204,8 @@ RUN apt-get update \
 
 WORKDIR /srv/docsrs
 
+COPY crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
+
 COPY --from=build /artifacts/docs_rs_admin /usr/local/bin/
 COPY --from=build /artifacts/cratesfyi /usr/local/bin
 
