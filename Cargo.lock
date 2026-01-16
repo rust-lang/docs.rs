@@ -1932,6 +1932,8 @@ dependencies = [
  "futures-util",
  "pretty_assertions",
  "sqlx",
+ "tempfile",
+ "test-case",
  "tokio",
  "tracing",
 ]

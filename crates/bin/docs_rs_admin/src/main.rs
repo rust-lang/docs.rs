@@ -1,4 +1,5 @@
 mod rebuilds;
+mod repackage;
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -17,7 +18,7 @@ use docs_rs_database::{
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
-use docs_rs_types::{CrateId, KrateName, Version};
+use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
 use std::iter;
@@ -72,6 +73,8 @@ impl CommandLine {
             .await?
             .with_meter_provider()?
             .with_pool()
+            .await?
+            .with_storage()
             .await?
             .with_build_queue()?
             .with_repository_stats()?
@@ -283,6 +286,14 @@ enum DatabaseSubcommand {
         version: Option<i64>,
     },
 
+    /// temporary command to repackage missing crates into archive storage.
+    /// starts at the earliest release and works forwards.
+    Repackage {
+        /// process at most this amount of releases
+        #[arg(long)]
+        limit: Option<u32>,
+    },
+
     /// temporary command to update the `crates.latest_version_id` field
     UpdateLatestVersionId,
 
@@ -319,6 +330,48 @@ impl DatabaseSubcommand {
                 docs_rs_database::migrate(&mut conn, version).await
             }
             .context("Failed to run database migrations")?,
+
+            Self::Repackage { limit } => {
+                let pool = ctx.pool()?;
+                let storage = ctx.storage()?;
+                let mut list_conn = pool.get_async().await?;
+                let mut update_conn = pool.get_async().await?;
+
+                let limit = limit.unwrap_or(2_000_000u32);
+
+                let mut stream = sqlx::query!(
+                    r#"SELECT
+                           r.id as "rid: ReleaseId",
+                           c.name as "name: KrateName",
+                           r.version as "version: Version"
+                       FROM
+                            crates as c
+                            INNER JOIN releases as r ON c.id = r.crate_id
+                       WHERE
+                            r.archive_storage = FALSE
+                       ORDER BY r.id
+                       LIMIT $1
+                    "#,
+                    limit as i64,
+                )
+                .fetch(&mut *list_conn);
+
+                while let Some(row) = stream.next().await {
+                    let row = row?;
+
+                    crate::repackage::repackage(
+                        &mut update_conn,
+                        storage,
+                        row.rid,
+                        &row.name,
+                        &row.version,
+                    )
+                    .await?;
+                }
+
+                Ok::<(), anyhow::Error>(())
+            }
+            .context("Failed to repackage storage")?,
 
             Self::UpdateLatestVersionId => {
                 let pool = ctx.pool()?;
