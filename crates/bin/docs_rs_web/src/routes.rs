@@ -2,7 +2,7 @@ use crate::{
     cache::CachePolicy,
     error::AxumNope,
     handlers::{
-        build_details, builds, crate_details, features, releases, rustdoc, sitemap, source,
+        about, build_details, builds, crate_details, features, releases, rustdoc, sitemap, source,
         statics::build_static_router, status,
     },
     metrics::request_recorder,
@@ -137,9 +137,9 @@ pub(crate) fn build_axum_routes() -> AxumRouter {
             "/-/sitemap/{letter}/sitemap.xml",
             get_internal(sitemap::sitemap_handler),
         )
-        .route_with_tsr("/about/builds", get_internal(sitemap::about_builds_handler))
-        .route_with_tsr("/about", get_internal(sitemap::about_handler))
-        .route_with_tsr("/about/{subpage}", get_internal(sitemap::about_handler))
+        .route_with_tsr("/about/builds", get_internal(about::about_builds_handler))
+        .route_with_tsr("/about", get_internal(about::about_handler))
+        .route_with_tsr("/about/{subpage}", get_internal(about::about_handler))
         .route("/", get_internal(releases::home_page))
         .route_with_tsr("/releases", get_internal(releases::recent_releases_handler))
         .route_with_tsr(
@@ -356,45 +356,31 @@ async fn fallback() -> impl IntoResponse {
 mod tests {
     use crate::cache::CachePolicy;
     use crate::testing::{
-        AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
+        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        async_wrapper,
     };
+    use anyhow::Result;
     use reqwest::StatusCode;
+    use test_case::test_case;
 
-    #[test]
-    fn test_root_redirects() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
-            let config = env.config();
-            // These are "well-known" resources that will be requested from the root, but support
-            // redirection
-            web.assert_redirect_cached(
-                "/favicon.ico",
-                "/-/static/favicon.ico",
-                CachePolicy::ForeverInCdnAndBrowser,
-                config,
-            )
-            .await?;
-            web.assert_redirect_cached(
-                "/robots.txt",
-                "/-/static/robots.txt",
-                CachePolicy::ForeverInCdnAndBrowser,
-                config,
-            )
+    // These are "well-known" resources that will be requested from the root, but support
+    // redirection
+    #[test_case("/favicon.ico", "/-/static/favicon.ico")]
+    #[test_case("/robots.txt", "/-/static/robots.txt")]
+    // This has previously been served with a url pointing to the root, it may be
+    // plausible to remove the redirects in the future, but for now we need to keep serving
+    // it.
+    #[test_case("/opensearch.xml", "/-/static/opensearch.xml")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_root_redirects(path: &str, target: &str) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let config = env.config();
+
+        web.assert_redirect_cached(path, target, CachePolicy::ForeverInCdnAndBrowser, config)
             .await?;
 
-            // This has previously been served with a url pointing to the root, it may be
-            // plausible to remove the redirects in the future, but for now we need to keep serving
-            // it.
-            web.assert_redirect_cached(
-                "/opensearch.xml",
-                "/-/static/opensearch.xml",
-                CachePolicy::ForeverInCdnAndBrowser,
-                config,
-            )
-            .await?;
-
-            Ok(())
-        });
+        Ok(())
     }
 
     #[test]
