@@ -30,6 +30,7 @@
                 </div>
 
                 <ul>
+                    <li>
                     {%- for build in builds -%}
                         <li>
                             {%- if build.build_status != "in_progress" -%}
@@ -44,14 +45,14 @@
                                                 {{ crate::icons::IconX.render_solid(false, false, "") }}
                                             {%- endif -%}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-9-24">
+                                        <div class="pure-u-1 pure-u-sm-10-24">
                                             {%- if let Some(rustc_version) = build.rustc_version -%}
                                                 {{ rustc_version }}
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-8-24">
+                                        <div class="pure-u-1 pure-u-sm-10-24">
                                             {%- if let Some(docsrs_version) = build.docsrs_version -%}
                                                 {{ docsrs_version }}
                                             {%- else -%}
@@ -64,14 +65,7 @@
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}
-                                        </div>
-                                        <div class="pure-u-1 pure-u-sm-3-24 duration">
-                                            {%- if let Some(build_duration) = build.build_duration -%}
-                                                took {{ build_duration|format_duration }}
-                                            {%- else -%}
-                                                &mdash;
-                                            {%- endif -%}
-                                        </div>
+                                        </div> {#- -#}
                                     </div> {#- -#}
                                 </a>
                             {%- else -%}
@@ -80,21 +74,8 @@
                                         <div class="pure-u-1 pure-u-sm-1-24 build">
                                             {{- crate::icons::IconGear.render_solid(false, true, "") -}}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-9-24 build"> {#- -#}
-                                            <a href="/releases/queue" class="normal">in progress</a> {#- -#}
-                                        </div>
-                                        <div class="pure-u-1 pure-u-sm-8-24">
-                                            &mdash;
-                                        </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-3-24 date">
-                                            &mdash;
-                                        </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-3-24 duration">
-                                            {%- if let Some(build_duration) = build.build_duration -%}
-                                                since {{ build_duration|format_duration }}
-                                            {%- else -%}
-                                                &mdash;
-                                            {%- endif -%}
+                                        <div class="pure-u-1 pure-u-sm-23-24 build"> {#- -#}
+                                            In the <a href="/releases/queue" class="normal">build queue</a> {#- -#}
                                         </div>
                                     </div>
                                 </div>
@@ -130,4 +111,3 @@
         </div>
     </div>
 {%- endblock body -%}
-

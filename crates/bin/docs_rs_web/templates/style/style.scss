@@ -386,8 +386,7 @@ div.recent-releases-container {
         }
     }
 
-    .date,
-    .duration {
+    .date {
         font-weight: normal;
 
         @media #{$media-sm} {

@@ -23,9 +23,7 @@ use docs_rs_database::crate_details::{Release, latest_release, parse_doc_targets
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
-use docs_rs_types::{
-    BuildId, BuildStatus, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
-};
+use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
 use std::sync::Arc;
@@ -344,40 +342,6 @@ impl CrateDetails {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-struct BuildStatistics {
-    avg_build_duration_release: Option<Duration>,
-    avg_build_duration_crate: Option<Duration>,
-}
-
-impl BuildStatistics {
-    fn has_data(&self) -> bool {
-        self.avg_build_duration_crate.is_some() || self.avg_build_duration_release.is_some()
-    }
-
-    async fn fetch_for_release(
-        conn: &mut sqlx::PgConnection,
-        release_id: ReleaseId,
-    ) -> Result<Self> {
-        Ok(sqlx::query_as!(
-            BuildStatistics,
-            r#"
-            SELECT
-                dr.avg_duration AS "avg_build_duration_release?: Duration",
-                dc.avg_duration AS "avg_build_duration_crate?: Duration"
-            FROM
-                build_durations_release AS dr
-            INNER JOIN build_durations_crate AS dc on dr.crate_id = dc.crate_id
-            WHERE rid = $1
-            "#,
-            release_id as _,
-        )
-        .fetch_optional(conn)
-        .await?
-        .unwrap_or_default())
-    }
-}
-
 #[derive(Debug, Clone, Template)]
 #[template(path = "crate/details.html")]
 struct CrateDetailsPage {
@@ -388,7 +352,6 @@ struct CrateDetailsPage {
     documented_items: Option<i32>,
     total_items: Option<i32>,
     total_items_needing_examples: Option<i32>,
-    build_statistics: BuildStatistics,
     items_with_examples: Option<i32>,
     homepage_url: Option<String>,
     documentation_url: Option<String>,
@@ -455,9 +418,6 @@ pub(crate) async fn crate_details_handler(
         Err(e) => warn!(?e, "error fetching readme"),
     }
 
-    let build_statistics =
-        BuildStatistics::fetch_for_release(&mut conn, details.release_id).await?;
-
     let CrateDetails {
         version,
         name,
@@ -494,7 +454,6 @@ pub(crate) async fn crate_details_handler(
         documented_items,
         total_items,
         total_items_needing_examples,
-        build_statistics,
         items_with_examples,
         homepage_url,
         documentation_url,
@@ -685,7 +644,6 @@ mod tests {
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::KrateName;
-    use docs_rs_types::testing::{FOO, V1};
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -2352,46 +2310,5 @@ path = "src/lib.rs"
             assert!(has_doc_size);
             Ok(())
         });
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_build_stats_no_data() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        let mut conn = env.async_conn().await?;
-
-        let stats = BuildStatistics::fetch_for_release(&mut conn, ReleaseId(42)).await?;
-        assert!(!stats.has_data());
-        assert!(stats.avg_build_duration_release.is_none());
-        assert!(stats.avg_build_duration_crate.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_build_stats_with_build() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let rid = env
-            .fake_release()
-            .await
-            .name(&FOO)
-            .version(V1)
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-
-        let stats = BuildStatistics::fetch_for_release(&mut conn, rid).await?;
-        assert!(stats.has_data());
-        assert!(stats.avg_build_duration_release.is_some());
-        assert!(stats.avg_build_duration_crate.is_some());
-
-        assert!(
-            !BuildStatistics::fetch_for_release(&mut conn, ReleaseId(42))
-                .await?
-                .has_data()
-        );
-
-        Ok(())
     }
 }
