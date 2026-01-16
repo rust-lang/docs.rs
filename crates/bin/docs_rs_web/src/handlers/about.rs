@@ -1,4 +1,5 @@
 use crate::{
+    cache::CachePolicy,
     error::{AxumErrorPage, AxumResult},
     extractors::{DbConnection, Path},
     impl_axum_webpage,
@@ -23,7 +24,12 @@ struct AboutBuilds {
     active_tab: &'static str,
 }
 
-impl_axum_webpage!(AboutBuilds);
+impl_axum_webpage!(
+    AboutBuilds,
+    // NOTE: potential future improvement: serve a special surrogate key, and
+    // purge that after we updated the local toolchain.
+    cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
+);
 
 pub(crate) async fn about_builds_handler(
     mut conn: DbConnection,
@@ -82,8 +88,22 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _};
+    use super::*;
+    use crate::testing::{
+        AxumResponseTestExt as _, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+    };
     use anyhow::Result;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn about_build_is_cached() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+
+        let response = web.assert_success("/about/builds").await?;
+        response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
+
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn about_page() -> Result<()> {
