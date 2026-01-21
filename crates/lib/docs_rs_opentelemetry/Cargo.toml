@@ -6,10 +6,7 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [features]
-testing = [
-    "docs_rs_config/testing",
-    "opentelemetry_sdk/testing",
-]
+testing = ["docs_rs_config/testing", "opentelemetry_sdk/testing"]
 
 [dependencies]
 anyhow = { workspace = true }
