@@ -6,7 +6,6 @@ use axum::{
     extract::{FromRequestParts, OptionalFromRequestParts},
     http::request::Parts,
 };
-use derive_more::Deref;
 use docs_rs_types::{CompressionAlgorithm, compression_from_file_extension};
 
 /// custom axum `Path` extractor that uses our own AxumNope::BadRequest
@@ -105,8 +104,16 @@ where
 /// file extensions in the URL.
 /// When using Accept-Encoding, we also have to return "Vary: Accept-Encoding" to ensure
 /// the cache behaves correctly.
-#[derive(Debug, Clone, Deref, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct WantedCompression(pub(crate) CompressionAlgorithm);
+
+impl core::ops::Deref for WantedCompression {
+    type Target = CompressionAlgorithm;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl<S> FromRequestParts<S> for WantedCompression
 where

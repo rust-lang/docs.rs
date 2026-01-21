@@ -26,7 +26,6 @@ chrono = { workspace = true }
 clap = { workspace = true }
 comrak = { version = "0.49.0", default-features = false }
 constant_time_eq = "0.4.2"
-derive_more = { workspace = true }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }

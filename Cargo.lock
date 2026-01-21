@@ -2384,7 +2384,6 @@ dependencies = [
  "clap",
  "comrak",
  "constant_time_eq",
- "derive_more 2.1.1",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
