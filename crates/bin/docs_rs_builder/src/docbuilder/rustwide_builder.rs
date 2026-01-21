@@ -12,6 +12,7 @@ use docs_rs_database::{
     },
     service_config::{ConfigName, get_config, set_config},
 };
+use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_rustdoc_json::{
@@ -26,7 +27,9 @@ use docs_rs_types::{
     BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version,
     doc_coverage::{self, DocCoverage},
 };
-use docs_rs_utils::{RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version};
+use docs_rs_utils::{
+    Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version,
+};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::{
@@ -43,7 +46,6 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use tokio::runtime;
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
@@ -114,7 +116,7 @@ pub enum PackageKind<'a> {
 pub struct RustwideBuilder {
     workspace: Workspace,
     toolchain: Toolchain,
-    runtime: runtime::Handle,
+    runtime: Handle,
     config: Arc<Config>,
     db: Pool,
     blocking_storage: Arc<Storage>,
@@ -127,7 +129,8 @@ pub struct RustwideBuilder {
 
 impl RustwideBuilder {
     pub fn init(config: Arc<Config>, context: &Context) -> Result<Self> {
-        let toolchain = context.runtime().block_on(async {
+        let runtime: Handle = context.runtime().clone().into();
+        let toolchain = runtime.block_on(async {
             let mut conn = context.pool()?.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
@@ -137,7 +140,7 @@ impl RustwideBuilder {
             toolchain,
             config: config.clone(),
             db: context.pool()?.clone(),
-            runtime: context.runtime().clone(),
+            runtime,
             blocking_storage: context.blocking_storage()?.clone(),
             storage: context.storage()?.clone(),
             registry_api: context.registry_api()?.clone(),
@@ -487,7 +490,7 @@ impl RustwideBuilder {
         )
     }
 
-    #[instrument(name = "docbuilder.build_package", parent = None, skip(self, name), fields(krate=name))]
+    #[instrument(name = BUILD_PACKAGE_TRANSACTION_NAME, parent = None, skip(self, name), fields(krate=name))]
     pub fn build_package(
         &mut self,
         name: &str,
@@ -533,6 +536,7 @@ impl RustwideBuilder {
         }
     }
 
+    #[instrument(skip(self))]
     #[allow(clippy::too_many_arguments)]
     fn build_package_inner(
         &mut self,

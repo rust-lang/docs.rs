@@ -8,6 +8,15 @@ use sentry::{
 use std::{env, str::FromStr as _, sync::Arc};
 use tracing_subscriber::{EnvFilter, filter::Directive, prelude::*};
 
+/// defines the transaction name to be used for our rustwide builder.
+///
+/// We want to trace _all_ builds, while we want to apply a
+/// sampling ratio to web requests.
+///
+/// From what I see right now, the transaction name or op is the only way
+/// to distinguish build transactions from web requests.
+pub const BUILD_PACKAGE_TRANSACTION_NAME: &str = "docbuilder.build_package";
+
 pub struct Guard {
     #[allow(dead_code)]
     sentry_guard: Option<sentry::ClientInitGuard>,
@@ -54,8 +63,7 @@ pub fn init() -> anyhow::Result<Guard> {
                 return if sampled { 1.0 } else { 0.0 };
             }
 
-            let op = ctx.operation();
-            if op == "docbuilder.build_package" {
+            if ctx.name() == BUILD_PACKAGE_TRANSACTION_NAME {
                 // record all transactions for builds
                 1.
             } else {

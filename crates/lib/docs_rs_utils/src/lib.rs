@@ -1,6 +1,9 @@
+mod runtime_ext;
 pub mod rustc_version;
 #[cfg(feature = "testing")]
 pub mod testing;
+
+pub use runtime_ext::Handle;
 
 use anyhow::{Context as _, Result};
 use std::fmt;
