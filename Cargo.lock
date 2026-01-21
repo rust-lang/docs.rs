@@ -2408,7 +2408,6 @@ dependencies = [
  "http 1.4.0",
  "http-body-util",
  "indoc",
- "itertools 0.14.0",
  "kuchikiki",
  "lol_html",
  "md5",

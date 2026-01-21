@@ -47,7 +47,6 @@ font-awesome-as-a-crate = { path = "../../lib/font-awesome-as-a-crate" }
 futures-util = { workspace = true }
 getrandom = "0.3.1"
 http = { workspace = true }
-itertools = { workspace = true }
 lol_html = "2.0.0"
 mime = { workspace = true }
 num_cpus = "1.15.0"
