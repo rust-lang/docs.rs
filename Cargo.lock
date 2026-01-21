@@ -1994,7 +1994,6 @@ dependencies = [
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
- "itertools 0.14.0",
  "log",
  "opentelemetry",
  "pretty_assertions",

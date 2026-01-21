@@ -28,7 +28,6 @@ use docs_rs_types::{
 };
 use docs_rs_utils::{RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
-use itertools::Itertools as _;
 use regex::Regex;
 use rustwide::{
     AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
@@ -989,7 +988,7 @@ impl RustwideBuilder {
                     get_file_list(&json_dir)
                         .filter_map(Result::ok)
                         .map(|p| p.to_string_lossy().to_string())
-                        .collect_vec(),
+                        .collect::<Vec<_>>(),
                 )
             })?;
 
@@ -2032,13 +2031,14 @@ mod tests {
                 .successful
         );
 
+        let mut features = get_features(&env, "optional-dep", &Version::new(0, 0, 1))?
+            .unwrap()
+            .iter()
+            .map(|f| f.name.to_owned())
+            .collect::<Vec<_>>();
+        features.sort_unstable();
         assert_eq!(
-            get_features(&env, "optional-dep", &Version::new(0, 0, 1))?
-                .unwrap()
-                .iter()
-                .map(|f| f.name.to_owned())
-                .sorted()
-                .collect_vec(),
+            features,
             // "regex" feature is not in the list,
             // because we don't have implicit features for optional dependencies
             // with `dep` syntax any more.

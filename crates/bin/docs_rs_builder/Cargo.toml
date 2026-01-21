@@ -26,7 +26,6 @@ docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_types = { path = "../../lib/docs_rs_types" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 docsrs-metadata = { path = "../../lib/metadata" }
-itertools = { workspace = true }
 log = "0.4"
 opentelemetry = { workspace = true }
 regex = { workspace = true }
