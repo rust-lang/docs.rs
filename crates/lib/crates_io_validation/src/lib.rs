@@ -205,74 +205,73 @@ pub fn validate_feature(name: &str) -> Result<(), InvalidFeature> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use claims::{assert_err_eq, assert_ok};
 
     #[test]
     fn test_validate_crate_name() {
         use super::{InvalidCrateName, MAX_NAME_LENGTH};
 
-        assert_ok!(validate_crate_name("crate", "foo"));
-        assert_err_eq!(
+        assert!(validate_crate_name("crate", "foo").is_ok());
+        assert_eq!(
             validate_crate_name("crate", "京"),
-            InvalidCrateName::Start {
+            Err(InvalidCrateName::Start {
                 first_char: '京',
                 what: "crate".into(),
                 name: "京".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", ""),
-            InvalidCrateName::Empty {
+            Err(InvalidCrateName::Empty {
                 what: "crate".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", "💝"),
-            InvalidCrateName::Start {
+            Err(InvalidCrateName::Start {
                 first_char: '💝',
                 what: "crate".into(),
                 name: "💝".into()
-            }
+            })
         );
-        assert_ok!(validate_crate_name("crate", "foo_underscore"));
-        assert_ok!(validate_crate_name("crate", "foo-dash"));
-        assert_err_eq!(
+        assert!(validate_crate_name("crate", "foo_underscore").is_ok());
+        assert!(validate_crate_name("crate", "foo-dash").is_ok());
+        assert_eq!(
             validate_crate_name("crate", "foo+plus"),
-            InvalidCrateName::Char {
+            Err(InvalidCrateName::Char {
                 ch: '+',
                 what: "crate".into(),
                 name: "foo+plus".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", "_foo"),
-            InvalidCrateName::Start {
+            Err(InvalidCrateName::Start {
                 first_char: '_',
                 what: "crate".into(),
                 name: "_foo".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", "-foo"),
-            InvalidCrateName::Start {
+            Err(InvalidCrateName::Start {
                 first_char: '-',
                 what: "crate".into(),
                 name: "-foo".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", "123"),
-            InvalidCrateName::StartWithDigit {
+            Err(InvalidCrateName::StartWithDigit {
                 what: "crate".into(),
                 name: "123".into()
-            }
+            })
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_crate_name("crate", "o".repeat(MAX_NAME_LENGTH + 1).as_str()),
-            InvalidCrateName::TooLong {
+            Err(InvalidCrateName::TooLong {
                 what: "crate".into(),
                 name: "o".repeat(MAX_NAME_LENGTH + 1).as_str().into()
-            }
+            })
         );
     }
 
@@ -280,31 +279,36 @@ mod tests {
     fn test_validate_dependency_name() {
         use super::{InvalidDependencyName, MAX_NAME_LENGTH};
 
-        assert_ok!(validate_dependency_name("foo"));
-        assert_err_eq!(
+        assert!(validate_dependency_name("foo").is_ok());
+        assert_eq!(
             validate_dependency_name("京"),
-            InvalidDependencyName::Start('京', "京".into())
+            Err(InvalidDependencyName::Start('京', "京".into()))
         );
-        assert_err_eq!(validate_dependency_name(""), InvalidDependencyName::Empty);
-        assert_err_eq!(
+        assert_eq!(
+            validate_dependency_name(""),
+            Err(InvalidDependencyName::Empty)
+        );
+        assert_eq!(
             validate_dependency_name("💝"),
-            InvalidDependencyName::Start('💝', "💝".into())
+            Err(InvalidDependencyName::Start('💝', "💝".into()))
         );
-        assert_ok!(validate_dependency_name("foo_underscore"));
-        assert_ok!(validate_dependency_name("foo-dash"));
-        assert_err_eq!(
+        assert!(validate_dependency_name("foo_underscore").is_ok());
+        assert!(validate_dependency_name("foo-dash").is_ok());
+        assert_eq!(
             validate_dependency_name("foo+plus"),
-            InvalidDependencyName::Char('+', "foo+plus".into())
+            Err(InvalidDependencyName::Char('+', "foo+plus".into()))
         );
         // Starting with an underscore is a valid dependency name.
-        assert_ok!(validate_dependency_name("_foo"));
-        assert_err_eq!(
+        assert!(validate_dependency_name("_foo").is_ok());
+        assert_eq!(
             validate_dependency_name("-foo"),
-            InvalidDependencyName::Start('-', "-foo".into())
+            Err(InvalidDependencyName::Start('-', "-foo".into()))
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_dependency_name("o".repeat(MAX_NAME_LENGTH + 1).as_str()),
-            InvalidDependencyName::TooLong("o".repeat(MAX_NAME_LENGTH + 1).as_str().into())
+            Err(InvalidDependencyName::TooLong(
+                "o".repeat(MAX_NAME_LENGTH + 1).as_str().into()
+            ))
         );
     }
 
@@ -313,48 +317,51 @@ mod tests {
         use super::InvalidDependencyName;
         use super::InvalidFeature;
 
-        assert_ok!(validate_feature("foo"));
-        assert_ok!(validate_feature("1foo"));
-        assert_ok!(validate_feature("_foo"));
-        assert_ok!(validate_feature("_foo-_+.1"));
-        assert_ok!(validate_feature("_foo-_+.1"));
-        assert_err_eq!(validate_feature(""), InvalidFeature::Empty);
-        assert_err_eq!(validate_feature("/"), InvalidDependencyName::Empty.into());
-        assert_err_eq!(
+        assert!(validate_feature("foo").is_ok());
+        assert!(validate_feature("1foo").is_ok());
+        assert!(validate_feature("_foo").is_ok());
+        assert!(validate_feature("_foo-_+.1").is_ok());
+        assert!(validate_feature("_foo-_+.1").is_ok());
+        assert_eq!(validate_feature(""), Err(InvalidFeature::Empty));
+        assert_eq!(
+            validate_feature("/"),
+            Err(InvalidDependencyName::Empty.into())
+        );
+        assert_eq!(
             validate_feature("%/%"),
-            InvalidDependencyName::Start('%', "%".into()).into()
+            Err(InvalidDependencyName::Start('%', "%".into()).into())
         );
-        assert_ok!(validate_feature("a/a"));
-        assert_ok!(validate_feature("32-column-tables"));
-        assert_ok!(validate_feature("c++20"));
-        assert_ok!(validate_feature("krate/c++20"));
-        assert_err_eq!(
+        assert!(validate_feature("a/a").is_ok());
+        assert!(validate_feature("32-column-tables").is_ok());
+        assert!(validate_feature("c++20").is_ok());
+        assert!(validate_feature("krate/c++20").is_ok());
+        assert_eq!(
             validate_feature("c++20/wow"),
-            InvalidDependencyName::Char('+', "c++20".into()).into()
+            Err(InvalidDependencyName::Char('+', "c++20".into()).into())
         );
-        assert_ok!(validate_feature("foo?/bar"));
-        assert_ok!(validate_feature("dep:foo"));
-        assert_err_eq!(
+        assert!(validate_feature("foo?/bar").is_ok());
+        assert!(validate_feature("dep:foo").is_ok());
+        assert_eq!(
             validate_feature("dep:foo?/bar"),
-            InvalidDependencyName::Char(':', "dep:foo".into()).into()
+            Err(InvalidDependencyName::Char(':', "dep:foo".into()).into())
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_feature("foo/?bar"),
-            InvalidFeature::Start('?', "?bar".into())
+            Err(InvalidFeature::Start('?', "?bar".into()))
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_feature("foo?bar"),
-            InvalidFeature::Char('?', "foo?bar".into())
+            Err(InvalidFeature::Char('?', "foo?bar".into()))
         );
-        assert_ok!(validate_feature("bar.web"));
-        assert_ok!(validate_feature("foo/bar.web"));
-        assert_err_eq!(
+        assert!(validate_feature("bar.web").is_ok());
+        assert!(validate_feature("foo/bar.web").is_ok());
+        assert_eq!(
             validate_feature("dep:0foo"),
-            InvalidDependencyName::StartWithDigit("0foo".into()).into()
+            Err(InvalidDependencyName::StartWithDigit("0foo".into()).into())
         );
-        assert_err_eq!(
+        assert_eq!(
             validate_feature("0foo?/bar.web"),
-            InvalidDependencyName::StartWithDigit("0foo".into()).into()
+            Err(InvalidDependencyName::StartWithDigit("0foo".into()).into())
         );
     }
 }
