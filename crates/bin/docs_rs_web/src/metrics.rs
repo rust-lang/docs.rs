@@ -195,10 +195,8 @@ mod tests {
             }
 
             let collected = dbg!(env.collected_metrics());
-            let AggregatedMetrics::U64(MetricData::Sum(routes_visited)) = collected
-                .get_metric("web", "docsrs.web.routes_visited")?
-                .data()
-            else {
+            let metric = collected.get_metric("web", "docsrs.web.routes_visited")?;
+            let AggregatedMetrics::U64(MetricData::Sum(routes_visited)) = metric.data() else {
                 panic!("Expected Sum<U64> metric data");
             };
 
@@ -241,9 +239,8 @@ mod tests {
                 )
             );
 
-            let AggregatedMetrics::F64(MetricData::Histogram(response_time)) = collected
-                .get_metric("web", "docsrs.web.response_time")?
-                .data()
+            let collected = collected.get_metric("web", "docsrs.web.response_time")?;
+            let AggregatedMetrics::F64(MetricData::Histogram(response_time)) = collected.data()
             else {
                 panic!("Expected Histogram<F64> metric data");
             };

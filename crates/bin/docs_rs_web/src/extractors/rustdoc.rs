@@ -9,7 +9,6 @@ use axum::{
 };
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::{EscapedURI, url_decode};
-use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
 const INDEX_HTML: &str = "index.html";
@@ -893,7 +892,13 @@ fn find_static_route_suffix<'a, 'b>(route: &'a str, path: &'b str) -> Option<Str
         // special case: if the suffix is just empty, return None
         None
     } else {
-        Some(suffix.iter().rev().join("/"))
+        Some(suffix.iter().rev().fold(String::new(), |mut acc, s| {
+            if !acc.is_empty() {
+                acc.push('/');
+            }
+            acc.push_str(s);
+            acc
+        }))
     }
 }
 

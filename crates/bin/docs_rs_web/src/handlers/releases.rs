@@ -24,7 +24,6 @@ use docs_rs_registry_api::{self as registry_api, RegistryApi};
 use docs_rs_types::{KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
 use futures_util::stream::TryStreamExt;
-use itertools::Itertools;
 use serde::Deserialize;
 use sqlx::Row;
 use std::{
@@ -756,7 +755,7 @@ pub(crate) async fn build_queue_handler(
                 *name == krate.name && *version == krate.version
             })
         })
-        .collect_vec();
+        .collect::<Vec<_>>();
 
     queue.retain_mut(|krate| {
         if krate.priority >= PRIORITY_CONTINUOUS {
