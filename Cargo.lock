@@ -2014,7 +2014,6 @@ name = "docs_rs_cargo_metadata"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "derive_more 2.1.1",
  "docs_rs_types",
  "serde",
  "serde_json",

@@ -1,13 +1,20 @@
 use super::Dependency;
-use derive_more::Deref;
 use docs_rs_types::VersionReq;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_KIND: &str = "normal";
 
 /// A crate dependency in our internal representation for releases.dependencies json.
-#[derive(Debug, Clone, PartialEq, Deref)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReleaseDependency(Dependency);
+
+impl core::ops::Deref for ReleaseDependency {
+    type Target = Dependency;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl<'de> Deserialize<'de> for ReleaseDependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
