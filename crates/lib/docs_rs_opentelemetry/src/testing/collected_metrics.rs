@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use derive_more::Deref;
 use opentelemetry_sdk::metrics::data::{
     AggregatedMetrics, HistogramDataPoint, Metric, MetricData, ResourceMetrics, SumDataPoint,
 };
@@ -47,8 +46,15 @@ impl CollectedMetrics {
     }
 }
 
-#[derive(Debug, Deref)]
 pub struct CollectedMetric<'a>(&'a Metric);
+
+impl core::ops::Deref for CollectedMetric<'_> {
+    type Target = Metric;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
 
 impl<'a> CollectedMetric<'a> {
     pub fn get_u64_counter(&'a self) -> &'a SumDataPoint<u64> {

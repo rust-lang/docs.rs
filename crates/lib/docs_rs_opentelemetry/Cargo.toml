@@ -7,14 +7,12 @@ edition = "2024"
 
 [features]
 testing = [
-    "dep:derive_more",
     "docs_rs_config/testing",
     "opentelemetry_sdk/testing",
 ]
 
 [dependencies]
 anyhow = { workspace = true }
-derive_more = { workspace = true, optional = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 opentelemetry = { workspace = true }
