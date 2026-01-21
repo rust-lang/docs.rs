@@ -81,7 +81,7 @@ clippy-fix:
 
 # run all linters, for local development & CI
 [group('testing')]
-lint: format lint-dependencies
+lint: format lint-dependencies-machete
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -104,8 +104,7 @@ sort-cargo-toml *args:
 
 
 [group('testing')]
-[arg("udeps", long="udeps")]
-lint-dependencies udeps="false":
+lint-dependencies-machete: 
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -120,17 +119,19 @@ lint-dependencies udeps="false":
     --exclude tests \
     -X cargo machete {}
 
-  # optionally check unused deps with cargo udeps.
+[group('testing')]
+lint-dependencies-udeps:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  # check unused deps with cargo udeps.
   # Optional, since udeps is much slower because it 
   # needs to additionally compile the workspace with nightly
+  echo "check for unused normal dependencies"
+  cargo +nightly udeps --workspace
 
-  if [ "{{ udeps }}" = "true" ]; then
-    echo "check for unused normal dependencies"
-    cargo +nightly udeps --workspace
-
-    echo "check for unused dev dependencies"
-    cargo +nightly udeps --workspace --all-targets
-  fi
+  echo "check for unused dev dependencies"
+  cargo +nightly udeps --workspace --all-targets
 
 [group('testing')]
 lint-js *args:

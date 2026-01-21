@@ -119,7 +119,7 @@ jobs:
 
       - run: |
           just lint
-          just lint-dependencies --udeps=true
+          just lint-dependencies-udeps
 
   lint-js:
     name: js linters
