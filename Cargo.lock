@@ -2115,7 +2115,6 @@ dependencies = [
  "askama",
  "axum-core",
  "axum-extra",
- "derive_more 2.1.1",
  "docs_rs_types",
  "docs_rs_uri",
  "headers",
