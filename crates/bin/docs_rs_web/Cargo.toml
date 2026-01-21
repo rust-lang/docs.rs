@@ -80,7 +80,6 @@ grass = { version = "0.13.1", default-features = false }
 md5 = "0.8.0"
 phf_codegen = "0.13"
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
-time = "0.3"
 walkdir = { workspace = true }
 
 [dev-dependencies]
