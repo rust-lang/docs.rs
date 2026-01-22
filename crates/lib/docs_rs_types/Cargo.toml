@@ -13,7 +13,6 @@ testing = []
 [dependencies]
 anyhow = { workspace = true }
 crates_io_validation = { path = "../crates_io_validation" }
-derive_more = { workspace = true }
 semver = { version = "1.0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
