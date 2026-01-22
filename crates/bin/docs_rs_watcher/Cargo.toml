@@ -9,8 +9,10 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
-crates-index-diff = { version = "29.0.0", features = [ "max-performance" ] }
+# NOTE: on the new infra, switch back from `git-https-reqwest` to `git-https` (curl) once the curl version is new enough
+crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https-reqwest", "git-performance", "parallel"] }
+# NOTE: on the new infra, switch back from `http-reqwest` to `http-curl` once the curl version is new enough
+crates-index-diff = { version = "29.0.0", default-features = false, features = [ "max-performance", "semver", "http-reqwest" ] }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
