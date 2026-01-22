@@ -2297,7 +2297,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "crates_io_validation",
- "derive_more 2.1.1",
  "pretty_assertions",
  "semver",
  "serde",

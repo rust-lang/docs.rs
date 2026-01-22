@@ -1,6 +1,5 @@
 use anyhow::Result;
 use crates_io_validation::{InvalidCrateName, validate_crate_name};
-use derive_more::{Deref, Display, Into};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sqlx::{
     Decode, Encode, Postgres,
@@ -9,24 +8,40 @@ use sqlx::{
     postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueRef},
     prelude::*,
 };
-use std::{borrow::Cow, io::Write, str::FromStr};
+use std::{borrow::Cow, fmt, io::Write, ops::Deref, str::FromStr};
 
 /// validated crate name
 ///
 /// Right now only used in web::cache, but we'll probably also use it
 /// to match our routes later.
 ///
-/// FIXME: this should actually come from some shared crate between the rust projects,
-/// so the amount of duplication is less.
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Deref, Into, Display, DeserializeFromStr, SerializeDisplay,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, DeserializeFromStr, SerializeDisplay)]
 pub struct KrateName(Cow<'static, str>);
 
 impl KrateName {
     #[cfg(any(test, feature = "testing"))]
     pub const fn from_static(s: &'static str) -> Self {
         KrateName(Cow::Borrowed(s))
+    }
+}
+
+impl Deref for KrateName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<KrateName> for Cow<'static, str> {
+    fn from(krate_name: KrateName) -> Self {
+        krate_name.0
+    }
+}
+
+impl fmt::Display for KrateName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

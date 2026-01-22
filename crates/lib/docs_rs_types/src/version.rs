@@ -3,7 +3,6 @@ pub use semver::VersionReq;
 #[allow(clippy::disallowed_types)]
 mod version_impl {
     use anyhow::Result;
-    use derive_more::{Deref, Display, From, Into};
     use serde_with::{DeserializeFromStr, SerializeDisplay};
     use sqlx::{
         Postgres,
@@ -12,24 +11,12 @@ mod version_impl {
         postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef},
         prelude::*,
     };
-    use std::{io::Write, str::FromStr};
+    use std::{fmt, io::Write, ops::Deref, str::FromStr};
 
     /// NewType around semver::Version to be able to use it with sqlx.
     ///
     /// Represented as string in the database.
-    #[derive(
-        Clone,
-        Debug,
-        Deref,
-        DeserializeFromStr,
-        Display,
-        Eq,
-        From,
-        Hash,
-        Into,
-        PartialEq,
-        SerializeDisplay,
-    )]
+    #[derive(Clone, Debug, DeserializeFromStr, Eq, Hash, PartialEq, SerializeDisplay)]
     pub struct Version(pub semver::Version);
 
     impl Version {
@@ -39,6 +26,26 @@ mod version_impl {
 
         pub fn parse(text: &str) -> Result<Self, semver::Error> {
             Version::from_str(text)
+        }
+    }
+
+    impl Deref for Version {
+        type Target = semver::Version;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl fmt::Display for Version {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl From<semver::Version> for Version {
+        fn from(v: semver::Version) -> Self {
+            Version(v)
         }
     }
 
