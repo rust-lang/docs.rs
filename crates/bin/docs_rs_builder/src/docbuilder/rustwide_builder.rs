@@ -620,23 +620,31 @@ impl RustwideBuilder {
         fs::create_dir_all(&self.config.temp_dir)?;
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
 
+        let mut algs = HashSet::new();
+        let (source_files_list, source_size) = {
+            debug!("adding sources into database");
+            let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
+
+            krate.copy_source_to(&self.workspace, temp_dir.path())?;
+
+            let (files_list, new_alg) = self.runtime.block_on(
+                self.storage
+                    .store_all_in_archive(&source_archive_path(name, version), &temp_dir),
+            )?;
+
+            fs::remove_dir_all(temp_dir.path())?;
+
+            algs.insert(new_alg);
+            let source_size: u64 = files_list.iter().map(|info| info.size).sum();
+            (files_list, source_size)
+        };
+
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
             .run(|build| {
-                let mut algs = HashSet::new();
-
-                debug!("adding sources into database");
-                let files_list = {
-                    let (files_list, new_alg) =
-                        self.runtime.block_on(
-                        self.storage.store_all_in_archive(
-                            &source_archive_path(name, version),
-                            build.host_source_dir(),
-                        ))?;
-                    algs.insert(new_alg);
-                    files_list
-                };
-                let source_size: u64 = files_list.iter().map(|info| info.size).sum();
+                // NOTE: rustwide will run `copy_source_to` again when preparing the call to this
+                // closure.
+                // This could be optimized, but only with more rustwide changes.
                 let metadata = Metadata::from_crate_root(build.host_source_dir())?;
                 let BuildTargets {
                     default_target,
@@ -816,7 +824,7 @@ impl RustwideBuilder {
                     cargo_metadata,
                     &build.host_source_dir(),
                     &res.target,
-                    file_list_to_json(files_list),
+                    file_list_to_json(source_files_list),
                     successful_targets,
                     &release_data,
                     has_docs,
@@ -1342,7 +1350,9 @@ mod tests {
     use docs_rs_utils::block_on_async_with_conn;
     // use crate::test::{AxumRouterTestExt, TestEnvironment};
     use docs_rs_registry_api::ReleaseData;
-    use docs_rs_types::{BuildStatus, CompressionAlgorithm, Feature, ReleaseId, Version};
+    use docs_rs_types::{
+        BuildStatus, CompressionAlgorithm, Feature, ReleaseId, Version, testing::V0_1,
+    };
     use pretty_assertions::assert_eq;
     use std::{collections::BTreeMap, io, iter};
     use test_case::test_case;
@@ -1929,23 +1939,28 @@ mod tests {
         // package with invalid cargo metadata.
         // Will succeed in the crate fetch step, so sources are
         // added. Will fail when we try to build.
-        let crate_ = "simconnect-sys";
-        let version = Version::new(0, 23, 1);
+        let crate_ = "simple-build-failure";
+        let version = V0_1;
+        let test_crate = Path::new("tests/crates/simple-build-failure/");
+
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
-        assert!(
-            !builder
-                .build_package(crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
+        assert!(!builder.build_local_package(test_crate)?.successful);
 
         // source archive exists
         let source_archive = source_archive_path(crate_, &version);
+        let storage = env.blocking_storage()?;
+
         assert!(
-            env.blocking_storage()?.exists(&source_archive)?,
+            storage.exists(&source_archive)?,
             "archive doesnt exist: {source_archive}"
+        );
+        assert!(
+            storage
+                .fetch_source_file(crate_, &version, None, "src/main.rs", true)
+                .is_ok()
         );
 
         Ok(())
