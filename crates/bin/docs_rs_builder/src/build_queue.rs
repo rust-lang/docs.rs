@@ -4,9 +4,10 @@ use anyhow::Result;
 use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
 use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
+use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_utils::retry;
 use std::time::Instant;
-use tracing::error;
+use tracing::{error, info_span};
 
 /// wrapper around BuildQueue::process_next_crate to handle metrics and cdn invalidation
 fn process_next_crate(
@@ -54,6 +55,15 @@ pub(crate) fn build_next_queue_package(
     let queue = context.blocking_build_queue()?.clone();
 
     process_next_crate(context, &builder.builder_metrics.clone(), |krate| {
+        let _span = info_span!(
+            parent: None,
+            BUILD_PACKAGE_TRANSACTION_NAME,
+            crate_name = %krate.name,
+            crate_version = %krate.version,
+            attempt = krate.attempt,
+        )
+        .entered();
+
         processed = true;
 
         let kind = krate
