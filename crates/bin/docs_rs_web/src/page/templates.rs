@@ -38,7 +38,7 @@ pub(crate) struct TemplateData {
     /// This is better than using `tokio::spawn_blocking` because
     /// tokio will wait until all tasks are finished when shutting
     /// down.
-    rendering_threadpool: rayon::ThreadPool,
+    rendering_threadpool: rayon_core::ThreadPool,
 }
 
 impl TemplateData {
@@ -46,7 +46,7 @@ impl TemplateData {
         trace!("Loading templates");
 
         let data = Self {
-            rendering_threadpool: rayon::ThreadPoolBuilder::new()
+            rendering_threadpool: rayon_core::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
                 .thread_name(move |idx| format!("docsrs-render {idx}"))
                 .build()?,
