@@ -1,6 +1,7 @@
 use crate::{AsyncBuildQueue, QueuedCrate, types::BuildPackageSummary};
 use anyhow::Result;
 use docs_rs_types::{KrateName, Version};
+use docs_rs_utils::Handle;
 use sqlx::Connection as _;
 #[cfg(test)]
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use tracing::error;
 
 #[derive(Debug)]
 pub struct BuildQueue {
-    runtime: runtime::Handle,
+    runtime: Handle,
     inner: Arc<AsyncBuildQueue>,
 }
 
@@ -62,7 +63,10 @@ impl BuildQueue {
 
 impl BuildQueue {
     pub fn new(runtime: runtime::Handle, inner: Arc<AsyncBuildQueue>) -> Self {
-        Self { runtime, inner }
+        Self {
+            runtime: runtime.into(),
+            inner,
+        }
     }
 
     pub fn process_next_crate(
@@ -216,7 +220,7 @@ mod tests {
         Ok(TestEnv {
             db,
             queue: BuildQueue {
-                runtime: runtime.handle().clone(),
+                runtime: runtime.handle().clone().into(),
                 inner: async_queue,
             },
             metrics,
