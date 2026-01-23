@@ -25,6 +25,12 @@ pub(crate) async fn security_middleware(
         return StatusCode::NOT_ACCEPTABLE.into_response();
     }
 
+    // `#` is never allowed in any rustdoc URLs, even encoded
+    if path.contains('#') {
+        warn!(%uri, "detected `#` in server-side request path");
+        return StatusCode::NOT_ACCEPTABLE.into_response();
+    }
+
     next.run(req).await
 }
 
@@ -46,6 +52,7 @@ mod tests {
     #[test_case("/.."; "relative path")]
     #[test_case("/asdf/../"; "relative path 2")]
     #[test_case("/tiny_http/latest/tiny_http%2f%2e%2e"; "encoded")]
+    #[test_case("/minidumper/latest/%23%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e"; "encoded XSS probe")]
     async fn test_invalid_path(path: &str) -> Result<()> {
         let app = Router::new()
             .route("/{*inner}", get(|| async { StatusCode::OK }))
