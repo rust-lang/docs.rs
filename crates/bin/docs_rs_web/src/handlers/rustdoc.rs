@@ -197,7 +197,7 @@ pub(crate) async fn rustdoc_redirector_handler(
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
     fn redirect_to_doc(
-        original_uri: Option<&EscapedURI>,
+        original_uri: &Uri,
         url: EscapedURI,
         cache_policy: CachePolicy,
         path_in_crate: Option<&str>,
@@ -208,10 +208,10 @@ pub(crate) async fn rustdoc_redirector_handler(
             url
         };
 
-        if let Some(original_uri) = original_uri
-            && original_uri.path() == url.path()
+        if original_uri.path() == url.path()
             && (url.authority().is_none()
                 || url.authority() == Some(&Authority::from_static("docs.rs")))
+            && url.fragment().is_none()
         {
             return Err(anyhow!(
                 "infinite redirect detected, \noriginal_uri = {}, redirect_url = {}",
@@ -224,6 +224,9 @@ pub(crate) async fn rustdoc_redirector_handler(
         trace!(%url, ?cache_policy, path_in_crate, "redirect to doc");
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
+
+    dbg!(&params);
+    dbg!(&original_uri);
 
     // edge case 1:
     // global static assets for older builds are served from the root, which ends up
@@ -269,7 +272,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         let target_uri =
             EscapedURI::from_uri(description.href.clone()).append_raw_query(original_query);
         return redirect_to_doc(
-            Some(&original_uri.into()),
+            &original_uri,
             target_uri,
             CachePolicy::ForeverInCdnAndStaleInBrowser(crate_name.into()),
             path_in_crate.as_deref(),
@@ -285,7 +288,7 @@ pub(crate) async fn rustdoc_redirector_handler(
             target: params.target,
             path: None,
         },
-        original_uri,
+        original_uri.clone(),
         matched_path,
     )
     .map_err(AxumNope::BadRequest)?
@@ -356,9 +359,11 @@ pub(crate) async fn rustdoc_redirector_handler(
         .await;
     }
 
+    dbg!(&params);
+
     if matched_release.rustdoc_status() {
         Ok(redirect_to_doc(
-            params.original_uri(),
+            &original_uri,
             params.rustdoc_url().append_raw_query(original_query),
             if matched_release.is_latest_url() {
                 CachePolicy::ForeverInCdn(params.name().into())
@@ -3342,6 +3347,31 @@ mod test {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_redirect_with_encoded_slash() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("minidumper")
+            .version("0.1.0")
+            .archive_storage(true)
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        web.assert_redirect_cached_unchecked(
+            "/minidumper/latest/%23%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e",
+            "/minidumper/latest/%23%3C/script%3E%3Cteste%3E",
+            CachePolicy::ForeverInCdn(KrateName::from_str("minidumper").unwrap().into()),
+            env.config(),
+        )
+        .await?;
+
+        Ok(())
     }
 
     #[test_case("/crate/dummy/0.1/json", "/crate/dummy/0.1.0/json")]
