@@ -3364,8 +3364,8 @@ mod test {
         let web = env.web_app().await;
 
         web.assert_redirect_cached_unchecked(
-            "/minidumper/latest/%23%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e",
-            "/minidumper/latest/%23%3C/script%3E%3Cteste%3E",
+            "/minidumper/latest/%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e",
+            "/minidumper/latest/%3C/script%3E%3Cteste%3E",
             CachePolicy::ForeverInCdn(KrateName::from_str("minidumper").unwrap().into()),
             env.config(),
         )
