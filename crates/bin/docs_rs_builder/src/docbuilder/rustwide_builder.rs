@@ -12,7 +12,6 @@ use docs_rs_database::{
     },
     service_config::{ConfigName, get_config, set_config},
 };
-use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_rustdoc_json::{
@@ -70,6 +69,7 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
+#[instrument(skip(config))]
 fn build_workspace(config: &Config) -> Result<Workspace> {
     let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
         .running_inside_docker(config.inside_docker);
@@ -150,6 +150,7 @@ impl RustwideBuilder {
         })
     }
 
+    #[instrument(skip(self))]
     pub fn reinitialize_workspace_if_interval_passed(&mut self) -> Result<()> {
         let interval = self.config.build_workspace_reinitialization_interval;
         if self.workspace_initialize_time.elapsed() >= interval {
@@ -490,7 +491,7 @@ impl RustwideBuilder {
         )
     }
 
-    #[instrument(name = BUILD_PACKAGE_TRANSACTION_NAME, parent = None, skip(self, name), fields(krate=name))]
+    #[instrument(skip(self))]
     pub fn build_package(
         &mut self,
         name: &str,
@@ -622,6 +623,7 @@ impl RustwideBuilder {
 
         let mut algs = HashSet::new();
         let (source_files_list, source_size) = {
+            let _span = info_span!("adding sources into database").entered();
             debug!("adding sources into database");
             let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
