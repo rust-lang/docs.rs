@@ -35,7 +35,7 @@ pub fn init() -> anyhow::Result<Guard> {
 
     let tracing_registry = tracing_subscriber::registry().with(log_formatter).with(
         EnvFilter::builder()
-            .with_default_directive(Directive::from_str("docs_rs=info")?)
+            .with_default_directive(Directive::from_str("info")?)
             .with_env_var("DOCSRS_LOG")
             .from_env_lossy(),
     );
