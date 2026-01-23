@@ -53,7 +53,7 @@ num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
 phf = "0.13.1"
 postcard = { workspace = true }
-rayon = { workspace = true }
+rayon-core = "1.13.0"
 regex = { workspace = true }
 reqwest = { workspace = true }
 sentry = { workspace = true }

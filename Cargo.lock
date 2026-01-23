@@ -2388,7 +2388,7 @@ dependencies = [
  "phf_codegen 0.13.1",
  "postcard",
  "pretty_assertions",
- "rayon",
+ "rayon-core",
  "regex",
  "reqwest 0.13.1",
  "sentry",

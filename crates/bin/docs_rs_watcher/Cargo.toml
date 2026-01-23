@@ -28,7 +28,7 @@ docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
-rayon = { workspace = true }
+rayon = "1.6.1"
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
