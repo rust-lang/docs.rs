@@ -5,7 +5,7 @@ use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
 use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
-use docs_rs_utils::retry;
+use docs_rs_utils::{Handle, retry};
 use std::time::Instant;
 use tracing::{error, info_span};
 
@@ -17,7 +17,7 @@ fn process_next_crate(
 ) -> Result<()> {
     let queue = context.blocking_build_queue()?.clone();
     let cdn = context.cdn();
-    let runtime = context.runtime().clone();
+    let runtime: Handle = context.runtime().clone().into();
     let queue_config = context.config().build_queue()?;
 
     let next_attempt = queue.process_next_crate(|to_process| {
