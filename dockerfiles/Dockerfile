@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.92-slim-trixie AS chef
+FROM rust:1.93-slim-trixie AS chef
 
 # We only pay the installation cost once, 
 # it will be cached from the second build onwards
