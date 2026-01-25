@@ -1,0 +1,22 @@
+// Checks that the "release pages" have all the same style (ie: centered).
+include: "utils.goml"
+go-to: |DOC_PATH| + "/releases"
+// Big enough to have "margin: auto" to kick in.
+set-window-size: (1300, 800)
+
+store-value: (tabs_menu_selector, ".description-container .pure-menu-horizontal ul.pure-menu-list")
+store-value: (current_tab, 1)
+store-value: (nb_tabs, 6)
+
+// If this assert fails, it means we added new entries for this menu so this test needs to be
+// updated.
+assert-count: (|tabs_menu_selector| + " > li", |nb_tabs|)
+
+call-function: ("check-tab-centered", {"tab_name": "Recent", "click_next": true})
+call-function: ("check-tab-centered", {"tab_name": "Stars", "click_next": true})
+call-function: ("check-tab-centered", {"tab_name": "Recent Failures", "click_next": true})
+call-function: ("check-tab-centered", {"tab_name": "Failures By Stars", "click_next": true})
+call-function: ("check-tab-centered", {"tab_name": "Activity", "click_next": true})
+call-function: ("check-tab-centered", {"tab_name": "Queue", "click_next": false})
+
+assert: |nb_tabs| == |current_tab|
