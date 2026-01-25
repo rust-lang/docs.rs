@@ -9,10 +9,12 @@ go-to: |DOC_PATH| + "/sysinfo"
 set-local-storage: { "rustdoc-theme": "light" }
 wait-for-css: (".nav-container", { "background-color": "rgb(255, 255, 255)" })
 go-to: |DOC_PATH| + "/crate/sysinfo"
+assert-local-storage: { "rustdoc-theme": "light" }
 wait-for-css: ("body", { "background-color": "rgb(255, 255, 255)" })
 
 go-to: |DOC_PATH| + "/sysinfo"
 set-local-storage: { "rustdoc-theme": "ayu" }
 wait-for-css: (".nav-container", { "background-color": "rgb(15, 20, 25)" })
 go-to: |DOC_PATH| + "/crate/sysinfo"
+assert-local-storage: { "rustdoc-theme": "ayu" }
 wait-for-css: ("body", { "background-color": "rgb(15, 20, 25)" })
