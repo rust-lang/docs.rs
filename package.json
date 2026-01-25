@@ -1,6 +1,6 @@
 {
   "name": "deps",
   "dependencies": {
-    "browser-ui-test": "^0.23.0"
+    "browser-ui-test": "^0.23.1"
   }
 }
