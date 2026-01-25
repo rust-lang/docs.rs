@@ -6,127 +6,127 @@
     {%- set docsrs_repo = "https://github.com/rust-lang/docs.rs" -%}
     <h1>Builds</h1>
     <div class="about-page">
-    <div class="container pure-u-5-6 about">
-    <p>
-        Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>.
+        <div class="container pure-u-5-6 about">
+            <p>
+                Docs.rs automatically builds documentation for crates released on <a href="https://crates.io/">crates.io</a>.
 
-        It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>.
-    </p>
+                It may take a while to build your crate, depending on how many crates are in <a href="/releases/queue">the queue</a>.
+            </p>
 
-    <p>
-        All crates are built in a sandbox using the nightly release of the Rust compiler.
-        {%- if let Some(rustc_version) = rustc_version %}
-        The current version in use is <code>{{ rustc_version }}</code>.
-        {%- endif -%}
-    </p>
+            <p>
+                All crates are built in a sandbox using the nightly release of the Rust compiler.
+                {%- if let Some(rustc_version) = rustc_version %}
+                The current version in use is <code>{{ rustc_version }}</code>.
+                {%- endif -%}
+            </p>
 
-    <h3 id="notes-on-docsrs"> <a href="#notes-on-docsrs">Notes on using Docs.rs</a> </h3>
+            <h3 id="notes-on-docsrs"> <a href="#notes-on-docsrs">Notes on using Docs.rs</a> </h3>
 
-    <h4 id="setting-a-readme"> <a href="#setting-a-readme">Setting a README</a> </h4>
-    <p>
-        The README displayed on docs.rs follows Cargo’s <code>package.readme</code> rules.
-        If <code>readme</code> is not set, docs.rs will look for <code>README.md</code>, <code>README.txt</code>, or <code>README</code> in the crate root.
-        Set <code>readme = "path/to/file"</code> to use a custom file, <code>readme = true</code> to use <code>README.md</code>, or <code>readme = false</code> to disable the README.
-    </p>
+            <h4 id="setting-a-readme"> <a href="#setting-a-readme">Setting a README</a> </h4>
+            <p>
+                The README displayed on docs.rs follows Cargo’s <code>package.readme</code> rules.
+                If <code>readme</code> is not set, docs.rs will look for <code>README.md</code>, <code>README.txt</code>, or <code>README</code> in the crate root.
+                Set <code>readme = "path/to/file"</code> to use a custom file, <code>readme = true</code> to use <code>README.md</code>, or <code>readme = false</code> to disable the README.
+            </p>
 
-    <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
-    <p>
-        To recognize Docs.rs from your Rust code, you can test for the <code>docsrs</code> cfg, e.g.:
-        {% filter dedent(None)|highlight("rust") -%}
-            #[cfg(docsrs)]
-            mod documentation;
-        {%- endfilter %}
-        The `docsrs` cfg only applies to the final rustdoc invocation (i.e. the crate currently
-        being documented). It does not apply to dependencies (including workspace ones).
-    </p>
-    <p>
-        To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
-        {% filter dedent(3)|highlight("rust") -%}
-            if std::env::var("DOCS_RS").is_ok() {
-                // ... your code here ...
-            }
-        {%- endfilter %}
-        This approach can be helpful if you need dependencies for building the library, but not for building the documentation.
-    </p>
+            <h4 id="detecting-docsrs"> <a href="#detecting-docsrs">Detecting Docs.rs</a> </h4>
+            <p>
+                To recognize Docs.rs from your Rust code, you can test for the <code>docsrs</code> cfg, e.g.:
+                {% filter dedent(None)|highlight("rust") -%}
+                    #[cfg(docsrs)]
+                    mod documentation;
+                {%- endfilter %}
+                The `docsrs` cfg only applies to the final rustdoc invocation (i.e. the crate currently
+                being documented). It does not apply to dependencies (including workspace ones).
+            </p>
+            <p>
+                To recognize Docs.rs from <code>build.rs</code> files, you can test for the environment variable <code>DOCS_RS</code>, e.g.:
+                {% filter dedent(3)|highlight("rust") -%}
+                    if std::env::var("DOCS_RS").is_ok() {
+                        // ... your code here ...
+                    }
+                {%- endfilter %}
+                This approach can be helpful if you need dependencies for building the library, but not for building the documentation.
+            </p>
 
-    <h4 id="cross-compiling"> <a href="#cross-compiling">Cross-compiling</a> </h4>
-    <p>
-      All targets other than <code>x86_64-unknown-linux-gnu</code> are cross-compiled. For implementation reasons, this is unlikely to change for the foreseeable future.
-    </p>
+            <h4 id="cross-compiling"> <a href="#cross-compiling">Cross-compiling</a> </h4>
+            <p>
+              All targets other than <code>x86_64-unknown-linux-gnu</code> are cross-compiled. For implementation reasons, this is unlikely to change for the foreseeable future.
+            </p>
 
-    <p>
-        You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
-        {% filter dedent(None)|highlight("toml") -%}
-            [package.metadata.docs.rs]
-            rustc-args = ["--cfg", "my_cfg"]
-        {%- endfilter %}
-        Here, the compiler arguments are set so that <code>#[cfg(my_cfg)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
-        This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
-    </p>
+            <p>
+                You can configure how your crate is built by adding <a href="metadata">package metadata</a> to your <code>Cargo.toml</code>, e.g.:
+                {% filter dedent(None)|highlight("toml") -%}
+                    [package.metadata.docs.rs]
+                    rustc-args = ["--cfg", "my_cfg"]
+                {%- endfilter %}
+                Here, the compiler arguments are set so that <code>#[cfg(my_cfg)]</code> (not to be confused with <code>#[cfg(doc)]</code>) can be used for conditional compilation.
+                This approach is also useful for setting <a href="https://doc.rust-lang.org/cargo/reference/features.html">cargo features</a>.
+            </p>
 
-    <h4 id="testing-builds-ci"> <a href="#testing-builds-ci">Testing documentation builds in CI</a> </h4>
-    <p>
-        When you start using docs.rs metadata or <code>#[cfg(docsrs)]</code> in your code, you might run into issues
-        where your code builds fine locally but fails on docs.rs.
+            <h4 id="testing-builds-ci"> <a href="#testing-builds-ci">Testing documentation builds in CI</a> </h4>
+            <p>
+                When you start using docs.rs metadata or <code>#[cfg(docsrs)]</code> in your code, you might run into issues
+                where your code builds fine locally but fails on docs.rs.
 
-        To avoid this, you can add <a href="https://github.com/dtolnay/cargo-docs-rs"><code>cargo docs-rs</code></a> to
-        your test-suite.
+                To avoid this, you can add <a href="https://github.com/dtolnay/cargo-docs-rs"><code>cargo docs-rs</code></a> to
+                your test-suite.
 
-        While it doesn't perfectly replicate our build environment, it can catch many common issues.
-    </p>
+                While it doesn't perfectly replicate our build environment, it can catch many common issues.
+            </p>
 
-    <h4 id="testing-builds-locally"> <a href="#testing-builds-locally">Testing documentation builds locally</a> </h4>
-    {%- set build_subcommand = "{}/blob/master/README.md#build-subcommand"|format(docsrs_repo) -%}
-    <p>
-        The Docs.rs <a href="{{ build_subcommand|safe }}">README</a> describes how to build
-        unpublished crate documentation locally using the same build environment as the Docs.rs build agent.
-    </p>
+            <h4 id="testing-builds-locally"> <a href="#testing-builds-locally">Testing documentation builds locally</a> </h4>
+            {%- set build_subcommand = "{}/blob/master/README.md#build-subcommand"|format(docsrs_repo) -%}
+            <p>
+                The Docs.rs <a href="{{ build_subcommand|safe }}">README</a> describes how to build
+                unpublished crate documentation locally using the same build environment as the Docs.rs build agent.
+            </p>
 
-    <h3 id="diagnosing-failed-builds"> <a href="#diagnosing-failed-builds">Diagnosing failed builds</a> </h3>
+            <h3 id="diagnosing-failed-builds"> <a href="#diagnosing-failed-builds">Diagnosing failed builds</a> </h3>
 
-    <h4 id="missing-dependencies"> <a href="#missing-dependencies">Missing dependencies</a> </h4>
-    <p>
-        Missing dependencies are a common reason for failed builds.
-        Docs.rs dependencies are managed through
-        <a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>.
-        See <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for how to add a dependency.
-    </p>
+            <h4 id="missing-dependencies"> <a href="#missing-dependencies">Missing dependencies</a> </h4>
+            <p>
+                Missing dependencies are a common reason for failed builds.
+                Docs.rs dependencies are managed through
+                <a href="https://github.com/rust-lang/crates-build-env">crates-build-env</a>.
+                See <a href="https://forge.rust-lang.org/docs-rs/add-dependencies.html">Forge</a> for how to add a dependency.
+            </p>
 
-    <h4 id="read-only-directories"> <a href="#read-only-directories">Write attempt on read-only directories</a> </h4>
-    <p>
-        Most of the sandbox is a read-only file system, including the source directory of your crate and its dependencies.
-        If your <code>build.rs</code> generates files that are relevant for documentation, consider writing to the
-        <a href="https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates">cargo output directory</a>,
-        passed in the environment variable <code>OUT_DIR</code>.
-    </p>
+            <h4 id="read-only-directories"> <a href="#read-only-directories">Write attempt on read-only directories</a> </h4>
+            <p>
+                Most of the sandbox is a read-only file system, including the source directory of your crate and its dependencies.
+                If your <code>build.rs</code> generates files that are relevant for documentation, consider writing to the
+                <a href="https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates">cargo output directory</a>,
+                passed in the environment variable <code>OUT_DIR</code>.
+            </p>
 
-    <h4 id="hitting-resource-limits"> <a href="#hitting-resource-limits">Hitting resource limits</a> </h4>
-    <p>
-        All the builds are executed inside a sandbox with limited resources. The current limits are:
-    </p>
+            <h4 id="hitting-resource-limits"> <a href="#hitting-resource-limits">Hitting resource limits</a> </h4>
+            <p>
+                All the builds are executed inside a sandbox with limited resources. The current limits are:
+            </p>
 
-    {% call macros::crate_limits(limits=limits) %}{% endcall %}
+            {% call macros::crate_limits(limits=limits) %}{% endcall %}
 
-    <p>
-        If your build fails because it hit one of these limits, please
-        <a href="{{ docsrs_repo|safe }}/issues/new/choose">open an issue</a>
-        to get them increased for your crate.
-        Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies:
-        <ul>
-          <li>Network access will not be enabled for any crate.</li>
-          <li>Any crate that requests a time extension will be limited to one target.</li>
-        </ul>
-    </p>
+            <p>
+                If your build fails because it hit one of these limits, please
+                <a href="{{ docsrs_repo|safe }}/issues/new/choose">open an issue</a>
+                to get them increased for your crate.
+                Since our build agent has finite resources, we have to consider each case individually. However, there are a few general policies:
+                <ul>
+                  <li>Network access will not be enabled for any crate.</li>
+                  <li>Any crate that requests a time extension will be limited to one target.</li>
+                </ul>
+            </p>
 
-    <h4 id="failures-and-rebuilds"><a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a></h4>
+            <h4 id="failures-and-rebuilds"><a href="#failures-and-rebuilds">Other failures and requesting rebuilds</a></h4>
 
-    <p>If your crate fails to build for a reason not listed here, you can rebuild it from <a href="https://crates.io">crates.io</a> website as you can see below:</p>
+            <p>If your crate fails to build for a reason not listed here, you can rebuild it from <a href="https://crates.io">crates.io</a> website as you can see below:</p>
 
-    <img src="/-/static/trigger-rebuild.png" alt="crates.io dropdown menu showing two items: yank and rebuild docs">
+            <img src="/-/static/trigger-rebuild.png" alt="crates.io dropdown menu showing two items: yank and rebuild docs">
 
-    <p>Or you can <a href="{{ docsrs_repo|safe }}/issues">file an issue</a> if you think it's a <b>docs.rs</b> issue.</p>
+            <p>Or you can <a href="{{ docsrs_repo|safe }}/issues">file an issue</a> if you think it's a <b>docs.rs</b> issue.</p>
 
-    </div>
-    <br/>
+        </div>
+        <br/>
     </div>
 {%- endblock body %}
