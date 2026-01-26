@@ -32,7 +32,7 @@ regex = { workspace = true }
 rustwide = { version = "0.22.0", features = ["unstable-toolchain-ci", "unstable"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
+sysinfo = { version = "0.38.0", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
