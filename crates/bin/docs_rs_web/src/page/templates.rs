@@ -118,12 +118,6 @@ pub mod filters {
 
     // Copied from `tera`.
     #[askama::filter_fn]
-    pub fn escape_html(input: &str, _: &dyn Values) -> askama::Result<impl Display> {
-        escape_html_inner(input)
-    }
-
-    // Copied from `tera`.
-    #[askama::filter_fn]
     pub fn escape_xml(input: &str, _: &dyn Values) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'".contains(c)) {
             return Ok(Cow::Borrowed(input));
