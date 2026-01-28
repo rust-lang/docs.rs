@@ -1,7 +1,7 @@
 use anyhow::Result;
 use docs_rs_storage::{AsyncStorage, FileEntry, rustdoc_archive_path, source_archive_path};
 use docs_rs_types::{CompressionAlgorithm, KrateName, ReleaseId, Version};
-use docs_rs_utils::spawn_blocking;
+use docs_rs_utils::{retry_async, spawn_blocking};
 use futures_util::TryStreamExt as _;
 use sqlx::Acquire as _;
 use std::collections::HashSet;
@@ -150,9 +150,14 @@ async fn repackage_path(
 
     if files > 0 {
         info!("creating zip file...");
-        let (file_list, alg) = storage
-            .store_all_in_archive(target_archive, &tempdir.path())
-            .await?;
+        let (file_list, alg) = retry_async(
+            || {
+                let path = tempdir.path().to_path_buf();
+                async move { storage.store_all_in_archive(target_archive, &path).await }
+            },
+            3,
+        )
+        .await?;
 
         info!("removing temp-dir...");
         fs::remove_dir_all(&tempdir).await?;
