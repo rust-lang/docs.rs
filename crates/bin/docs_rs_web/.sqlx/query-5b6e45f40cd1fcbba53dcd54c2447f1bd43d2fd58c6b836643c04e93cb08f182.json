@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            builds.id as \"id: BuildId\",\n            builds.rustc_version,\n            builds.docsrs_version,\n            builds.build_status as \"build_status: BuildStatus\",\n            COALESCE(builds.build_finished, builds.build_started) as build_time,\n            CASE\n                WHEN builds.build_started IS NULL\n                    -- for old builds, `build_started` is empty.\n                    THEN NULL\n                ELSE\n                    CASE\n                        -- for in-progress builds we show the duration until now\n                        WHEN builds.build_status = 'in_progress' THEN (CURRENT_TIMESTAMP - builds.build_started)\n                        -- there are broken builds where the status is `error`, and `build_finished` is NULL\n                        WHEN builds.build_finished IS NULL THEN NULL\n                        -- for finished builds we can show the full duration\n                        ELSE (builds.build_finished - builds.build_started)\n                    END\n            END AS \"build_duration?: Duration\",\n            builds.errors\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            crates.name = $1 AND\n            releases.version = $2\n         ORDER BY builds.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: BuildId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "rustc_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "docsrs_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "build_status: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "build_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "build_duration?: Duration",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 6,
+        "name": "errors",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "5b6e45f40cd1fcbba53dcd54c2447f1bd43d2fd58c6b836643c04e93cb08f182"
+}

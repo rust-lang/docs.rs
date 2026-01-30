@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    AVG(b.build_finished - b.build_started) AS \"duration?: Duration\"\n\n                FROM\n                    crates AS c\n                    INNER JOIN releases AS r on c.id = r.crate_id\n                    INNER JOIN builds AS b on r.id = b.rid\n\n                WHERE\n                    c.id = $1 AND\n                    b.build_status = 'success' AND\n                    b.build_started IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duration?: Duration",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c187e208794078317762450f53054049157f3b7ee2b715173f5accf559df3cfc"
+}

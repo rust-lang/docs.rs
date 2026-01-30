@@ -203,8 +203,9 @@ async fn get_builds(
                 ELSE
                     CASE
                         -- for in-progress builds we show the duration until now
-                        WHEN builds.build_finished IS NULL
-                            THEN (CURRENT_TIMESTAMP - builds.build_started)
+                        WHEN builds.build_status = 'in_progress' THEN (CURRENT_TIMESTAMP - builds.build_started)
+                        -- there are broken builds where the status is `error`, and `build_finished` is NULL
+                        WHEN builds.build_finished IS NULL THEN NULL
                         -- for finished builds we can show the full duration
                         ELSE (builds.build_finished - builds.build_started)
                     END
@@ -255,7 +256,7 @@ mod tests {
             let response = env
                 .web_app()
                 .await
-                .get("/crate/foo/0.1.0/builds")
+                .assert_success("/crate/foo/0.1.0/builds")
                 .await?
                 .error_for_status()?;
             response.assert_cache_control(CachePolicy::NoCaching, env.config());
@@ -268,8 +269,7 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            // third column contains build-start time, even when the rest is empty
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 2);
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
 
             Ok(())
         });
