@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT AVG(b.build_finished - b.build_started) AS \"duration?: Duration\"\n                FROM builds AS b\n                WHERE\n                    b.rid = $1 AND\n                    b.build_status = 'success' AND\n                    b.build_started IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "duration?: Duration",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2c7c1c2f69ccea2fbb16d6d7706b41d9a17670801c85b53b235b306ec8eef95e"
+}

@@ -363,7 +363,7 @@ impl BuildStatistics {
         Ok(Self {
             avg_build_duration_release: sqlx::query_scalar!(
                 r#"
-                SELECT AVG(b.build_finished - b.build_started) AS "duration!: Duration"
+                SELECT AVG(b.build_finished - b.build_started) AS "duration?: Duration"
                 FROM builds AS b
                 WHERE
                     b.rid = $1 AND
@@ -372,11 +372,12 @@ impl BuildStatistics {
                 release_id as _,
             )
             .fetch_optional(&mut *conn)
-            .await?,
+            .await?
+            .flatten(),
             avg_build_duration_crate: sqlx::query_scalar!(
                 r#"
                 SELECT
-                    AVG(b.build_finished - b.build_started) AS "duration!: Duration"
+                    AVG(b.build_finished - b.build_started) AS "duration?: Duration"
 
                 FROM
                     crates AS c
@@ -390,7 +391,8 @@ impl BuildStatistics {
                 crate_id as _,
             )
             .fetch_optional(&mut *conn)
-            .await?,
+            .await?
+            .flatten(),
         })
     }
 }
