@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT priority, attempt, last_attempt\n             FROM queue\n             WHERE name = $1 AND version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "priority",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "attempt",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_attempt",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "fc654c9fccbceba15f4aceea9fe0b637290907671172571ed76fad04622d027f"
+}

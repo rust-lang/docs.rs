@@ -21,7 +21,8 @@ impl CollectedMetrics {
             .0
             .iter()
             .flat_map(|rm| rm.scope_metrics())
-            .find(|sm| sm.scope().name() == scope)
+            .filter(|sm| sm.scope().name() == scope)
+            .last()
             .ok_or_else(|| {
                 anyhow!(
                     "Scope '{}' not found in collected metrics: {:?}",
@@ -33,7 +34,8 @@ impl CollectedMetrics {
         Ok(CollectedMetric(
             scope_metrics
                 .metrics()
-                .find(|m| m.name() == name)
+                .filter(|m| m.name() == name)
+                .last()
                 .ok_or_else(|| {
                     anyhow!(
                         "Metric '{}' not found in scope '{}': {:?}",

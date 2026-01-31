@@ -131,7 +131,7 @@ mod tests {
             .await?;
 
         let mut conn = env.async_conn().await?;
-        sqlx::query!("UPDATE queue SET attempt = 99")
+        sqlx::query!("DELETE FROM queue")
             .execute(&mut *conn)
             .await?;
 
