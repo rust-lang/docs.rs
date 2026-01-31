@@ -52,10 +52,6 @@ impl BuildQueue {
             .block_on(self.inner.pending_count_by_priority())
     }
     #[cfg(test)]
-    pub(crate) fn failed_count(&self) -> Result<usize> {
-        self.runtime.block_on(self.inner.failed_count())
-    }
-    #[cfg(test)]
     pub(crate) fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
         self.runtime.block_on(self.inner.queued_crates())
     }
@@ -94,12 +90,10 @@ impl BuildQueue {
                     attempt
                  FROM queue
                  WHERE
-                    attempt < $1 AND
-                    (last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $2))
+                    last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $1)
                  ORDER BY priority ASC, attempt ASC, id ASC
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED"#,
-                self.inner.config.build_attempts as i32,
                 self.inner.config.delay_between_build_attempts.as_secs_f64(),
             )
             .fetch_optional(&mut *transaction),
@@ -110,22 +104,38 @@ impl BuildQueue {
 
         let res = f(&to_process);
 
-        let mut increase_attempt_count = || -> Result<i32> {
-            let next_attempt: i32 = self.runtime.block_on(
-                sqlx::query_scalar!(
-                    "UPDATE queue
+        let delete_from_queue = |conn: &mut sqlx::PgConnection| -> Result<()> {
+            self.runtime.block_on(
+                sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id).execute(conn),
+            )?;
+            Ok(())
+        };
+
+        let increase_attempt_or_delete_from_queue =
+            |conn: &mut sqlx::PgConnection| -> Result<Option<i32>> {
+                let potential_next_attempt = self.runtime.block_on(
+                    sqlx::query_scalar!(
+                        "UPDATE queue
                          SET
                             attempt = attempt + 1,
                             last_attempt = NOW()
                          WHERE id = $1
                          RETURNING attempt;",
-                    to_process.id,
-                )
-                .fetch_one(&mut *transaction),
-            )?;
+                        to_process.id,
+                    )
+                    .fetch_one(&mut *conn),
+                )?;
 
-            Ok(next_attempt)
-        };
+                if potential_next_attempt >= self.inner.config.build_attempts.into() {
+                    self.inner.queue_metrics.failed_crates_count.add(1, &[]);
+                    // exceeded max attempts, remove from queue
+                    delete_from_queue(&mut *conn)?;
+                    Ok(None)
+                } else {
+                    // keep in queue for re-attempt
+                    Ok(Some(potential_next_attempt))
+                }
+            };
 
         let next_attempt: Option<i32>;
 
@@ -134,20 +144,18 @@ impl BuildQueue {
                 should_reattempt: false,
                 successful: _,
             }) => {
-                self.runtime.block_on(
-                    sqlx::query!("DELETE FROM queue WHERE id = $1;", to_process.id)
-                        .execute(&mut *transaction),
-                )?;
+                delete_from_queue(&mut transaction)?;
                 next_attempt = None;
             }
             Ok(BuildPackageSummary {
                 should_reattempt: true,
                 successful: _,
             }) => {
-                next_attempt = Some(increase_attempt_count()?);
+                next_attempt = increase_attempt_or_delete_from_queue(&mut transaction)?;
             }
             Err(e) => {
-                next_attempt = Some(increase_attempt_count()?);
+                next_attempt = increase_attempt_or_delete_from_queue(&mut transaction)?;
+
                 error!(
                     ?e,
                     name = %to_process.name,
@@ -197,6 +205,27 @@ mod tests {
 
         pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
             self.db.async_conn().await
+        }
+
+        fn queued_builds(&self) -> Result<u64> {
+            let collected_metrics = self.metrics.collected_metrics();
+
+            Ok(collected_metrics
+                .get_metric("build_queue", "docsrs.build_queue.queued_builds")?
+                .get_u64_counter()
+                .value())
+        }
+
+        fn failed_count(&self) -> u64 {
+            let collected_metrics = self.metrics.collected_metrics();
+
+            if let Ok(metric) = collected_metrics
+                .get_metric("build_queue", "docsrs.build_queue.failed_crates_count")
+            {
+                metric.get_u64_counter().value()
+            } else {
+                0
+            }
         }
     }
 
@@ -280,7 +309,7 @@ mod tests {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
         })?;
-        let queue = env.queue;
+        let queue = &env.queue;
 
         const LOW_PRIORITY: KrateName = KrateName::from_static("low-priority");
         const HIGH_PRIORITY_FOO: KrateName = KrateName::from_static("high-priority-foo");
@@ -348,15 +377,7 @@ mod tests {
         })?;
         assert!(!called, "there were still items in the queue");
 
-        let collected_metrics = env.metrics.collected_metrics();
-
-        assert_eq!(
-            collected_metrics
-                .get_metric("build_queue", "docsrs.build_queue.queued_builds")?
-                .get_u64_counter()
-                .value(),
-            test_crates.len() as u64
-        );
+        assert_eq!(env.queued_builds()?, test_crates.len() as u64);
 
         Ok(())
     }
@@ -434,15 +455,15 @@ mod tests {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
         })?;
-        let queue = env.queue;
+        let queue = &env.queue;
 
-        assert_eq!(queue.failed_count()?, 0);
+        assert_eq!(env.failed_count(), 0);
         queue.add_crate(&FOO, &V1, -100, None)?;
-        assert_eq!(queue.failed_count()?, 0);
+        assert_eq!(env.failed_count(), 0);
         queue.add_crate(&BAR, &V1, 0, None)?;
 
         for _ in 0..MAX_ATTEMPTS {
-            assert_eq!(queue.failed_count()?, 0);
+            assert_eq!(env.failed_count(), 0);
             queue.process_next_crate(|krate| {
                 assert_eq!(FOO, krate.name);
                 Ok(BuildPackageSummary {
@@ -451,13 +472,13 @@ mod tests {
                 })
             })?;
         }
-        assert_eq!(queue.failed_count()?, 1);
+        assert_eq!(env.failed_count(), 1);
 
         queue.process_next_crate(|krate| {
             assert_eq!(BAR, krate.name);
             Ok(BuildPackageSummary::default())
         })?;
-        assert_eq!(queue.failed_count()?, 1);
+        assert_eq!(env.failed_count(), 1);
 
         Ok(())
     }
@@ -470,27 +491,27 @@ mod tests {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
         })?;
-        let queue = env.queue;
+        let queue = &env.queue;
 
-        assert_eq!(queue.failed_count()?, 0);
+        assert_eq!(env.failed_count(), 0);
         queue.add_crate(&FOO, &V1, -100, None)?;
-        assert_eq!(queue.failed_count()?, 0);
+        assert_eq!(env.failed_count(), 0);
         queue.add_crate(&BAR, &V1, 0, None)?;
 
         for _ in 0..MAX_ATTEMPTS {
-            assert_eq!(queue.failed_count()?, 0);
+            assert_eq!(env.failed_count(), 0);
             queue.process_next_crate(|krate| {
                 assert_eq!(FOO, krate.name);
                 anyhow::bail!("this failed");
             })?;
         }
-        assert_eq!(queue.failed_count()?, 1);
+        assert_eq!(env.failed_count(), 1);
 
         queue.process_next_crate(|krate| {
             assert_eq!(BAR, krate.name);
             Ok(BuildPackageSummary::default())
         })?;
-        assert_eq!(queue.failed_count()?, 1);
+        assert_eq!(env.failed_count(), 1);
 
         Ok(())
     }

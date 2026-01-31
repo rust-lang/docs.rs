@@ -18,3 +18,7 @@ opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
+opentelemetry_sdk = { workspace = true, features = ["testing"] }

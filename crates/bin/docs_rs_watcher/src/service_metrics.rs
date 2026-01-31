@@ -8,7 +8,6 @@ use std::collections::HashSet;
 pub struct OtelServiceMetrics {
     pub queued_crates_count: Gauge<u64>,
     pub prioritized_crates_count: Gauge<u64>,
-    pub failed_crates_count: Gauge<u64>,
     pub queue_is_locked: Gauge<u64>,
     pub queued_crates_count_by_priority: Gauge<u64>,
 }
@@ -24,10 +23,6 @@ impl OtelServiceMetrics {
                 .build(),
             prioritized_crates_count: meter
                 .u64_gauge(format!("{PREFIX}.prioritized_crates_count"))
-                .with_unit("1")
-                .build(),
-            failed_crates_count: meter
-                .u64_gauge(format!("{PREFIX}.failed_crates_count"))
                 .with_unit("1")
                 .build(),
             queue_is_locked: meter
@@ -73,9 +68,6 @@ impl OtelServiceMetrics {
                 &[KeyValue::new("priority", priority.to_string())],
             );
         }
-
-        self.failed_crates_count
-            .record(queue.failed_count().await? as u64, &[]);
 
         Ok(())
     }
