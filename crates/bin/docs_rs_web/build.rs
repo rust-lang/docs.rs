@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Error, Result};
-use std::{env, fs::File, io::Write as _, path::Path};
+use std::{collections::BTreeMap, env, fs::File, io::Write as _, path::Path};
 
 mod tracked {
     use std::{
@@ -68,7 +68,7 @@ mod tracked {
     }
 }
 
-type ETagMap<'a> = phf_codegen::Map<'a, String>;
+type ETagMap = BTreeMap<String, String>;
 
 fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR").context("missing OUT_DIR")?;
@@ -81,11 +81,13 @@ fn main() -> Result<()> {
     calculate_static_etags(&mut etag_map)?;
 
     let mut etag_file = File::create(out_dir.join("static_etag_map.rs"))?;
-    writeln!(
-        &mut etag_file,
-        "pub static STATIC_ETAG_MAP: ::phf::Map<&'static str, &'static str> = {};",
-        etag_map.build()
-    )?;
+    writeln!(etag_file, "pub const STATIC_ETAG_MAP: &[(&str, &str)] = &[")?;
+    for (path, etag) in etag_map.iter() {
+        // the debug repr of a `str` is also a valid escaped string literal in the code
+        writeln!(etag_file, r#"    ({:?}, {:?}), "#, path, etag)?;
+    }
+    writeln!(etag_file, "];")?;
+
     etag_file.sync_all()?;
 
     // trigger recompilation when a new migration is added
@@ -100,7 +102,7 @@ fn etag_from_path(path: impl AsRef<Path>) -> Result<String> {
 fn etag_from_content(content: impl AsRef<[u8]>) -> String {
     let digest = md5::compute(content);
     let md5_hex = format!("{:x}", digest);
-    format!(r#""\"{md5_hex}\"""#)
+    format!(r#""{md5_hex}""#)
 }
 
 fn compile_sass_file(src: &Path, dest: &Path) -> Result<()> {
@@ -137,7 +139,7 @@ fn compile_sass(out_dir: &Path, etag_map: &mut ETagMap) -> Result<()> {
                 })?;
 
                 let dest_str = dest.file_name().unwrap().to_str().unwrap().to_owned();
-                etag_map.entry(dest_str, etag_from_path(&dest)?);
+                etag_map.insert(dest_str, etag_from_path(&dest)?);
             }
         }
     }
@@ -148,7 +150,7 @@ fn compile_sass(out_dir: &Path, etag_map: &mut ETagMap) -> Result<()> {
     let vendored = pure + &grids;
     std::fs::write(out_dir.join("vendored").with_extension("css"), &vendored)?;
 
-    etag_map.entry(
+    etag_map.insert(
         "vendored.css".to_owned(),
         etag_from_content(vendored.as_bytes()),
     );
@@ -169,7 +171,7 @@ fn calculate_static_etags(etag_map: &mut ETagMap) -> Result<()> {
 
             let partial_path = path.strip_prefix(static_dir).unwrap();
             let partial_path_str = partial_path.to_string_lossy().to_string();
-            etag_map.entry(partial_path_str, etag_from_path(path)?);
+            etag_map.insert(partial_path_str, etag_from_path(path)?);
         }
     }
 

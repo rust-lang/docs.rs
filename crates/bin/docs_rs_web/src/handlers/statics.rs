@@ -102,12 +102,19 @@ async fn conditional_get(
     req: Request,
     next: Next,
 ) -> Response {
+    debug_assert!(STATIC_ETAG_MAP.is_sorted());
+
     let if_none_match = if_none_match.map(|th| th.0);
     let resource_path = partial_uri.path().trim_start_matches('/');
-    let Some(etag) = STATIC_ETAG_MAP.get(resource_path).map(|etag| {
-        etag.parse::<ETag>()
-            .expect("compile time generated, should always pass")
-    }) else {
+    let Some(etag) = STATIC_ETAG_MAP
+        .binary_search_by_key(&resource_path, |(path, _)| *path)
+        .ok()
+        .map(|pos| {
+            let etag = STATIC_ETAG_MAP[pos].1;
+            etag.parse::<ETag>()
+                .expect("compile time generated, should always pass")
+        })
+    else {
         let res = next.run(req).await;
 
         debug_assert!(
