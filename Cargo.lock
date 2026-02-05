@@ -2411,8 +2411,6 @@ dependencies = [
  "num_cpus",
  "opentelemetry",
  "opentelemetry_sdk",
- "phf 0.13.1",
- "phf_codegen 0.13.1",
  "postcard",
  "pretty_assertions",
  "rayon-core",

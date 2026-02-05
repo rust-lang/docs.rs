@@ -9,7 +9,6 @@ build = "build.rs"
 
 [package.metadata.cargo-machete]
 ignored = [
-    "phf",
     # used in build script output
     "slug", # used in askama templates, can be moved to web binary
 ]
@@ -51,7 +50,6 @@ lol_html = "2.0.0"
 mime = { workspace = true }
 num_cpus = "1.15.0"
 opentelemetry = { workspace = true }
-phf = "0.13.1"
 postcard = { workspace = true }
 rayon-core = "1.13.0"
 regex = { workspace = true }
@@ -76,7 +74,6 @@ url = { workspace = true }
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
 md5 = "0.8.0"
-phf_codegen = "0.13"
 syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
 walkdir = { workspace = true }
 
