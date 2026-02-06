@@ -67,7 +67,7 @@ impl GitHub {
         if let Some(ref token) = config.github_accesstoken {
             headers.insert(
                 AUTHORIZATION,
-                HeaderValue::from_str(&format!("token {token}"))?,
+                HeaderValue::from_str(&format!("Bearer {token}"))?,
             );
         } else {
             warn!("did not collect `github.com` stats as no token was provided");
@@ -268,6 +268,7 @@ mod tests {
     };
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
+    use reqwest::header::AUTHORIZATION;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 
@@ -297,6 +298,7 @@ mod tests {
             .with_body(
                 r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -315,6 +317,7 @@ mod tests {
             .mock("POST", "/graphql")
             .with_header("content-type", "application/json")
             .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -336,6 +339,7 @@ mod tests {
                 r#"{"data": {"nodes": [], "rateLimit": {"remaining": 100000}}, "errors":
                     [{"type": "NOT_FOUND", "path": ["nodes", 0], "message": "none"}]}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -361,6 +365,7 @@ mod tests {
                     "description": "this is", "stargazerCount": 10, "forkCount": 11,
                     "issues": {"totalCount": 12}}}}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         let repo = updater
