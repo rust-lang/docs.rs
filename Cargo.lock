@@ -1929,7 +1929,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_build_limits"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "docs_rs_config",
@@ -1948,7 +1948,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_build_queue"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_cargo_metadata"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "docs_rs_types",
@@ -2019,14 +2019,14 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_config"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "docs_rs_context"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "bon",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_database"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2076,7 +2076,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_env_vars"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "tracing",
@@ -2084,7 +2084,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_fastly"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2106,7 +2106,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_headers"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
@@ -2139,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_logging"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "docs_rs_utils",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_rustdoc_json"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "docs_rs_types",
@@ -2227,7 +2227,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_storage"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2320,7 +2320,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_utils"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",

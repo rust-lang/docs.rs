@@ -1,10 +1,10 @@
 [package]
 name = "docs_rs_admin"
-version = "0.6.0"
-authors = ["Onur Aslan <onuraslan@gmail.com>", "The Rust Project Developers"]
-license = "MIT"
-repository = "https://github.com/rust-lang/docs.rs"
-edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }

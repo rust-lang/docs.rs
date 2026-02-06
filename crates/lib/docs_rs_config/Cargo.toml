@@ -1,7 +1,8 @@
 [package]
 name = "docs_rs_config"
-version = "0.1.0"
-edition = "2024"
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 [features]
 testing = []

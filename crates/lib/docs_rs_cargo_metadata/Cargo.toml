@@ -1,9 +1,8 @@
 [package]
 name = "docs_rs_cargo_metadata"
-version = "0.1.0"
-license = "MIT"
-repository = "https://github.com/rust-lang/docs.rs"
-edition = "2024"
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 [features]
 testing = []
