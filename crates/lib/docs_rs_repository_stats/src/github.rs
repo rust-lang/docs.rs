@@ -3,7 +3,7 @@ use crate::{
     config::Config,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_utils::APP_USER_AGENT;
@@ -187,7 +187,7 @@ impl GitHub {
         query: &str,
         variables: impl serde::Serialize,
     ) -> Result<GraphResponse<T>> {
-        Ok(self
+        let response = self
             .client
             .post(&self.endpoint)
             .json(&serde_json::json!({
@@ -195,10 +195,16 @@ impl GitHub {
                 "variables": variables,
             }))
             .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?)
+            .await?;
+
+        let status = response.status();
+
+        if status.is_client_error() || status.is_server_error() {
+            let body = response.text().await?;
+            bail!("GitHub GraphQL response status: {}\n{}", status, body);
+        } else {
+            Ok(response.json().await?)
+        }
     }
 }
 
@@ -382,6 +388,33 @@ mod tests {
         assert_eq!(repo.stars, 10);
         assert_eq!(repo.forks, 11);
         assert_eq!(repo.issues, 12);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_403_error_with_body() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(403)
+            .with_body("some error text")
+            .create();
+
+        let err = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "GitHub GraphQL response status: 403 Forbidden\nsome error text"
+        );
+
         Ok(())
     }
 }
