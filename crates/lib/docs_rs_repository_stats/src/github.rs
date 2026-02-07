@@ -3,15 +3,15 @@ use crate::{
     config::Config,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
-    Client as HttpClient,
+    Client as HttpClient, StatusCode,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
@@ -155,7 +155,7 @@ impl RepositoryForge for GitHub {
                 ("RATE_LIMITED", []) => {
                     return Err(RateLimitReached.into());
                 }
-                _ => anyhow::bail!("error updating repositories: {}", error.message),
+                _ => bail!("error updating repositories: {}", error.message),
             }
         }
 
@@ -198,12 +198,24 @@ impl GitHub {
             .await?;
 
         let status = response.status();
+        let body = response.text().await?;
 
-        if status.is_client_error() || status.is_server_error() {
-            let body = response.text().await?;
-            bail!("GitHub GraphQL response status: {}\n{}", status, body);
+        if status == StatusCode::FORBIDDEN
+            && let Ok(api_error) = serde_json::from_str::<ApiError>(&body)
+            && (api_error
+                .documentation_url
+                .contains("secondary-rate-limits")
+                || api_error.message.contains("secondary rate limit"))
+        {
+            Err(RateLimitReached.into())
+        } else if status.is_client_error() || status.is_server_error() {
+            Err(anyhow!(
+                "GitHub GraphQL response status: {}\n{}",
+                status,
+                body
+            ))
         } else {
-            Ok(response.json().await?)
+            Ok(serde_json::from_str(&body)?)
         }
     }
 }
@@ -266,10 +278,17 @@ struct GraphIssues {
     total_count: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ApiError {
+    documentation_url: String,
+    message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         Config, GitHub, RateLimitReached,
+        github::ApiError,
         updater::{RepositoryForge, repository_name},
     };
     use anyhow::Result;
@@ -413,6 +432,43 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "GitHub GraphQL response status: 403 Forbidden\nsome error text"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_secondary_rate_limit() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(403)
+            .with_body(&serde_json::to_string(&ApiError {
+                documentation_url: "https://docs.github.com/graphql/overview/\
+                    rate-limits-and-node-limits-for-the-graphql-api#secondary-rate-limits"
+                    .into(),
+                message: "You have exceeded a secondary rate limit.
+                    Please wait a few minutes before you try again.
+                    For more on scraping GitHub and how it may affect your rights,
+                    please review our Terms of Service
+                    (https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+                    If you reach out to GitHub Support for help, please include the request ID
+                    ECEE:193CF9:5A5D684:1866A8EB:698779A9."
+                    .into(),
+            })?)
+            .create();
+
+        assert!(
+            updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+                .unwrap_err()
+                .is::<RateLimitReached>()
         );
 
         Ok(())
