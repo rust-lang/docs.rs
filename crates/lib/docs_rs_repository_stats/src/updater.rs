@@ -150,7 +150,11 @@ impl RepositoryStatsUpdater {
             let needs_update: Vec<String> = sqlx::query!(
                 "SELECT host_id
                  FROM repositories
-                 WHERE host = $1 AND updated_at < NOW() - INTERVAL '1 day';",
+                 WHERE
+                    host = $1 AND
+                    updated_at < NOW() - INTERVAL '1 day'
+                 ORDER BY updated_at
+                ;",
                 updater.host()
             )
             .fetch(&mut *conn)
