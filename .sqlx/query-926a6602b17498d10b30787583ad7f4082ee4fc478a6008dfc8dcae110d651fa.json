@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n             SELECT DISTINCT name AS \"name: KrateName\"\n             FROM queue\n             WHERE priority = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "926a6602b17498d10b30787583ad7f4082ee4fc478a6008dfc8dcae110d651fa"
+}
