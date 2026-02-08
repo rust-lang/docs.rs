@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT host_id\n                 FROM repositories\n                 WHERE\n                    host = $1 AND\n                    updated_at < NOW() - INTERVAL '1 day'\n                 ORDER BY updated_at\n                ;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "host_id",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1a0487c0559ce9e4283e9ede644546283bb6261466bfb7ed23c49df2d042e3c5"
+}
