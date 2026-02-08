@@ -73,6 +73,8 @@ cargo run --bin docs_rs_admin -- database migrate
 cargo run --bin docs_rs_builder -- build update-toolchain
 # Build a sample crate to make sure it works
 cargo run --bin docs_rs_builder -- build crate regex 1.3.1
+# if you don't want to run the builder, you can import a release from docs.rs itself
+cargo run --bin docs_rs_import_release -- regex latest
 # This starts the web server but does not build any crates.
 # It does not automatically run the migrations, so you need to do that manually (see above).
 cargo run --bin docs_rs_web
