@@ -602,15 +602,15 @@ impl<'a> FakeRelease<'a> {
     }
 }
 
-struct FakeGithubStats {
-    repo: String,
-    stars: i32,
-    forks: i32,
-    issues: i32,
+pub struct FakeGithubStats {
+    pub repo: String,
+    pub stars: i32,
+    pub forks: i32,
+    pub issues: i32,
 }
 
 impl FakeGithubStats {
-    async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
+    pub async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
         let existing_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM repositories")
             .fetch_one(&mut *conn)
             .await?

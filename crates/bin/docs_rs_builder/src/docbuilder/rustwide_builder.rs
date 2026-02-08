@@ -13,7 +13,7 @@ use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_registry_api::RegistryApi;
-use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{
     RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion,
     read_format_version_from_rustdoc_json,
@@ -837,6 +837,10 @@ impl RustwideBuilder {
                     true,
                     source_size,
                 ))?;
+
+                if let Some(repository_id) = repository {
+                    self.runtime.block_on(workspaces::update_repository_stats(&mut async_conn, repository_id))?;
+                }
 
                 if let Some(doc_coverage) = res.doc_coverage {
                     self.runtime.block_on(add_doc_coverage(

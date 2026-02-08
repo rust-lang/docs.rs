@@ -112,6 +112,10 @@ pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<u
 
     let crates_added = process_changes(context, &changes, index.repository_url()).await;
 
+    if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
+        error!(?err, "error deprioritizing workspaces");
+    }
+
     // set the reference in the database
     // so this survives recreating the registry watcher
     // server.

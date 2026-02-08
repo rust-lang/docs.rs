@@ -262,6 +262,7 @@ mod tests {
         let env = test_queue(Config {
             build_attempts: 99,
             delay_between_build_attempts: Duration::from_secs(1),
+            ..Default::default()
         })?;
 
         let queue = &env.queue;
@@ -308,6 +309,7 @@ mod tests {
         let env = test_queue(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
+            ..Default::default()
         })?;
         let queue = &env.queue;
 
@@ -454,6 +456,7 @@ mod tests {
         let env = test_queue(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
+            ..Default::default()
         })?;
         let queue = &env.queue;
 
@@ -490,6 +493,7 @@ mod tests {
         let env = test_queue(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
+            ..Default::default()
         })?;
         let queue = &env.queue;
 
