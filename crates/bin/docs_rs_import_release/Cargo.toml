@@ -1,0 +1,34 @@
+[package]
+name = "docs_rs_import_release"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "Import a successfully built release from docs.rs into a test deployment"
+
+[dependencies]
+anyhow = { workspace = true }
+async-tar = { version = "0.6.0", default-features = false, features = ["runtime-tokio", "xattr"] }
+clap = { workspace = true }
+docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
+docs_rs_database = { path = "../../lib/docs_rs_database" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
+docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
+docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
+docs_rs_storage = { path = "../../lib/docs_rs_storage" }
+docs_rs_types = { path = "../../lib/docs_rs_types" }
+docs_rs_utils = { path = "../../lib/docs_rs_utils" }
+docsrs-metadata = { path = "../../lib/metadata" }
+futures-util = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+sqlx = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }

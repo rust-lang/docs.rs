@@ -206,11 +206,20 @@ impl Metadata {
     ///
     /// All of the above is ignored for proc-macros, which are always only compiled for the host.
     pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
+        self.targets_for_host(include_default_targets, HOST_TARGET)
+    }
+
+    /// Return the targets that should be built, given a different simulated HOST_TARGET.
+    pub fn targets_for_host(
+        &self,
+        include_default_targets: bool,
+        host_target: &'static str,
+    ) -> BuildTargets<'_> {
         // Proc macros can only be compiled for the host, so just completely ignore any configured targets.
         // It would be nice to warn about this somehow ...
         if self.proc_macro {
             return BuildTargets {
-                default_target: HOST_TARGET,
+                default_target: host_target,
                 other_targets: HashSet::default(),
             };
         }
@@ -224,7 +233,7 @@ impl Metadata {
                     .as_ref()
                     .and_then(|targets| targets.first().map(String::as_str))
             })
-            .unwrap_or(HOST_TARGET);
+            .unwrap_or(host_target);
 
         let crate_targets = self
             .targets

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE queue\n             SET priority = GREATEST(priority, $1)\n             WHERE\n                name = $2\n                AND version != $3\n             ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e550304c4f4f1b7aba42b7eb0eb7c1fb7732b174f49c76a145ae86fad2556671"
+}

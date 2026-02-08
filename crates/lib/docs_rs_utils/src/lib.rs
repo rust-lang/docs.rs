@@ -39,6 +39,9 @@ pub const APP_USER_AGENT: &str = concat!(
 /// `s3://rust-docs-rs//rustdoc-static/something.css`
 pub const RUSTDOC_STATIC_STORAGE_PREFIX: &str = "/rustdoc-static/";
 
+/// Where we want to serve the rustdoc static files stored in the storage prefix above
+pub const RUSTDOC_STATIC_PATH: &str = "/-/rustdoc.static/";
+
 /// a wrapper around tokio's `spawn_blocking` that
 /// enables us to write nicer code when the closure
 /// returns an `anyhow::Result`.
