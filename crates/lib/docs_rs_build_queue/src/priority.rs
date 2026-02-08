@@ -1,5 +1,6 @@
 use crate::PRIORITY_DEFAULT;
 use anyhow::Result;
+use docs_rs_types::KrateName;
 use futures_util::stream::TryStreamExt;
 
 /// Get the build queue priority for a crate, returns the matching pattern too
@@ -16,12 +17,12 @@ pub async fn list_crate_priorities(conn: &mut sqlx::PgConnection) -> Result<Vec<
 /// Get the build queue priority for a crate with its matching pattern
 pub async fn get_crate_pattern_and_priority(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: &KrateName,
 ) -> Result<Option<(String, i32)>> {
     // Search the `priority` table for a priority where the crate name matches the stored pattern
     Ok(sqlx::query!(
         "SELECT pattern, priority FROM crate_priorities WHERE $1 LIKE pattern LIMIT 1",
-        name
+        name as _
     )
     .fetch_optional(&mut *conn)
     .await?
@@ -29,7 +30,7 @@ pub async fn get_crate_pattern_and_priority(
 }
 
 /// Get the build queue priority for a crate
-pub async fn get_crate_priority(conn: &mut sqlx::PgConnection, name: &str) -> Result<i32> {
+pub async fn get_crate_priority(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<i32> {
     Ok(get_crate_pattern_and_priority(conn, name)
         .await?
         .map_or(PRIORITY_DEFAULT, |(_, priority)| priority))
@@ -76,44 +77,51 @@ mod tests {
     use docs_rs_config::AppConfig as _;
     use docs_rs_database::{Config, testing::TestDatabase};
     use docs_rs_opentelemetry::testing::TestMetrics;
+    use test_case::test_case;
 
+    #[test_case(
+        "docsrs-%",
+        &["docsrs-database", "docsrs-", "docsrs-s3", "docsrs-webserver"],
+        &["docsrs"]
+    )]
+    #[test_case(
+        "_c_",
+        &["rcc"],
+        &["rc"]
+    )]
+    #[test_case(
+        "hexponent",
+        &["hexponent"],
+        &["hexponents", "floathexponent"]
+    )]
     #[tokio::test(flavor = "multi_thread")]
-    async fn set_priority() -> Result<()> {
+    async fn set_priority(
+        pattern: &str,
+        should_match: &[&str],
+        should_not_match: &[&str],
+    ) -> Result<()> {
         let test_metrics = TestMetrics::new();
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
+        const PRIO: i32 = -100;
+
         let mut conn = db.async_conn().await?;
 
-        set_crate_priority(&mut conn, "docsrs-%", -100).await?;
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs-database").await?,
-            -100
-        );
-        assert_eq!(get_crate_priority(&mut conn, "docsrs-").await?, -100);
-        assert_eq!(get_crate_priority(&mut conn, "docsrs-s3").await?, -100);
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs-webserver").await?,
-            -100
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs").await?,
-            PRIORITY_DEFAULT
-        );
+        set_crate_priority(&mut conn, pattern, PRIO).await?;
 
-        set_crate_priority(&mut conn, "_c_", 100).await?;
-        assert_eq!(get_crate_priority(&mut conn, "rcc").await?, 100);
-        assert_eq!(get_crate_priority(&mut conn, "rc").await?, PRIORITY_DEFAULT);
+        for name in should_match {
+            assert_eq!(
+                get_crate_priority(&mut conn, &name.parse().unwrap()).await?,
+                PRIO
+            );
+        }
 
-        set_crate_priority(&mut conn, "hexponent", 10).await?;
-        assert_eq!(get_crate_priority(&mut conn, "hexponent").await?, 10);
-        assert_eq!(
-            get_crate_priority(&mut conn, "hexponents").await?,
-            PRIORITY_DEFAULT
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "floathexponent").await?,
-            PRIORITY_DEFAULT
-        );
+        for name in should_not_match {
+            assert_eq!(
+                get_crate_priority(&mut conn, &name.parse().unwrap()).await?,
+                PRIORITY_DEFAULT
+            );
+        }
 
         Ok(())
     }
@@ -124,43 +132,16 @@ mod tests {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
+        let pattern = "docsrs-%";
+        let krate = KrateName::from_static("docsrs-");
+        const PRIO: i32 = -100;
 
-        set_crate_priority(&mut conn, "docsrs-%", -100).await?;
-        assert_eq!(get_crate_priority(&mut conn, "docsrs-").await?, -100);
+        set_crate_priority(&mut conn, pattern, PRIO).await?;
+        assert_eq!(get_crate_priority(&mut conn, &krate).await?, PRIO);
 
+        assert_eq!(remove_crate_priority(&mut conn, pattern).await?, Some(PRIO));
         assert_eq!(
-            remove_crate_priority(&mut conn, "docsrs-%").await?,
-            Some(-100)
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs-").await?,
-            PRIORITY_DEFAULT
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn get_priority() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-
-        set_crate_priority(&mut conn, "docsrs-%", -100).await?;
-
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs-database").await?,
-            -100
-        );
-        assert_eq!(get_crate_priority(&mut conn, "docsrs-").await?, -100);
-        assert_eq!(get_crate_priority(&mut conn, "docsrs-s3").await?, -100);
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs-webserver").await?,
-            -100
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "unrelated").await?,
+            get_crate_priority(&mut conn, &krate).await?,
             PRIORITY_DEFAULT
         );
 
@@ -174,26 +155,14 @@ mod tests {
 
         let mut conn = db.async_conn().await?;
 
-        assert_eq!(
-            get_crate_priority(&mut conn, "docsrs").await?,
-            PRIORITY_DEFAULT
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "rcc").await?,
-            PRIORITY_DEFAULT
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "lasso").await?,
-            PRIORITY_DEFAULT
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "hexponent").await?,
-            PRIORITY_DEFAULT
-        );
-        assert_eq!(
-            get_crate_priority(&mut conn, "rust4lyfe").await?,
-            PRIORITY_DEFAULT
-        );
+        for name in &["docsrs", "rcc", "lasso", "hexponent", "rust4lyfe"] {
+            let krate = KrateName::from_static(name);
+
+            assert_eq!(
+                get_crate_priority(&mut conn, &krate).await?,
+                PRIORITY_DEFAULT
+            );
+        }
 
         Ok(())
     }

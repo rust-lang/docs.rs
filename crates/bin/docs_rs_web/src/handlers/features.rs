@@ -181,8 +181,8 @@ pub(crate) async fn build_features_handler(
         FROM releases
         INNER JOIN crates ON crates.id = releases.crate_id
         WHERE crates.name = $1 AND releases.version = $2"#,
-        params.name(),
-        version.to_string(),
+        params.name() as _,
+        version as _,
     )
     .fetch_optional(&mut *conn)
     .await?

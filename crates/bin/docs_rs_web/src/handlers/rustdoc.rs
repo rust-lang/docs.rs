@@ -3559,7 +3559,7 @@ mod test {
     ) -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        const NAME: &str = "dummy";
+        const NAME: &KrateName = &KrateName::from_static("dummy");
         const VERSION: Version = Version::new(0, 1, 0);
         const TARGET: &str = "x86_64-unknown-linux-gnu";
         const FORMAT_VERSION: RustdocJsonFormatVersion = RustdocJsonFormatVersion::Latest;

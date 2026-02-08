@@ -751,7 +751,7 @@ fn get_file_extension(path: &str) -> Option<&str> {
     })
 }
 
-fn generate_rustdoc_url(name: &str, version: &ReqVersion, path: &str) -> EscapedURI {
+fn generate_rustdoc_url(name: &KrateName, version: &ReqVersion, path: &str) -> EscapedURI {
     EscapedURI::from_path(format!("/{}/{}/{}", name, version, path))
 }
 

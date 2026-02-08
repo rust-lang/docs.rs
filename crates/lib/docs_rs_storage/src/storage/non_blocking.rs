@@ -19,7 +19,7 @@ use anyhow::Result;
 use dashmap::DashMap;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_types::{BuildId, CompressionAlgorithm, Version};
+use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::stream::BoxStream;
 use std::{
@@ -75,7 +75,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn stream_rustdoc_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -94,7 +94,7 @@ impl AsyncStorage {
 
     pub async fn fetch_source_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -109,7 +109,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn stream_source_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -128,7 +128,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn rustdoc_file_exists(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,

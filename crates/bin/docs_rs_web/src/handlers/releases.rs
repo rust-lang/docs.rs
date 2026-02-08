@@ -552,9 +552,10 @@ pub(crate) async fn search_handler(
         // since we never pass a version into `match_version` here, we'll never get
         // `MatchVersion::Exact`, so the distinction between `Exact` and `Semver` doesn't
         // matter
-        if let Ok(matchver) = match_version(&mut conn, krate, &ReqVersion::Latest)
-            .await
-            .map(|matched_release| matched_release.into_exactly_named())
+        if let Ok(krate) = krate.parse::<KrateName>()
+            && let Ok(matchver) = match_version(&mut conn, &krate, &ReqVersion::Latest)
+                .await
+                .map(|matched_release| matched_release.into_exactly_named())
         {
             query_params.remove("query");
             queries.extend(query_params);
@@ -563,7 +564,7 @@ pub(crate) async fn search_handler(
             let params = RustdocParams::from_matched_release(&matchver);
 
             trace!(
-                krate,
+                %krate,
                 ?params,
                 "redirecting I'm feeling lucky search to crate page"
             );
@@ -809,7 +810,7 @@ mod tests {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
 
-            let crate_id = initialize_crate(&mut conn, "foo").await?;
+            let crate_id = initialize_crate(&mut conn, &FOO).await?;
             let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
             let build_id = initialize_build(&mut conn, release_id).await?;
 

@@ -1,12 +1,12 @@
 use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
-use docs_rs_types::{CompressionAlgorithm, Version};
+use docs_rs_types::{CompressionAlgorithm, KrateName, Version};
 
-pub fn rustdoc_archive_path(name: &str, version: &Version) -> String {
+pub fn rustdoc_archive_path(name: &KrateName, version: &Version) -> String {
     format!("rustdoc/{name}/{version}.zip")
 }
 
 pub fn rustdoc_json_path(
-    name: &str,
+    name: &KrateName,
     version: &Version,
     target: &str,
     format_version: RustdocJsonFormatVersion,
@@ -24,6 +24,6 @@ pub fn rustdoc_json_path(
     path
 }
 
-pub fn source_archive_path(name: &str, version: &Version) -> String {
+pub fn source_archive_path(name: &KrateName, version: &Version) -> String {
     format!("sources/{name}/{version}.zip")
 }

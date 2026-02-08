@@ -147,7 +147,7 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
 #[instrument(skip(conn))]
 pub(crate) async fn match_version(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: &KrateName,
     input_version: &ReqVersion,
 ) -> Result<MatchedRelease, AxumNope> {
     let (crate_id, name, corrected_name) = {
@@ -158,16 +158,12 @@ pub(crate) async fn match_version(
                 name as "name: KrateName"
              FROM crates
              WHERE normalize_crate_name(name) = normalize_crate_name($1)"#,
-            name,
+            name as _,
         )
         .fetch_optional(&mut *conn)
         .await
         .context("error fetching crate")?
         .ok_or(AxumNope::CrateNotFound)?;
-
-        let name: KrateName = name
-            .parse()
-            .expect("here we know it's valid, because we found it after normalizing");
 
         if row.name != name {
             (row.id, name, Some(row.name))
@@ -193,7 +189,7 @@ pub(crate) async fn match_version(
                 .find(|release| &release.version == parsed_req_version)
             {
                 return Ok(MatchedRelease {
-                    name,
+                    name: name.clone(),
                     corrected_name,
                     req_version: input_version.clone(),
                     release: release.clone(),
@@ -254,7 +250,7 @@ mod tests {
     use crate::testing::{TestEnvironment, async_wrapper};
     use docs_rs_database::Pool;
     use docs_rs_test_fakes::FakeBuild;
-    use docs_rs_types::ReleaseId;
+    use docs_rs_types::{ReleaseId, testing::FOO};
     use std::str::FromStr as _;
 
     async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
@@ -272,7 +268,7 @@ mod tests {
         let mut conn = pool.get_async().await.unwrap();
         let version = match_version(
             &mut conn,
-            "foo",
+            &FOO,
             &ReqVersion::from_str(v.unwrap_or_default()).unwrap(),
         )
         .await

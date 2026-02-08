@@ -98,7 +98,7 @@ impl CrateDetails {
 
     async fn new(
         conn: &mut sqlx::PgConnection,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         req_version: Option<ReqVersion>,
         prefetched_releases: Vec<Release>,
@@ -161,8 +161,8 @@ impl CrateDetails {
                  DESC LIMIT 1
              ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2;"#,
-            name,
-            version.to_string(),
+            name as _,
+            version as _,
         )
         .fetch_optional(&mut *conn)
         .await?
@@ -743,21 +743,24 @@ mod tests {
         status
     }
 
-    async fn crate_details<V>(
+    async fn crate_details<K, V>(
         conn: &mut sqlx::PgConnection,
-        name: &str,
+        name: K,
         version: V,
         req_version: Option<ReqVersion>,
     ) -> CrateDetails
     where
+        K: TryInto<KrateName>,
+        K::Error: std::error::Error + Send + Sync + 'static,
         V: TryInto<Version>,
         V::Error: std::error::Error + Send + Sync + 'static,
     {
+        let name = name.try_into().expect("invalid crate name");
         let version = version.try_into().expect("invalid version");
 
         let crate_id = sqlx::query_scalar!(
             r#"SELECT id as "id: CrateId" FROM crates WHERE name = $1"#,
-            name
+            name as _
         )
         .fetch_one(&mut *conn)
         .await
@@ -765,7 +768,7 @@ mod tests {
 
         let releases = releases_for_crate(&mut *conn, crate_id).await.unwrap();
 
-        CrateDetails::new(&mut *conn, name, &version, req_version, releases)
+        CrateDetails::new(&mut *conn, &name, &version, req_version, releases)
             .await
             .unwrap()
             .unwrap()

@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use docs_rs_types::Version;
+use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, retry_async};
 use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
 use serde::Deserialize;
@@ -46,7 +46,7 @@ impl RegistryApi {
     }
 
     #[instrument(skip(self))]
-    pub async fn get_crate_data(&self, name: &str) -> Result<CrateData> {
+    pub async fn get_crate_data(&self, name: &KrateName) -> Result<CrateData> {
         let owners = self
             .get_owners(name)
             .await
@@ -56,7 +56,11 @@ impl RegistryApi {
     }
 
     #[instrument(skip(self))]
-    pub async fn get_release_data(&self, name: &str, version: &Version) -> Result<ReleaseData> {
+    pub async fn get_release_data(
+        &self,
+        name: &KrateName,
+        version: &Version,
+    ) -> Result<ReleaseData> {
         let (release_time, yanked, downloads) = self
             .get_release_time_yanked_downloads(name, version)
             .await
@@ -72,14 +76,14 @@ impl RegistryApi {
     /// Get release_time, yanked and downloads from the registry's API
     async fn get_release_time_yanked_downloads(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
     ) -> Result<(DateTime<Utc>, bool, i32)> {
         let url = {
             let mut url = self.api_base.clone();
             url.path_segments_mut()
                 .map_err(|()| anyhow!("Invalid API url"))?
-                .extend(&["api", "v1", "crates", name, "versions"]);
+                .extend(&["api", "v1", "crates", name.as_str(), "versions"]);
             url
         };
 
@@ -124,12 +128,12 @@ impl RegistryApi {
     }
 
     /// Fetch owners from the registry's API
-    async fn get_owners(&self, name: &str) -> Result<Vec<CrateOwner>> {
+    async fn get_owners(&self, name: &KrateName) -> Result<Vec<CrateOwner>> {
         let url = {
             let mut url = self.api_base.clone();
             url.path_segments_mut()
                 .map_err(|()| anyhow!("Invalid API url"))?
-                .extend(&["api", "v1", "crates", name, "owners"]);
+                .extend(&["api", "v1", "crates", name.as_str(), "owners"]);
             url
         };
 

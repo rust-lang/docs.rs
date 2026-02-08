@@ -19,7 +19,7 @@ pub enum BlacklistError {
 pub async fn is_blacklisted(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<bool> {
     Ok(sqlx::query_scalar!(
         r#"SELECT 1  FROM blacklisted_crates WHERE crate_name = $1;"#,
-        name
+        name as _
     )
     .fetch_optional(conn)
     .await?
@@ -50,7 +50,7 @@ pub async fn add_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Resul
 
     sqlx::query!(
         "INSERT INTO blacklisted_crates (crate_name) VALUES ($1);",
-        name
+        name as _
     )
     .execute(conn)
     .await?;
@@ -66,7 +66,7 @@ pub async fn remove_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Re
 
     sqlx::query!(
         "DELETE FROM blacklisted_crates WHERE crate_name = $1;",
-        name
+        name as _
     )
     .execute(conn)
     .await?;

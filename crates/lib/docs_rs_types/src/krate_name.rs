@@ -8,14 +8,14 @@ use sqlx::{
     postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueRef},
     prelude::*,
 };
-use std::{borrow::Cow, fmt, io::Write, ops::Deref, str::FromStr};
+use std::{borrow::Cow, fmt, io::Write, str::FromStr};
 
 /// validated crate name
 ///
 /// Right now only used in web::cache, but we'll probably also use it
 /// to match our routes later.
 ///
-#[derive(Debug, Clone, PartialEq, Eq, Hash, DeserializeFromStr, SerializeDisplay)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord, Hash, DeserializeFromStr, SerializeDisplay)]
 pub struct KrateName(Cow<'static, str>);
 
 impl KrateName {
@@ -23,12 +23,18 @@ impl KrateName {
     pub const fn from_static(s: &'static str) -> Self {
         KrateName(Cow::Borrowed(s))
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
-impl Deref for KrateName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<str> for KrateName {
+    fn as_ref(&self) -> &str {
         &self.0
     }
 }
@@ -57,6 +63,14 @@ impl FromStr for KrateName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         validate_crate_name("crate", s)?;
         Ok(KrateName(Cow::Owned(s.to_string())))
+    }
+}
+
+impl TryFrom<&str> for KrateName {
+    type Error = InvalidCrateName;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 

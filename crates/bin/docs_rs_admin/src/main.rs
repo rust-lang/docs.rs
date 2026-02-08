@@ -306,7 +306,7 @@ enum DatabaseSubcommand {
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
-        name: String,
+        name: KrateName,
     },
 
     /// Blacklist operations

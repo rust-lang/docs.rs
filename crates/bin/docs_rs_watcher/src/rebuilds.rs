@@ -162,10 +162,10 @@ mod tests {
 
         let build_queue = env.build_queue()?;
         build_queue
-            .add_crate(&FOO.parse().unwrap(), &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
             .await?;
         build_queue
-            .add_crate(&BAR.parse().unwrap(), &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS, None)
             .await?;
 
         env.fake_release()
