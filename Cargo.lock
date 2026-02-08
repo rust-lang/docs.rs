@@ -406,6 +406,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-tar"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e9933aa2da420042c67e2ea83eec765919347d9742592744dc97cc42ef20c5d"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "redox_syscall 0.7.0",
+ "tokio",
+ "tokio-stream",
+ "xattr",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2122,6 +2137,36 @@ dependencies = [
  "serde_json",
  "test-case",
  "tokio",
+]
+
+[[package]]
+name = "docs_rs_import_release"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "async-tar",
+ "clap",
+ "docs_rs_cargo_metadata",
+ "docs_rs_context",
+ "docs_rs_database",
+ "docs_rs_logging",
+ "docs_rs_registry_api",
+ "docs_rs_repository_stats",
+ "docs_rs_rustdoc_json",
+ "docs_rs_storage",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "docsrs-metadata",
+ "futures-util",
+ "regex",
+ "reqwest 0.13.1",
+ "serde",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]
@@ -6152,12 +6197,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls 0.26.4",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -8191,6 +8238,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f01b580c9ac74c8d8f0c0e4afb04eeef2acf145458e52c03845ee9cd23e3d12"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

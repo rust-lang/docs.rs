@@ -11,7 +11,7 @@ use serde_json::Value;
 use slug::slugify;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    fmt, fs,
     io::{BufRead, BufReader},
     path::Path,
 };
@@ -30,7 +30,7 @@ pub async fn finish_release(
     crate_id: CrateId,
     release_id: ReleaseId,
     metadata_pkg: &MetadataPackage,
-    source_dir: &Path,
+    source_dir: impl AsRef<Path> + fmt::Debug,
     default_target: &str,
     source_files: Value,
     doc_targets: Vec<String>,
@@ -42,6 +42,7 @@ pub async fn finish_release(
     archive_storage: bool,
     source_size: u64,
 ) -> Result<()> {
+    let source_dir = source_dir.as_ref();
     debug!("updating release data");
     let dependencies: ReleaseDependencyList = metadata_pkg
         .dependencies
