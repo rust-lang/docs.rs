@@ -112,8 +112,8 @@ async fn crate_version_exists(
         INNER JOIN crates ON crates.id = releases.crate_id
         WHERE crates.name = $1 AND releases.version = $2
         LIMIT 1"#,
-        name,
-        version.to_string(),
+        name as _,
+        version as _,
     )
     .fetch_optional(&mut *conn)
     .await?;
@@ -185,7 +185,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
 
 async fn get_builds(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: &KrateName,
     version: &Version,
 ) -> Result<Vec<Build>> {
     Ok(sqlx::query_as!(
@@ -218,8 +218,8 @@ async fn get_builds(
             crates.name = $1 AND
             releases.version = $2
          ORDER BY builds.id DESC"#,
-        name,
-        version.to_string(),
+        name as _,
+        version as _,
     )
     .fetch_all(&mut *conn)
     .await?)

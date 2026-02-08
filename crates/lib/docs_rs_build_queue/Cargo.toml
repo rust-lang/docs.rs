@@ -33,3 +33,4 @@ docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testin
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 docs_rs_utils = { path = "../../lib/docs_rs_utils", features = ["testing"] }
 pretty_assertions = { workspace = true }
+test-case = { workspace = true }

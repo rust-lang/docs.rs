@@ -1977,6 +1977,7 @@ dependencies = [
  "opentelemetry",
  "pretty_assertions",
  "sqlx",
+ "test-case",
  "tokio",
  "tracing",
 ]

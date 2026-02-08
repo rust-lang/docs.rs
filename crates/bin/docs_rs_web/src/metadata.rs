@@ -29,7 +29,7 @@ pub(crate) struct MetaData {
 impl MetaData {
     pub(crate) async fn from_crate(
         conn: &mut sqlx::PgConnection,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         req_version: Option<ReqVersion>,
     ) -> Result<MetaData> {
@@ -53,8 +53,8 @@ impl MetaData {
                 DESC LIMIT 1
             ) AS builds ON true
             WHERE crates.name = $1 AND releases.version = $2"#,
-            name,
-            version.to_string(),
+            name as _,
+            version as _,
         )
         .fetch_one(&mut *conn)
         .await
@@ -84,6 +84,7 @@ mod tests {
     use crate::testing::TestEnvironment;
 
     use super::*;
+    use docs_rs_types::testing::{FOO, V0_1};
     use serde_json::json;
 
     #[test]
@@ -173,13 +174,7 @@ mod tests {
             .await?;
 
         let mut conn = env.async_conn().await?;
-        let metadata = MetaData::from_crate(
-            &mut conn,
-            "foo",
-            &"0.1.0".parse().unwrap(),
-            Some(ReqVersion::Latest),
-        )
-        .await;
+        let metadata = MetaData::from_crate(&mut conn, &FOO, &V0_1, Some(ReqVersion::Latest)).await;
         assert_eq!(
             metadata.unwrap(),
             MetaData {

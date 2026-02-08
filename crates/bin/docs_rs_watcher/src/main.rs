@@ -153,7 +153,7 @@ enum DatabaseSubcommand {
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
-        name: String,
+        name: KrateName,
     },
 
     /// Remove documentation from the database
@@ -214,7 +214,7 @@ enum DeleteSubcommand {
     Version {
         /// Name of the crate to delete
         #[arg(name = "CRATE_NAME")]
-        name: docs_rs_types::KrateName,
+        name: KrateName,
 
         /// The version of the crate to delete
         #[arg(name = "VERSION")]

@@ -13,7 +13,8 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, ReleaseId, Version, VersionReq,
+    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId, Version,
+    VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -25,18 +26,21 @@ use tracing::debug;
 /// Create a fake release in the database that failed before the build.
 /// This is a temporary small factory function only until we refactored the
 /// `FakeRelease` and `FakeBuild` factories to be more flexible.
-pub async fn fake_release_that_failed_before_build<V>(
+pub async fn fake_release_that_failed_before_build<K, V>(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: K,
     version: V,
     errors: &str,
 ) -> Result<(ReleaseId, BuildId)>
 where
+    K: TryInto<KrateName>,
+    K::Error: std::error::Error + Send + Sync + 'static,
     V: TryInto<Version>,
     V::Error: std::error::Error + Send + Sync + 'static,
 {
+    let name = name.try_into()?;
     let version = version.try_into()?;
-    let crate_id = initialize_crate(&mut *conn, name).await?;
+    let crate_id = initialize_crate(&mut *conn, &name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
     let build_id = initialize_build(&mut *conn, release_id).await?;
 
@@ -163,10 +167,16 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub fn name(mut self, new: &str) -> Self {
-        self.package.name = new.into();
+    pub fn name<K>(mut self, new: K) -> Self
+    where
+        K: TryInto<KrateName>,
+        K::Error: fmt::Debug,
+    {
+        let new = new.try_into().expect("invalid crate name").to_string();
+
+        self.package.name = new.clone();
         self.package.id = format!("{new}-id");
-        self.package.targets[0].name = new.into();
+        self.package.targets[0].name = new;
         self
     }
 
@@ -406,9 +416,12 @@ impl<'a> FakeRelease<'a> {
                 source_directory.display()
             );
             if archive_storage {
+                // NOTE: should we migrate MetadataPackage?
+                let krate_name: KrateName = package.name.parse()?;
+
                 let archive = match kind {
-                    FileKind::Rustdoc => rustdoc_archive_path(&package.name, &package.version),
-                    FileKind::Sources => source_archive_path(&package.name, &package.version),
+                    FileKind::Rustdoc => rustdoc_archive_path(&krate_name, &package.version),
+                    FileKind::Sources => source_archive_path(&krate_name, &package.version),
                 };
                 debug!("store in archive: {:?}", archive);
                 Ok(storage
@@ -514,6 +527,8 @@ impl<'a> FakeRelease<'a> {
             self.doc_targets.insert(0, default_target.to_owned());
         }
 
+        let krate_name: KrateName = package.name.parse()?;
+
         for target in &self.doc_targets {
             let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({
                 "format_version": 42
@@ -529,7 +544,7 @@ impl<'a> FakeRelease<'a> {
                     storage
                         .store_one_uncompressed(
                             &rustdoc_json_path(
-                                &package.name,
+                                &krate_name,
                                 &package.version,
                                 target,
                                 format_version,
@@ -546,7 +561,7 @@ impl<'a> FakeRelease<'a> {
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
         // non-linux platforms.
         let mut async_conn = pool.get_async().await?;
-        let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
+        let crate_id = initialize_crate(&mut async_conn, &krate_name).await?;
         let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
 
         docs_rs_database::releases::finish_release(
@@ -569,7 +584,7 @@ impl<'a> FakeRelease<'a> {
         .await?;
         docs_rs_database::releases::update_crate_data_in_database(
             &mut async_conn,
-            &package.name,
+            &krate_name,
             &self.registry_crate_data,
         )
         .await?;

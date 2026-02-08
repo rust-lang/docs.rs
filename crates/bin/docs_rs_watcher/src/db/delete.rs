@@ -107,7 +107,7 @@ async fn get_id(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<Optio
         FROM crates
         WHERE normalize_crate_name(name) = normalize_crate_name($1)
         "#,
-        name
+        name as _
     )
     .fetch_optional(&mut *conn)
     .await?)
@@ -157,9 +157,12 @@ async fn delete_crate_from_database(
 ) -> Result<bool> {
     let mut transaction = conn.begin().await?;
 
-    sqlx::query!("DELETE FROM sandbox_overrides WHERE crate_name = $1", name,)
-        .execute(&mut *transaction)
-        .await?;
+    sqlx::query!(
+        "DELETE FROM sandbox_overrides WHERE crate_name = $1",
+        name as _
+    )
+    .execute(&mut *transaction)
+    .await?;
 
     for &(table, column) in METADATA {
         sqlx::query(
@@ -211,11 +214,13 @@ mod tests {
     };
     use test_case::test_case;
 
-    async fn crate_exists(conn: &mut sqlx::PgConnection, name: &str) -> Result<bool> {
-        Ok(sqlx::query!("SELECT id FROM crates WHERE name = $1;", name)
-            .fetch_optional(conn)
-            .await?
-            .is_some())
+    async fn crate_exists(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<bool> {
+        Ok(
+            sqlx::query!("SELECT id FROM crates WHERE name = $1;", name as _)
+                .fetch_optional(conn)
+                .await?
+                .is_some(),
+        )
     }
 
     async fn release_exists(conn: &mut sqlx::PgConnection, id: ReleaseId) -> Result<bool> {

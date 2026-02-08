@@ -1,6 +1,6 @@
 use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage, types::FileRange};
 use anyhow::Result;
-use docs_rs_types::{BuildId, CompressionAlgorithm, Version};
+use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
 use tokio::runtime;
 
@@ -22,7 +22,7 @@ impl Storage {
 
     pub fn fetch_source_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -39,7 +39,7 @@ impl Storage {
 
     pub fn rustdoc_file_exists(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,

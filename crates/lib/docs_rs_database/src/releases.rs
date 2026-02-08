@@ -3,7 +3,8 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, DocCoverage, Feature, ReleaseId, Version,
+    BuildId, BuildStatus, CompressionAlgorithm, CrateId, DocCoverage, Feature, KrateName,
+    ReleaseId, Version,
 };
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
@@ -303,7 +304,7 @@ pub async fn update_build_with_error(
     Ok(build_id)
 }
 
-pub async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &str) -> Result<CrateId> {
+pub async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<CrateId> {
     sqlx::query_scalar!(
         "INSERT INTO crates (name)
          VALUES ($1)
@@ -311,7 +312,7 @@ pub async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &str) -> Resu
          SET -- this `SET` is needed so the id is always returned.
             name = EXCLUDED.name
          RETURNING id",
-        name
+        name as _
     )
     .fetch_one(&mut *conn)
     .await
@@ -502,13 +503,13 @@ async fn add_keywords_into_database(
 #[instrument(skip(conn))]
 pub async fn update_crate_data_in_database(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: &KrateName,
     registry_data: &CrateData,
 ) -> Result<()> {
     info!("Updating crate data for {}", name);
     let crate_id = sqlx::query_scalar!(
         r#"SELECT id as "id: CrateId" FROM crates WHERE crates.name = $1"#,
-        name
+        name as _
     )
     .fetch_one(&mut *conn)
     .await?;
@@ -672,7 +673,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build_id = initialize_build(&mut conn, release_id).await?;
 
@@ -707,7 +708,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build_id = initialize_build(&mut conn, release_id).await?;
 
@@ -757,7 +758,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build_id = initialize_build(&mut conn, release_id).await?;
 
@@ -803,7 +804,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build_id = initialize_build(&mut conn, release_id).await?;
 
@@ -953,7 +954,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         let owner1 = CrateOwner {
             avatar: "avatar".repeat(100),
@@ -994,7 +995,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         let owner1 = CrateOwner {
             avatar: "avatar".into(),
@@ -1035,7 +1036,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         // set initial owner details
         update_owners_in_database(
@@ -1085,7 +1086,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         // set initial owner details
         update_owners_in_database(
@@ -1204,19 +1205,18 @@ mod test {
 
         let mut conn = db.async_conn().await?;
 
-        let name = "krate";
-        let crate_id = initialize_crate(&mut conn, name).await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         let id = sqlx::query_scalar!(
             r#"SELECT id as "id: CrateId" FROM crates WHERE name = $1"#,
-            name
+            KRATE as _
         )
         .fetch_one(&mut *conn)
         .await?;
 
         assert_eq!(crate_id, id);
 
-        let same_crate_id = initialize_crate(&mut conn, name).await?;
+        let same_crate_id = initialize_crate(&mut conn, &KRATE).await?;
         assert_eq!(crate_id, same_crate_id);
 
         Ok(())
@@ -1228,8 +1228,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let name = "krate";
-        let crate_id = initialize_crate(&mut conn, name).await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
 
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
@@ -1255,8 +1254,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
 
         let mut conn = db.async_conn().await?;
-        let name = "krate";
-        let crate_id = initialize_crate(&mut conn, name).await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
         let build_id = initialize_build(&mut conn, release_id).await?;
@@ -1283,14 +1281,14 @@ mod test {
 
         let mut conn = db.async_conn().await?;
 
-        let name: String = "krate".repeat(100);
+        let name: KrateName = "krate".repeat(100)[..64].parse()?;
         let crate_id = initialize_crate(&mut conn, &name).await?;
 
         let db_name = sqlx::query_scalar!("SELECT name FROM crates WHERE id = $1", crate_id.0)
             .fetch_one(&mut *conn)
             .await?;
 
-        assert_eq!(db_name, name);
+        assert_eq!(db_name, name.as_str());
 
         Ok(())
     }
@@ -1302,7 +1300,7 @@ mod test {
 
         let mut conn = db.async_conn().await?;
 
-        let crate_id = initialize_crate(&mut conn, "krate").await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let version = Version::parse(&format!(
             "1.2.3-{}+{}",
             "prerelease".repeat(100),

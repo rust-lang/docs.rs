@@ -19,7 +19,7 @@ use axum::{Extension, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
-use docs_rs_types::{BuildId, ReqVersion, Version};
+use docs_rs_types::{BuildId, KrateName, ReqVersion, Version};
 use mime::Mime;
 use std::{cmp::Ordering, sync::Arc};
 use tracing::instrument;
@@ -73,7 +73,7 @@ impl FileList {
     #[instrument(skip(conn))]
     async fn from_path(
         conn: &mut sqlx::PgConnection,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         folder: &str,
     ) -> Result<Option<FileList>> {
@@ -82,7 +82,7 @@ impl FileList {
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
             WHERE crates.name = $1 AND releases.version = $2",
-            name,
+            name as _,
             version as _,
         )
         .fetch_optional(&mut *conn)
@@ -238,7 +238,7 @@ pub(crate) async fn source_browser_handler(
          WHERE
              name = $1 AND
              version = $2"#,
-        params.name(),
+        params.name() as _,
         version as _,
     )
     .fetch_one(&mut *conn)

@@ -45,7 +45,7 @@ impl Overrides {
     ) -> Result<Option<Self>> {
         Ok(sqlx::query!(
             "SELECT * FROM sandbox_overrides WHERE crate_name = $1",
-            krate
+            krate as _
         )
         .fetch_optional(conn)
         .await?
@@ -65,7 +65,7 @@ impl Overrides {
             );
         }
 
-        if sqlx::query_scalar!("SELECT id FROM crates WHERE crates.name = $1", krate)
+        if sqlx::query_scalar!("SELECT id FROM crates WHERE crates.name = $1", krate as _)
             .fetch_optional(&mut *conn)
             .await?
             .is_none()
@@ -85,7 +85,7 @@ impl Overrides {
                     max_targets = $3,
                     timeout_seconds = $4
             ",
-            krate,
+            krate as _,
             overrides.memory.map(|i| i as i64),
             overrides.targets.map(|i| i as i32),
             overrides.timeout.map(|d| d.as_secs() as i32),
@@ -96,9 +96,12 @@ impl Overrides {
     }
 
     pub async fn remove(conn: &mut sqlx::PgConnection, krate: &KrateName) -> Result<()> {
-        sqlx::query!("DELETE FROM sandbox_overrides WHERE crate_name = $1", krate)
-            .execute(conn)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM sandbox_overrides WHERE crate_name = $1",
+            krate as _
+        )
+        .execute(conn)
+        .await?;
         Ok(())
     }
 }
