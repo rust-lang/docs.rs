@@ -6,7 +6,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, retry_async};
-use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, HeaderValue, USER_AGENT},
+};
 use serde::Deserialize;
 use tracing::instrument;
 use url::Url;
@@ -60,25 +63,7 @@ impl RegistryApi {
         &self,
         name: &KrateName,
         version: &Version,
-    ) -> Result<ReleaseData> {
-        let (release_time, yanked, downloads) = self
-            .get_release_time_yanked_downloads(name, version)
-            .await
-            .context(format!("Failed to get crate data for {name}-{version}"))?;
-
-        Ok(ReleaseData {
-            release_time,
-            yanked,
-            downloads,
-        })
-    }
-
-    /// Get release_time, yanked and downloads from the registry's API
-    async fn get_release_time_yanked_downloads(
-        &self,
-        name: &KrateName,
-        version: &Version,
-    ) -> Result<(DateTime<Utc>, bool, i32)> {
+    ) -> Result<Option<ReleaseData>> {
         let url = {
             let mut url = self.api_base.clone();
             url.path_segments_mut()
@@ -103,20 +88,31 @@ impl RegistryApi {
             downloads: i32,
         }
 
-        let response: Response = retry_async(
+        let response: Response = match retry_async(
             || async {
-                Ok(self
-                    .client
-                    .get(url.clone())
-                    .send()
-                    .await?
-                    .error_for_status()?)
+                Ok(
+                    match self
+                        .client
+                        .get(url.clone())
+                        .send()
+                        .await?
+                        .error_for_status()
+                    {
+                        Ok(resp) => Some(resp),
+                        Err(err) if matches!(err.status(), Some(StatusCode::NOT_FOUND)) => None,
+                        Err(err) => return Err(err.into()),
+                    },
+                )
             },
             self.max_retries,
         )
         .await?
-        .json()
-        .await?;
+        {
+            Some(resp) => resp.json().await?,
+            None => {
+                return Ok(None);
+            }
+        };
 
         let version = response
             .versions
@@ -124,7 +120,11 @@ impl RegistryApi {
             .find(|data| data.num == *version)
             .with_context(|| anyhow!("Could not find version in response"))?;
 
-        Ok((version.created_at, version.yanked, version.downloads))
+        Ok(Some(ReleaseData {
+            release_time: version.created_at,
+            yanked: version.yanked,
+            downloads: version.downloads,
+        }))
     }
 
     /// Fetch owners from the registry's API
@@ -239,5 +239,76 @@ impl RegistryApi {
         };
 
         Ok(Search { crates, meta })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use docs_rs_types::testing::{KRATE, V1, V2};
+    use reqwest::header::CONTENT_TYPE;
+
+    #[tokio::test]
+    async fn test_get_release_data() -> Result<()> {
+        let mut server = mockito::Server::new_async().await;
+
+        let created = Utc::now();
+
+        let _m = server
+            .mock("GET", "/api/v1/crates/krate/versions")
+            .with_status(200)
+            .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+            .with_body(
+                serde_json::json!({
+                    "versions": [
+                        {
+                            "num": V1.to_string(),
+                            "created_at": created.to_rfc3339(),
+                            "yanked": false,
+                            "downloads": 42
+                        },
+                        {
+                            "num": V2.to_string(),
+                            "created_at": "2025-01-01T00:00:00Z",
+                            "yanked": true,
+                            "downloads": 22
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let api = RegistryApi::new(server.url().parse().unwrap(), 0)?;
+
+        assert_eq!(
+            api.get_release_data(&KRATE, &V1).await?,
+            Some(ReleaseData {
+                release_time: created,
+                yanked: false,
+                downloads: 42
+            })
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_404_in_release_data_returns_none() -> Result<()> {
+        let mut server = mockito::Server::new_async().await;
+
+        let _m = server
+            .mock("GET", "/api/v1/crates/krate/versions")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let api = RegistryApi::new(server.url().parse().unwrap(), 0)?;
+
+        assert_eq!(api.get_release_data(&KRATE, &V1).await?, None,);
+
+        Ok(())
     }
 }

@@ -2245,9 +2245,13 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_types",
  "docs_rs_utils",
+ "mime",
+ "mockito",
  "reqwest 0.13.2",
  "serde",
+ "serde_json",
  "sqlx",
+ "tokio",
  "tracing",
  "url",
 ]

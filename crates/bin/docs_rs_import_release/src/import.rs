@@ -4,6 +4,7 @@ use crate::{
     rustdoc::{download_static_files, find_static_paths, find_successful_build_targets},
     rustdoc_status::fetch_rustdoc_status,
 };
+use anyhow::anyhow;
 use anyhow::{Result, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_database::releases::{
@@ -117,7 +118,10 @@ async fn import_test_release_inner(
         (files_list, source_size)
     };
 
-    let registry_data = registry_api.get_release_data(name, version).await?;
+    let registry_data = registry_api
+        .get_release_data(name, version)
+        .await?
+        .ok_or_else(|| anyhow!("registry data not found"))?;
 
     let rustdoc_dir = {
         info!("download & extract rustdoc archive...");

@@ -7,7 +7,7 @@ pub struct CrateData {
     pub owners: Vec<CrateOwner>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ReleaseData {
     pub release_time: DateTime<Utc>,
     pub yanked: bool,
