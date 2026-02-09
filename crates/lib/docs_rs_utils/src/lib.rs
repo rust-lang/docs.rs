@@ -107,9 +107,10 @@ pub fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T
     unreachable!()
 }
 
-pub async fn retry_async<T, Fut, F: FnMut() -> Fut>(mut f: F, max_attempts: u32) -> Result<T>
+pub async fn retry_async<T, E, Fut, F: FnMut() -> Fut>(mut f: F, max_attempts: u32) -> Result<T, E>
 where
-    Fut: Future<Output = Result<T>>,
+    Fut: Future<Output = Result<T, E>>,
+    E: fmt::Debug,
 {
     for attempt in 1.. {
         match f().await {

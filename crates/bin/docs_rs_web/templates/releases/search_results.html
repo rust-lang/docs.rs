@@ -3,6 +3,9 @@
 
 {%- block header -%}
     {% call release_macros::search_header(title=title) %}{% endcall %}
+    {% if let Some(message) = message %}
+        <p>{{ message|linebreaksbr }}</p>
+    {% endif %}
 {%- endblock header -%}
 
 {%- block topbar -%}
