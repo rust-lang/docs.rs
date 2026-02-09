@@ -1,2 +1,2 @@
-FROM otel/opentelemetry-collector-contrib:0.144.0 AS base
+FROM otel/opentelemetry-collector-contrib:0.145.0 AS base
 COPY collector-config-dev.yaml /etc/otelcol-contrib/config.yaml
