@@ -1,5 +1,5 @@
 use crate::types::FileRange;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use docs_rs_types::CompressionAlgorithm;
 use itertools::Itertools as _;
 use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};
@@ -96,8 +96,11 @@ pub(crate) async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::De
 
             let entry = archive.by_index(i)?;
 
-            let start = entry.data_start() as i64;
-            let end = (entry.data_start() + entry.compressed_size() - 1) as i64;
+            let start = entry
+                .data_start()
+                .ok_or_else(|| anyhow!("missing data_start in zip derectory"))?;
+
+            let end = start + entry.compressed_size() - 1;
             let compression_raw = match entry.compression() {
                 zip::CompressionMethod::Bzip2 => compression_bzip,
                 c => bail!("unsupported compression algorithm {} in zip-file", c),
@@ -105,8 +108,8 @@ pub(crate) async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::De
 
             insert_stmt.push_values([()], |mut b, _| {
                 b.push_bind(entry.name())
-                    .push_bind(start)
-                    .push_bind(end)
+                    .push_bind(start as i64)
+                    .push_bind(end as i64)
                     .push_bind(compression_raw);
             });
             insert_stmt
