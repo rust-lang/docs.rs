@@ -1,0 +1,12 @@
+[package]
+name = "bindeps-test"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.docs.rs]
+cargo-args = ["-Zbindeps"]
+
+[lib]
+name = "bindeps_test"
+path = "src/lib.rs"
+
