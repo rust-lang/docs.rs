@@ -44,7 +44,7 @@ docs_rs_uri = { path = "../../lib/docs_rs_uri" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 font-awesome-as-a-crate = { path = "../../lib/font-awesome-as-a-crate" }
 futures-util = { workspace = true }
-getrandom = "0.3.1"
+getrandom = "0.4.0"
 http = { workspace = true }
 lol_html = "2.0.0"
 mime = { workspace = true }
