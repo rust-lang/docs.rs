@@ -200,7 +200,9 @@ impl GitHub {
         let status = response.status();
         let body = response.text().await?;
 
-        if status == StatusCode::FORBIDDEN
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            Err(RateLimitReached.into())
+        } else if status == StatusCode::FORBIDDEN
             && let Ok(api_error) = serde_json::from_str::<ApiError>(&body)
             && (api_error
                 .documentation_url
@@ -459,6 +461,30 @@ mod tests {
                     ECEE:193CF9:5A5D684:1866A8EB:698779A9."
                     .into(),
             })?)
+            .create();
+
+        assert!(
+            updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+                .unwrap_err()
+                .is::<RateLimitReached>()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_429_rate_limit() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(429)
             .create();
 
         assert!(
