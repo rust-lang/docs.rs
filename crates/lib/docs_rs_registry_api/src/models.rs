@@ -50,12 +50,21 @@ impl fmt::Display for OwnerKind {
     }
 }
 
+#[derive(Deserialize, Debug, Default)]
+#[cfg_attr(test, derive(Serialize))]
+pub(crate) struct SearchResponse {
+    pub(crate) crates: Option<Vec<SearchCrate>>,
+    pub(crate) meta: Option<SearchMeta>,
+}
+
 #[derive(Deserialize, Debug)]
+#[cfg_attr(test, derive(Serialize, PartialEq, Clone))]
 pub struct SearchCrate {
     pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
+#[cfg_attr(test, derive(Serialize, PartialEq, Clone))]
 pub struct SearchMeta {
     pub next_page: Option<String>,
     pub prev_page: Option<String>,
@@ -65,4 +74,35 @@ pub struct SearchMeta {
 pub struct Search {
     pub crates: Vec<SearchCrate>,
     pub meta: SearchMeta,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct ApiErrors {
+    pub errors: Vec<ApiError>,
+}
+
+impl fmt::Display for ApiErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for error in &self.errors {
+            writeln!(f, "{}", error)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct ApiError {
+    pub detail: Option<String>,
+}
+
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.detail.as_deref().unwrap_or("Unknown API Error")
+        )
+    }
 }
