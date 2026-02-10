@@ -63,7 +63,7 @@ pub async fn delete_version(
         return Ok(());
     };
 
-    let is_library = delete_version_from_database(conn, crate_id, version).await?;
+    let is_library = delete_version_from_database(conn, name, crate_id, version).await?;
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
@@ -125,6 +125,7 @@ const METADATA: &[(&str, &str)] = &[
 /// Returns whether this release was a library
 async fn delete_version_from_database(
     conn: &mut sqlx::PgConnection,
+    name: &KrateName,
     crate_id: CrateId,
     version: &Version,
 ) -> Result<bool> {
@@ -142,6 +143,14 @@ async fn delete_version_from_database(
     .fetch_one(&mut *transaction)
     .await?
     .unwrap_or(false);
+
+    sqlx::query!(
+        "DELETE FROM queue WHERE name = $1 AND version = $2;",
+        name as _,
+        version as _
+    )
+    .execute(&mut *transaction)
+    .await?;
 
     update_latest_version_id(&mut transaction, crate_id).await?;
 
@@ -171,7 +180,7 @@ async fn delete_crate_from_database(
             )
             .as_str()).bind(crate_id).execute(&mut *transaction).await?;
     }
-    sqlx::query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id.0)
+    sqlx::query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id as _)
         .execute(&mut *transaction)
         .await?;
 
@@ -181,16 +190,19 @@ async fn delete_crate_from_database(
         FROM releases
         WHERE releases.crate_id = $1
         ",
-        crate_id.0
+        crate_id as _
     )
     .fetch_one(&mut *transaction)
     .await?
     .unwrap_or(false);
 
-    sqlx::query!("DELETE FROM releases WHERE crate_id = $1;", crate_id.0)
+    sqlx::query!("DELETE FROM releases WHERE crate_id = $1;", crate_id as _)
         .execute(&mut *transaction)
         .await?;
-    sqlx::query!("DELETE FROM crates WHERE id = $1;", crate_id.0)
+    sqlx::query!("DELETE FROM crates WHERE id = $1;", crate_id as _)
+        .execute(&mut *transaction)
+        .await?;
+    sqlx::query!("DELETE FROM queue WHERE name = $1;", name as _)
         .execute(&mut *transaction)
         .await?;
 
@@ -253,7 +265,13 @@ mod tests {
     async fn test_delete_crate(archive_storage: bool) -> Result<()> {
         let env = TestEnvironment::new().await?;
         let storage = env.storage()?;
+        let queue = env.build_queue()?;
         let mut conn = env.async_conn().await?;
+
+        // crate fake entries in the build queue
+        queue.add_crate(&FOO, &V1, 0, None).await?;
+        queue.add_crate(&FOO, &V2, 0, None).await?;
+        queue.add_crate(&BAR, &V1, 0, None).await?;
 
         // Create fake packages in the database
         let pkg1_v1_id = env
@@ -301,6 +319,10 @@ mod tests {
         }
 
         delete_crate(&mut conn, storage, &FOO).await?;
+
+        assert!(!queue.has_build_queued(&FOO, &V1).await?);
+        assert!(!queue.has_build_queued(&FOO, &V2).await?);
+        assert!(queue.has_build_queued(&BAR, &V1).await?);
 
         assert!(!crate_exists(&mut conn, &FOO).await?);
         assert!(crate_exists(&mut conn, &BAR).await?);
@@ -359,6 +381,7 @@ mod tests {
     async fn test_delete_version(archive_storage: bool) -> Result<()> {
         let env = TestEnvironment::new().await?;
         let storage = env.storage()?;
+        let queue = env.build_queue()?;
 
         async fn owners(conn: &mut sqlx::PgConnection, crate_id: CrateId) -> Result<Vec<String>> {
             Ok(sqlx::query!(
@@ -387,6 +410,9 @@ mod tests {
         }
 
         let mut conn = env.async_conn().await?;
+        queue.add_crate(&KRATE, &V1, 0, None).await?;
+        queue.add_crate(&KRATE, &V2, 0, None).await?;
+
         let v1 = env
             .fake_release()
             .await
@@ -400,6 +426,7 @@ mod tests {
             })
             .create()
             .await?;
+        assert!(queue.has_build_queued(&KRATE, &V2).await?);
         assert!(release_exists(&mut conn, v1).await?);
         assert!(
             storage
@@ -456,6 +483,8 @@ mod tests {
         );
 
         delete_version(&mut conn, storage, &KRATE, &V1).await?;
+        assert!(!queue.has_build_queued(&KRATE, &V1).await?);
+        assert!(queue.has_build_queued(&KRATE, &V2).await?);
         assert!(!release_exists(&mut conn, v1).await?);
         if archive_storage {
             // for archive storage the archive and index files
