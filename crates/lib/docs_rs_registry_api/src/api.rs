@@ -3,11 +3,13 @@ use crate::{
     error::{Error, Result},
     models::{ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchResponse},
 };
-use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, retry_async};
-use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, HeaderValue, USER_AGENT},
+};
 use serde::{Deserialize, de::DeserializeOwned};
 use tracing::instrument;
 use url::Url;
@@ -111,7 +113,7 @@ impl RegistryApi {
         &self,
         name: &KrateName,
         version: &Version,
-    ) -> Result<ReleaseData> {
+    ) -> Result<Option<ReleaseData>> {
         let url = {
             let mut url = self.api_base.clone();
             url.path_segments_mut()
@@ -136,19 +138,25 @@ impl RegistryApi {
             downloads: i32,
         }
 
-        let response: Response = self.request(&url).await?;
+        let response: Response = match self.request(&url).await {
+            Ok(response) => response,
+            Err(err) if err.status() == Some(StatusCode::NOT_FOUND) => return Ok(None),
+            Err(err) => return Err(err),
+        };
 
-        let version = response
+        let Some(version) = response
             .versions
             .into_iter()
             .find(|data| data.num == *version)
-            .with_context(|| anyhow!("Could not find version in response"))?;
+        else {
+            return Ok(None);
+        };
 
-        Ok(ReleaseData {
+        Ok(Some(ReleaseData {
             release_time: version.created_at,
             yanked: version.yanked,
             downloads: version.downloads,
-        })
+        }))
     }
 
     /// Fetch owners from the registry's API
@@ -222,6 +230,8 @@ impl RegistryApi {
 mod tests {
     use super::*;
     use crate::models::{ApiError, SearchCrate, SearchMeta};
+    use anyhow::anyhow;
+    use docs_rs_types::testing::{KRATE, V1, V2};
     use reqwest::{StatusCode, header::CONTENT_TYPE};
     use serde::Serialize;
     use test_case::test_case;
@@ -239,6 +249,25 @@ mod tests {
 
         let api = RegistryApi::new(crates_io_api.url().parse().unwrap(), 0)?;
         api.search("q=foo").await
+    }
+
+    async fn test_get_release(
+        status: StatusCode,
+        body: impl Serialize,
+        version: &Version,
+    ) -> Result<Option<ReleaseData>> {
+        let mut crates_io_api = mockito::Server::new_async().await;
+
+        let _m = crates_io_api
+            .mock("GET", "/api/v1/crates/krate/versions")
+            .with_status(status.as_u16().into())
+            .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+            .with_body(serde_json::to_vec(&body).unwrap())
+            .create_async()
+            .await;
+
+        let api = RegistryApi::new(crates_io_api.url().parse().unwrap(), 0)?;
+        api.get_release_data(&KRATE, version).await
     }
 
     #[test]
@@ -394,6 +423,97 @@ mod tests {
 
         assert_eq!(req_err.status(), Some(status));
         assert!(body.contains(msg));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_release_ok() -> Result<()> {
+        let release_data = test_get_release(
+            StatusCode::OK,
+            serde_json::json!({
+                "versions": [
+                    {
+                        "num": V1.to_string(),
+                        "created_at": "2024-01-01T00:00:00Z",
+                        "yanked": false,
+                        "downloads": 42
+                    },
+                    {
+                        "num": V2.to_string(),
+                        "created_at": "2024-01-02T00:00:00Z",
+                        "yanked": true,
+                        "downloads": 100
+                    }
+                ]
+            }),
+            &V1,
+        )
+        .await?
+        .expect("found version");
+
+        assert_eq!(
+            release_data,
+            ReleaseData {
+                release_time: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                yanked: false,
+                downloads: 42,
+            }
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_release_not_found_empty_result() -> Result<()> {
+        assert!(
+            test_get_release(
+                StatusCode::OK,
+                serde_json::json!({
+                    "versions": []
+                }),
+                &V1,
+            )
+            .await?
+            .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_release_not_found_other_version() -> Result<()> {
+        assert!(
+            test_get_release(
+                StatusCode::OK,
+                serde_json::json!({
+                    "versions": [
+                        {
+                            "num": V1.to_string(),
+                            "created_at": "2024-01-01T00:00:00Z",
+                            "yanked": false,
+                            "downloads": 42
+                        }
+                    ]
+                }),
+                &V2,
+            )
+            .await?
+            .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_release_not_found_404() -> Result<()> {
+        assert!(
+            test_get_release(StatusCode::NOT_FOUND, "", &V1)
+                .await?
+                .is_none()
+        );
 
         Ok(())
     }

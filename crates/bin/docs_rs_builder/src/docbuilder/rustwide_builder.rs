@@ -786,7 +786,7 @@ impl RustwideBuilder {
                         .runtime
                         .block_on(self.registry_api.get_release_data(name, version))
                         {
-                        Ok(data) => Some(data),
+                        Ok(data) => data,
                         Err(err) => {
                             error!(%name, %version, ?err, "could not fetch releases-data");
                             None
