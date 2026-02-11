@@ -65,3 +65,26 @@ tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
 zip = { version = "7.0.0", default-features = false, features = ["bzip2"] }
+
+[profile.dev]
+# recommendation coming from 
+# https://doc.rust-lang.org/nightly/cargo/guide/build-performance.html#reduce-amount-of-generated-debug-information
+# for our normal dev work, line-tables are good enough to see line numbers in backtraces.
+debug = "line-tables-only"
+# mostly for mac os, splits debug info into separate files to speed up incremental builds
+# https://corrode.dev/blog/tips-for-faster-rust-compile-times/#macos-only-faster-incremental-debug-builds
+split-debuginfo = "unpacked"
+
+[profile.dev.build-override]
+# optimize proc macros & build scripts, make them execute faster 
+# https://corrode.dev/blog/tips-for-faster-rust-compile-times/#avoid-procedural-macro-crates
+opt-level = 3
+
+[profile.dev.package."*"]
+# no debug information for dependencies
+debug = false
+
+[profile.debugging]
+# big "debugging" profile, if you need to do real interactive debugging
+inherits = "dev"
+debug = true
