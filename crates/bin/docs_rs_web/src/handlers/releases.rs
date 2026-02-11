@@ -814,7 +814,7 @@ mod tests {
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus,
+        BuildStatus, SimpleBuildError,
         testing::{BAR, BAZ, FOO, V0_1, V1, V2, V3},
     };
     use kuchikiki::traits::TendrilSink;
@@ -840,7 +840,7 @@ mod tests {
                 "docs.rs 4.0.0",
                 BuildStatus::Success,
                 None,
-                None,
+                None::<&SimpleBuildError>,
             )
             .await?;
 
@@ -1434,7 +1434,7 @@ mod tests {
             &mut conn,
             "failed_hard",
             "0.1.0",
-            "some random error",
+            SimpleBuildError("some random error".into()),
         )
         .await?;
 

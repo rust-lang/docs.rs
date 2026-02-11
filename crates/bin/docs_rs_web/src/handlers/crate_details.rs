@@ -703,8 +703,8 @@ mod tests {
     use docs_rs_database::{crate_details::releases_for_crate, releases::update_build_status};
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
-    use docs_rs_types::KrateName;
     use docs_rs_types::testing::{FOO, V1};
+    use docs_rs_types::{KrateName, SimpleBuildError};
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -1740,7 +1740,13 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error_features() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let text_content = env
                 .web_app()
@@ -1764,7 +1770,13 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let text_content = env
                 .web_app()

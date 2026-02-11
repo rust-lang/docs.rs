@@ -49,24 +49,39 @@
 
             {%- filter dedent(None)|safe -%}
                 <pre>
+                    {%- if let Some(error_kind) = build_details.error_kind -%}
+                        <p>
+                        # error kind
+                        {{ error_kind }}
+                        </p>
+                    {%- endif -%}
+
                     {%- if let Some(errors) = build_details.errors -%}
+                        <p>
                         # pre-build errors
                         {{ errors }}
+                        </p>
                     {%- endif -%}
 
                     {%- if let Some(rustc_version) = build_details.rustc_version -%}
+                        <p>
                         # rustc version
                         {{ rustc_version }}
+                        </p>
                     {%- endif -%}
 
                     {%- if let Some(docsrs_version) = build_details.docsrs_version -%}
+                        <p>
                         # docs.rs version
                         {{ docsrs_version }}
+                        </p>
                     {%- endif -%}
 
                     {%- if !build_details.output.is_empty() -%}
+                        <p>
                         # build log
                         {{ build_details.output }}
+                        </p>
                     {%- endif -%}
                 </pre>
             {%- endfilter -%}

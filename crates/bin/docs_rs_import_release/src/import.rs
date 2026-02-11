@@ -18,7 +18,9 @@ use docs_rs_rustdoc_json::{
 };
 use docs_rs_storage::{AsyncStorage, file_list_to_json, rustdoc_archive_path, source_archive_path};
 use docs_rs_storage::{compress, decompress, rustdoc_json_path};
-use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
+use docs_rs_types::{
+    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, SimpleBuildError, Version,
+};
 use docs_rs_utils::{BUILD_VERSION, spawn_blocking};
 use docsrs_metadata::Metadata;
 use std::collections::HashSet;
@@ -72,7 +74,12 @@ pub(crate) async fn import_test_release(
     .await;
 
     if let Err(err) = &result {
-        update_build_with_error(&mut *conn, build_id, Some(&format!("{err:?}"))).await?;
+        update_build_with_error(
+            &mut *conn,
+            build_id,
+            Some(&SimpleBuildError(format!("{err:?}"))),
+        )
+        .await?;
     }
 
     result
@@ -241,7 +248,7 @@ async fn import_test_release_inner(
         BUILD_VERSION,
         BuildStatus::Success,
         Some(documentation_size),
-        None,
+        None::<&SimpleBuildError>,
     )
     .await?;
 

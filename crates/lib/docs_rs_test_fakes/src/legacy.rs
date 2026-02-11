@@ -13,8 +13,8 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId, Version,
-    VersionReq,
+    BuildError, BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId,
+    SimpleBuildError, Version, VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -26,13 +26,14 @@ use tracing::debug;
 /// Create a fake release in the database that failed before the build.
 /// This is a temporary small factory function only until we refactored the
 /// `FakeRelease` and `FakeBuild` factories to be more flexible.
-pub async fn fake_release_that_failed_before_build<K, V>(
+pub async fn fake_release_that_failed_before_build<K, V, E>(
     conn: &mut sqlx::PgConnection,
     name: K,
     version: V,
-    errors: &str,
+    build_error: E,
 ) -> Result<(ReleaseId, BuildId)>
 where
+    E: BuildError,
     K: TryInto<KrateName>,
     K::Error: std::error::Error + Send + Sync + 'static,
     V: TryInto<Version>,
@@ -48,10 +49,12 @@ where
         "UPDATE builds
          SET
              build_status = 'failure',
-             errors = $2
+             errors = $2,
+             error_kind = $3
          WHERE id = $1",
         build_id.0,
-        errors,
+        build_error.to_string(),
+        build_error.kind(),
     )
     .execute(&mut *conn)
     .await?;
@@ -705,7 +708,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(42),
-            None,
+            None::<&SimpleBuildError>,
         )
         .await?;
 
