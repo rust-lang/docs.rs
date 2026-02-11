@@ -240,7 +240,7 @@ mod tests {
     use docs_rs_build_limits::Overrides;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus,
+        BuildStatus, SimpleBuildError,
         testing::{FOO, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;
@@ -251,7 +251,13 @@ mod tests {
     fn build_list_empty_build() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let response = env
                 .web_app()

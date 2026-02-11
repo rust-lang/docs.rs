@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE builds\n         SET\n             build_status = $1,\n             errors = $2,\n             error_kind = $3\n         WHERE id = $4\n         RETURNING rid as \"rid: ReleaseId\" ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rid: ReleaseId",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7633edc3884e73fc8edad8f5e1539b79ab4ea2ff504cf2319324403b979365e1"
+}

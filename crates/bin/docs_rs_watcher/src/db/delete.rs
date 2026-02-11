@@ -209,7 +209,7 @@ mod tests {
     use docs_rs_storage::rustdoc_json_path;
     use docs_rs_test_fakes::{CrateOwner, OwnerKind, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        CompressionAlgorithm, ReleaseId,
+        CompressionAlgorithm, ReleaseId, SimpleBuildError,
         testing::{BAR, FOO, KRATE, V1, V2},
     };
     use test_case::test_case;
@@ -520,8 +520,13 @@ mod tests {
 
         let mut conn = env.async_conn().await?;
 
-        let (release_id, _) =
-            fake_release_that_failed_before_build(&mut conn, &KRATE, V1, "some-error").await?;
+        let (release_id, _) = fake_release_that_failed_before_build(
+            &mut conn,
+            &KRATE,
+            V1,
+            SimpleBuildError("some-error".into()),
+        )
+        .await?;
 
         delete_version(&mut conn, env.storage()?, &KRATE, &V1).await?;
 
@@ -535,8 +540,13 @@ mod tests {
         let env = TestEnvironment::new().await?;
         let mut conn = env.async_conn().await?;
 
-        let (release_id, _) =
-            fake_release_that_failed_before_build(&mut conn, &KRATE, V1, "some-error").await?;
+        let (release_id, _) = fake_release_that_failed_before_build(
+            &mut conn,
+            &KRATE,
+            V1,
+            SimpleBuildError("some-error".into()),
+        )
+        .await?;
 
         delete_crate(&mut conn, env.storage()?, &KRATE).await?;
 
