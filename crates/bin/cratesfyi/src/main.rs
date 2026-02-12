@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use cratesfyi::daemon::start_daemon;
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use std::env;
 use tokio::runtime;
@@ -8,8 +9,11 @@ use tokio::runtime;
 fn main() {
     // set the global log::logger for backwards compatibility
     // through rustwide.
-    docs_rs_builder::logging::init();
-    let guard = docs_rs_logging::init().expect("error initializing logging");
+    let logging_config =
+        docs_rs_logging::Config::from_environment().expect("error loading logging config");
+    docs_rs_builder::logging::init(&logging_config);
+    let guard =
+        docs_rs_logging::init_with_config(&logging_config).expect("error initializing logging");
 
     if let Err(err) = CommandLine::parse().handle_args() {
         eprintln!("error running watcher: {:?}", err);

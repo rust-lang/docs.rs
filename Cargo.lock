@@ -2225,6 +2225,8 @@ name = "docs_rs_logging"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "docs_rs_config",
+ "docs_rs_env_vars",
  "docs_rs_utils",
  "sentry",
  "tracing",

@@ -26,7 +26,7 @@ use std::iter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
     if let Err(err) = CommandLine::parse().handle_args().await {
         eprintln!("error running admin CLI: {:?}", err);

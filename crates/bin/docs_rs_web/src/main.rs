@@ -17,7 +17,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
     let args = Cli::parse();
     let context = build_context().await?;
