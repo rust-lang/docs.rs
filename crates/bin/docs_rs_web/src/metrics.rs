@@ -194,13 +194,11 @@ mod tests {
                 *entry += 2;
             }
 
-            let collected = dbg!(env.collected_metrics());
+            let collected = env.collected_metrics();
             let metric = collected.get_metric("web", "docsrs.web.routes_visited")?;
             let AggregatedMetrics::U64(MetricData::Sum(routes_visited)) = metric.data() else {
                 panic!("Expected Sum<U64> metric data");
             };
-
-            dbg!(&routes_visited);
 
             let routes_visited: HashMap<String, u64> = routes_visited
                 .data_points()
@@ -244,8 +242,6 @@ mod tests {
             else {
                 panic!("Expected Histogram<F64> metric data");
             };
-
-            dbg!(&response_time);
 
             let response_time_sample_counts: HashMap<String, u64> = response_time
                 .data_points()

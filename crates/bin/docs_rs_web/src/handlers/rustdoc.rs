@@ -225,9 +225,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
 
-    dbg!(&params);
-    dbg!(&original_uri);
-
     // edge case 1:
     // global static assets for older builds are served from the root, which ends up
     // in this handler as `params.name`.
@@ -358,8 +355,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         .instrument(info_span!("serve asset for crate"))
         .await;
     }
-
-    dbg!(&params);
 
     if matched_release.rustdoc_status() {
         Ok(redirect_to_doc(
@@ -1871,7 +1866,7 @@ mod test {
         ) -> Result<(), anyhow::Error> {
             let mut links: BTreeMap<_, _> = links.iter().copied().collect();
 
-            for (platform, link, rel) in dbg!(get_platform_links(path, web).await?) {
+            for (platform, link, rel) in get_platform_links(path, web).await? {
                 assert_eq!(rel, "nofollow");
                 web.assert_redirect(&link, links.remove(platform.as_str()).unwrap())
                     .await?;
@@ -2887,15 +2882,15 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(dbg!(
+            let dom = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
                     .get("/testing/0.1.0/testing/")
                     .await?
                     .error_for_status()?
                     .text()
-                    .await?
-            ));
+                    .await?,
+            );
             assert!(
                 dom.select(
                     r#"a[href="/optional-dep/^1.2.3/"] > i[class="dependencies normal"] + i"#

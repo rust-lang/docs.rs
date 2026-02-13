@@ -38,3 +38,6 @@ docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
+
+[lints]
+workspace = true

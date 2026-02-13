@@ -550,14 +550,14 @@ mod tests {
             };
             Overrides::save(&mut conn, &FOO, limits).await?;
 
-            let page = kuchikiki::parse_html().one(dbg!(
+            let page = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
                     .assert_success(&format!("/crate/foo/{V1}/builds"))
                     .await?
                     .text()
-                    .await?
-            ));
+                    .await?,
+            );
 
             let header = page.select(".about h4").unwrap().next().unwrap();
             assert_eq!(header.text_contents(), "foo's sandbox limits");

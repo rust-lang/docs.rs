@@ -30,3 +30,6 @@ docs_rs_headers = { path = "../docs_rs_headers", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 mockito = { workspace = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true

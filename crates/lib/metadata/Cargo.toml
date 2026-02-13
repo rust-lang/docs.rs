@@ -16,3 +16,6 @@ path = "lib.rs"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
 toml = "0.9"
+
+[lints]
+workspace = true

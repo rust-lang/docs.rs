@@ -11,3 +11,6 @@ docs_rs_web = { path = "../crates/bin/docs_rs_web" }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true
