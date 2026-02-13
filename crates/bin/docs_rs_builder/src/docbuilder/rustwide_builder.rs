@@ -1587,7 +1587,6 @@ mod tests {
                         .collect();
                     json_files.retain(|f| f.ends_with(&format!(".json.{ext}")));
                     json_files.sort();
-                    dbg!(&json_files);
                     assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
                     assert!(json_files[0].ends_with(&format!(".json.{ext}")));
                     assert_eq!(

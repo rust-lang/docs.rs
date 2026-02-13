@@ -1812,8 +1812,6 @@ mod tests {
                 })
                 .collect();
 
-            dbg!(&platform_links);
-
             assert_eq!(platform_links.len(), 2);
 
             for (_, url, rel) in &platform_links {
@@ -1836,7 +1834,7 @@ mod tests {
             url: &str,
             should_contain_redirect: bool,
         ) {
-            let response = env.web_app().await.get(dbg!(url)).await.unwrap();
+            let response = env.web_app().await.get(url).await.unwrap();
             let status = response.status();
             assert!(
                 status.is_success(),
@@ -1846,11 +1844,7 @@ mod tests {
                 response.redirect_target().unwrap_or_default(),
             );
             let text = response.text().await.unwrap();
-            let list1 = dbg!(check_links(
-                text.clone(),
-                false,
-                dbg!(should_contain_redirect)
-            ));
+            let list1 = check_links(text.clone(), false, should_contain_redirect);
 
             // Same test with AJAX endpoint.
             let platform_menu_url = kuchikiki::parse_html()
@@ -1862,12 +1856,7 @@ mod tests {
                 .get("data-url")
                 .expect("data-url")
                 .to_string();
-            let response = env
-                .web_app()
-                .await
-                .get(&dbg!(platform_menu_url))
-                .await
-                .unwrap();
+            let response = env.web_app().await.get(&platform_menu_url).await.unwrap();
             assert!(
                 response.status().is_success(),
                 "{}",
@@ -1877,11 +1866,11 @@ mod tests {
                 CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
                 env.config(),
             );
-            let list2 = dbg!(check_links(
+            let list2 = check_links(
                 response.text().await.unwrap(),
                 true,
                 should_contain_redirect,
-            ));
+            );
             assert_eq!(list1, list2);
         }
 

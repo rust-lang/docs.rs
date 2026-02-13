@@ -61,3 +61,6 @@ test-case = { workspace = true }
 [[bench]]
 name = "compression"
 harness = false
+
+[lints]
+workspace = true

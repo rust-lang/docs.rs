@@ -6,3 +6,5 @@ license = "CC-BY-4.0 AND MIT"
 description = "Font Awesome Free, packaged as a crate"
 repository = "https://github.com/rust-lang/docs.rs"
 
+[lints]
+workspace = true

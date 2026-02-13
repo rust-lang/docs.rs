@@ -66,6 +66,10 @@ url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
 zip = { version = "7.0.0", default-features = false, features = ["bzip2"] }
 
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
 [profile.dev]
 # recommendation coming from 
 # https://doc.rust-lang.org/nightly/cargo/guide/build-performance.html#reduce-amount-of-generated-debug-information

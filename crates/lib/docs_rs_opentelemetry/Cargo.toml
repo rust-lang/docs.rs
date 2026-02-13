@@ -22,3 +22,6 @@ url = { workspace = true }
 [dev-dependencies]
 docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

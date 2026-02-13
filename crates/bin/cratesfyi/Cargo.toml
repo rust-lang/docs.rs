@@ -18,3 +18,6 @@ docs_rs_watcher = { path = "../docs_rs_watcher" }
 docs_rs_web = { path = "../docs_rs_web" }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true

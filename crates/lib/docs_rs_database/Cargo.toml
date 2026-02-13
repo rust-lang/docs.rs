@@ -44,3 +44,6 @@ docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 rand = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
+
+[lints]
+workspace = true

@@ -1369,14 +1369,11 @@ mod tests {
             .with_target_name("dummy")
             .with_doc_targets(TARGETS.iter().cloned());
 
-        dbg!(&params);
-
         assert!(params.doc_target().is_none());
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
         assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
 
         let params = params.with_doc_target(DEFAULT_TARGET);
-        dbg!(&params);
         assert_eq!(params.doc_target(), Some(DEFAULT_TARGET));
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
         assert_eq!(params.storage_path(), "dummy/struct.Dummy.html");
@@ -1438,8 +1435,6 @@ mod tests {
             .with_maybe_doc_target(target)
             .with_maybe_inner_path(path)
             .with_doc_targets(TARGETS.iter().cloned());
-
-        dbg!(&params);
 
         assert_eq!(params.doc_target(), expected_target);
         assert_eq!(params.inner_path(), expected_path);
@@ -1587,7 +1582,6 @@ mod tests {
 
         // with page-kind "Rustdoc", we get the full path with static suffix
         let params = params.with_page_kind(PageKind::Rustdoc);
-        dbg!(&params);
         assert_eq!(
             params.rustdoc_url(),
             format!("/krate/latest/{OTHER_TARGET}/path_add/static.html")
@@ -1632,8 +1626,6 @@ mod tests {
             .with_doc_target("dummy")
             .with_inner_path("struct.Dummy.html");
 
-        dbg!(&params);
-
         // initial params, doc-target is "dummy", not validated
         assert_eq!(params.doc_target(), Some("dummy"));
         assert_eq!(params.inner_path(), "struct.Dummy.html");
@@ -1645,8 +1637,6 @@ mod tests {
             .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
-        dbg!(&params);
-
         assert_eq!(params.doc_target(), None);
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
 
@@ -1655,7 +1645,6 @@ mod tests {
         // Then we expect the path to be intact still, and the target to be set, even
         // though the folder-part of the path was initially generated from the doc_target field.
         let params = params.with_doc_target(OTHER_TARGET);
-        dbg!(&params);
         assert_eq!(params.doc_target(), Some(OTHER_TARGET));
         assert_eq!(params.inner_path(), "dummy/struct.Dummy.html");
     }
@@ -1703,23 +1692,19 @@ mod tests {
     #[test]
     fn test_parse_something() {
         // test for https://github.com/rust-lang/docs.rs/issues/2989
-        let params = dbg!(
-            RustdocParams::new(KRATE)
-                .with_page_kind(PageKind::Rustdoc)
-                .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
-                .unwrap()
-                .with_req_version(ReqVersion::Latest)
-                .with_doc_target(KRATE.to_string())
-        );
+        let params = RustdocParams::new(KRATE)
+            .with_page_kind(PageKind::Rustdoc)
+            .try_with_original_uri(format!("/{KRATE}/latest/{KRATE}"))
+            .unwrap()
+            .with_req_version(ReqVersion::Latest)
+            .with_doc_target(KRATE.to_string());
 
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
 
-        let params = dbg!(
-            params
-                .with_target_name(KRATE.to_string())
-                .with_default_target(DEFAULT_TARGET)
-                .with_doc_targets(TARGETS.iter().cloned())
-        );
+        let params = params
+            .with_target_name(KRATE.to_string())
+            .with_default_target(DEFAULT_TARGET)
+            .with_doc_targets(TARGETS.iter().cloned());
 
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
     }
@@ -1742,8 +1727,6 @@ mod tests {
             .with_target_name(KRATE.to_string())
             .with_doc_targets(TARGETS.iter().cloned());
 
-        dbg!(&params);
-
         assert_eq!(params.rustdoc_url(), expected_url);
     }
 
@@ -1760,8 +1743,6 @@ mod tests {
             .with_req_version(ReqVersion::Exact(ver))
             .with_doc_target(KRATE.to_string())
             .with_inner_path("trait.Itertools.html");
-
-        dbg!(&params);
 
         assert_eq!(
             params.rustdoc_url(),

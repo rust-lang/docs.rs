@@ -27,3 +27,6 @@ mime = { workspace = true }
 mockito = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true
