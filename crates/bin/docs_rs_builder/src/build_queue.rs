@@ -6,6 +6,7 @@ use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_utils::{Handle, retry};
+use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::{error, info_span};
 
@@ -25,7 +26,22 @@ fn process_next_crate(
             let instant = Instant::now();
             let res = f(to_process);
             let elapsed = instant.elapsed().as_secs_f64();
-            builder_metrics.build_time.record(elapsed, &[]);
+            builder_metrics.build_time.record(
+                elapsed,
+                &[KeyValue::new(
+                    "result",
+                    match &res {
+                        Ok(summary) => {
+                            if summary.successful {
+                                "success"
+                            } else {
+                                "failed"
+                            }
+                        }
+                        Err(_) => "error",
+                    },
+                )],
+            );
             res
         };
 
