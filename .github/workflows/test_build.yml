@@ -1,0 +1,29 @@
+name: test ci build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  RUST_CACHE_KEY: rust-cache-20241114
+  # disable incremental builds in CI, it's not needed
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: restore build & cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.RUST_CACHE_KEY }}
+
+      - name: build binary
+        run: cargo build -p docs_rs_builder --release
+
+      - name: run binary
+        run: ./target/release/docs_rs_builder
