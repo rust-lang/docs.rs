@@ -1137,7 +1137,7 @@ impl RustwideBuilder {
             }
         };
 
-        if let Err(err) = self.execute_json_build(
+        self.execute_json_build(
             build_id,
             name,
             version,
@@ -1146,16 +1146,7 @@ impl RustwideBuilder {
             build,
             metadata,
             limits,
-        ) {
-            // FIXME: this is temporary. Theoretically all `Err` things coming out
-            // of the method should be retryable, so we could juse use `?` here.
-            // But since this is new, I want to be carful and first see what kind of
-            // errors we are seeing here.
-            error!(
-                ?err,
-                "internal error when trying to generate rustdoc JSON output"
-            );
-        }
+        )?;
 
         let result = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
