@@ -8,19 +8,19 @@ jobs:
   prod:
     name: Production
     runs-on: ubuntu-latest
+    environment: production
+    concurrency: production
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Build the Docker image
-        run: docker build -t docs-rs-web -f dockerfiles/Dockerfile --target web-server .
-
-      - name: Upload the Docker image to ECR (production)
-        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          image: docs-rs-web
-          repository: docs-rs-web
-          region: us-west-1
-          aws_access_key_id: "${{ secrets.aws_access_key_id }}"
-          aws_secret_access_key: "${{ secrets.aws_secret_access_key }}"
-          redeploy_ecs_cluster: rust-ecs-prod
-          redeploy_ecs_service: docs-rs-web
+          persist-credentials: false
+
+      - name: Deploy to ECS
+        uses: ./.github/actions/deploy-ecs
+        with:
+          aws-iam: "760062276060:role/ci--rust-lang--docs.rs--production"
+          cluster: docs-rs-prod

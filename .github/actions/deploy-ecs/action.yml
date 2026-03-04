@@ -1,0 +1,50 @@
+name: Deploy to ECS
+description: Build Docker image, push to ECR, and deploy to ECS
+
+inputs:
+  aws-iam:
+    description: Ending part of the ARN of the IAM role to assume for AWS credentials
+    required: true
+  cluster:
+    description: Name of the ECS cluster to deploy to
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: arn:aws:iam::${{ inputs.aws-iam }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and tag the Docker image
+      env:
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        tags: ${{ env.REGISTRY }}/docs-rs-web:latest
+        target: web-server
+        file: dockerfiles/Dockerfile
+        push: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: GIT_VERSION=${{ github.sha }}
+
+    - name: Kick ECS to deploy new version
+      shell: bash
+      env:
+        CLUSTER: ${{ inputs.cluster }}
+        SERVICE: docs-rs-web
+      run: |
+        aws ecs update-service --service ${SERVICE} --cluster ${CLUSTER} --force-new-deployment
+        # Poll every 15 seconds until a successful state has been reached. Fail after 40 failed checks.
+        aws ecs wait services-stable --services ${SERVICE} --cluster ${CLUSTER}
