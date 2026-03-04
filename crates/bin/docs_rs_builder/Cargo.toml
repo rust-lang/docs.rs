@@ -29,7 +29,7 @@ docsrs-metadata = { path = "../../lib/metadata" }
 log = "0.4"
 opentelemetry = { workspace = true }
 regex = { workspace = true }
-rustwide = { version = "0.22.0", features = ["unstable-toolchain-ci", "unstable"] }
+rustwide = { version = "0.22.0", features = ["unstable", "unstable-toolchain-ci"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 sysinfo = { version = "0.38.0", default-features = false, features = ["system"] }

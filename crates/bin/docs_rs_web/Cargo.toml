@@ -59,22 +59,22 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slug = { workspace = true }
 sqlx = { workspace = true }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
+syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 toml = { workspace = true }
 tower = "0.5.1"
-tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
+tower-http = { version = "0.6.0", features = ["catch-panic", "fs", "timeout", "trace"] }
 tracing = { workspace = true }
-tracing-futures = { version = "0.2.5", features = ["std-future", "futures-03"] }
+tracing-futures = { version = "0.2.5", features = ["futures-03", "std-future"] }
 url = { workspace = true }
 
 [build-dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
 md5 = "0.8.0"
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
+syntect = { version = "5.0.0", default-features = false, features = ["dump-create", "parsing", "regex-onig", "yaml-load"] }
 walkdir = { workspace = true }
 
 [dev-dependencies]
