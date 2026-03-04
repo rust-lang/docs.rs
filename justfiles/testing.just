@@ -96,12 +96,15 @@ lint: format lint-dependencies-machete
 
 [group('testing')]
 sort-cargo-toml *args:
-  # for now manually, `cargo sort --workspace` is broken right now for docs.rs
-  # https://github.com/DevinR528/cargo-sort/pull/121
-  cargo sort {{ args }} \
-    ./Cargo.toml \
-    ./crates/bin/* \
-    ./crates/lib/*
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.0")}} != 'true' ]; then 
+    echo "cargo-sort to old, must be >=2.1.0"
+    exit 1;
+  fi
+
+  cargo sort --workspace {{ args }} 
 
 
 [group('testing')]

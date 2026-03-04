@@ -13,7 +13,7 @@ anyhow = { workspace = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 opentelemetry = { workspace = true }
-opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic",  "metrics"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic", "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
 opentelemetry_sdk = { workspace = true }
 tracing = { workspace = true }

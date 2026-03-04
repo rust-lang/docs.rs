@@ -15,9 +15,9 @@ testing = [
 
 [dependencies]
 anyhow = { workspace = true }
-async-compression = { version = "0.4.32", features = ["tokio", "bzip2", "zstd", "gzip"] }
+async-compression = { version = "0.4.32", features = ["bzip2", "gzip", "tokio", "zstd"] }
 async-stream = { workspace = true }
-aws-config = { version = "1.0.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
+aws-config = { version = "1.0.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-s3 = "1.3.0"
 aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
 bzip2 = "0.6.0"
