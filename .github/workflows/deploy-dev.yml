@@ -9,19 +9,20 @@ jobs:
   docker:
     name: Build and upload docker image
     runs-on: ubuntu-latest
+    environment: staging
+    concurrency: staging
+    if: github.repository_owner == 'rust-lang'
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Build the Docker image
-        run: docker build -t docs-rs-web -f dockerfiles/Dockerfile --target web-server .
-
-      - name: Upload the Docker image to ECR (dev)
-        uses: rust-lang/simpleinfra/github-actions/upload-docker-image@master
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          image: docs-rs-web
-          repository: docs-rs-web
-          region: us-east-1
-          aws_access_key_id: "${{ secrets.staging_aws_access_key_id }}"
-          aws_secret_access_key: "${{ secrets.staging_aws_secret_access_key }}"
-          redeploy_ecs_cluster: docs-rs-staging
-          redeploy_ecs_service: docs-rs-web
+          persist-credentials: false
+
+      - name: Deploy to ECS
+        uses: ./.github/actions/deploy-ecs
+        with:
+          aws-iam: "519825364412:role/ci--rust-lang--docs.rs--staging"
+          cluster: docs-rs-staging
