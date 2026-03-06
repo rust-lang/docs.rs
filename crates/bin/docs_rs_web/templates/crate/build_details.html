@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{%- import "header/package_navigation.html" as navigation -%}
+
+{%- block title -%}
+    {% call macros::doc_title(name=metadata.name, version=metadata.version) %}{% endcall %}
+{%- endblock title -%}
+
+{%- block body_classes -%}
+    centered
+{%- endblock body_classes -%}
+
+{%- block topbar -%}
+  {%- include "rustdoc/topbar.html" -%}
+{%- endblock topbar -%}
+
+{%- block header -%}
+    {% call navigation::package_navigation(metadata=metadata, active_tab="builds") %}{% endcall %}
+{%- endblock header -%}
+
+{%- block body -%}
+    <div class="container">
+        <div class="recent-releases-container">
+            <div class="release">
+                <strong>Build #{{ build_details.id }} {%- if let Some(build_time) = build_details.build_time %} {{ build_time.format("%F %T") }}{% endif %}</strong>
+            </div>
+
+            {%- if build_details.build_status  == "failure" -%}
+                <p class="build-info">{{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }} Build failed. If you want to re-trigger a documentation build, you can do it <a href="https://crates.io/crates/{{metadata.name}}/{{metadata.version}}/rebuild-docs">here</a>. You can find more information on <b>docs.rs</b> builds documentation on the <a href="/about/builds">builds page</a>.</p>
+            {%- endif -%}
+
+            <ul>
+                {%- for filename in all_log_filenames -%}
+                    <li>
+                        <a href="{{ params.build_details_url(*build_details.id, Some(&filename)) }}" class="release">
+                            <div class="pure-g">
+                                <div class="pure-u-1 pure-u-sm-1-24 build">{{ crate::icons::IconFileLines.render_solid(false, false, "") }}</div>
+                                <div class="pure-u-1 pure-u-sm-10-24">
+                                    {% if current_filename.as_deref().unwrap_or_default() == filename.as_str() %}
+                                        <b>{{ filename }}</b>
+                                    {% else %}
+                                        {{ filename }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </a>
+                    </li>
+                {%- endfor -%}
+            </ul>
+
+            {%- filter dedent(None)|safe -%}
+                <pre>
+                    {%- if let Some(error_kind) = build_details.error_kind -%}
+                        <p>
+                        # error kind
+                        {{ error_kind }}
+                        </p>
+                    {%- endif -%}
+
+                    {%- if let Some(errors) = build_details.errors -%}
+                        <p>
+                        # pre-build errors
+                        {{ errors }}
+                        </p>
+                    {%- endif -%}
+
+                    {%- if let Some(rustc_version) = build_details.rustc_version -%}
+                        <p>
+                        # rustc version
+                        {{ rustc_version }}
+                        </p>
+                    {%- endif -%}
+
+                    {%- if let Some(docsrs_version) = build_details.docsrs_version -%}
+                        <p>
+                        # docs.rs version
+                        {{ docsrs_version }}
+                        </p>
+                    {%- endif -%}
+
+                    {%- if !build_details.output.is_empty() -%}
+                        <p>
+                        # build log
+                        {{ build_details.output }}
+                        </p>
+                    {%- endif -%}
+                </pre>
+            {%- endfilter -%}
+        </div>
+    </div>
+{%- endblock body -%}

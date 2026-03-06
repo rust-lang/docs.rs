@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_watcher::{Config, Index, index_watcher};
@@ -7,7 +8,7 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
     if let Err(err) = CommandLine::parse().handle_args().await {
         eprintln!("error running watcher: {:?}", err);
@@ -52,17 +53,16 @@ impl CommandLine {
     async fn handle_args(self) -> Result<()> {
         let config = Arc::new(Config::from_environment()?);
         let ctx = Context::builder()
+            .with_runtime()
             .await?
+            .with_meter_provider()?
             .with_pool()
             .await?
             .with_storage()
             .await?
-            .with_cdn()
-            .await?
-            .with_build_queue()
-            .await?
-            .with_repository_stats()
-            .await?
+            .with_maybe_cdn()?
+            .with_build_queue()?
+            .with_repository_stats()?
             .build()?;
 
         match self {
@@ -153,7 +153,7 @@ enum DatabaseSubcommand {
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
-        name: String,
+        name: KrateName,
     },
 
     /// Remove documentation from the database
@@ -214,7 +214,7 @@ enum DeleteSubcommand {
     Version {
         /// Name of the crate to delete
         #[arg(name = "CRATE_NAME")]
-        name: docs_rs_types::KrateName,
+        name: KrateName,
 
         /// The version of the crate to delete
         #[arg(name = "VERSION")]

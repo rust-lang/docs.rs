@@ -73,6 +73,7 @@ impl Limits {
 #[cfg(test)]
 mod test {
     use super::*;
+    use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::KRATE;

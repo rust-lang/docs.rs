@@ -1,14 +1,23 @@
 [package]
 name = "docs_rs_logging"
-version = "0.1.0"
-edition = "2024"
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[features]
+testing = ["docs_rs_config/testing"]
 
 [dependencies]
 anyhow = { workspace = true }
+docs_rs_config = { path = "../docs_rs_config" }
+docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 sentry = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt", "json", "env-filter", "tracing-log"] }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "env-filter", "fmt", "json", "tracing-log"] }
 
-[features]
-testing = []
+[dev-dependencies]
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
+
+[lints]
+workspace = true

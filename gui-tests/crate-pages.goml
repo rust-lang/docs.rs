@@ -1,0 +1,20 @@
+// Checks that the "crate pages" have all the same style (ie: not centered).
+include: "utils.goml"
+go-to: |DOC_PATH| + "/crate/sysinfo"
+// Big enough to have "margin: auto" to kick in.
+set-window-size: (1300, 800)
+
+store-value: (tabs_menu_selector, ".description-container .pure-menu-horizontal ul.pure-menu-list")
+store-value: (current_tab, 1)
+store-value: (nb_tabs, 4)
+
+// If this assert fails, it means we added new entries for this menu so this test needs to be
+// updated.
+assert-count: (|tabs_menu_selector| + " > li", |nb_tabs|)
+
+call-function: ("check-tab-not-centered", {"tab_name": " Crate", "click_next": true})
+call-function: ("check-tab-not-centered", {"tab_name": " Source", "click_next": true})
+call-function: ("check-tab-not-centered", {"tab_name": " Builds", "click_next": true})
+call-function: ("check-tab-not-centered", {"tab_name": "Feature flags", "click_next": false})
+
+assert: |nb_tabs| == |current_tab|

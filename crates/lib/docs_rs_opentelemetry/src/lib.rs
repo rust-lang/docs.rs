@@ -1,5 +1,5 @@
 mod config;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub use config::Config;
 

@@ -112,6 +112,10 @@ pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<u
 
     let crates_added = process_changes(context, &changes, index.repository_url()).await;
 
+    if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
+        error!(?err, "error deprioritizing workspaces");
+    }
+
     // set the reference in the database
     // so this survives recreating the registry watcher
     // server.
@@ -260,8 +264,7 @@ async fn process_crate_deleted(context: &Context, krate: &KrateName) -> Result<(
     );
     queue_crate_invalidation(krate, context.cdn.as_deref()).await;
 
-    let name: KrateName = krate.parse()?;
-    context.build_queue()?.remove_crate_from_queue(&name).await
+    context.build_queue()?.remove_crate_from_queue(krate).await
 }
 
 pub(crate) async fn set_yanked(
@@ -283,7 +286,7 @@ pub(crate) async fn set_yanked(
              AND version = $2
         RETURNING crates.id as "id: CrateId"
         "#,
-        name,
+        name as _,
         version as _,
         yanked,
     )
@@ -298,12 +301,7 @@ pub(crate) async fn set_yanked(
         );
         update_latest_version_id(&mut conn, crate_id).await?;
     } else {
-        let name: KrateName = name.parse()?;
-        match context
-            .build_queue()?
-            .has_build_queued(&name, version)
-            .await
-        {
+        match context.build_queue()?.has_build_queued(name, version).await {
             Ok(false) => {
                 error!(
                     %name,
@@ -344,7 +342,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env.context, &krate, None).await?;
+        process_version_added(&env, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -355,7 +353,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env.context, &krate, None).await?;
+        process_version_added(&env, &krate, None).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -387,7 +385,7 @@ mod tests {
             version: V1,
             yanked: true,
         };
-        process_version_yank_status(&env.context, &krate).await?;
+        process_version_yank_status(&env, &krate).await?;
 
         // And verify it's actually marked as yanked
         let row = sqlx::query!(
@@ -406,7 +404,7 @@ mod tests {
             version: V1,
             yanked: false,
         };
-        process_version_yank_status(&env.context, &krate).await?;
+        process_version_yank_status(&env, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT yanked
@@ -433,7 +431,7 @@ mod tests {
             .create()
             .await?;
 
-        process_crate_deleted(&env.context, &KRATE).await?;
+        process_crate_deleted(&env, &KRATE).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -471,7 +469,7 @@ mod tests {
             version: V2,
             ..Default::default()
         };
-        process_version_deleted(&env.context, &krate).await?;
+        process_version_deleted(&env, &krate).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -517,7 +515,7 @@ mod tests {
             ..Default::default()
         };
         let added = process_changes(
-            &env.context,
+            &env,
             &vec![
                 // Should be added correctly
                 Change::Added(krate1.into()),

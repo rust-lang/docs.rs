@@ -6,6 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::MetadataPackage;
+use docs_rs_config::AppConfig as _;
 use docs_rs_database::Pool;
 use futures_util::stream::TryStreamExt;
 use regex::Regex;
@@ -149,7 +150,11 @@ impl RepositoryStatsUpdater {
             let needs_update: Vec<String> = sqlx::query!(
                 "SELECT host_id
                  FROM repositories
-                 WHERE host = $1 AND updated_at < NOW() - INTERVAL '1 day';",
+                 WHERE
+                    host = $1 AND
+                    updated_at < NOW() - INTERVAL '1 day'
+                 ORDER BY updated_at
+                ;",
                 updater.host()
             )
             .fetch(&mut *conn)

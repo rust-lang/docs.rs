@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE\n             FROM queue\n             WHERE name = $1\n             ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f8b389df3451e4b5e6539e9260ba6340edf69c7dba22e667aedd510e868b0f00"
+}

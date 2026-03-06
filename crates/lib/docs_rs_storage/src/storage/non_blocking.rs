@@ -19,7 +19,7 @@ use anyhow::Result;
 use dashmap::DashMap;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_types::{BuildId, CompressionAlgorithm, Version};
+use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::stream::BoxStream;
 use std::{
@@ -75,7 +75,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn stream_rustdoc_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -94,7 +94,7 @@ impl AsyncStorage {
 
     pub async fn fetch_source_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -109,7 +109,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn stream_source_file(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -128,7 +128,7 @@ impl AsyncStorage {
     #[instrument]
     pub async fn rustdoc_file_exists(
         &self,
-        name: &str,
+        name: &KrateName,
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
@@ -428,8 +428,9 @@ impl AsyncStorage {
     pub async fn store_all_in_archive(
         &self,
         archive_path: &str,
-        root_dir: &Path,
+        root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        let root_dir = root_dir.as_ref();
         let (mut zip_content,    file_paths) =
             spawn_blocking({
                 let archive_path = archive_path.to_owned();
@@ -523,9 +524,11 @@ impl AsyncStorage {
     #[instrument(skip(self))]
     pub async fn store_all(
         &self,
-        prefix: &Path,
-        root_dir: &Path,
+        prefix: impl AsRef<Path> + fmt::Debug,
+        root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        let prefix = prefix.as_ref();
+        let root_dir = root_dir.as_ref();
         let alg = CompressionAlgorithm::default();
 
         let (blobs, file_paths_and_mimes) = spawn_blocking({

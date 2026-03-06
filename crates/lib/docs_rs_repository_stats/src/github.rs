@@ -3,15 +3,15 @@ use crate::{
     config::Config,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
-    Client as HttpClient,
+    Client as HttpClient, StatusCode,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
 
 const GRAPHQL_UPDATE: &str = "query($ids: [ID!]!) {
@@ -67,7 +67,7 @@ impl GitHub {
         if let Some(ref token) = config.github_accesstoken {
             headers.insert(
                 AUTHORIZATION,
-                HeaderValue::from_str(&format!("token {token}"))?,
+                HeaderValue::from_str(&format!("Bearer {token}"))?,
             );
         } else {
             warn!("did not collect `github.com` stats as no token was provided");
@@ -155,7 +155,7 @@ impl RepositoryForge for GitHub {
                 ("RATE_LIMITED", []) => {
                     return Err(RateLimitReached.into());
                 }
-                _ => anyhow::bail!("error updating repositories: {}", error.message),
+                _ => bail!("error updating repositories: {}", error.message),
             }
         }
 
@@ -187,7 +187,7 @@ impl GitHub {
         query: &str,
         variables: impl serde::Serialize,
     ) -> Result<GraphResponse<T>> {
-        Ok(self
+        let response = self
             .client
             .post(&self.endpoint)
             .json(&serde_json::json!({
@@ -195,10 +195,30 @@ impl GitHub {
                 "variables": variables,
             }))
             .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?)
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            Err(RateLimitReached.into())
+        } else if status == StatusCode::FORBIDDEN
+            && let Ok(api_error) = serde_json::from_str::<ApiError>(&body)
+            && (api_error
+                .documentation_url
+                .contains("secondary-rate-limits")
+                || api_error.message.contains("secondary rate limit"))
+        {
+            Err(RateLimitReached.into())
+        } else if status.is_client_error() || status.is_server_error() {
+            Err(anyhow!(
+                "GitHub GraphQL response status: {}\n{}",
+                status,
+                body
+            ))
+        } else {
+            Ok(serde_json::from_str(&body)?)
+        }
     }
 }
 
@@ -260,13 +280,22 @@ struct GraphIssues {
     total_count: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ApiError {
+    documentation_url: String,
+    message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         Config, GitHub, RateLimitReached,
+        github::ApiError,
         updater::{RepositoryForge, repository_name},
     };
     use anyhow::Result;
+    use docs_rs_config::AppConfig as _;
+    use reqwest::header::AUTHORIZATION;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 
@@ -296,6 +325,7 @@ mod tests {
             .with_body(
                 r#"{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -314,6 +344,7 @@ mod tests {
             .mock("POST", "/graphql")
             .with_header("content-type", "application/json")
             .with_body(r#"{"data": {"nodes": [], "rateLimit": {"remaining": 0}}}"#)
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -335,6 +366,7 @@ mod tests {
                 r#"{"data": {"nodes": [], "rateLimit": {"remaining": 100000}}, "errors":
                     [{"type": "NOT_FOUND", "path": ["nodes", 0], "message": "none"}]}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         match updater.fetch_repositories(&[String::new()]).await {
@@ -360,6 +392,7 @@ mod tests {
                     "description": "this is", "stargazerCount": 10, "forkCount": 11,
                     "issues": {"totalCount": 12}}}}"#,
             )
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
             .create();
 
         let repo = updater
@@ -376,6 +409,94 @@ mod tests {
         assert_eq!(repo.stars, 10);
         assert_eq!(repo.forks, 11);
         assert_eq!(repo.issues, 12);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_403_error_with_body() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(403)
+            .with_body("some error text")
+            .create();
+
+        let err = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "GitHub GraphQL response status: 403 Forbidden\nsome error text"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_secondary_rate_limit() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(403)
+            .with_body(&serde_json::to_string(&ApiError {
+                documentation_url: "https://docs.github.com/graphql/overview/\
+                    rate-limits-and-node-limits-for-the-graphql-api#secondary-rate-limits"
+                    .into(),
+                message: "You have exceeded a secondary rate limit.
+                    Please wait a few minutes before you try again.
+                    For more on scraping GitHub and how it may affect your rights,
+                    please review our Terms of Service
+                    (https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+                    If you reach out to GitHub Support for help, please include the request ID
+                    ECEE:193CF9:5A5D684:1866A8EB:698779A9."
+                    .into(),
+            })?)
+            .create();
+
+        assert!(
+            updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+                .unwrap_err()
+                .is::<RateLimitReached>()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_429_rate_limit() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(429)
+            .create();
+
+        assert!(
+            updater
+                .fetch_repository(
+                    &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+                )
+                .await
+                .unwrap_err()
+                .is::<RateLimitReached>()
+        );
+
         Ok(())
     }
 }

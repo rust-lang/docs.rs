@@ -37,3 +37,69 @@ impl Default for TestMetrics {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opentelemetry::metrics::Counter;
+
+    const METER: &str = "meter";
+    const METRIC: &str = "metric1";
+
+    fn create_metric(meter_provider: &AnyMeterProvider) -> Counter<u64> {
+        let meter = meter_provider.meter(METER);
+        meter.u64_counter(METRIC).with_unit("1").build()
+    }
+
+    #[test]
+    fn test_collect_once() -> anyhow::Result<()> {
+        let metrics = TestMetrics::new();
+
+        let dummy = create_metric(metrics.provider());
+        dummy.add(42, &[]);
+        dummy.add(24, &[]);
+
+        assert_eq!(
+            66,
+            metrics
+                .collected_metrics()
+                .get_metric(METER, METRIC)?
+                .get_u64_counter()
+                .value()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collect_twice() -> anyhow::Result<()> {
+        let metrics = TestMetrics::new();
+
+        let dummy = create_metric(metrics.provider());
+        dummy.add(42, &[]);
+
+        eprintln!("first asserts");
+        assert_eq!(
+            42,
+            metrics
+                .collected_metrics()
+                .get_metric(METER, METRIC)?
+                .get_u64_counter()
+                .value()
+        );
+
+        dummy.add(24, &[]);
+
+        eprintln!("second asserts");
+        assert_eq!(
+            66,
+            metrics
+                .collected_metrics()
+                .get_metric(METER, METRIC)?
+                .get_u64_counter()
+                .value()
+        );
+
+        Ok(())
+    }
+}

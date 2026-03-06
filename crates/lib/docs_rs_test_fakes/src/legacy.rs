@@ -1,20 +1,20 @@
 use anyhow::{Context as _, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
-use docs_rs_builder::RUSTDOC_JSON_COMPRESSION_ALGORITHMS;
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
     Pool,
     releases::{initialize_build, initialize_crate, initialize_release, update_build_status},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
+use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
-    AsyncStorage, FileEntry, RustdocJsonFormatVersion, add_path_into_database,
-    add_path_into_remote_archive, compress, file_list_to_json, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    AsyncStorage, FileEntry, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
+    source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, ReleaseId, Version, VersionReq,
+    BuildError, BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId,
+    SimpleBuildError, Version, VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -26,18 +26,22 @@ use tracing::debug;
 /// Create a fake release in the database that failed before the build.
 /// This is a temporary small factory function only until we refactored the
 /// `FakeRelease` and `FakeBuild` factories to be more flexible.
-pub async fn fake_release_that_failed_before_build<V>(
+pub async fn fake_release_that_failed_before_build<K, V, E>(
     conn: &mut sqlx::PgConnection,
-    name: &str,
+    name: K,
     version: V,
-    errors: &str,
+    build_error: E,
 ) -> Result<(ReleaseId, BuildId)>
 where
+    E: BuildError,
+    K: TryInto<KrateName>,
+    K::Error: std::error::Error + Send + Sync + 'static,
     V: TryInto<Version>,
     V::Error: std::error::Error + Send + Sync + 'static,
 {
+    let name = name.try_into()?;
     let version = version.try_into()?;
-    let crate_id = initialize_crate(&mut *conn, name).await?;
+    let crate_id = initialize_crate(&mut *conn, &name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
     let build_id = initialize_build(&mut *conn, release_id).await?;
 
@@ -45,10 +49,12 @@ where
         "UPDATE builds
          SET
              build_status = 'failure',
-             errors = $2
+             errors = $2,
+             error_kind = $3
          WHERE id = $1",
         build_id.0,
-        errors,
+        build_error.to_string(),
+        build_error.kind(),
     )
     .execute(&mut *conn)
     .await?;
@@ -164,10 +170,16 @@ impl<'a> FakeRelease<'a> {
         self
     }
 
-    pub fn name(mut self, new: &str) -> Self {
-        self.package.name = new.into();
+    pub fn name<K>(mut self, new: K) -> Self
+    where
+        K: TryInto<KrateName>,
+        K::Error: fmt::Debug,
+    {
+        let new = new.try_into().expect("invalid crate name").to_string();
+
+        self.package.name = new.clone();
         self.package.id = format!("{new}-id");
-        self.package.targets[0].name = new.into();
+        self.package.targets[0].name = new;
         self
     }
 
@@ -407,25 +419,28 @@ impl<'a> FakeRelease<'a> {
                 source_directory.display()
             );
             if archive_storage {
+                // NOTE: should we migrate MetadataPackage?
+                let krate_name: KrateName = package.name.parse()?;
+
                 let archive = match kind {
-                    FileKind::Rustdoc => rustdoc_archive_path(&package.name, &package.version),
-                    FileKind::Sources => source_archive_path(&package.name, &package.version),
+                    FileKind::Rustdoc => rustdoc_archive_path(&krate_name, &package.version),
+                    FileKind::Sources => source_archive_path(&krate_name, &package.version),
                 };
                 debug!("store in archive: {:?}", archive);
-                let (files_list, new_alg) =
-                    add_path_into_remote_archive(storage, &archive, source_directory).await?;
-                Ok((files_list, new_alg))
+                Ok(storage
+                    .store_all_in_archive(&archive, source_directory)
+                    .await?)
             } else {
                 let prefix = match kind {
                     FileKind::Rustdoc => "rustdoc",
                     FileKind::Sources => "sources",
                 };
-                add_path_into_database(
-                    storage,
-                    format!("{}/{}/{}/", prefix, package.name, package.version),
-                    source_directory,
-                )
-                .await
+                storage
+                    .store_all(
+                        format!("{}/{}/{}/", prefix, package.name, package.version),
+                        source_directory,
+                    )
+                    .await
             }
         }
 
@@ -515,6 +530,8 @@ impl<'a> FakeRelease<'a> {
             self.doc_targets.insert(0, default_target.to_owned());
         }
 
+        let krate_name: KrateName = package.name.parse()?;
+
         for target in &self.doc_targets {
             let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({
                 "format_version": 42
@@ -530,7 +547,7 @@ impl<'a> FakeRelease<'a> {
                     storage
                         .store_one_uncompressed(
                             &rustdoc_json_path(
-                                &package.name,
+                                &krate_name,
                                 &package.version,
                                 target,
                                 format_version,
@@ -547,7 +564,7 @@ impl<'a> FakeRelease<'a> {
         // be set to docsrs_metadata::HOST_TARGET, because then tests fail on all
         // non-linux platforms.
         let mut async_conn = pool.get_async().await?;
-        let crate_id = initialize_crate(&mut async_conn, &package.name).await?;
+        let crate_id = initialize_crate(&mut async_conn, &krate_name).await?;
         let release_id = initialize_release(&mut async_conn, crate_id, &package.version).await?;
 
         docs_rs_database::releases::finish_release(
@@ -570,7 +587,7 @@ impl<'a> FakeRelease<'a> {
         .await?;
         docs_rs_database::releases::update_crate_data_in_database(
             &mut async_conn,
-            &package.name,
+            &krate_name,
             &self.registry_crate_data,
         )
         .await?;
@@ -588,15 +605,15 @@ impl<'a> FakeRelease<'a> {
     }
 }
 
-struct FakeGithubStats {
-    repo: String,
-    stars: i32,
-    forks: i32,
-    issues: i32,
+pub struct FakeGithubStats {
+    pub repo: String,
+    pub stars: i32,
+    pub forks: i32,
+    pub issues: i32,
 }
 
 impl FakeGithubStats {
-    async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
+    pub async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
         let existing_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM repositories")
             .fetch_one(&mut *conn)
             .await?
@@ -691,7 +708,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(42),
-            None,
+            None::<&SimpleBuildError>,
         )
         .await?;
 

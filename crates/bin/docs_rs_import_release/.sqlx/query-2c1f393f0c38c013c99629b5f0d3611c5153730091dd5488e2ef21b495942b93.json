@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO crates (name)\n         VALUES ($1)\n         ON CONFLICT (name) DO UPDATE\n         SET -- this `SET` is needed so the id is always returned.\n            name = EXCLUDED.name\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2c1f393f0c38c013c99629b5f0d3611c5153730091dd5488e2ef21b495942b93"
+}

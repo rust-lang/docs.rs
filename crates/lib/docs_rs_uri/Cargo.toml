@@ -1,6 +1,8 @@
 [package]
 name = "docs_rs_uri"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [dependencies]
@@ -8,8 +10,11 @@ askama = { workspace = true }
 http = { workspace = true }
 percent-encoding = "2.2.0"
 serde_with = { workspace = true }
-url = { workspace = true }
 thiserror = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }
+
+[lints]
+workspace = true

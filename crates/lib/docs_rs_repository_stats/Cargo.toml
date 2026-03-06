@@ -1,6 +1,8 @@
 [package]
 name = "docs_rs_repository_stats"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [dependencies]
@@ -8,8 +10,10 @@ anyhow = { workspace = true }
 async-trait  = "0.1.89"
 chrono = { workspace = true }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_database = { path = "../docs_rs_database" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 regex = { workspace = true }
@@ -17,9 +21,17 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+docs_rs_database = { path = "../docs_rs_database", features = ["testing"] }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
+docs_rs_storage = { path = "../docs_rs_storage", features = ["testing"] }
+docs_rs_test_fakes = { path = "../docs_rs_test_fakes" }
+docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 mockito = { workspace = true }
+pretty_assertions = { workspace = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true

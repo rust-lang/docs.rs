@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO owner_rels (cid, oid)\n             SELECT $1,oid\n             FROM UNNEST($2::int[]) as oid\n             ON CONFLICT (cid,oid)\n             DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95bc487e596e04e5e1cfd20903d8bdb54917c2ea91a0ee9c1dad7d5290ca2e62"
+}

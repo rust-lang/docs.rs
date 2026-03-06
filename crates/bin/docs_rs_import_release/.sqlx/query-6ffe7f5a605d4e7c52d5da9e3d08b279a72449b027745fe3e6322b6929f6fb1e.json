@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH counts AS (\n            SELECT r.repository_id, count(*) AS crate_count\n            FROM releases AS r\n            JOIN crates AS c ON c.latest_version_id = r.id\n            WHERE r.repository_id IS NOT NULL\n            GROUP BY r.repository_id\n        )\n\n        UPDATE repositories AS repo\n        SET crate_count = coalesce(counts.crate_count, 0)\n        FROM counts\n        WHERE\n            repo.id = counts.repository_id\n            AND repo.crate_count IS DISTINCT FROM counts.crate_count\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "6ffe7f5a605d4e7c52d5da9e3d08b279a72449b027745fe3e6322b6929f6fb1e"
+}

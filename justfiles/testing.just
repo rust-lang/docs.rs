@@ -23,6 +23,7 @@ sqlx-prepare *args: _ensure_db_and_s3_are_running
       -- --all-targets --all-features
 
   for subcrate in crates/lib/* crates/bin/*; do
+    echo "Preparing SQLx metadata for ${subcrate}..."
     # NOTE: potential optimization: only run this command when `sqlx` 
     # is in the dependencies of the subcrate.
     (cd "${subcrate}" && cargo sqlx prepare \
@@ -81,32 +82,69 @@ clippy-fix:
 
 # run all linters, for local development & CI
 [group('testing')]
-lint: format lint-dependencies
+lint: format lint-dependencies-machete
   #!/usr/bin/env bash
   set -euo pipefail
 
   if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    just sort-cargo-toml --check
     just clippy
   else
+    just sort-cargo-toml 
     just clippy-fix
   fi
 
 [group('testing')]
-lint-dependencies:
+sort-cargo-toml *args:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.0")}} != 'true' ]; then 
+    echo "cargo-sort to old, must be >=2.1.0"
+    exit 1;
+  fi
+
+  cargo sort --workspace {{ args }} 
+
+
+[group('testing')]
+lint-dependencies-machete: 
+  #!/usr/bin/env bash
+  set -euo pipefail
+
   # check unused deps with cargo machete is fast, 
   # but has many false positives. 
   # While it can also recurse into subdirs, it would 
   # also stumble onto our broken crates in `/tests/crates/*`, 
   # where I also don't want to add machete-metadata.
-  @fd \
+  fd \
     --glob 'Cargo.toml' \
     --type file \
     --exclude tests \
     -X cargo machete {}
 
 [group('testing')]
+lint-dependencies-udeps:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  # check unused deps with cargo udeps.
+  # Optional, since udeps is much slower because it 
+  # needs to additionally compile the workspace with nightly
+  echo "check for unused normal dependencies"
+  cargo +nightly udeps --workspace
+
+  echo "check for unused dev dependencies"
+  cargo +nightly udeps --workspace --all-targets
+
+[group('testing')]
 lint-js *args:
-  deno run -A npm:eslint@9 static templates gui-tests eslint.config.js {{ args }}
+  deno run -A npm:eslint@9 \
+    crates/bin/docs_rs_web/static \
+    crates/bin/docs_rs_web/templates \
+    eslint.config.js \
+    gui-tests \
+    {{ args }}
   
 [group('testing')]
 run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web

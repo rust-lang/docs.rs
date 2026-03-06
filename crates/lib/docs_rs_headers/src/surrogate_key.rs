@@ -3,7 +3,6 @@
 //! https://www.fastly.com/documentation/reference/http/http-headers/Surrogate-Key/haeders.surrogate keys
 
 use anyhow::{Context as _, bail};
-use derive_more::Deref;
 use docs_rs_types::KrateName;
 use headers::{self, Header};
 use http::{HeaderName, HeaderValue};
@@ -15,8 +14,16 @@ pub static SURROGATE_KEY: HeaderName = HeaderName::from_static("surrogate-key");
 /// a single surrogate key.
 ///
 /// The typical Fastly `Surrogate-Key` header might include more than one.
-#[derive(Debug, Clone, Deref, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SurrogateKey(HeaderValue);
+
+impl core::ops::Deref for SurrogateKey {
+    type Target = HeaderValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl SurrogateKey {
     pub const fn from_static(s: &'static str) -> Self {

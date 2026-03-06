@@ -1,3 +1,5 @@
+use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -24,8 +26,8 @@ pub struct Config {
     pub build_limits: Arc<docs_rs_build_limits::Config>,
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         Ok(Self {
             temp_dir: prefix.join("tmp"),
@@ -47,8 +49,8 @@ impl Config {
         })
     }
 
-    #[cfg(any(feature = "testing", test))]
-    pub fn test_config() -> anyhow::Result<Self> {
+    #[cfg(test)]
+    fn test_config() -> Result<Self> {
         let mut config = Self::from_environment()?;
 
         config.include_default_targets = true;

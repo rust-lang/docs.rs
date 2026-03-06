@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT build_status as \"build_status!: BuildStatus\"\n            FROM crates\n            INNER JOIN releases ON crates.id = releases.crate_id\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            WHERE crates.name = $1 AND releases.version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0b4084390b6c738c6f26c2dd13eff6ec8e7ea47c4d005d6cc00dbc60f69380cf"
+}

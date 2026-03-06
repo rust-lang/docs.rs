@@ -1,10 +1,11 @@
-use crate::{Config, QueuedCrate, metrics};
+use crate::{Config, PRIORITY_DEFAULT, PRIORITY_DEPRIORITIZED, QueuedCrate, metrics};
 use anyhow::Result;
 use docs_rs_database::{
     Pool,
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{KrateName, Version};
 use futures_util::TryStreamExt as _;
 use std::{collections::HashMap, sync::Arc};
@@ -13,14 +14,12 @@ use std::{collections::HashMap, sync::Arc};
 pub struct AsyncBuildQueue {
     pub(super) config: Arc<Config>,
     pub(super) db: Pool,
-    queue_metrics: metrics::BuildQueueMetrics,
-    max_attempts: i32,
+    pub(super) queue_metrics: metrics::BuildQueueMetrics,
 }
 
 impl AsyncBuildQueue {
     pub fn new(db: Pool, config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Self {
         AsyncBuildQueue {
-            max_attempts: config.build_attempts.into(),
             config,
             db,
             queue_metrics: metrics::BuildQueueMetrics::new(otel_meter_provider),
@@ -81,29 +80,16 @@ impl AsyncBuildQueue {
 
         Ok(sqlx::query!(
             r#"
-                SELECT
-                    priority,
-                    COUNT(*) as "count!"
-                FROM queue
-                WHERE attempt < $1
-                GROUP BY priority"#,
-            self.max_attempts,
+            SELECT
+                priority,
+                COUNT(*) as "count!"
+            FROM queue
+            GROUP BY priority"#,
         )
         .fetch(&mut *conn)
         .map_ok(|row| (row.priority, row.count as usize))
         .try_collect()
         .await?)
-    }
-
-    pub async fn failed_count(&self) -> Result<usize> {
-        let mut conn = self.db.get_async().await?;
-
-        Ok(sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!" FROM queue WHERE attempt >= $1;"#,
-            self.max_attempts,
-        )
-        .fetch_one(&mut *conn)
-        .await? as usize)
     }
 
     pub async fn queued_crates(&self) -> Result<Vec<QueuedCrate>> {
@@ -119,9 +105,7 @@ impl AsyncBuildQueue {
                 registry,
                 attempt
              FROM queue
-             WHERE attempt < $1
              ORDER BY priority ASC, attempt ASC, id ASC"#,
-            self.max_attempts
         )
         .fetch_all(&mut *conn)
         .await?)
@@ -133,11 +117,9 @@ impl AsyncBuildQueue {
             "SELECT id
              FROM queue
              WHERE
-                attempt < $1 AND
-                name = $2 AND
-                version = $3
+                name = $1 AND
+                version = $2
              ",
-            self.max_attempts,
             name as _,
             version as _,
         )
@@ -183,6 +165,51 @@ impl AsyncBuildQueue {
         Ok(())
     }
 
+    /// Decreases the priority of all releases coming from bigger workspaces.
+    ///
+    /// In a separate method so we can do a bulk-select & update.
+    pub async fn deprioritize_workspaces(&self) -> Result<()> {
+        let mut conn = self.db.get_async().await?;
+
+        let high_priority_names: Vec<_> = sqlx::query!(
+            r#"
+             SELECT DISTINCT name AS "name: KrateName"
+             FROM queue
+             WHERE priority = $1"#,
+            PRIORITY_DEFAULT
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|row| row.name)
+        .collect();
+
+        let to_deprioritize: Vec<_> = workspaces::get_crate_counts(&mut conn, high_priority_names)
+            .await?
+            .into_iter()
+            .filter_map(|(name, count)| {
+                (count > self.config.deprioritize_workspace_size.into()).then(|| name.to_string())
+            })
+            .collect();
+
+        sqlx::query!(
+            r#"
+            UPDATE queue
+            SET priority = $3
+            WHERE
+                name = ANY($1) AND
+                priority = $2
+            "#,
+            &to_deprioritize[..],
+            PRIORITY_DEFAULT,
+            PRIORITY_DEPRIORITIZED,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        Ok(())
+    }
+
     /// Decreases the priority of all releases currently present in the queue not matching the version passed to *at least* new_priority.
     pub async fn deprioritize_other_releases(
         &self,
@@ -197,12 +224,10 @@ impl AsyncBuildQueue {
              WHERE
                 name = $2
                 AND version != $3
-                AND attempt < $4
              ",
             new_priority,
             name as _,
             latest_version as _,
-            self.max_attempts,
         )
         .execute(&mut *conn)
         .await?;
@@ -238,9 +263,12 @@ impl AsyncBuildQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use docs_rs_types::testing::{KRATE, V1, V2};
+    use docs_rs_storage::testing::TestStorage;
+    use docs_rs_test_fakes::{FakeGithubStats, FakeRelease};
+    use docs_rs_types::testing::{BAR, BAZ, FOO, KRATE, V1, V2};
     use pretty_assertions::assert_eq;
 
     const FAILED_KRATE: KrateName = KrateName::from_static("failed_crate");
@@ -250,10 +278,21 @@ mod tests {
     // test& app context. Then we could migrate this.
     struct TestEnv {
         db: TestDatabase,
+        storage: TestStorage,
         queue: AsyncBuildQueue,
     }
 
+    impl TestEnv {
+        async fn fake_release(&self) -> FakeRelease<'_> {
+            FakeRelease::new(self.db.pool().clone(), self.storage.storage().clone())
+        }
+    }
+
     async fn test_queue() -> Result<TestEnv> {
+        test_queue_with_config(Config::from_environment()?).await
+    }
+
+    async fn test_queue_with_config(config: Config) -> Result<TestEnv> {
         let test_metrics = TestMetrics::new();
         let db = TestDatabase::new(
             &docs_rs_database::Config::test_config()?,
@@ -261,13 +300,16 @@ mod tests {
         )
         .await?;
 
-        let queue = AsyncBuildQueue::new(
-            db.pool().clone(),
-            Arc::new(Config::from_environment()?),
+        let storage = TestStorage::from_config(
+            docs_rs_storage::Config::test_config()?.into(),
             test_metrics.provider(),
-        );
+        )
+        .await?;
 
-        Ok(TestEnv { db, queue })
+        let queue =
+            AsyncBuildQueue::new(db.pool().clone(), Arc::new(config), test_metrics.provider());
+
+        Ok(TestEnv { db, storage, queue })
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -290,18 +332,19 @@ mod tests {
         let env = test_queue().await?;
         let queue = env.queue;
 
+        assert_eq!(queue.pending_count().await?, 0);
+
         let mut conn = env.db.async_conn().await?;
         sqlx::query!(
-            "
-                INSERT INTO queue (name, version, priority, attempt, last_attempt )
-                VALUES ($1, $2, 0, 99, NOW())",
+            "INSERT INTO queue (name, version, priority, attempt, last_attempt )
+             VALUES ($1, $2, 0, 5, NOW())",
             FAILED_KRATE as _,
             V1 as _
         )
         .execute(&mut *conn)
         .await?;
 
-        assert_eq!(queue.pending_count().await?, 0);
+        assert_eq!(queue.pending_count().await?, 1);
 
         queue.add_crate(&FAILED_KRATE, &V1, 9, None).await?;
 
@@ -309,9 +352,9 @@ mod tests {
 
         let row = sqlx::query!(
             "SELECT priority, attempt, last_attempt
-                     FROM queue
-                     WHERE name = $1 AND version = $2",
-            "failed_crate",
+             FROM queue
+             WHERE name = $1 AND version = $2",
+            FAILED_KRATE as _,
             V1 as _
         )
         .fetch_one(&mut *conn)
@@ -333,7 +376,7 @@ mod tests {
         let mut conn = env.db.async_conn().await?;
         assert!(queue.has_build_queued(&KRATE, &V1).await.unwrap());
 
-        sqlx::query!("UPDATE queue SET attempt = 6")
+        sqlx::query!("DELETE FROM queue")
             .execute(&mut *conn)
             .await
             .unwrap();
@@ -383,6 +426,81 @@ mod tests {
         queue.remove_crate_from_queue(&KRATE).await?;
 
         assert_eq!(queue.pending_count().await?, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_deprio_workspace() -> Result<()> {
+        let mut config = Config::from_environment()?;
+        // so any workspace with more than 1 crate is deprioritized
+        config.deprioritize_workspace_size = 1;
+        let env = test_queue_with_config(config).await?;
+
+        let mut conn = env.db.async_conn().await?;
+
+        // make FOO and BAR a workspace
+        {
+            let repo_id = FakeGithubStats {
+                repo: "owner1/repo1".into(),
+                stars: 0,
+                forks: 0,
+                issues: 0,
+            }
+            .create(&mut conn)
+            .await?;
+
+            for name in [FOO, BAR] {
+                env.fake_release()
+                    .await
+                    .name(&name)
+                    .version(V1)
+                    .create()
+                    .await?;
+            }
+
+            sqlx::query!("UPDATE releases SET repository_id = $1", repo_id)
+                .execute(&mut *conn)
+                .await?;
+        }
+
+        let queue = env.queue;
+
+        // enqueue FOO and BAR with priority 0
+        for krate in &[FOO, BAR, BAZ] {
+            queue.add_crate(krate, &V1, 0, None).await?;
+        }
+
+        // unchanged priorities
+        assert_eq!(
+            queue
+                .queued_crates()
+                .await?
+                .into_iter()
+                .map(|q| (q.name, q.priority))
+                .collect::<Vec<_>>(),
+            vec![(FOO, 0), (BAR, 0), (BAZ, 0)]
+        );
+
+        workspaces::rewrite_repository_stats(&mut conn).await?;
+
+        assert_eq!(
+            workspaces::get_crate_counts(&mut conn, vec![FOO, BAR, BAZ]).await?,
+            HashMap::from_iter([(FOO, 2), (BAR, 2)])
+        );
+
+        queue.deprioritize_workspaces().await?;
+
+        // updated priorities & order
+        assert_eq!(
+            queue
+                .queued_crates()
+                .await?
+                .into_iter()
+                .map(|q| (q.name, q.priority))
+                .collect::<Vec<_>>(),
+            vec![(BAZ, 0), (FOO, 1), (BAR, 1)]
+        );
 
         Ok(())
     }

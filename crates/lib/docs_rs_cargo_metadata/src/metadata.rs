@@ -1,25 +1,25 @@
 use anyhow::{Context, Result};
 use docs_rs_types::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path, process, str};
 
 pub struct CargoMetadata {
     root: Package,
 }
 
 impl CargoMetadata {
-    #[cfg(feature = "testing")]
-    pub fn load_from_host_path(source_dir: &std::path::Path) -> Result<Self> {
-        let res = std::process::Command::new("cargo")
-            .args(["metadata", "--format-version", "1", "--offline"])
+    pub fn load_from_host_path(source_dir: impl AsRef<Path>) -> Result<Self> {
+        let source_dir = source_dir.as_ref();
+        let res = process::Command::new("cargo")
+            .args(["metadata", "--format-version", "1"])
             .current_dir(source_dir)
             .output()?;
         let status = res.status;
         if !status.success() {
-            let stderr = std::str::from_utf8(&res.stderr).unwrap_or("");
+            let stderr = str::from_utf8(&res.stderr).unwrap_or("");
             anyhow::bail!("error returned by `cargo metadata`: {status}\n{stderr}")
         }
-        Self::load_from_metadata(std::str::from_utf8(&res.stdout)?)
+        Self::load_from_metadata(str::from_utf8(&res.stdout)?)
     }
 
     pub fn load_from_metadata(metadata: &str) -> Result<Self> {

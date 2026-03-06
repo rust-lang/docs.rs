@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                           r.id as \"rid: ReleaseId\",\n                           c.name as \"name: KrateName\",\n                           r.version as \"version: Version\"\n                       FROM\n                            crates as c\n                            INNER JOIN releases as r ON c.id = r.crate_id\n                       WHERE\n                            r.archive_storage = FALSE\n                       ORDER BY r.id\n                       LIMIT $1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rid: ReleaseId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "version: Version",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6d63000cd0dc4998a80279dac1bed55e2c0e11bf32cf4539d38a43789f5fefe8"
+}

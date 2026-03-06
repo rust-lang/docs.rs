@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE repositories as repo\n        SET crate_count = (\n            select count(*)\n            from releases AS r\n            inner join crates as c on c.latest_version_id = r.id\n            where r.repository_id = repo.id\n        )\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "18f63b04baf4df9a340e6908c93f4fa701370aec942809666fe2645fd38efa69"
+}

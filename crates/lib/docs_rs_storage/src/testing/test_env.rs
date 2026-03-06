@@ -21,7 +21,11 @@ impl Deref for TestStorage {
 impl TestStorage {
     pub async fn from_kind(kind: StorageKind, meter_provider: &AnyMeterProvider) -> Result<Self> {
         docs_rs_logging::testing::init();
-        Self::from_config(Arc::new(Config::test_config(kind)?), meter_provider).await
+        Self::from_config(
+            Arc::new(Config::test_config_with_kind(kind)?),
+            meter_provider,
+        )
+        .await
     }
 
     pub async fn from_config(

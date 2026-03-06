@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO owners (login, avatar, kind)\n                 VALUES ($1, $2, $3)\n                 ON CONFLICT (login) DO UPDATE\n                     SET\n                         avatar = EXCLUDED.avatar,\n                         kind = EXCLUDED.kind\n                 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        {
+          "Custom": {
+            "name": "owner_kind",
+            "kind": {
+              "Enum": [
+                "user",
+                "team"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "87952bd450ed2c13b99bd502a73a84edd7d17e6171523ebbd57f1d9dd7c9b46c"
+}

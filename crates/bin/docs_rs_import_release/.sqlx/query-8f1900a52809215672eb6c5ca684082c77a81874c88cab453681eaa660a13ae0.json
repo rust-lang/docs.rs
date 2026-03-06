@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pattern, priority FROM crate_priorities",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pattern",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "priority",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8f1900a52809215672eb6c5ca684082c77a81874c88cab453681eaa660a13ae0"
+}

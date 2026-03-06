@@ -1,3 +1,5 @@
+use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
 use url::Url;
 
@@ -7,8 +9,8 @@ pub struct Config {
     pub endpoint: Option<Url>,
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         Ok(Self {
             endpoint: maybe_env("OTEL_EXPORTER_OTLP_ENDPOINT")?,
         })

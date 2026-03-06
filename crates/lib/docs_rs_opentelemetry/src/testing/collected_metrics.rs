@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use derive_more::Deref;
 use opentelemetry_sdk::metrics::data::{
     AggregatedMetrics, HistogramDataPoint, Metric, MetricData, ResourceMetrics, SumDataPoint,
 };
@@ -22,7 +21,8 @@ impl CollectedMetrics {
             .0
             .iter()
             .flat_map(|rm| rm.scope_metrics())
-            .find(|sm| sm.scope().name() == scope)
+            .filter(|sm| sm.scope().name() == scope)
+            .last()
             .ok_or_else(|| {
                 anyhow!(
                     "Scope '{}' not found in collected metrics: {:?}",
@@ -34,7 +34,8 @@ impl CollectedMetrics {
         Ok(CollectedMetric(
             scope_metrics
                 .metrics()
-                .find(|m| m.name() == name)
+                .filter(|m| m.name() == name)
+                .last()
                 .ok_or_else(|| {
                     anyhow!(
                         "Metric '{}' not found in scope '{}': {:?}",
@@ -47,8 +48,15 @@ impl CollectedMetrics {
     }
 }
 
-#[derive(Debug, Deref)]
 pub struct CollectedMetric<'a>(&'a Metric);
+
+impl core::ops::Deref for CollectedMetric<'_> {
+    type Target = Metric;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
 
 impl<'a> CollectedMetric<'a> {
     pub fn get_u64_counter(&'a self) -> &'a SumDataPoint<u64> {

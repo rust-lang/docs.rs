@@ -1,4 +1,3 @@
-pub mod blacklist;
 mod build_queue;
 mod config;
 pub mod docbuilder;
@@ -10,9 +9,6 @@ mod testing;
 mod utils;
 
 pub use config::Config;
-pub use docbuilder::rustwide_builder::{
-    PackageKind, RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustwideBuilder,
-    read_format_version_from_rustdoc_json,
-};
+pub use docbuilder::rustwide_builder::{PackageKind, RustwideBuilder};
 pub use metrics::BuilderMetrics;
 pub use queue_builder::queue_builder;

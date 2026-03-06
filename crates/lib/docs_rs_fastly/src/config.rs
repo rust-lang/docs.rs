@@ -1,5 +1,9 @@
+use anyhow::Result;
+use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env};
 use url::Url;
+
+const FASTLY_API_HOST: &str = "https://api.fastly.com";
 
 #[derive(Debug)]
 pub struct Config {
@@ -13,18 +17,33 @@ pub struct Config {
     pub service_sid: Option<String>,
 }
 
-impl Config {
-    pub fn from_environment() -> anyhow::Result<Self> {
+impl AppConfig for Config {
+    fn from_environment() -> Result<Self> {
         Ok(Self {
-            api_host: env(
-                "DOCSRS_FASTLY_API_HOST",
-                "https://api.fastly.com".parse().unwrap(),
-            )?,
+            api_host: env("DOCSRS_FASTLY_API_HOST", FASTLY_API_HOST.parse().unwrap())?,
             api_token: maybe_env("DOCSRS_FASTLY_API_TOKEN")?,
             service_sid: maybe_env("DOCSRS_FASTLY_SERVICE_SID_WEB")?,
         })
     }
 
+    /// test config
+    /// assumes we're using the mock CDN, but generates a config where
+    /// `is_valid` is true.`
+    #[cfg(any(test, feature = "testing"))]
+    fn test_config() -> Result<Self> {
+        let cfg = Self {
+            api_host: FASTLY_API_HOST.parse().unwrap(),
+            api_token: Some("some_token".into()),
+            service_sid: Some("some_sid".into()),
+        };
+
+        debug_assert!(cfg.is_valid());
+
+        Ok(cfg)
+    }
+}
+
+impl Config {
     pub fn is_valid(&self) -> bool {
         self.api_token.is_some() && self.service_sid.is_some()
     }

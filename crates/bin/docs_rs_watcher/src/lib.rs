@@ -11,7 +11,7 @@ mod testing;
 pub use config::Config;
 pub use db::{delete_crate, delete_version};
 pub use index::Index;
-pub use rebuilds::{queue_rebuilds, queue_rebuilds_faulty_rustdoc};
+pub use rebuilds::queue_rebuilds;
 
 use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
 use anyhow::Result;

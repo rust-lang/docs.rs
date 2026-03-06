@@ -1,6 +1,7 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use docs_rs_builder::{Config, PackageKind, RustwideBuilder, queue_builder};
+use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
 use docs_rs_env_vars::maybe_env;
@@ -9,8 +10,10 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::runtime;
 
 fn main() -> Result<()> {
-    docs_rs_builder::logging::init();
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let logging_config = docs_rs_logging::Config::from_environment()?;
+    docs_rs_builder::logging::init(&logging_config);
+    let _guard =
+        docs_rs_logging::init_with_config(&logging_config).context("error initializing logging")?;
 
     if let Err(err) = CommandLine::parse().handle_args() {
         eprintln!("error running builder: {:?}", err);
@@ -42,19 +45,18 @@ impl CommandLine {
         let config = Arc::new(Config::from_environment()?);
         let ctx = runtime.block_on(async {
             Context::builder()
+                .with_runtime()
                 .await?
+                .with_meter_provider()?
                 .with_pool()
                 .await?
                 .with_storage()
                 .await?
-                .with_cdn()
-                .await?
-                .with_build_queue()
-                .await?
-                .with_registry_api()
-                .await?
-                .with_repository_stats()
-                .await?
+                .with_maybe_cdn()?
+                .with_build_queue()?
+                .with_registry_api()?
+                .with_repository_stats()?
+                .with_build_limits()?
                 .build()
         })?;
 

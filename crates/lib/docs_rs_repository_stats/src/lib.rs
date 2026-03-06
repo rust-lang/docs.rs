@@ -3,6 +3,7 @@ mod errors;
 mod github;
 mod gitlab;
 mod updater;
+pub mod workspaces;
 
 pub use config::Config;
 pub use errors::RateLimitReached;

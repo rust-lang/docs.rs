@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO queue (name, version, priority, attempt, last_attempt )\n             VALUES ($1, $2, 0, 5, NOW())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "276400867113567750e95f66264185a6347ca3ae4b703914c08c57d5ac5580af"
+}

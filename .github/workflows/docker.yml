@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: setup docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: build docker image
         uses: docker/build-push-action@v6

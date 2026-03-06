@@ -1,8 +1,12 @@
 [package]
 name = "docs_rs_utils"
-version = "0.1.0"
-edition = "2024"
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 build = "build.rs"
+
+[features]
+testing = []
 
 [dependencies]
 anyhow = { workspace = true }
@@ -17,5 +21,5 @@ chrono = { workspace = true }
 time = "0.3"
 tokio = { workspace = true }
 
-[features]
-testing = []
+[lints]
+workspace = true

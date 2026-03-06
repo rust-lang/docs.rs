@@ -185,7 +185,7 @@ mod tests {
         let diff = [Difference::CrateNotInIndex(KRATE)];
 
         // calling with dry-run leads to no change
-        handle_diff(&env.context, diff.iter(), true).await?;
+        handle_diff(&env, diff.iter(), true).await?;
 
         assert_eq!(
             count(&env, "SELECT count(*) FROM crates WHERE name = 'krate'").await?,
@@ -193,7 +193,7 @@ mod tests {
         );
 
         // without dry-run the crate will be deleted
-        handle_diff(&env.context, diff.iter(), false).await?;
+        handle_diff(&env, diff.iter(), false).await?;
 
         assert_eq!(
             count(&env, "SELECT count(*) FROM crates WHERE name = 'krate'").await?,
@@ -223,11 +223,11 @@ mod tests {
 
         assert_eq!(count(&env, "SELECT count(*) FROM releases").await?, 2);
 
-        handle_diff(&env.context, diff.iter(), true).await?;
+        handle_diff(&env, diff.iter(), true).await?;
 
         assert_eq!(count(&env, "SELECT count(*) FROM releases").await?, 2);
 
-        handle_diff(&env.context, diff.iter(), false).await?;
+        handle_diff(&env, diff.iter(), false).await?;
 
         assert_eq!(
             single_row::<Version>(
@@ -254,14 +254,14 @@ mod tests {
 
         let diff = [Difference::ReleaseYank(KRATE, V1, false)];
 
-        handle_diff(&env.context, diff.iter(), true).await?;
+        handle_diff(&env, diff.iter(), true).await?;
 
         assert_eq!(
             single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
             vec![true]
         );
 
-        handle_diff(&env.context, diff.iter(), false).await?;
+        handle_diff(&env, diff.iter(), false).await?;
 
         assert_eq!(
             single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
@@ -276,13 +276,13 @@ mod tests {
         let env = TestEnvironment::new().await?;
         let diff = [Difference::ReleaseNotInDb(KRATE, V1)];
 
-        handle_diff(&env.context, diff.iter(), true).await?;
+        handle_diff(&env, diff.iter(), true).await?;
 
         let build_queue = env.build_queue()?;
 
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        handle_diff(&env.context, diff.iter(), false).await?;
+        handle_diff(&env, diff.iter(), false).await?;
 
         assert_eq!(
             build_queue
@@ -301,13 +301,13 @@ mod tests {
         let env = TestEnvironment::new().await?;
         let diff = [Difference::CrateNotInDb(KRATE, vec![V1, V2])];
 
-        handle_diff(&env.context, diff.iter(), true).await?;
+        handle_diff(&env, diff.iter(), true).await?;
 
         let build_queue = env.build_queue()?;
 
         assert!(build_queue.queued_crates().await?.is_empty());
 
-        handle_diff(&env.context, diff.iter(), false).await?;
+        handle_diff(&env, diff.iter(), false).await?;
 
         assert_eq!(
             build_queue

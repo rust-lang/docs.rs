@@ -1,15 +1,20 @@
 [package]
 name = "docs_rs_watcher"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true }
-crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https", "git-performance", "parallel"] }
-crates-index-diff = { version = "28.0.0", features = [ "max-performance" ]}
+# NOTE: on the new infra, switch back from `git-https-reqwest` to `git-https` (curl) once the curl version is new enough
+crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https-reqwest", "git-performance", "parallel"] }
+# NOTE: on the new infra, switch back from `http-reqwest` to `http-curl` once the curl version is new enough
+crates-index-diff = { version = "29.0.0", default-features = false, features = ["http-reqwest", "max-performance", "semver"] }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
+docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
@@ -23,17 +28,22 @@ docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
-rayon = { workspace = true }
+rayon = "1.6.1"
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
+docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly", features = ["testing"] }
+docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
-mockito = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
+
+[lints]
+workspace = true

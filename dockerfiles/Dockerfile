@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.92-slim-trixie AS chef
+FROM rust:1.93-slim-trixie AS chef
 
 # We only pay the installation cost once, 
 # it will be cached from the second build onwards
@@ -97,12 +97,20 @@ RUN apt-get update \
 
 WORKDIR /srv/docsrs
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
-CMD ["start-web-server", "0.0.0.0:3000"]
+# copy the new binary, will also be used as default entrypoint.
+COPY --from=build /artifacts/docs_rs_web /usr/local/bin/
 
-COPY --from=build /artifacts/cratesfyi /usr/local/bin
-COPY static /srv/docsrs/static
-COPY vendor /srv/docsrs/vendor
+# also copy the old legacy binary, so we can fall back to using it 
+# by just overwriting the entrypoint & CMD when running this container.
+COPY --from=build /artifacts/cratesfyi /usr/local/bin/
+
+# copy necessary assets
+COPY crates/bin/docs_rs_web/static /srv/docsrs/static
+COPY crates/bin/docs_rs_web/vendor /srv/docsrs/vendor
+
+ENTRYPOINT ["/usr/bin/tini"]
+CMD ["/usr/local/bin/docs_rs_web", "--", "0.0.0.0:3000"]
+
 
 ########################
 #  Build server stage  #
@@ -170,7 +178,7 @@ COPY --from=build /artifacts/docs_rs_watcher /usr/local/bin/
 COPY --from=build /artifacts/cratesfyi /usr/local/bin/
 
 ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_watcher", "--"]
-CMD ["start", "--repository-stats-updater=true", "--queue-rebuilds=true"]
+CMD ["start", "--repository-stats-updater", "--queue-rebuilds"]
 
 ###############
 #  CLI stage  #
@@ -196,6 +204,9 @@ RUN apt-get update \
 
 WORKDIR /srv/docsrs
 
-ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/cratesfyi", "--"]
+COPY crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
 
+COPY --from=build /artifacts/docs_rs_admin /usr/local/bin/
 COPY --from=build /artifacts/cratesfyi /usr/local/bin
+
+ENTRYPOINT ["/usr/bin/tini", "/usr/local/bin/docs_rs_admin", "--"]

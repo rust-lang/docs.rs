@@ -1,0 +1,56 @@
+define-function: (
+    "check-tab",
+    [tab_name, centered, click_next],
+    block {
+        // We check the tab's name is the one expected.
+        assert-text: (|tabs_menu_selector| + " > li a.pure-menu-active .title", |tab_name|)
+        // We check it also matches the one we clicked.
+        assert: |tabs_menu_selector| + " > li:nth-of-type(" + |current_tab| + ") a.pure-menu-active"
+
+        // We ensure that the content of the page is (not?) centered.
+        if: (|centered|, block {
+            assert: "body.centered"
+            assert-css: ("div.container", {
+                "margin-top": "0px",
+                "margin-bottom": "0px",
+                "margin-left": "70px",
+                "margin-right": "70px",
+            })
+        })
+        else: block {
+            assert: "body:not(.centered)"
+            assert-css: ("div.container", {
+                "margin-top": "0px",
+                "margin-bottom": "0px",
+                "margin-left": "0px",
+                "margin-right": "0px",
+            })
+        }
+        if: (|click_next|, block {
+            store-value: (current_tab, |current_tab| + 1)
+            click: |tabs_menu_selector| + " > li:nth-of-type(" + |current_tab| + ")"
+        })
+    }
+)
+
+define-function: (
+    "check-tab-centered",
+    [tab_name, click_next],
+    block {
+        call-function: (
+            "check-tab",
+            {"tab_name": |tab_name|, "centered": true, "click_next": |click_next|},
+        )
+    }
+)
+
+define-function: (
+    "check-tab-not-centered",
+    [tab_name, click_next],
+    block {
+        call-function: (
+            "check-tab",
+            {"tab_name": |tab_name|, "centered": false, "click_next": |click_next|},
+        )
+    }
+)

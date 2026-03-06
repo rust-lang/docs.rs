@@ -24,11 +24,18 @@
 
 #[allow(clippy::disallowed_types)]
 mod header_impl {
-    use derive_more::Deref;
     use headers::{self, ETag, Header, IfNoneMatch as OriginalIfNoneMatch};
 
-    #[derive(Debug, Clone, PartialEq, Deref)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct IfNoneMatch(pub headers::IfNoneMatch);
+
+    impl core::ops::Deref for IfNoneMatch {
+        type Target = headers::IfNoneMatch;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
 
     impl Header for IfNoneMatch {
         fn name() -> &'static http::HeaderName {

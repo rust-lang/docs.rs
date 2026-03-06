@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO doc_coverage (\n            release_id, total_items, documented_items,\n            total_items_needing_examples, items_with_examples\n        )\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (release_id) DO UPDATE\n                SET\n                    total_items = $2,\n                    documented_items = $3,\n                    total_items_needing_examples = $4,\n                    items_with_examples = $5\n            RETURNING release_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "release_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "494e6b594aba915ba2582eca4797b13012576b2800c257ae3b0d3b7706c69a2c"
+}

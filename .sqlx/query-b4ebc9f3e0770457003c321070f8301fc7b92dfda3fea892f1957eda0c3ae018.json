@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                        r.rustdoc_status,\n                        r.is_library\n                    FROM\n                        crates as c\n                        INNER JOIN releases AS r ON c.id = r.crate_id\n                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id\n                    WHERE\n                        c.name = $1 AND\n                        r.version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "is_library",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "b4ebc9f3e0770457003c321070f8301fc7b92dfda3fea892f1957eda0c3ae018"
+}

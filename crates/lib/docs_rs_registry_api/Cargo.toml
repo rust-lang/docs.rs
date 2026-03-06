@@ -1,16 +1,32 @@
 [package]
 name = "docs_rs_registry_api"
 version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
+docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 sqlx = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
+mime = { workspace = true }
+mockito = { workspace = true }
+test-case = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

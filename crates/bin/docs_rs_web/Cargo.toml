@@ -1,0 +1,99 @@
+[package]
+name = "docs_rs_web"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+build = "build.rs"
+
+[package.metadata.cargo-machete]
+ignored = [
+    # used in build script output
+    "slug", # used in askama templates, can be moved to web binary
+]
+
+[dependencies]
+anyhow = { workspace = true }
+askama = { workspace = true }
+async-stream = { workspace = true }
+axum = { version = "0.8.1", features = ["macros"] }
+axum-extra = { workspace = true }
+base64 = { workspace = true }
+bon = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+comrak = { version = "0.50.0", default-features = false }
+constant_time_eq = "0.4.2"
+docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
+docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
+docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
+docs_rs_config = { path = "../../lib/docs_rs_config" }
+docs_rs_context = { path = "../../lib/docs_rs_context" }
+docs_rs_database = { path = "../../lib/docs_rs_database" }
+docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
+docs_rs_headers = { path = "../../lib/docs_rs_headers" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging" }
+docs_rs_mimes = { path = "../../lib/docs_rs_mimes" }
+docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
+docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
+docs_rs_storage = { path = "../../lib/docs_rs_storage" }
+docs_rs_types = { path = "../../lib/docs_rs_types" }
+docs_rs_uri = { path = "../../lib/docs_rs_uri" }
+docs_rs_utils = { path = "../../lib/docs_rs_utils" }
+font-awesome-as-a-crate = { path = "../../lib/font-awesome-as-a-crate" }
+futures-util = { workspace = true }
+getrandom = "0.4.0"
+http = { workspace = true }
+lol_html = "2.0.0"
+mime = { workspace = true }
+num_cpus = "1.15.0"
+opentelemetry = { workspace = true }
+postcard = { workspace = true }
+rayon-core = "1.13.0"
+regex = { workspace = true }
+reqwest = { workspace = true }
+sentry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slug = { workspace = true }
+sqlx = { workspace = true }
+syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
+toml = { workspace = true }
+tower = "0.5.1"
+tower-http = { version = "0.6.0", features = ["catch-panic", "fs", "timeout", "trace"] }
+tracing = { workspace = true }
+tracing-futures = { version = "0.2.5", features = ["futures-03", "std-future"] }
+url = { workspace = true }
+
+[build-dependencies]
+anyhow = { version = "1.0.42", features = ["backtrace"] }
+grass = { version = "0.13.1", default-features = false }
+md5 = "0.8.0"
+syntect = { version = "5.0.0", default-features = false, features = ["dump-create", "parsing", "regex-onig", "yaml-load"] }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
+docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
+docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
+docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
+docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
+docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
+docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
+http-body-util = "0.1.0"
+indoc = "2.0.0"
+kuchikiki = "0.8"
+mockito = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+test-case = { workspace = true }
+walkdir = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{%- import "releases/header.html" as release_macros -%}
+
+{%- block title -%}Queue - Docs.rs{%- endblock title -%}
+
+{%- block header -%}
+    {% call release_macros::header(title="Queue", description=description, tab="queue", owner="") %}{% endcall %}
+{%- endblock header -%}
+
+{%- block topbar -%}
+    {% let search_query = Some(String::new()) %}
+    {%- include "header/topbar.html" -%}
+{%- endblock topbar -%}
+
+{%- block body_classes -%}
+centered
+{%- endblock body_classes -%}
+
+{%- block body -%}
+    <div class="container">
+        <div class="recent-releases-container">
+            <div class="release pure-g">
+                <div class="pure-u-1-2">
+                    <strong>currently being built</strong>
+                </div>
+            </div>
+
+            <div class = "pure-g">
+                <div class="pure-u-1-2">
+                    {%- if !in_progress_builds.is_empty() %}
+                        <ol class="queue-list">
+                            {% for release in in_progress_builds -%}
+                                {%- set release_params = RustdocParams::new(release.0).with_req_version(release.1) -%}
+                                <li>
+                                    <a href="{{ release_params.builds_url() }}">
+                                        {{ release.0 }} {{ release.1 }}
+                                    </a>
+                                </li>
+                            {%- endfor %}
+                        </ol>
+                    {%- else %}
+                        <div class="about">
+                            <p><strong>There is nothing currently being built</strong></p>
+                        </div>
+                    {%- endif %}
+                </div>
+            </div>
+
+            <div class="release">
+                <strong>Build Queue</strong>
+            </div>
+
+            <ol class="queue-list">
+                {%- if !queue.is_empty() -%}
+                    {% for crate_item in queue -%}
+                        <li>
+                            <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                {{- crate_item.name }} {{ crate_item.version -}}
+                            </a>
+
+                            {% if crate_item.priority != 0 -%}
+                                (priority: {{ crate_item.priority }})
+                            {%- endif %}
+                        </li>
+                    {%- endfor %}
+                {%- else %}
+                    <strong>There is nothing in the build queue</strong>
+                {%- endif %}
+            </ol>
+
+            <div class="release">
+                <strong>Rebuild Queue</strong>
+            </div>
+
+            <div class="about">
+                <p>
+                    We continuously rebuild the latest versions for all crates so they can
+                    benefit from new features in rustdoc.
+                </p>
+                {%- if !expand_rebuild_queue -%}
+                    {% let rebuild_queue_len = rebuild_queue.len() %}
+                    <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
+                    <p><a href="?expand=1">Show</a></p>
+                {%- endif -%}
+            </div>
+
+            {%- if expand_rebuild_queue -%}
+                <ol class="rebuild-queue-list">
+                    {%- if !rebuild_queue.is_empty() -%}
+                        {% for crate_item in rebuild_queue -%}
+                            <li>
+                                <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                    {{- crate_item.name }} {{ crate_item.version -}}
+                                </a>
+                            </li>
+                        {%- endfor %}
+                    {%- else %}
+                        <strong>There is nothing in the rebuild queue</strong>
+                    {%- endif %}
+                </ol>
+            {%- endif -%}
+        </div>
+    </div>
+{%- endblock body -%}

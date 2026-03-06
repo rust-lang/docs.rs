@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            releases.features as \"features?: Vec<DbFeature>\",\n            releases.dependencies\n        FROM releases\n        INNER JOIN crates ON crates.id = releases.crate_id\n        WHERE crates.name = $1 AND releases.version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "features?: Vec<DbFeature>",
+        "type_info": {
+          "Custom": {
+            "name": "feature[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "feature",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "subfeatures",
+                        "TextArray"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "dependencies",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "e0a18d6ec1e1a0d4e14a1f2e4e4e9e8985fe619d5a502d8428af509ba1b9d9b0"
+}
