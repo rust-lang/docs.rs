@@ -469,13 +469,17 @@ pub(crate) async fn crate_details_handler(
 
     let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
+    let build_statistics =
+        BuildStatistics::fetch_for_release(&mut conn, details.crate_id, details.release_id).await?;
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
         Err(e) => warn!(?e, "error fetching readme"),
     }
-
-    let build_statistics =
-        BuildStatistics::fetch_for_release(&mut conn, details.crate_id, details.release_id).await?;
 
     let CrateDetails {
         version,

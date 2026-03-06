@@ -246,6 +246,29 @@ pub(crate) async fn source_browser_handler(
 
     let inner_path = params.inner_path();
 
+    let current_folder = if let Some(last_slash_pos) = inner_path.rfind('/') {
+        &inner_path[..last_slash_pos + 1]
+    } else {
+        ""
+    };
+    let show_parent_link = !current_folder.is_empty();
+
+    let file_list = FileList::from_path(&mut conn, params.name(), version, current_folder)
+        .await?
+        .unwrap_or_default();
+
+    let metadata = MetaData::from_crate(
+        &mut conn,
+        params.name(),
+        version,
+        Some(params.req_version().clone()),
+    )
+    .await?;
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     // try to get actual file first
     // skip if request is a directory
     let stream = if !params.path_is_folder() {
@@ -325,25 +348,6 @@ pub(crate) async fn source_browser_handler(
     } else {
         (None, None)
     };
-
-    let current_folder = if let Some(last_slash_pos) = inner_path.rfind('/') {
-        &inner_path[..last_slash_pos + 1]
-    } else {
-        ""
-    };
-    let show_parent_link = !current_folder.is_empty();
-
-    let file_list = FileList::from_path(&mut conn, params.name(), version, current_folder)
-        .await?
-        .unwrap_or_default();
-
-    let metadata = MetaData::from_crate(
-        &mut conn,
-        params.name(),
-        version,
-        Some(params.req_version().clone()),
-    )
-    .await?;
 
     Ok(SourcePage {
         file_list,

@@ -105,6 +105,19 @@ pub(crate) async fn build_details_handler(
     .await?
     .ok_or(AxumNope::BuildNotFound)?;
 
+    let metadata = MetaData::from_crate(
+        &mut conn,
+        params.name(),
+        &version,
+        Some(params.req_version().clone()),
+    )
+    .await?;
+    let params = params.apply_metadata(&metadata);
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
         // legacy case, for old builds the build log was stored in the database.
         (output, Vec::new(), None)
@@ -154,15 +167,6 @@ pub(crate) async fn build_details_handler(
 
         (file_content, all_log_filenames, current_filename)
     };
-
-    let metadata = MetaData::from_crate(
-        &mut conn,
-        params.name(),
-        &version,
-        Some(params.req_version().clone()),
-    )
-    .await?;
-    let params = params.apply_metadata(&metadata);
 
     Ok(BuildDetailsPage {
         metadata,
