@@ -147,24 +147,27 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    /// Return unstable cargo flags (`-Z*`) from `cargo_args`.
+    /// Return unstable cargo flags from `cargo_args` that are allowed on host commands.
     ///
-    /// These flags need to be passed to all cargo invocations (e.g., `cargo metadata`,
-    /// `cargo fetch`) to support unstable features like `bindeps`.
+    /// Most host-side cargo invocations on docs.rs are not sandboxed, so only whitelisted
+    /// unstable flags are allowed here.
     ///
-    /// See <https://github.com/rust-lang/docs.rs/issues/2710>.
+    /// Currently this includes only `bindeps`, accepted as either `-Zbindeps` or
+    /// `-Z bindeps`.
     pub fn unstable_cargo_flags(&self) -> Vec<String> {
         let mut flags = Vec::new();
         let mut iter = self.cargo_args.iter();
         while let Some(arg) = iter.next() {
-            if arg.starts_with("-Z") {
-                if arg == "-Z" {
-                    // `-Z bindeps` style (two separate args)
-                    if let Some(value) = iter.next() {
+            if arg == "-Z" {
+                // `-Z bindeps` style (two separate args)
+                if let Some(value) = iter.next() {
+                    if value == "bindeps" {
                         flags.push("-Z".to_string());
                         flags.push(value.clone());
                     }
-                } else {
+                }
+            } else if let Some(value) = arg.strip_prefix("-Z") {
+                if value == "bindeps" {
                     // `-Zbindeps` style (single arg)
                     flags.push(arg.clone());
                 }
@@ -581,7 +584,7 @@ mod test_parsing {
         let metadata = Metadata::from_str(manifest).unwrap();
         assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
 
-        // Test multiple unstable flags
+        // Test that only whitelisted flags are returned.
         let manifest = r#"
             [package]
             name = "test"
@@ -589,10 +592,7 @@ mod test_parsing {
             cargo-args = ["-Zbindeps", "-Z", "build-std", "--offline"]
         "#;
         let metadata = Metadata::from_str(manifest).unwrap();
-        assert_eq!(
-            metadata.unstable_cargo_flags(),
-            vec!["-Zbindeps", "-Z", "build-std"]
-        );
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
 
         // Test no unstable flags
         let manifest = r#"

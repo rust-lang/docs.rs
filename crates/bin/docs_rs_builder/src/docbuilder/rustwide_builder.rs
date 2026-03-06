@@ -97,13 +97,14 @@ fn load_metadata_from_rustwide(
     workspace: &Workspace,
     toolchain: &Toolchain,
     source_dir: &Path,
-    unstable_flags: &[String],
+    host_unstable_flags: &[String],
 ) -> Result<CargoMetadata> {
     let mut args = vec!["metadata", "--format-version", "1"];
-    // Add unstable flags (e.g., `-Z bindeps`) to support crates using unstable cargo features.
+    // Add whitelisted unstable flags (currently `bindeps`) for host-side `cargo metadata`.
     // See https://github.com/rust-lang/docs.rs/issues/2710
-    let unstable_flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
-    args.extend(unstable_flags_refs);
+    let host_unstable_flag_refs: Vec<&str> =
+        host_unstable_flags.iter().map(|s| s.as_str()).collect();
+    args.extend(host_unstable_flag_refs);
 
     let res = Command::new(workspace, toolchain.cargo())
         .args(&args)
@@ -487,15 +488,17 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        // Read docsrs metadata first to get unstable cargo flags (e.g., `-Z bindeps`)
+        // Read docs.rs metadata first to get host-side unstable cargo flags (e.g., `-Z bindeps`).
         let docsrs_metadata = Metadata::from_crate_root(path).unwrap_or_default();
-        let unstable_flags = docsrs_metadata.unstable_cargo_flags();
+        let host_unstable_flags = docsrs_metadata.unstable_cargo_flags();
 
-        let metadata =
-            load_metadata_from_rustwide(&self.workspace, &self.toolchain, path, &unstable_flags)
-                .map_err(|err| {
-                    err.context(format!("failed to load local package {}", path.display()))
-                })?;
+        let metadata = load_metadata_from_rustwide(
+            &self.workspace,
+            &self.toolchain,
+            path,
+            &host_unstable_flags,
+        )
+        .map_err(|err| err.context(format!("failed to load local package {}", path.display())))?;
         let package = metadata.root();
         self.build_package(
             &package
@@ -692,13 +695,16 @@ impl RustwideBuilder {
                     info!("removing lockfile and reattempting build");
                     std::fs::remove_file(cargo_lock)?;
 
-                    // Get unstable cargo flags for commands that need them (e.g., `-Z bindeps`)
-                    let unstable_flags = metadata.unstable_cargo_flags();
+                    // Get host-side unstable cargo flags for host-side cargo commands.
+                    let host_unstable_flags = metadata.unstable_cargo_flags();
 
                     {
                         let _span = info_span!("cargo_generate_lockfile").entered();
                         let mut args = vec!["generate-lockfile"];
-                        let flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
+                        let flags_refs: Vec<&str> = host_unstable_flags
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect();
                         args.extend(flags_refs.iter());
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
@@ -708,7 +714,10 @@ impl RustwideBuilder {
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
                         let mut args = vec!["fetch", "--locked"];
-                        let flags_refs: Vec<&str> = unstable_flags.iter().map(|s| s.as_str()).collect();
+                        let flags_refs: Vec<&str> = host_unstable_flags
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect();
                         args.extend(flags_refs.iter());
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .cd(build.host_source_dir())
