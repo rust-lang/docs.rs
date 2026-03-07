@@ -7,6 +7,8 @@ pub use runtime_ext::Handle;
 
 use anyhow::{Context as _, Result};
 use std::fmt;
+use std::pin::Pin;
+use std::task::{Context, Poll, ready};
 use std::{panic, thread, time::Duration};
 use tokio::runtime;
 use tracing::{Span, error, warn};
@@ -66,23 +68,53 @@ pub const RUSTDOC_STATIC_PATH: &str = "/-/rustdoc.static/";
 /// })
 /// .await?
 /// ```
-pub async fn spawn_blocking<F, R>(f: F) -> Result<R>
+pub fn spawn_blocking<F, R>(f: F) -> SpawnBlockingHandle<R>
 where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
 {
     let span = Span::current();
 
-    let result = tokio::task::spawn_blocking(move || {
+    let inner = tokio::task::spawn_blocking(move || {
         let _guard = span.enter();
         f()
-    })
-    .await;
+    });
 
-    match result {
-        Ok(result) => result,
-        Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
-        Err(err) => Err(err.into()),
+    SpawnBlockingHandle { inner }
+}
+
+pub struct SpawnBlockingHandle<R> {
+    inner: tokio::task::JoinHandle<Result<R>>,
+}
+
+impl<R> SpawnBlockingHandle<R> {
+    pub fn abort(&self) {
+        self.inner.abort();
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.inner.is_finished()
+    }
+
+    pub fn id(&self) -> tokio::task::Id {
+        self.inner.id()
+    }
+
+    pub fn into_inner(self) -> tokio::task::JoinHandle<Result<R>> {
+        self.inner
+    }
+}
+
+impl<R> Future for SpawnBlockingHandle<R> {
+    type Output = Result<R>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let result = ready!(Pin::new(&mut self.inner).poll(cx));
+        match result {
+            Ok(result) => Poll::Ready(result),
+            Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
+            Err(err) => Poll::Ready(Err(err.into())),
+        }
     }
 }
 

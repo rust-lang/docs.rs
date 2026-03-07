@@ -45,6 +45,7 @@ strum = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { version = "0.7.15", default-features = false, features = ["io-util"] }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
