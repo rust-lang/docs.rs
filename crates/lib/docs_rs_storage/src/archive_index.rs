@@ -2,7 +2,7 @@ use crate::types::FileRange;
 use anyhow::{Context as _, Result, anyhow, bail};
 use docs_rs_types::CompressionAlgorithm;
 use itertools::Itertools as _;
-use sqlx::{Acquire as _, QueryBuilder, Row as _, Sqlite};
+use sqlx::{Acquire as _, ConnectOptions as _, QueryBuilder, Row as _, Sqlite};
 use std::{fs, io, path::Path};
 use tracing::instrument;
 
@@ -26,37 +26,35 @@ impl FileInfo {
 /// crates a new empty SQLite database, and returns a configured connection
 /// pool to connect to the DB.
 /// Any existing DB at the given path will be deleted first.
-async fn sqlite_create<P: AsRef<Path>>(path: P) -> Result<sqlx::SqlitePool> {
+async fn sqlite_create<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection> {
     let path = path.as_ref();
     if path.exists() {
         fs::remove_file(path)?;
     }
 
-    sqlx::SqlitePool::connect_with(
-        sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(path)
-            .read_only(false)
-            .pragma("synchronous", "full")
-            .create_if_missing(true),
-    )
-    .await
-    .map_err(Into::into)
+    sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(path)
+        .read_only(false)
+        .pragma("synchronous", "full")
+        .create_if_missing(true)
+        .connect()
+        .await
+        .map_err(Into::into)
 }
 
 /// open existing SQLite database, return a configured connection poll
 /// to connect to the DB.
 /// Will error when the database doesn't exist at that path.
-async fn sqlite_open<P: AsRef<Path>>(path: P) -> Result<sqlx::SqlitePool> {
-    sqlx::SqlitePool::connect_with(
-        sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(path)
-            .read_only(true)
-            .pragma("synchronous", "off") // not needed for readonly db
-            .serialized(false) // same as OPEN_NOMUTEX
-            .create_if_missing(false),
-    )
-    .await
-    .map_err(Into::into)
+async fn sqlite_open<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection> {
+    sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .pragma("synchronous", "off") // not needed for readonly db
+        .serialized(false) // same as OPEN_NOMUTEX
+        .create_if_missing(false)
+        .connect()
+        .await
+        .map_err(Into::into)
 }
 
 /// create an archive index based on a zipfile.
@@ -67,8 +65,7 @@ pub(crate) async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::De
     zipfile: &mut R,
     destination: P,
 ) -> Result<()> {
-    let pool = sqlite_create(destination).await?;
-    let mut conn = pool.acquire().await?;
+    let mut conn = sqlite_create(destination).await?;
     let mut tx = conn.begin().await?;
 
     sqlx::query(
@@ -128,7 +125,7 @@ pub(crate) async fn create<R: io::Read + io::Seek, P: AsRef<Path> + std::fmt::De
     tx.commit().await?;
 
     // VACUUM outside the transaction
-    sqlx::query("VACUUM").execute(&mut *conn).await?;
+    sqlx::query("VACUUM").execute(&mut conn).await?;
 
     Ok(())
 }
@@ -172,10 +169,9 @@ pub(crate) async fn find_in_file<P: AsRef<Path> + std::fmt::Debug>(
     archive_index_path: P,
     search_for: &str,
 ) -> Result<Option<FileInfo>> {
-    let pool = sqlite_open(archive_index_path).await?;
-    let mut conn = pool.acquire().await?;
+    let mut conn = sqlite_open(archive_index_path).await?;
 
-    find_in_sqlite_index(&mut *conn, search_for).await
+    find_in_sqlite_index(&mut conn, search_for).await
 }
 
 #[cfg(test)]
@@ -226,11 +222,10 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(&mut tf, &tempfile).await?;
 
-        let pool = sqlite_open(&tempfile).await?;
-        let mut conn = pool.acquire().await?;
+        let mut conn = sqlite_open(&tempfile).await?;
 
         let row = sqlx::query("SELECT count(*) FROM files")
-            .fetch_one(&mut *conn)
+            .fetch_one(&mut conn)
             .await?;
 
         assert_eq!(row.get::<i64, _>(0), 100_000);
