@@ -20,7 +20,8 @@ use std::{borrow::Cow, sync::Arc, time::Instant};
 ///
 /// Otel default buckets are not suited for that.
 pub const RESPONSE_TIME_HISTOGRAM_BUCKETS: &[f64] = &[
-    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0,
+    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5, 3.5, 5.0, 7.5, 10.0,
+    15.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0,
 ];
 
 #[derive(Debug)]
