@@ -11,7 +11,7 @@ use crate::{
     metrics::StorageMetrics,
     types::{FileRange, StorageKind},
     utils::{
-        file_list::get_file_list,
+        file_list::{get_file_list, walk_dir_recursive},
         storage_path::{rustdoc_archive_path, source_archive_path},
     },
 };
@@ -21,15 +21,13 @@ use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
-use futures_util::stream::BoxStream;
+use futures_util::{TryStreamExt as _, future, stream::BoxStream};
 use std::{
     fmt,
-    fs::{self, File},
-    io::{self, BufReader},
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::Mutex;
+use tokio::{fs, io, sync::Mutex};
 use tracing::{debug, info_span, instrument, trace, warn};
 
 pub struct AsyncStorage {
@@ -254,8 +252,8 @@ impl AsyncStorage {
 
         let _write_guard = rwlock.lock().await;
 
-        if tokio::fs::try_exists(&local_index_path).await? {
-            tokio::fs::remove_file(&local_index_path).await?;
+        if fs::try_exists(&local_index_path).await? {
+            fs::remove_file(&local_index_path).await?;
         }
 
         Ok(())
@@ -271,7 +269,7 @@ impl AsyncStorage {
             .parent()
             .ok_or_else(|| anyhow::anyhow!("index path without parent"))?
             .to_path_buf();
-        tokio::fs::create_dir_all(&parent).await?;
+        fs::create_dir_all(&parent).await?;
 
         // Create a unique temp file in the cache folder.
         let (temp_file, mut temp_path) = spawn_blocking({
@@ -282,16 +280,16 @@ impl AsyncStorage {
         .into_parts();
 
         // Download into temp file.
-        let mut temp_file = tokio::fs::File::from_std(temp_file);
+        let mut temp_file = fs::File::from_std(temp_file);
         let mut stream = self.get_stream(remote_index_path).await?.content;
-        tokio::io::copy(&mut stream, &mut temp_file).await?;
+        io::copy(&mut stream, &mut temp_file).await?;
         temp_file.sync_all().await?;
 
         temp_path.disable_cleanup(true);
 
         // Publish atomically.
         // Will replace any existing file.
-        tokio::fs::rename(&temp_path, local_index_path).await?;
+        fs::rename(&temp_path, local_index_path).await?;
 
         // fsync parent dir to make rename durable
         spawn_blocking(move || {
@@ -431,8 +429,9 @@ impl AsyncStorage {
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
         let root_dir = root_dir.as_ref();
-        let (mut zip_content,    file_paths) =
+        let (zip_content, file_paths) =
             spawn_blocking({
+                use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
 
@@ -480,24 +479,25 @@ impl AsyncStorage {
 
         let alg = CompressionAlgorithm::default();
         let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
-        let compressed_index_content = {
+        let (zip_content, compressed_index_content) = {
             let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
-            tokio::fs::create_dir_all(&self.config.temp_dir).await?;
+            fs::create_dir_all(&self.config.temp_dir).await?;
             let local_index_path =
                 tempfile::NamedTempFile::new_in(&self.config.temp_dir)?.into_temp_path();
 
-            archive_index::create(&mut io::Cursor::new(&mut zip_content), &local_index_path)
-                .await?;
+            let zip_cursor =
+                archive_index::create(std::io::Cursor::new(zip_content), &local_index_path).await?;
+            let zip_content = zip_cursor.into_inner();
 
             let mut buf: Vec<u8> = Vec::new();
             compress_async(
-                &mut tokio::io::BufReader::new(tokio::fs::File::open(&local_index_path).await?),
+                &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
                 &mut buf,
                 alg,
             )
             .await?;
-            buf
+            (zip_content, buf)
         };
 
         self.backend
@@ -531,45 +531,53 @@ impl AsyncStorage {
         let root_dir = root_dir.as_ref();
         let alg = CompressionAlgorithm::default();
 
-        let (blobs, file_paths_and_mimes) = spawn_blocking({
-            let prefix = prefix.to_owned();
-            let root_dir = root_dir.to_owned();
-            move || {
-                let mut file_paths = Vec::new();
-                let mut blobs: Vec<BlobUpload> = Vec::new();
-                for file_path in get_file_list(&root_dir) {
-                    let file_path = file_path?;
+        let (file_paths_and_mimes, blobs): (Vec<_>, Vec<_>) = walk_dir_recursive(&root_dir)
+            .err_into::<anyhow::Error>()
+            .map_ok(|item| async move {
+                // Some files have insufficient permissions
+                // (like .lock file created by cargo in documentation directory).
+                // Skip these files.
+                let Ok(file) = fs::File::open(&item).await else {
+                    return Ok(None);
+                };
 
-                    // Some files have insufficient permissions
-                    // (like .lock file created by cargo in documentation directory).
-                    // Skip these files.
-                    let Ok(file) = fs::File::open(root_dir.join(&file_path)) else {
-                        continue;
-                    };
+                let content = {
+                    let mut buf: Vec<u8> = Vec::new();
+                    compress_async(io::BufReader::new(file), &mut buf, alg).await?;
+                    buf
+                };
 
-                    let file_size = file.metadata()?.len();
+                let bucket_path = prefix.join(&item.relative).to_string_lossy().to_string();
 
-                    let content = compress(file, alg)?;
-                    let bucket_path = prefix.join(&file_path).to_string_lossy().to_string();
+                let file_size = item.metadata.len();
 
-                    let file_info = FileEntry {
-                        path: file_path,
-                        size: file_size,
-                    };
-                    let mime = file_info.mime();
-                    file_paths.push(file_info);
+                let file_info = FileEntry {
+                    path: item.relative.clone(),
+                    size: file_size,
+                };
+                let mime = file_info.mime();
 
-                    blobs.push(BlobUpload {
+                Ok(Some((
+                    file_info,
+                    BlobUpload {
                         path: bucket_path,
                         mime,
                         content,
                         compression: Some(alg),
-                    });
-                }
-                Ok((blobs, file_paths))
-            }
-        })
-        .await?;
+                    },
+                )))
+            })
+            .try_buffer_unordered(self.config.local_filesystem_parallelism)
+            .try_filter_map(|item| future::ready(Ok(item)))
+            .try_fold(
+                (Vec::new(), Vec::new()),
+                |(mut file_paths_and_mimes, mut blobs), (file_info, blob)| async move {
+                    file_paths_and_mimes.push(file_info);
+                    blobs.push(blob);
+                    Ok((file_paths_and_mimes, blobs))
+                },
+            )
+            .await?;
 
         self.backend.store_batch(blobs).await?;
         Ok((file_paths_and_mimes, alg))
@@ -640,7 +648,17 @@ impl AsyncStorage {
         let source_path = source_path.as_ref();
 
         let alg = CompressionAlgorithm::default();
-        let content = compress(BufReader::new(File::open(source_path)?), alg)?;
+
+        let content = {
+            let mut buf: Vec<u8> = Vec::new();
+            compress_async(
+                io::BufReader::new(fs::File::open(source_path).await?),
+                &mut buf,
+                alg,
+            )
+            .await?;
+            buf
+        };
 
         let mime = detect_mime(&target_path).to_owned();
 
@@ -691,7 +709,6 @@ impl std::fmt::Debug for AsyncStorage {
 mod test {
     use super::*;
     use crate::testing::TestStorage;
-    use tokio::fs;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_outdated_local_archive_index_gets_redownloaded() -> Result<()> {
@@ -833,7 +850,6 @@ mod backend_tests {
     use crate::{PathNotFoundError, errors::SizeLimitReached};
     use docs_rs_headers::compute_etag;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use futures_util::TryStreamExt as _;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
@@ -1084,9 +1100,9 @@ mod backend_tests {
         for &file in &files {
             let path = dir.path().join(file);
             if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).await?;
             }
-            fs::write(path, "data")?;
+            fs::write(path, "data").await?;
         }
 
         let local_index_location = storage
@@ -1120,7 +1136,7 @@ mod backend_tests {
 
         // delete the existing index to test the download of it
         if local_index_location.exists() {
-            fs::remove_file(&local_index_location)?;
+            fs::remove_file(&local_index_location).await?;
         }
 
         // the first exists-query will download and store the index
@@ -1174,9 +1190,9 @@ mod backend_tests {
         for &file in &files {
             let path = dir.path().join(file);
             if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).await?;
             }
-            fs::write(path, "data")?;
+            fs::write(path, "data").await?;
         }
 
         let (stored_files, algs) = storage.store_all(Path::new("prefix"), dir.path()).await?;
