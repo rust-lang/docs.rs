@@ -933,7 +933,8 @@ pub(crate) async fn json_download_handler(
 
         stripped_format_version
             .parse::<RustdocJsonFormatVersion>()
-            .context("can't parse format version")?
+            .context("can't parse format version")
+            .map_err(AxumNope::BadRequest)?
     } else {
         RustdocJsonFormatVersion::Latest
     };
@@ -1074,7 +1075,10 @@ mod test {
         RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
     };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
-    use docs_rs_types::Version;
+    use docs_rs_types::{
+        Version,
+        testing::{KRATE, V2},
+    };
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -3636,6 +3640,34 @@ mod test {
             &format!("attachment; filename=\"{NAME}_{VERSION}_{TARGET}_latest.json\""),
         );
         web.assert_conditional_get(&path, &resp).await?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn json_download_bad_request() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V2)
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        let response = web
+            .get(&format!("/crate/{KRATE}/{V2}/json/963570%40"))
+            .await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            response
+                .text()
+                .await?
+                .contains("can&#39;t parse format version")
+        );
         Ok(())
     }
 
