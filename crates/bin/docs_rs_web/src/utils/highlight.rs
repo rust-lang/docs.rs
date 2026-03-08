@@ -135,4 +135,10 @@ mod tests {
         let highlighted = with_lang(Some("toml"), &text, None);
         assert!(highlighted.starts_with("&lt;p&gt;\n"));
     }
+
+    #[test]
+    fn rust_union_is_highlighted_as_keyword() {
+        let highlighted = with_lang(Some("rust"), "union Foo { field: u8 }\n", None);
+        assert!(highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+    }
 }
