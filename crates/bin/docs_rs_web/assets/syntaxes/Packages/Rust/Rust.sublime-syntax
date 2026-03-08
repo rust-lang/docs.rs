@@ -133,7 +133,10 @@ contexts:
     - match: \*mut\b
       scope: storage.modifier.rust
 
-    - match: \b(crate|extern|union|use|where)\b
+    - match: \b(crate|extern|use|where)\b
+      scope: keyword.other.rust
+
+    - match: \bunion(?=\s+[[:alpha:]_][[:alnum:]_]*\s*\{)\b
       scope: keyword.other.rust
 
     - match: \b(break|else|for|if|loop|match|while|continue)\b

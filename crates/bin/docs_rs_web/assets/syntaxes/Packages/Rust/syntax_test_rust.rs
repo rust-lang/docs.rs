@@ -1148,3 +1148,12 @@ let p_imm: *const u32 = &i as *const u32;
 type ExampleRawPointer = HashMap<*const i32, Option<i32>, BuildHasherDefault<FnvHasher>>;
 //                               ^^^^^^ storage.modifier - invalid
 //                                      ^^^ storage.type
+
+
+union MyUnion {
+// <- keyword.other
+    f1: u32,
+}
+
+let union = 1;
+//  ^^^^^ - keyword.other
