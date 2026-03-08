@@ -141,4 +141,20 @@ mod tests {
         let highlighted = with_lang(Some("rust"), "union Foo { field: u8 }\n", None);
         assert!(highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
     }
+
+    #[test]
+    fn rust_union_identifier_is_not_highlighted_as_keyword() {
+        let highlighted = with_lang(
+            Some("rust"),
+            "struct X { union: u32 }\nlet x = X { union: 0 };\n",
+            None,
+        );
+        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+    }
+
+    #[test]
+    fn rust_union_macro_name_is_not_highlighted_as_keyword() {
+        let highlighted = with_lang(Some("rust"), "macro_rules! union { () => {} }\nunion!();\n", None);
+        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+    }
 }
