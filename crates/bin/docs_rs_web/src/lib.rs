@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 #![allow(
     // clippy::cognitive_complexity,
     // TODO: `AxumNope::Redirect(EscapedURI, CachePolicy)` is too big.
