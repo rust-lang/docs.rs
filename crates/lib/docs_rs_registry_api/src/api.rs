@@ -401,7 +401,7 @@ mod tests {
 
         assert!(matches!(
             test_search(status, response.clone()).await.unwrap_err(),
-            Error::CrateIoApiError(status, errors) if errors == response
+            Error::CrateIoApiError(_status, errors) if errors == response
         ));
 
         Ok(())
