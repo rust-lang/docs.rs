@@ -139,22 +139,26 @@ mod tests {
     #[test]
     fn rust_union_is_highlighted_as_keyword() {
         let highlighted = with_lang(Some("rust"), "union Foo { field: u8 }\n", None);
-        assert!(highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+        assert!(highlighted.contains("<span class=\"syntax-keyword\">union</span> Foo"));
     }
 
     #[test]
     fn rust_union_identifier_is_not_highlighted_as_keyword() {
         let highlighted = with_lang(
             Some("rust"),
-            "struct X { union: u32 }\nlet x = X { union: 0 };\n",
+            "struct X { union: u32 }\nlet x = X { union: 0 };\nprintln!(\"{}\", x.union);\n",
             None,
         );
-        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+        assert!(highlighted.contains("union:"));
+        assert!(highlighted.contains("x.union"));
+        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>:"));
+        assert!(!highlighted.contains(".<span class=\"syntax-keyword\">union</span>"));
     }
 
     #[test]
     fn rust_union_macro_name_is_not_highlighted_as_keyword() {
         let highlighted = with_lang(Some("rust"), "macro_rules! union { () => {} }\nunion!();\n", None);
-        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>"));
+        assert!(highlighted.contains("macro_rules! union"));
+        assert!(!highlighted.contains("<span class=\"syntax-keyword\">union</span>!"));
     }
 }
