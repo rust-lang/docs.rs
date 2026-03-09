@@ -28,7 +28,7 @@ runs:
     - name: Build and tag the Docker image
       env:
         REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         tags: ${{ env.REGISTRY }}/docs-rs-web:latest
