@@ -135,4 +135,58 @@ mod tests {
         let highlighted = with_lang(Some("toml"), &text, None);
         assert!(highlighted.starts_with("&lt;p&gt;\n"));
     }
+
+    // "union" should be a keyword only in this case: `union X {}`.
+    #[test]
+    fn union_keyword() {
+        fn highlight_and_check(code: &str, should_contain: &[&str]) {
+            let highlighted = with_lang(Some("rust"), code, None);
+            for needle in should_contain {
+                if !highlighted.contains(needle) {
+                    panic!("{needle:?} isn't contained in {highlighted:?}");
+                }
+            }
+        }
+        highlight_and_check(
+            r#"
+struct X {
+    union: u32,
+}
+let union = X { union: 0 };
+println!("{}", union.union);"#,
+            &[
+                // "union" as field name
+                "{</span>\n    <span class=\"syntax-variable syntax-other syntax-member syntax-rust\">union</span><span class=\"syntax-punctuation syntax-separator syntax-type syntax-rust\">:</span> <span class=\"syntax-storage syntax-type syntax-rust\">u32</span",
+                // "union" as variable name
+                "let</span> union <span",
+                // "union" when creating a type with a field named "union"
+                "{</span> union<span class=\"syntax-punctuation syntax-separator syntax-rust\">:</span> <span class=\"syntax-constant syntax-numeric syntax-integer syntax-decimal syntax-rust\">0</span",
+                // Accessing a field named "union".
+                ",</span> union<span class=\"syntax-punctuation syntax-accessor syntax-dot syntax-rust\">.</span>union<span",
+            ],
+        );
+        highlight_and_check(
+            r#"
+macro_rules! union { () => {} }
+union!();"#,
+            &[
+                // "union" as macro name
+                "macro_rules!</span> <span class=\"syntax-entity syntax-name syntax-macro syntax-rust\">union</span>",
+                // Calling the "union" macro.
+                "<span class=\"syntax-support syntax-macro syntax-rust\">union!</span>",
+            ],
+        );
+        highlight_and_check(
+            "union X { a: u32 }",
+            // "union" has "syntax-keyword" in here, so all good.
+            &["<span class=\"syntax-keyword syntax-other syntax-rust\">union</span> X <span"],
+        );
+        highlight_and_check(
+            r#"union X<T> { a: T }"#,
+            // "union" has "syntax-keyword" in here, so all good.
+            &[
+                "<span class=\"syntax-keyword syntax-other syntax-rust\">union</span> <span class=\"syntax-meta syntax-generic syntax-rust\">X<span",
+            ],
+        );
+    }
 }
