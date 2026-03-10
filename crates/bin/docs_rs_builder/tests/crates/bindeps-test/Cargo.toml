@@ -6,7 +6,10 @@ edition = "2021"
 [package.metadata.docs.rs]
 cargo-args = ["-Zbindeps"]
 
+[build-dependencies]
+# This requires `-Z bindeps` to be accepted by cargo metadata/fetch.
+bindeps-helper = { path = "bindeps-helper", artifact = "bin" }
+
 [lib]
 name = "bindeps_test"
 path = "src/lib.rs"
-
