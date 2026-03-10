@@ -21,7 +21,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_registry_api::{self as registry_api, RegistryApi};
-use docs_rs_types::{KrateName, ReqVersion, Version};
+use docs_rs_types::{Duration, KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
 use futures_util::stream::TryStreamExt;
 use http::StatusCode;
@@ -731,11 +731,19 @@ struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
-    in_progress_builds: Vec<(KrateName, Version)>,
+    in_progress_builds: Vec<InProgressBuild>,
     expand_rebuild_queue: bool,
 }
 
 impl_axum_webpage! { BuildQueuePage }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InProgressBuild {
+    name: KrateName,
+    version: Version,
+    elapsed: Option<Duration>,
+    average_duration: Option<Duration>,
+}
 
 #[derive(Deserialize)]
 pub(crate) struct BuildQueueParams {
@@ -747,22 +755,35 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let in_progress_builds: Vec<(KrateName, Version)> = sqlx::query!(
+    let in_progress_builds: Vec<_> = sqlx::query_as!(
+        InProgressBuild,
         r#"SELECT
             crates.name as "name: KrateName",
-            releases.version as "version: Version"
+            releases.version as "version: Version",
+            CASE
+                WHEN builds.build_started IS NULL THEN NULL
+                ELSE (CURRENT_TIMESTAMP - builds.build_started)
+            END AS "elapsed: Duration",
+            (
+                SELECT AVG(prev_builds.build_finished - prev_builds.build_started)
+                FROM crates AS prev_crates
+                INNER JOIN releases AS prev_releases ON prev_crates.id = prev_releases.crate_id
+                INNER JOIN builds AS prev_builds ON prev_releases.id = prev_builds.rid
+                WHERE
+                    prev_crates.id = releases.crate_id
+                    AND prev_builds.id <> builds.id
+                    AND prev_builds.build_status = 'success'
+                    AND prev_builds.build_started IS NOT NULL
+            ) AS "average_duration: Duration"
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
             builds.build_status = 'in_progress'
-         ORDER BY builds.id ASC"#
+         ORDER BY builds.id ASC"#,
     )
     .fetch_all(&mut *conn)
-    .await?
-    .into_iter()
-    .map(|rec| (rec.name, rec.version))
-    .collect();
+    .await?;
 
     let mut rebuild_queue = Vec::new();
     let mut queue = build_queue
@@ -770,9 +791,9 @@ pub(crate) async fn build_queue_handler(
         .await?
         .into_iter()
         .filter(|krate| {
-            !in_progress_builds.iter().any(|(name, version)| {
+            !in_progress_builds.iter().any(|in_progress| {
                 // use `.any` instead of `.contains` to avoid cloning name& version for the match
-                *name == krate.name && *version == krate.version
+                in_progress.name == krate.name && in_progress.version == krate.version
             })
         })
         .collect::<Vec<_>>();
@@ -1858,27 +1879,27 @@ mod tests {
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
 
-            let lists = full
-                .select(".queue-list")
-                .expect("missing queues")
-                .collect::<Vec<_>>();
-            assert_eq!(lists.len(), 2);
-
-            let in_progress_items: Vec<_> = lists[0]
-                .as_node()
-                .select("li > a")
-                .expect("missing in progress list items")
+            let in_progress_items: Vec<_> = full
+                .select("table tbody tr td:first-child > a")
+                .expect("missing in progress build rows")
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(in_progress_items, vec![format!("foo {V1}")]);
 
-            let queued_items: Vec<_> = lists[1]
-                .as_node()
-                .select("li > a")
+            let queued_items: Vec<_> = full
+                .select(".queue-list > li > a")
                 .expect("missing queued list items")
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(queued_items, vec![format!("bar {V2}")]);
+
+            let runtime_columns: Vec<_> = full
+                .select("table tbody tr td:nth-child(2), table tbody tr td:nth-child(3)")
+                .expect("missing duration columns")
+                .map(|node| node.text_contents().trim().to_string())
+                .collect();
+            assert_eq!(runtime_columns.len(), 2);
+            assert!(runtime_columns.into_iter().all(|value| !value.is_empty()));
 
             Ok(())
         });
