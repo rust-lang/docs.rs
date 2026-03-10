@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            crates.name as \"name: KrateName\",\n            releases.version as \"version: Version\",\n            CASE\n                WHEN builds.build_started IS NULL THEN NULL\n                ELSE (CURRENT_TIMESTAMP - builds.build_started)\n            END AS \"elapsed: Duration\",\n            (\n                SELECT AVG(prev_builds.build_finished - prev_builds.build_started)\n                FROM crates AS prev_crates\n                INNER JOIN releases AS prev_releases ON prev_crates.id = prev_releases.crate_id\n                INNER JOIN builds AS prev_builds ON prev_releases.id = prev_builds.rid\n                WHERE\n                    prev_crates.id = releases.crate_id\n                    AND prev_builds.id <> builds.id\n                    AND prev_builds.build_status = 'success'\n                    AND prev_builds.build_started IS NOT NULL\n            ) AS \"average_duration: Duration\"\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            builds.build_status = 'in_progress'\n         ORDER BY builds.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "version: Version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "elapsed: Duration",
+        "type_info": "Interval"
+      },
+      {
+        "ordinal": 3,
+        "name": "average_duration: Duration",
+        "type_info": "Interval"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "cbe0780dcbb1724ab13a27b1d693912b47078f48d724c29166af04b10a49e7d8"
+}

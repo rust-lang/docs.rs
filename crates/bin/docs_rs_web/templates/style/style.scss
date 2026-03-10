@@ -276,7 +276,7 @@ div.recent-releases-container {
         padding: 0;
     }
 
-    ol.queue-list li, ol.rebuild-queue-list li {
+    .queue-list li, .rebuild-queue-list li {
         list-style-type: decimal;
         margin-left: 20px;
 
@@ -413,6 +413,48 @@ div.recent-releases-container {
       background-color: var(--color-warn-background);
       padding: .2em .8em .2em .5em;
       border-radius: 1em;
+    }
+
+    table {
+        margin: 1.5em 1em;
+        --table-border: 1px solid var(--color-border);
+        border-radius: 4px;
+
+        border-spacing: 0;
+        border-collapse: separate;
+        border: var(--table-border);
+        overflow: hidden;
+
+        a {
+            color: var(--color-url);
+        }
+    }
+
+    th, td {
+        padding: 4px 1em;
+        font-weight: 300;
+        text-align: center;
+    }
+
+    th {
+        border-bottom: var(--table-border);
+    }
+
+    /* All this code is to have rounded borders on the table */
+    table th:not(:last-child),
+    table td:not(:last-child) {
+        border-right: var(--table-border);
+    }
+
+    table thead>tr:not(:last-child)>th,
+    table thead>tr:not(:last-child)>td,
+    table tbody>tr:not(:last-child)>th,
+    table tbody>tr:not(:last-child)>td,
+    table tr:not(:last-child)>td,
+    table tr:not(:last-child)>th,
+    table thead:not(:last-child),
+    table tbody:not(:last-child) {
+        border-bottom: var(--table-border);
     }
 }
 
