@@ -2286,30 +2286,32 @@ mod tests {
     #[test]
     #[ignore] // Requires full build environment
     fn test_bindeps_crate_builds_with_unstable_flags() -> Result<()> {
-        // This test verifies that the fix for issue #2710 works: crates using
-        // unstable cargo features like `bindeps` can now build because the unstable
-        // flags from `cargo-args` are correctly passed to `cargo metadata` and
-        // `cargo fetch` commands.
-        //
-        // The test crate has `cargo-args = ["-Zbindeps"]` in its Cargo.toml.
-        // With the fix, `load_metadata_from_rustwide` accepts unstable flags and
-        // passes them to `cargo metadata`, allowing the build to succeed.
-
         let env = TestEnvironment::new()?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
+        let crate_path = Path::new("tests/crates/bindeps-test");
+        let metadata = Metadata::from_crate_root(crate_path)?;
+        let unstable_flags = metadata.unstable_cargo_flags();
 
-        // With the fix, cargo metadata is called with the `-Zbindeps` flag
-        // from cargo-args, allowing the build to succeed
-        let result = builder.build_local_package(Path::new("tests/crates/bindeps-test"));
+        // The test crate contains a real `artifact = "bin"` dependency, so metadata
+        // must fail without `-Zbindeps`.
+        assert!(
+            load_metadata_from_rustwide(&builder.workspace, &builder.toolchain, crate_path, &[])
+                .is_err(),
+            "cargo metadata should fail without -Zbindeps",
+        );
 
-        assert!(result.is_ok(), "build should succeed with bindeps fix");
-        if let Ok(summary) = result {
-            assert!(
-                summary.successful,
-                "build should be successful with bindeps fix"
-            );
-        }
+        // With the fix, host-side cargo metadata receives the whitelisted unstable flag.
+        assert!(
+            load_metadata_from_rustwide(
+                &builder.workspace,
+                &builder.toolchain,
+                crate_path,
+                &unstable_flags,
+            )
+            .is_ok(),
+            "cargo metadata should succeed with -Zbindeps",
+        );
 
         Ok(())
     }
