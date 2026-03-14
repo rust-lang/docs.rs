@@ -38,7 +38,8 @@ pub async fn delete_crate(
         // remove existing local archive index files.
         let local_index_folder = storage
             .config()
-            .local_archive_cache_path
+            .archive_index_cache
+            .path
             .join(&remote_folder);
         if local_index_folder.exists() {
             fs::remove_dir_all(&local_index_folder)
@@ -79,7 +80,7 @@ pub async fn delete_version(
             .await?;
     }
 
-    let local_archive_cache = &storage.config().local_archive_cache_path;
+    let local_archive_cache = &storage.config().archive_index_cache.path;
     let mut paths = vec![source_archive_path(name, version)];
     if is_library {
         paths.push(rustdoc_archive_path(name, version));
@@ -552,7 +553,8 @@ mod tests {
             assert!(
                 !storage
                     .config()
-                    .local_archive_cache_path
+                    .archive_index_cache
+                    .path
                     .join(&archive_index)
                     .exists()
             );
