@@ -444,7 +444,20 @@ impl Cache {
 
         // fast path: try to use whatever is there, no locking
         let force_redownload = match find_in_file(&local_index_path, path_in_archive).await {
-            Ok(res) => return Ok(res),
+            Ok(res) => {
+                // Keep moka's recency/frequency view in sync with successful fast-path
+                // file lookups so TTI and admission decisions reflect real usage.
+                if self.manager.get(&local_index_path).await.is_none() {
+                    let entry_path = local_index_path.clone();
+                    self.manager
+                        .entry(local_index_path.clone())
+                        .or_insert_with(
+                            async move { Arc::new(Entry::from_path(&entry_path).await) },
+                        )
+                        .await;
+                }
+                return Ok(res);
+            }
             Err(err) => {
                 let force_redownload = !err.is::<PathNotFoundError>();
                 debug!(?err, "archive index lookup failed, will try repair.");
@@ -1107,6 +1120,7 @@ mod tests {
             downloader.download_count(&format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}")),
             0
         );
+        assert!(cache.manager.get(&cache_file).await.is_some());
 
         Ok(())
     }
