@@ -1,4 +1,5 @@
 use crate::{
+    Config,
     db::{delete_crate, delete_version},
     index::Index,
 };
@@ -89,7 +90,11 @@ async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
 /// Updates registry index repository and adds new crates into build queue.
 ///
 /// Returns the number of crates added
-pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<usize> {
+pub(crate) async fn get_new_crates(
+    context: &Context,
+    index: &Index,
+    config: &Config,
+) -> Result<usize> {
     let mut conn = context.pool()?.get_async().await?;
 
     let last_seen_reference = last_seen_reference(&mut conn).await?;
@@ -110,7 +115,7 @@ pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<u
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &changes, index.repository_url()).await;
+    let crates_added = process_changes(context, &changes, index.repository_url(), config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -128,11 +133,12 @@ async fn process_changes(
     context: &Context,
     changes: &Vec<Change>,
     registry: Option<&str>,
+    config: &Config,
 ) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
-        match process_change(context, change, registry).await {
+        match process_change(context, change, registry, config).await {
             Ok(added) => {
                 if added {
                     crates_added += 1;
@@ -151,6 +157,7 @@ async fn process_change(
     context: &Context,
     change: &Change,
     registry: Option<&str>,
+    config: &Config,
 ) -> Result<bool> {
     let crate_version: CrateVersion = change
         .versions()
@@ -170,10 +177,10 @@ async fn process_change(
         }
         Change::CrateDeleted { name, .. } => {
             let name: KrateName = name.parse()?;
-            process_crate_deleted(context, &name).await?
+            process_crate_deleted(context, config, &name).await?
         }
         Change::VersionDeleted(_release) => {
-            process_version_deleted(context, &crate_version).await?
+            process_version_deleted(context, config, &crate_version).await?
         }
     };
     Ok(change.added().is_some())
@@ -223,12 +230,17 @@ async fn process_version_added(
     Ok(())
 }
 
-async fn process_version_deleted(context: &Context, release: &CrateVersion) -> Result<()> {
+async fn process_version_deleted(
+    context: &Context,
+    config: &Config,
+    release: &CrateVersion,
+) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
 
     delete_version(
         &mut conn,
         context.storage()?,
+        config,
         &release.name,
         &release.version,
     )
@@ -252,10 +264,14 @@ async fn process_version_deleted(context: &Context, release: &CrateVersion) -> R
     Ok(())
 }
 
-async fn process_crate_deleted(context: &Context, krate: &KrateName) -> Result<()> {
+async fn process_crate_deleted(
+    context: &Context,
+    config: &Config,
+    krate: &KrateName,
+) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
 
-    delete_crate(&mut conn, context.storage()?, krate)
+    delete_crate(&mut conn, context.storage()?, config, krate)
         .await
         .with_context(|| format!("failed to delete crate {krate}"))?;
     info!(
@@ -329,6 +345,7 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_build_queue::PRIORITY_DEFAULT;
     use docs_rs_types::testing::{KRATE, V1, V2};
+
     use pretty_assertions::assert_eq;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -431,7 +448,7 @@ mod tests {
             .create()
             .await?;
 
-        process_crate_deleted(&env, &KRATE).await?;
+        process_crate_deleted(&env, env.config(), &KRATE).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -469,7 +486,7 @@ mod tests {
             version: V2,
             ..Default::default()
         };
-        process_version_deleted(&env, &krate).await?;
+        process_version_deleted(&env, env.config(), &krate).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -527,6 +544,7 @@ mod tests {
                 Change::VersionDeleted(non_existing_version.into()),
             ],
             None,
+            env.config(),
         )
         .await;
 

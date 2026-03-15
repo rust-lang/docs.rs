@@ -192,7 +192,7 @@ impl DatabaseSubcommand {
                 .await?;
             }
 
-            Self::Delete { command } => command.handle_args(ctx).await?,
+            Self::Delete { command } => command.handle_args(config, ctx).await?,
 
             Self::Synchronize { dry_run } => {
                 docs_rs_watcher::consistency::run_check(&config, &ctx, dry_run).await?;
@@ -223,17 +223,18 @@ enum DeleteSubcommand {
 }
 
 impl DeleteSubcommand {
-    async fn handle_args(self, ctx: Context) -> Result<()> {
+    async fn handle_args(self, config: Arc<Config>, ctx: Context) -> Result<()> {
         let mut conn = ctx.pool()?.get_async().await?;
         let storage = ctx.storage()?;
 
         match self {
             Self::Version { name, version } => {
-                docs_rs_watcher::delete_version(&mut conn, storage, &name, &version).await?;
+                docs_rs_watcher::delete_version(&mut conn, storage, &config, &name, &version)
+                    .await?;
             }
 
             Self::Crate { name } => {
-                docs_rs_watcher::delete_crate(&mut conn, storage, &name).await?;
+                docs_rs_watcher::delete_crate(&mut conn, storage, &config, &name).await?;
             }
         }
 
