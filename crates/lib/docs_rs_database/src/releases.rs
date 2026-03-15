@@ -359,6 +359,21 @@ pub async fn initialize_build(
 ) -> Result<BuildId> {
     let hostname = hostname::get()?;
 
+    sqlx::query!(
+        r#"UPDATE builds
+           SET
+               build_status = 'failure',
+               errors = $1,
+               build_finished = NOW()
+           WHERE
+               rid = $2
+               AND build_status = 'in_progress'"#,
+        "build aborted: builder process restarted before completion",
+        release_id as _,
+    )
+    .execute(&mut *conn)
+    .await?;
+
     let build_id = sqlx::query_scalar!(
         r#"INSERT INTO builds(rid, build_status, build_server, build_started)
          VALUES ($1, $2, $3, NOW())
@@ -1293,6 +1308,51 @@ mod test {
 
         let another_build_id = initialize_build(&mut conn, release_id).await?;
         assert_ne!(build_id, another_build_id);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_initialize_build_marks_previous_attempt_as_failure() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
+
+        let first_build_id = initialize_build(&mut conn, release_id).await?;
+        let second_build_id = initialize_build(&mut conn, release_id).await?;
+
+        assert_ne!(first_build_id, second_build_id);
+
+        let builds = sqlx::query!(
+            r#"SELECT
+                id as "id: BuildId",
+                build_status as "build_status: BuildStatus",
+                errors,
+                build_finished
+               FROM builds
+               WHERE rid = $1
+               ORDER BY id ASC"#,
+            release_id.0,
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+
+        assert_eq!(builds.len(), 2);
+
+        assert_eq!(builds[0].id, first_build_id);
+        assert_eq!(builds[0].build_status, BuildStatus::Failure);
+        assert_eq!(
+            builds[0].errors,
+            Some("build aborted: builder process restarted before completion".into())
+        );
+        assert!(builds[0].build_finished.is_some());
+
+        assert_eq!(builds[1].id, second_build_id);
+        assert_eq!(builds[1].build_status, BuildStatus::InProgress);
+        assert!(builds[1].build_finished.is_none());
 
         Ok(())
     }
