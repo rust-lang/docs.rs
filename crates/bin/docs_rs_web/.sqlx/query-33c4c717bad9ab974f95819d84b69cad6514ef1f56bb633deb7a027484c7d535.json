@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT crates.name,\n                            releases.target_name,\n                            release_build_status.last_build_time\n                     FROM crates\n                     INNER JOIN releases ON crates.latest_version_id = releases.id\n                     INNER JOIN release_build_status ON release_build_status.rid = releases.id\n                     WHERE\n                         rustdoc_status = true AND\n                         crates.name ILIKE $1\n                      ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_build_time",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "33c4c717bad9ab974f95819d84b69cad6514ef1f56bb633deb7a027484c7d535"
+}
