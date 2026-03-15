@@ -117,6 +117,11 @@ For this to work, you need to install the `browser-ui-test` package:
 npm install browser-ui-test
 ```
 
+### Additional internal docs
+
+- [Build workspaces](./docs/build-workspaces.md)
+- [Archive storage and indexes](./docs/archive-storage-and-indexes.md)
+
 ### Pure docker-compose
 
 If you have trouble with the above commands, consider using `just compose-up-web`,
