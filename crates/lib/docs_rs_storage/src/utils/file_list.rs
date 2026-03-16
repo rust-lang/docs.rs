@@ -64,14 +64,40 @@ pub(crate) fn walk_dir_recursive(
     root: impl AsRef<Path>,
 ) -> impl Stream<Item = Result<FileItem, io::Error>> {
     let root = root.as_ref().to_path_buf();
+
     try_stream! {
         let mut dirs = vec![root.clone()];
 
         while let Some(dir) = dirs.pop() {
-            let mut entries = tokio::fs::read_dir(&dir).await?;
-            while let Some(entry) = entries.next_entry().await? {
+            let mut entries = match tokio::fs::read_dir(&dir).await {
+                Ok(entries) => entries,
+                Err(err)
+                    if err.kind() == io::ErrorKind::NotFound && dir != root =>
+                {
+                    continue;
+                }
+                Err(err) => Err(err)?,
+            };
+
+            loop {
+                let entry = match entries.next_entry().await {
+                    Ok(Some(entry)) => entry,
+                    Ok(None) => break,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        break;
+                    }
+                    Err(err) => Err(err)?,
+                };
+
                 let path = entry.path();
-                let meta = entry.metadata().await?;
+                let meta = match entry.metadata().await {
+                    Ok(meta) => meta,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        continue;
+                    }
+                    Err(err) => Err(err)?,
+                };
+
                 if meta.is_dir() {
                     dirs.push(path.clone());
                 } else {
@@ -141,6 +167,21 @@ mod test {
             ]
         );
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_walk_dir_recursive_errors_for_missing_root() -> Result<()> {
+        use futures_util::TryStreamExt;
+
+        let base = tempfile::tempdir()?;
+        let missing_root = base.path().join("does-not-exist");
+        let err = walk_dir_recursive(&missing_root)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
         Ok(())
     }
 }
