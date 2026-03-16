@@ -49,7 +49,7 @@ pretty_assertions = "1.4.0"
 rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", features = ["gzip", "json", "stream"] }
-sentry = { version = "0.46.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
+sentry = { version = "0.47.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.4.0"
