@@ -24,13 +24,13 @@ const RECENT_SITEMAP_DAYS: u64 = 7;
 #[derive(Template)]
 #[template(path = "core/sitemap/index.xml")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SitemapIndexXml {
+struct SitemapIndex {
     sitemaps: Vec<char>,
     recent_sitemaps: Vec<String>,
 }
 
 impl_axum_webpage! {
-    SitemapIndexXml,
+    SitemapIndex,
     content_type = "application/xml",
 }
 
@@ -47,7 +47,7 @@ pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
         })
         .collect();
 
-    SitemapIndexXml {
+    SitemapIndex {
         sitemaps,
         recent_sitemaps,
     }
@@ -56,45 +56,27 @@ pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
 #[derive(Template)]
 #[template(path = "core/sitemap/_item.xml")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SitemapItemXml {
+struct SitemapItem {
     crate_name: String,
-    last_modified: String,
     target_name: String,
+    last_build_time: chrono::DateTime<Utc>,
+}
+
+impl SitemapItem {
+    fn last_modified(&self) -> String {
+        self.last_build_time
+            // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
+            // so they should all get recrawled if they haven't been since then.
+            .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
+            .format("%+")
+            .to_string()
+    }
 }
 
 const SITEMAP_HEADER: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n"#;
 
 const SITEMAP_FOOTER: &[u8] = b"</urlset>\n";
-
-fn render_sitemap_item(item: SitemapItem) -> AxumResult<Bytes> {
-    let target_name = item
-        .target_name
-        .expect("when we have rustdoc_status=true, this field is filled");
-
-    let item = (SitemapItemXml {
-        crate_name: item.name,
-        target_name,
-        last_modified: item
-            .last_build_time
-            .expect("when we have rustdoc_status=true, this field is filled")
-            // On Aug 27 2022 we added `<link rel="canonical">` to all pages,
-            // so they should all get recrawled if they haven't been since then.
-            .max(Utc.with_ymd_and_hms(2022, 8, 28, 0, 0, 0).unwrap())
-            .format("%+")
-            .to_string(),
-    })
-    .render()
-    .map_err(|err| AxumNope::InternalError(err.into()))?;
-
-    Ok(Bytes::from(item))
-}
-
-struct SitemapItem {
-    name: String,
-    target_name: Option<String>,
-    last_build_time: Option<chrono::DateTime<Utc>>,
-}
 
 type SitemapQueryStream<'a> = BoxStream<'a, Result<SitemapItem, sqlx::Error>>;
 
@@ -111,9 +93,9 @@ where
 
         let result = query(&mut conn);
         pin_mut!(result);
-        while let Some(row) = result.next().await {
-            let row = match row {
-                Ok(row) => row,
+        while let Some(item) = result.next().await {
+            let item = match item {
+                Ok(item) => item,
                 Err(err) => {
                     error!(?err, "error fetching row from database");
                     yield Err(AxumNope::InternalError(err.into()));
@@ -121,15 +103,17 @@ where
                 }
             };
 
-            match render_sitemap_item(row) {
-                Ok(bytes) => {
+            let mut buf = Vec::with_capacity(400);
+
+            match item.write_into(&mut buf) {
+                Ok(_) => {
                     items += 1;
-                    streamed_bytes += bytes.len();
-                    yield Ok(bytes);
+                    streamed_bytes += buf.len();
+                    yield Ok(Bytes::from(buf));
                 }
                 Err(err) => {
                     error!(?err, "error when rendering sitemap item xml");
-                    yield Err(err);
+                    yield Err(AxumNope::InternalError(err.into()));
                     break;
                 }
             }
@@ -170,9 +154,11 @@ pub(crate) async fn sitemap_handler(
         Box::pin(
             sqlx::query_as!(
                 SitemapItem,
-                r#"SELECT crates.name,
-                            releases.target_name,
-                            release_build_status.last_build_time
+                r#"SELECT crates.name as "crate_name",
+                          -- when we have rustdoc_status=true, both these fields are always filled,
+                          -- so forcing them as non-option is ok.
+                          releases.target_name as "target_name!",
+                          release_build_status.last_build_time as "last_build_time!"
                      FROM crates
                      INNER JOIN releases ON crates.latest_version_id = releases.id
                      INNER JOIN release_build_status ON release_build_status.rid = releases.id
@@ -210,9 +196,11 @@ pub(crate) async fn recent_sitemap_handler(
         Box::pin(
             sqlx::query_as!(
                 SitemapItem,
-                r#"SELECT crates.name,
-                            releases.target_name,
-                            release_build_status.last_build_time
+                r#"SELECT crates.name as "crate_name",
+                          -- when we have rustdoc_status=true, both these fields are always filled,
+                          -- so forcing them as non-option is ok.
+                          releases.target_name as "target_name!",
+                          release_build_status.last_build_time as "last_build_time!"
                      FROM crates
                      INNER JOIN releases ON crates.latest_version_id = releases.id
                      INNER JOIN release_build_status ON release_build_status.rid = releases.id
