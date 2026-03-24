@@ -38,13 +38,7 @@ pub(crate) async fn sitemapindex_handler() -> impl IntoResponse {
     let sitemaps: Vec<char> = ('a'..='z').collect();
     let today = Utc::now().date_naive();
     let recent_sitemaps = (0..RECENT_SITEMAP_DAYS)
-        .map(|days| {
-            today
-                .checked_sub_days(Days::new(days))
-                .expect("underflow when building recent sitemap dates")
-                .format("%F")
-                .to_string()
-        })
+        .map(|days| (today + Days::new(days)).format("%F").to_string())
         .collect();
 
     SitemapIndex {
