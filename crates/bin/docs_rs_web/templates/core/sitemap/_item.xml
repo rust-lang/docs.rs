@@ -1,3 +1,4 @@
+        {% let last_modified = last_modified() -%}
         <url>
             <loc>https://docs.rs/{{ crate_name }}/latest/{{ target_name }}/</loc>
             <lastmod>{{ last_modified|escape_xml }}</lastmod>

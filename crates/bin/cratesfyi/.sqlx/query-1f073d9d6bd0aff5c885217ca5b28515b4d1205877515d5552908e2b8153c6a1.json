@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT crates.name as \"crate_name\",\n                          -- when we have rustdoc_status=true, both these fields are always filled,\n                          -- so forcing them as non-option is ok.\n                          releases.target_name as \"target_name!\",\n                          release_build_status.last_build_time as \"last_build_time!\"\n                     FROM crates\n                     INNER JOIN releases ON crates.latest_version_id = releases.id\n                     INNER JOIN release_build_status ON release_build_status.rid = releases.id\n                     WHERE\n                         releases.rustdoc_status = true AND\n                         release_build_status.last_build_time >= $1 AND\n                         release_build_status.last_build_time < $2\n                     ORDER BY release_build_status.last_build_time DESC\n                      ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_build_time!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "1f073d9d6bd0aff5c885217ca5b28515b4d1205877515d5552908e2b8153c6a1"
+}
