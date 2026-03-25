@@ -10,7 +10,8 @@ build = "build.rs"
 [package.metadata.cargo-machete]
 ignored = [
     # used in build script output
-    "slug", # used in askama templates, can be moved to web binary
+    # used in askama templates, can be moved to web binary
+    "slug",
 ]
 
 [dependencies]
