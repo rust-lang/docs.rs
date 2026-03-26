@@ -472,7 +472,8 @@ impl Cache {
         // https://docs.rs/moka/0.12.14/moka/future/struct.Cache.html#concurrent-calls-on-the-same-key
         // So we don't need any locking here to prevent multiple downloads for the same
         // missing archive index.
-        self.manager
+        if let Err(arc_err) = self
+            .manager
             .try_get_with_by_ref(&local_index_path, async {
                 // NOTE: benign race with the eviction listener.
                 //
@@ -512,27 +513,27 @@ impl Cache {
                 Ok::<_, anyhow::Error>(Arc::new(entry))
             })
             .await
-            .map_err(|arc_err: Arc<anyhow::Error>| {
-                // We can't convert this Arc<Error> into the inner error type.
-                // See https://github.com/moka-rs/moka/issues/497
-                // But since some callers are specifically checking
-                // ::is<PathNotFoundError> to differentiate other errors from
-                // the "not found" case, we want to preserve that information
-                // if it was the cause of the error.
-                //
-                // This mean all error types that we later want to use with ::is<> or
-                // ::downcast<> have to be mentioned here.
-                //
-                // While we could also migrate to a custom enum error type, this would
-                // only be really nice when the whole storage lib uses is. Otherwise
-                // we'll end up with some hardcoded conversions again.
-                // So I can leave it as-is for now.
-                if arc_err.is::<PathNotFoundError>() {
-                    anyhow!(PathNotFoundError)
-                } else {
-                    anyhow!(arc_err)
-                }
-            })?;
+        {
+            // We can't convert this Arc<Error> into the inner error type.
+            // See https://github.com/moka-rs/moka/issues/497
+            // But since some callers are specifically checking
+            // ::is<PathNotFoundError> to differentiate other errors from
+            // the "not found" case, we want to preserve that information
+            // if it was the cause of the error.
+            //
+            // This mean all error types that we later want to use with ::is<> or
+            // ::downcast<> have to be mentioned here.
+            //
+            // While we could also migrate to a custom enum error type, this would
+            // only be really nice when the whole storage lib uses is. Otherwise
+            // we'll end up with some hardcoded conversions again.
+            // So I can leave it as-is for now.
+            if arc_err.is::<PathNotFoundError>() {
+                return Ok(None);
+            } else {
+                return Err(anyhow!(arc_err));
+            }
+        }
 
         // Final attempt: if this still fails, bubble the error.
         find_in_file(local_index_path, path_in_archive).await
@@ -977,6 +978,44 @@ mod tests {
         }
     }
 
+    struct NotFoundDownloader {
+        remote_index_path: String,
+        fetch_count: std::sync::Mutex<usize>,
+    }
+
+    impl NotFoundDownloader {
+        fn new(remote_index_path: String) -> Self {
+            Self {
+                remote_index_path,
+                fetch_count: std::sync::Mutex::new(0),
+            }
+        }
+
+        fn fetch_count(&self) -> usize {
+            *self.fetch_count.lock().unwrap()
+        }
+    }
+
+    impl Downloader for NotFoundDownloader {
+        fn fetch_archive_index<'a>(
+            &'a self,
+            remote_index_path: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<StreamingBlob>> + Send + 'a>> {
+            Box::pin(async move {
+                if remote_index_path != self.remote_index_path {
+                    bail!(
+                        "unexpected remote index path: expected {}, got {remote_index_path}",
+                        self.remote_index_path
+                    );
+                }
+
+                let mut fetch_count = self.fetch_count.lock().unwrap();
+                *fetch_count += 1;
+                Err(PathNotFoundError.into())
+            })
+        }
+    }
+
     async fn create_index_bytes(file_count: u32) -> Result<Vec<u8>> {
         let tf = create_test_archive(file_count).await?;
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
@@ -1165,6 +1204,25 @@ mod tests {
             .await?;
         assert!(result.is_none());
         assert_eq!(downloader.download_count(&remote_index_path), 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn find_remote_index_not_found_returns_none_without_retries() -> Result<()> {
+        let cache = test_cache().await?;
+        const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(7));
+        const ARCHIVE_NAME: &str = "missing-index.zip";
+        const FILE_IN_ARCHIVE: &str = "testfile0";
+
+        let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+        let downloader = NotFoundDownloader::new(remote_index_path);
+
+        let result = cache
+            .find(ARCHIVE_NAME, LATEST_BUILD_ID, FILE_IN_ARCHIVE, &downloader)
+            .await?;
+        assert!(result.is_none());
+        assert_eq!(downloader.fetch_count(), 1);
 
         Ok(())
     }
