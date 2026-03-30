@@ -37,7 +37,7 @@ pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 /// dummy size we assume in case of errors
 const DUMMY_FILE_SIZE: u64 = 1024 * 1024; // 1 MiB
 /// self-repair attempts
-const FIND_ATTEMPTS: usize = 3;
+const FIND_ATTEMPTS: usize = 5;
 
 #[derive(Debug)]
 struct Metrics {
@@ -1214,7 +1214,11 @@ mod tests {
         fs::write(&cache_file, b"not-an-sqlite-index").await?;
 
         let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-        let downloader = FlakyDownloader::new(remote_index_path, create_index_bytes(1).await?, 2);
+        let downloader = FlakyDownloader::new(
+            remote_index_path,
+            create_index_bytes(1).await?,
+            FIND_ATTEMPTS - 1,
+        );
 
         let result = cache
             .find(ARCHIVE_NAME, LATEST_BUILD_ID, FILE_IN_ARCHIVE, &downloader)
