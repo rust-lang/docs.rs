@@ -3,7 +3,7 @@ use crate::{
     error::{AxumErrorPage, AxumResult},
     extractors::{DbConnection, Path},
     impl_axum_webpage,
-    page::templates::{RenderBrands, RenderSolid, filters},
+    page::templates::{AlertSeverityRender, RenderBrands, RenderSolid, filters},
 };
 use askama::Template;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};

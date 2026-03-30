@@ -15,7 +15,7 @@ pub(crate) mod status;
 use crate::Config;
 use crate::metrics::WebMetrics;
 use crate::middleware::{csp, security};
-use crate::page::{self, TemplateData};
+use crate::page::{self, TemplateData, global_alert::GlobalAlertCache};
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use axum::{
@@ -75,6 +75,7 @@ async fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
+    let global_alert_cache = Arc::new(GlobalAlertCache::new(context.pool()?.clone()).await);
 
     let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
 
@@ -103,6 +104,7 @@ async fn apply_middleware(
             .layer(Extension(config.clone()))
             .layer(Extension(context.registry_api()?.clone()))
             .layer(Extension(context.storage()?.clone()))
+            .layer(Extension(global_alert_cache))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(
@@ -231,6 +233,7 @@ mod tests {
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
     };
+    use docs_rs_database::service_config::{AlertSeverity, ConfigName, GlobalAlert, set_config};
     use docs_rs_types::{DocCoverage, ReleaseId, Version};
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -260,6 +263,51 @@ mod tests {
             assert!(web.get("/").await?.status().is_success());
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_global_alert_is_not_rendered_when_unset() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+
+        assert_eq!(page.select("a.pure-menu-link.error").unwrap().count(), 0);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_global_alert_is_rendered_when_configured() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let mut conn = env.async_conn().await?;
+        // NOTE: the global alert is cached inside the web-app, so we have to
+        // set it before we fetch the web-app from the test-environments.
+        set_config(
+            &mut conn,
+            ConfigName::GlobalAlert,
+            GlobalAlert {
+                url: "https://example.com/maintenance".into(),
+                text: "Scheduled maintenance".into(),
+                severity: AlertSeverity::Warn,
+            },
+        )
+        .await?;
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+        let alert = page
+            .select("a.pure-menu-link.warn")
+            .unwrap()
+            .next()
+            .expect("missing global alert");
+
+        assert_eq!(
+            alert.attributes.borrow().get("href"),
+            Some("https://example.com/maintenance")
+        );
+        assert!(alert.text_contents().contains("Scheduled maintenance"));
+        Ok(())
     }
 
     #[test]
