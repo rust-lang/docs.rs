@@ -9,7 +9,7 @@ use crate::{
     impl_axum_webpage,
     match_release::match_version,
     metrics::WebMetrics,
-    page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    page::templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
 };
 use anyhow::{Context as _, Result, anyhow};
 use askama::Template;
