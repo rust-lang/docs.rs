@@ -37,7 +37,7 @@ runs:
         push: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        build-args: GIT_VERSION=${{ github.sha }}
+        build-args: GIT_SHA=${{ github.sha }}
 
     - name: Kick ECS to deploy new version
       shell: bash
