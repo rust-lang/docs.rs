@@ -8,7 +8,7 @@ use crate::{
     impl_axum_webpage,
     match_release::{MatchedRelease, match_version},
     metadata::MetaData,
-    page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    page::templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
     utils::{get_correct_docsrs_style_file, licenses},
 };
 use anyhow::{Context, Result, anyhow};
