@@ -10,9 +10,10 @@ use anyhow::{Context as _, anyhow};
 use askama::Template;
 use async_stream::stream;
 use axum::body::Bytes;
+use docs_rs_database::service_config::GlobalAlert;
 use futures_util::{Stream, StreamExt as _};
 use lol_html::{element, errors::RewritingError};
-use std::sync::Arc;
+use std::{any::Any, collections::HashMap, sync::Arc};
 use tokio::{io::AsyncRead, task::JoinHandle};
 use tokio_util::io::ReaderStream;
 use tracing::{Span, error, instrument};
@@ -39,6 +40,7 @@ pub(crate) fn rewrite_rustdoc_html_stream<R>(
     template_data: Arc<TemplateData>,
     mut reader: R,
     max_allowed_memory_usage: usize,
+    global_alert: Option<GlobalAlert>,
     data: Arc<RustdocPage>,
     otel_metrics: Arc<WebMetrics>,
 ) -> impl Stream<Item = Result<Bytes, RustdocRewritingError>> + Send + 'static
@@ -69,7 +71,9 @@ where
                         let head_html = Head::new(&data).render().unwrap();
                         let vendored_html = Vendored.render().unwrap();
                         let body_html = Body.render().unwrap();
-                        let topbar_html = data.render().unwrap();
+                        let values: HashMap<&str, &dyn Any> =
+                            HashMap::from_iter([("global_alert", &global_alert as &dyn Any)]);
+                        let topbar_html = data.render_with_values(&values).unwrap();
 
                         // Before: <body> ... rustdoc content ... </body>
                         // After:
