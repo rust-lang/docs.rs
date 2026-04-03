@@ -2,14 +2,14 @@
 pub(crate) mod memory;
 pub(crate) mod s3;
 
-use crate::{BlobUpload, StreamingBlob, types::FileRange};
+use crate::{StreamingBlob, blob::StreamUpload, types::FileRange};
 use anyhow::Result;
 use futures_util::stream::BoxStream;
 
 pub(crate) trait StorageBackendMethods {
     async fn exists(&self, path: &str) -> Result<bool>;
     async fn get_stream(&self, path: &str, range: Option<FileRange>) -> Result<StreamingBlob>;
-    async fn store_batch(&self, batch: Vec<BlobUpload>) -> Result<()>;
+    async fn upload_stream(&self, upload: StreamUpload) -> Result<()>;
     async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String>>;
     async fn delete_prefix(&self, prefix: &str) -> Result<()>;
 }
@@ -39,8 +39,8 @@ impl StorageBackendMethods for StorageBackend {
         call_inner!(self, get_stream(path, range))
     }
 
-    async fn store_batch(&self, batch: Vec<BlobUpload>) -> Result<()> {
-        call_inner!(self, store_batch(batch))
+    async fn upload_stream(&self, upload: StreamUpload) -> Result<()> {
+        call_inner!(self, upload_stream(upload))
     }
 
     async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String>> {
