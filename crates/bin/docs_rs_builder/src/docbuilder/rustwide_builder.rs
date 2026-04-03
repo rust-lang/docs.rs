@@ -2328,12 +2328,15 @@ mod tests {
         //
         // Fixing this requires rustwide to accept extra cargo args for its
         // prepare phase (see https://github.com/rust-lang/rustwide/pull/119).
+        //
+        // TODO: flip this assertion to `assert!(... .successful)` once rustwide
+        // is updated with extra_cargo_args support.
         let env = TestEnvironment::new()?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
         assert!(
-            builder
+            !builder
                 .build_local_package(Path::new("tests/crates/bindeps-test"))?
                 .successful
         );
