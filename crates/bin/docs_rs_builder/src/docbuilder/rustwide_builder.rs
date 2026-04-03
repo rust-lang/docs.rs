@@ -2327,7 +2327,7 @@ mod tests {
         // the `validate_manifest` step — before our build closure even runs.
         //
         // Fixing this requires rustwide to accept extra cargo args for its
-        // prepare phase (see https://github.com/rust-lang/rustwide/issues/XXX).
+        // prepare phase (see https://github.com/rust-lang/rustwide/pull/119).
         let env = TestEnvironment::new()?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
