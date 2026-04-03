@@ -2285,7 +2285,7 @@ mod tests {
 
     #[test]
     #[ignore] // Requires full build environment
-    fn test_bindeps_crate_builds_with_unstable_flags() -> Result<()> {
+    fn test_bindeps_metadata_with_unstable_flags() -> Result<()> {
         let env = TestEnvironment::new()?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2311,6 +2311,31 @@ mod tests {
             )
             .is_ok(),
             "cargo metadata should succeed with -Zbindeps",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Requires full build environment
+    fn test_bindeps_crate_full_build() -> Result<()> {
+        // Full build path for a crate using artifact dependencies (`-Zbindeps`).
+        //
+        // This currently fails because rustwide's `Prepare::prepare()` runs
+        // `cargo metadata`, `cargo generate-lockfile`, and `cargo fetch`
+        // without the `-Zbindeps` flag, causing `InvalidCargoTomlSyntax` at
+        // the `validate_manifest` step — before our build closure even runs.
+        //
+        // Fixing this requires rustwide to accept extra cargo args for its
+        // prepare phase (see https://github.com/rust-lang/rustwide/issues/XXX).
+        let env = TestEnvironment::new()?;
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/bindeps-test"))?
+                .successful
         );
 
         Ok(())
