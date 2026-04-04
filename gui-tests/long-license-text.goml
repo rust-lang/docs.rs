@@ -1,0 +1,27 @@
+// Checks that the links have the expected color.
+
+go-to: |DOC_PATH| + "/crate/sysinfo/0.23.5/builds"
+store-value: (menu_selector, '.crate-dropdown')
+store-value: (sub_menu_selector, |menu_selector| + ' .pure-menu-children')
+store-value: (license_selector, |sub_menu_selector| + ' .license')
+click: |menu_selector|
+wait-for-css: (|sub_menu_selector|, {"display": "block"})
+store-size: (
+    |license_selector|,
+    {"height": original_height, "width": original_width},
+)
+store-size: (|sub_menu_selector|, {"width": menu_width})
+assert: |menu_width| == |original_width|
+
+// Now we change the content of the license to make it overflow the menu's width.
+store-property: (|license_selector|, {"innerHTML": html})
+set-property: (
+    |license_selector|,
+    {"innerHTML": |html| + "OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0 OR blablablablabla"},
+)
+// And now, the height should have increased while the width should remain the same.
+store-size: (
+    |license_selector|,
+    {"height": new_height, "width": new_width},
+)
+assert: |new_width| == |original_width| && |new_height| > |original_height|
