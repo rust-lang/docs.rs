@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE queue\n                    SET priority = $2\n                    WHERE name = $1\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1fcb4371909a27b059e3dba7c0791b40f873618036c55c679e5854dbd4cbf91e"
+}
