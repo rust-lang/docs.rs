@@ -1,12 +1,29 @@
-{# Get the current global alert #}
-{%- let global_alert = askama::get_value::<Option<crate::page::GlobalAlert>>("global_alert").unwrap() -%}
+{%- let alerts = askama::get_value::<crate::page::ActiveAlerts>("alerts").unwrap() -%}
 
-{# If there is a global alert, render it #}
-{%- if let Some(global_alert) = global_alert -%}
-    <li class="pure-menu-item">
-        <a href="{{ global_alert.url|safe }}" class="pure-menu-link {{ global_alert.severity.css_class() }}">
-            {{- global_alert.severity.render_icon_solid(false, false, "") }}
-            {{ global_alert.text -}}
+{%- if alerts.len() == 1 -%}
+   <li class="pure-menu-item">
+        {% let alert = alerts.first().unwrap() %}
+        <a href="{{ alert.url|safe }}" class="pure-menu-link {{ alert.severity.css_class() }}">
+            {{- alert.severity.render_icon_solid(false, false, "") }}
+            {{ alert.text -}}
         </a>
     </li>
+{%- elif alerts.len() >= 2 -%}
+    {% let first = alerts.first().unwrap() %}
+    <ul class="pure-menu-list">
+        <li class="pure-menu-item pure-menu-has-children">
+            <a href="#" class="pure-menu-link {{ first.severity.css_class() }}">
+                {{- first.severity.render_icon_solid(false, false, "") }} {{ first.text -}}
+            </a>
+            <ul class="pure-menu-children">
+                {%- for alert in alerts %}
+                    <li class="pure-menu-item"> {#- -#}
+                        <a class="pure-menu-link {{ alert.severity.css_class() }}" href="{{ alert.url|safe }}">
+                            {{- alert.severity.render_icon_solid(false, false, "") }} {{ alert.text -}}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </li>
+    </ul>
 {% endif %}

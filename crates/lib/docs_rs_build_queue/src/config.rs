@@ -8,6 +8,7 @@ pub struct Config {
     pub build_attempts: u16,
     pub deprioritize_workspace_size: u16,
     pub delay_between_build_attempts: Duration,
+    pub public_alert_threshold: usize,
 }
 
 impl Default for Config {
@@ -16,6 +17,7 @@ impl Default for Config {
             build_attempts: 5,
             deprioritize_workspace_size: 20,
             delay_between_build_attempts: Duration::from_secs(60),
+            public_alert_threshold: 1000,
         }
     }
 }
@@ -34,6 +36,10 @@ impl AppConfig for Config {
 
         if let Some(size) = maybe_env::<u16>("DOCSRS_DEPRIORITIZE_WORKSPACE_SIZE")? {
             config.deprioritize_workspace_size = size;
+        }
+
+        if let Some(length) = maybe_env::<usize>("DOCSRS_QUEUE_PUBLIC_ALERT_THRESHOLD")? {
+            config.public_alert_threshold = length;
         }
 
         Ok(config)

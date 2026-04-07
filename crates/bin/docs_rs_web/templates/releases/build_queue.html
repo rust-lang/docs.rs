@@ -18,6 +18,15 @@ centered
 
 {%- block body -%}
     <div class="container">
+
+        {%- if show_length_warning %}
+            <div class="warning">
+                <b>The docs.rs build queue is too long.</b> <br/>
+                Building your crate might take longer, up to a couple of days.<br/>
+                The team is notified.
+            </div>
+        {%- endif %}
+
         <div class="recent-releases-container">
             <div class="release">
                 <strong>Currently being built</strong>
