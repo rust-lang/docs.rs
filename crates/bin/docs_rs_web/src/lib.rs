@@ -32,12 +32,11 @@ pub use handlers::run_web_server;
 use page::GlobalAlert;
 
 // Warning message shown in the navigation bar of every page. Set to `None` to hide it.
-pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;
-/*
+// pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = None;
+
 pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
-    url: "https://blog.rust-lang.org/2019/09/18/upcoming-docsrs-changes.html",
-    text: "Upcoming docs.rs breaking changes!",
-    css_class: "error",
-    fa_icon: "exclamation-triangle",
+    url: "https://blog.rust-lang.org/2026/04/04/docsrs-only-default-targets/",
+    text: "Upcoming changes to build targets!",
+    css_class: "warn",
+    fa_icon: crate::icons::IconTriangleExclamation,
 });
-*/
