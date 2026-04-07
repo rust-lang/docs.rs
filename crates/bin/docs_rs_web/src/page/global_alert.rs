@@ -1,4 +1,5 @@
 use anyhow::{Context as _, Result};
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::{
     Pool,
     service_config::{ConfigName, GlobalAlert, get_config},
@@ -11,9 +12,11 @@ use tokio::{
 };
 use tracing::{debug, error};
 
+pub(crate) type ActiveAlerts = Vec<GlobalAlert>;
+
 #[derive(Debug)]
 struct State {
-    value: Option<GlobalAlert>,
+    snapshot: ActiveAlerts,
 }
 
 #[derive(Debug)]
@@ -23,23 +26,23 @@ pub(crate) struct GlobalAlertCache {
 }
 
 impl GlobalAlertCache {
-    const TTL: Duration = Duration::from_secs(600); // 5 minutes
+    const TTL: Duration = Duration::from_secs(300); // 5 minutes
 
-    pub(crate) async fn new(pool: Pool) -> Self {
-        Self::new_with_ttl(pool, Self::TTL).await
+    pub(crate) async fn new(pool: Pool, build_queue: Arc<AsyncBuildQueue>) -> Self {
+        Self::new_with_ttl(pool, build_queue, Self::TTL).await
     }
 
-    async fn new_with_ttl(pool: Pool, ttl: Duration) -> Self {
-        let initial_value = match Self::load_from_pool(&pool).await {
-            Ok(value) => value,
+    async fn new_with_ttl(pool: Pool, build_queue: Arc<AsyncBuildQueue>, ttl: Duration) -> Self {
+        let initial_snapshot = match Self::load_from_sources(&pool, &build_queue).await {
+            Ok(snapshot) => snapshot,
             Err(err) => {
-                error!(?err, "failed to load initial global alert");
-                None
+                error!(?err, "failed to load initial alerts snapshot");
+                ActiveAlerts::default()
             }
         };
 
         let state = Arc::new(RwLock::new(State {
-            value: initial_value,
+            snapshot: initial_snapshot,
         }));
         let refresh_state = Arc::clone(&state);
 
@@ -53,14 +56,17 @@ impl GlobalAlertCache {
             loop {
                 refresh_interval.tick().await;
 
-                debug!("loading global alert from database");
-                match Self::load_from_pool(&pool).await {
-                    Ok(value) => {
+                debug!("loading alerts snapshot");
+                match Self::load_from_sources(&pool, &build_queue).await {
+                    Ok(snapshot) => {
                         let mut state = refresh_state.write().await;
-                        state.value = value;
+                        state.snapshot = snapshot;
                     }
                     Err(err) => {
-                        error!(?err, "failed to refresh global alert, keeping cached value");
+                        error!(
+                            ?err,
+                            "failed to refresh alerts snapshot, keeping cached value"
+                        );
                     }
                 }
             }
@@ -72,19 +78,33 @@ impl GlobalAlertCache {
         }
     }
 
-    async fn load_from_pool(pool: &Pool) -> Result<Option<GlobalAlert>> {
+    async fn load_from_sources(pool: &Pool, build_queue: &AsyncBuildQueue) -> Result<ActiveAlerts> {
         let mut conn = pool
             .get_async()
             .await
-            .context("failed to get DB connection for global alert")?;
+            .context("failed to get DB connection for alerts")?;
 
-        get_config::<GlobalAlert>(&mut conn, ConfigName::GlobalAlert)
+        let mut active_alerts = ActiveAlerts::new();
+
+        if let Some(alert) = get_config::<GlobalAlert>(&mut conn, ConfigName::GlobalAlert)
             .await
-            .context("failed to load global alert from config")
+            .context("failed to load manual global alert from config")?
+        {
+            active_alerts.push(alert);
+        }
+
+        active_alerts.extend(
+            build_queue
+                .gather_alerts()
+                .await
+                .context("failed to load build queue alerts")?,
+        );
+
+        Ok(active_alerts)
     }
 
-    pub(crate) async fn get(&self) -> Option<GlobalAlert> {
-        self.state.read().await.value.clone()
+    pub(crate) async fn get(&self) -> ActiveAlerts {
+        self.state.read().await.snapshot.clone()
     }
 }
 
@@ -99,7 +119,7 @@ mod tests {
     use super::*;
     use crate::testing::TestEnvironment;
     use anyhow::Result;
-    use docs_rs_database::service_config::{AlertSeverity, ConfigName, set_config};
+    use docs_rs_database::service_config::{AlertSeverity, set_config};
     use tokio::time::sleep;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -119,11 +139,15 @@ mod tests {
         .await?;
         drop(conn);
 
-        let cache =
-            GlobalAlertCache::new_with_ttl(env.pool()?.clone(), Duration::from_millis(25)).await;
+        let cache = GlobalAlertCache::new_with_ttl(
+            env.pool()?.clone(),
+            env.build_queue()?.clone(),
+            Duration::from_millis(25),
+        )
+        .await;
 
         assert_eq!(
-            cache.get().await.as_ref().map(|alert| alert.text.as_str()),
+            cache.get().await.first().map(|alert| alert.text.as_str()),
             Some("Scheduled maintenance")
         );
 
@@ -143,8 +167,8 @@ mod tests {
         sleep(Duration::from_millis(75)).await;
 
         assert_eq!(
-            cache.get().await,
-            Some(GlobalAlert {
+            cache.get().await.first(),
+            Some(&GlobalAlert {
                 url: "https://example.com/maintenance".into(),
                 text: "Scheduled maintenance".into(),
                 severity: AlertSeverity::Warn,
