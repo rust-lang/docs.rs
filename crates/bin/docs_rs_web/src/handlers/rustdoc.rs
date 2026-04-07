@@ -15,7 +15,7 @@ use crate::{
     metrics::WebMetrics,
     middleware::csp::Csp,
     page::{
-        TemplateData,
+        ActiveAlerts, TemplateData,
         global_alert::GlobalAlertCache,
         templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
     },
@@ -34,7 +34,7 @@ use axum_extra::{
     typed_header::TypedHeader,
 };
 use docs_rs_cargo_metadata::Dependency;
-use docs_rs_database::{Pool, service_config::GlobalAlert};
+use docs_rs_database::Pool;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
@@ -492,7 +492,7 @@ impl RustdocPage {
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
         if_none_match: Option<&IfNoneMatch>,
-        global_alert: Option<GlobalAlert>,
+        alerts: ActiveAlerts,
     ) -> AxumResponse {
         let crate_name = &self.metadata.name;
 
@@ -530,7 +530,7 @@ impl RustdocPage {
                     template_data,
                     rustdoc_html.content,
                     max_parse_memory,
-                    global_alert,
+                    alerts,
                     self.clone(),
                     otel_metrics,
                 )),
