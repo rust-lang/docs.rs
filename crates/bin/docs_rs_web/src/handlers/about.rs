@@ -7,6 +7,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
+use chrono::{DateTime, NaiveDate, Utc};
 use docs_rs_build_limits::Limits;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
@@ -26,6 +27,27 @@ struct AboutBuilds {
 
 impl_axum_webpage!(
     AboutBuilds,
+    // NOTE: potential future improvement: serve a special surrogate key, and
+    // purge that after we updated the local toolchain.
+    cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
+);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Abnormality {
+    title: &'static str,
+    explanation: &'static str,
+    start_time: Option<DateTime<Utc>>,
+}
+
+#[derive(Template)]
+#[template(path = "core/about/status.html")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AboutStatus {
+    abnormalities: Vec<Abnormality>,
+}
+
+impl_axum_webpage!(
+    AboutStatus,
     // NOTE: potential future improvement: serve a special surrogate key, and
     // purge that after we updated the local toolchain.
     cache_policy = |_| CachePolicy::ShortInCdnAndBrowser,
@@ -75,6 +97,20 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
         "redirections" => AboutPageRedirection.into_response(),
         "download" => AboutPageDownload.into_response(),
         "rustdoc-json" => AboutPageRustdocJson.into_response(),
+        "status" => AboutStatus {
+            abnormalities: vec![
+                Abnormality {
+                    title: "Build queue is abnormally long",
+                    explanation: "The build queue currently contains more than 100 crates, so it might take a while before new published crates get documented.",
+                    start_time: Some(NaiveDate::from_ymd_opt(2023, 1, 30).unwrap().and_hms_opt(19, 32, 33).unwrap().and_utc()),
+                },
+                Abnormality {
+                    title: "High number of requests",
+                    explanation: "There is a huge amount of HTTP requests currently, pages load might be slower than usual.",
+                    start_time: None,
+                },
+            ],
+        }.into_response(),
         _ => {
             let msg = "This /about page does not exist. \
                 Perhaps you are interested in <a href=\"https://github.com/rust-lang/docs.rs/tree/master/templates/core/about\">creating</a> it?";
