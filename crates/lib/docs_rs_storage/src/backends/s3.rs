@@ -1,7 +1,7 @@
 use crate::{
     Config,
     backends::StorageBackendMethods,
-    blob::{StreamUpload, StreamingBlob},
+    blob::{BlobUpload, StreamingBlob},
     errors::PathNotFoundError,
     metrics::StorageMetrics,
     types::FileRange,
@@ -13,20 +13,15 @@ use aws_sdk_s3::{
     Client,
     config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
-    primitives::ByteStream,
     types::{Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::Utc;
 use docs_rs_headers::{ETag, compute_etag};
 use futures_util::{
-    TryStreamExt,
-    stream::{BoxStream, StreamExt},
+    future::TryFutureExt,
+    stream::{BoxStream, FuturesUnordered, StreamExt},
 };
-use http_body::Frame;
-use http_body_util::StreamBody;
-use opentelemetry::KeyValue;
-use tokio_util::io::ReaderStream;
 use tracing::{error, warn};
 
 // error codes to check for when trying to determine if an error is
@@ -235,50 +230,45 @@ impl StorageBackendMethods for S3Backend {
         })
     }
 
-    async fn upload_stream(&self, upload: StreamUpload) -> Result<(), Error> {
-        let StreamUpload {
-            path,
-            mime,
-            source,
-            compression,
-        } = upload;
+    async fn store_batch(&self, mut batch: Vec<BlobUpload>) -> Result<(), Error> {
+        // Attempt to upload the batch 3 times
+        for _ in 0..3 {
+            let mut futures = FuturesUnordered::new();
+            for blob in batch.drain(..) {
+                futures.push(
+                    self.client
+                        .put_object()
+                        .bucket(&self.bucket)
+                        .key(&blob.path)
+                        .body(blob.content.clone().into())
+                        .content_type(blob.mime.to_string())
+                        .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
+                        .send()
+                        .map_ok(|_| {
+                            self.otel_metrics.uploaded_files.add(1, &[]);
+                        })
+                        .map_err(|err| {
+                            warn!(?err, "Failed to upload blob to S3");
+                            // Reintroduce failed blobs for a retry
+                            blob
+                        }),
+                );
+            }
 
-        let content_length = source.content_length().await?;
-
-        let mut last_err = None;
-
-        for attempt in 1..=3 {
-            let reader = source.reader().await?;
-            let stream = ReaderStream::new(reader).map_ok(Frame::data);
-
-            match self
-                .client
-                .put_object()
-                .bucket(&self.bucket)
-                .key(&path)
-                .body(ByteStream::from_body_1_x(StreamBody::new(stream)))
-                .content_length(content_length as i64)
-                .content_type(mime.to_string())
-                .set_content_encoding(compression.map(|alg| alg.to_string()))
-                .send()
-                .await
-            {
-                Ok(_) => {
-                    self.otel_metrics
-                        .uploaded_files
-                        .add(1, &[KeyValue::new("attempt", attempt.to_string())]);
-                    return Ok(());
+            while let Some(result) = futures.next().await {
+                // Push each failed blob back into the batch
+                if let Err(blob) = result {
+                    batch.push(blob);
                 }
-                Err(err) => {
-                    warn!(?err, attempt = attempt + 1, %path, "failed to upload blob to S3");
-                    last_err = Some(err);
-                }
+            }
+
+            // If we uploaded everything in the batch, we're done
+            if batch.is_empty() {
+                return Ok(());
             }
         }
 
-        Err(last_err
-            .expect("upload retry loop exited without a result")
-            .into())
+        panic!("failed to upload 3 times, exiting");
     }
 
     async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String, Error>> {

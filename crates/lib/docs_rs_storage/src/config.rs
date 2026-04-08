@@ -106,15 +106,11 @@ pub struct Config {
     // we often also add compression on top of it, which is CPU-bound,
     // even when just light / simpler compression.
     pub local_filesystem_parallelism: usize,
-
-    // How much we want to parallelize file uploads / downloads.
-    pub network_parallelism: usize,
 }
 
 impl AppConfig for Config {
     fn from_environment() -> anyhow::Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
-        let cores = std::thread::available_parallelism()?.get();
 
         Ok(Self {
             temp_dir: prefix.join("tmp"),
@@ -128,8 +124,10 @@ impl AppConfig for Config {
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
             #[cfg(any(test, feature = "testing"))]
             s3_bucket_is_temporary: false,
-            local_filesystem_parallelism: env("DOCSRS_LOCAL_FILESYSTEM_PARALLELISM", cores)?,
-            network_parallelism: env("DOCSRS_NETWORK_PARALLELISM", 8usize.min(cores))?,
+            local_filesystem_parallelism: env(
+                "DOCSRS_LOCAL_FILESYSTEM_PARALLELISM",
+                std::thread::available_parallelism()?.get(),
+            )?,
         })
     }
 

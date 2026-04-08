@@ -1,4 +1,4 @@
-use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage};
+use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage, types::FileRange};
 use anyhow::Result;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
@@ -10,6 +10,7 @@ pub struct Storage {
     runtime: runtime::Handle,
 }
 
+#[allow(dead_code)]
 impl Storage {
     pub fn new(inner: Arc<AsyncStorage>, runtime: runtime::Handle) -> Self {
         Self { inner, runtime }
@@ -69,6 +70,17 @@ impl Storage {
         self.runtime.block_on(self.inner.get(path, max_size))
     }
 
+    pub(crate) fn get_range(
+        &self,
+        path: &str,
+        max_size: usize,
+        range: FileRange,
+        compression: Option<CompressionAlgorithm>,
+    ) -> Result<Blob> {
+        self.runtime
+            .block_on(self.inner.get_range(path, max_size, range, compression))
+    }
+
     pub fn get_from_archive(
         &self,
         archive_path: &str,
@@ -126,6 +138,17 @@ impl Storage {
         content: impl Into<Vec<u8>>,
     ) -> Result<CompressionAlgorithm> {
         self.runtime.block_on(self.inner.store_one(path, content))
+    }
+
+    // Store file into the backend at the given path (also used to detect mime type), returns the
+    // chosen compression algorithm
+    pub fn store_path(
+        &self,
+        target_path: impl Into<String> + std::fmt::Debug,
+        source_path: impl AsRef<Path> + std::fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        self.runtime
+            .block_on(self.inner.store_path(target_path, source_path))
     }
 
     /// sync wrapper for the list_prefix function
