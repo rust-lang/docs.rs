@@ -73,6 +73,10 @@ div.nav-container {
         &.description {
             font-size: 14.4px;
         }
+
+        &.description.license {
+            white-space: normal;
+        }
     }
     a.pure-menu-sublink {
         color: var(--color-navbar-standard);

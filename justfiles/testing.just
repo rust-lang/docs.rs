@@ -99,8 +99,8 @@ sort-cargo-toml *args:
   #!/usr/bin/env bash
   set -euo pipefail
 
-  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.0")}} != 'true' ]; then 
-    echo "cargo-sort to old, must be >=2.1.0"
+  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3")}} != 'true' ]; then 
+    echo "cargo-sort to old, must be >=2.1.3"
     exit 1;
   fi
 

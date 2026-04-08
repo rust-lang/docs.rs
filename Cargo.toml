@@ -40,6 +40,7 @@ http = "1.0.0"
 itertools = "0.14.0" 
 mime = "0.3.16"
 mockito = "1.0.2"
+num_cpus = "1.15.0"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic", "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"
@@ -49,7 +50,7 @@ pretty_assertions = "1.4.0"
 rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", features = ["gzip", "json", "stream"] }
-sentry = { version = "0.46.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
+sentry = { version = "0.47.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.4.0"

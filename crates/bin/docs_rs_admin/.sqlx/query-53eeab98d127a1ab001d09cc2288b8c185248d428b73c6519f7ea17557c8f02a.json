@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            c.name as \"name: KrateName\",\n            repo.override_build_priority as \"priority!\"\n\n        FROM\n            crates AS c\n            INNER JOIN releases AS r ON c.latest_version_id = r.id\n            INNER JOIN repositories AS repo ON r.repository_id = repo.id\n\n        WHERE\n            c.name = ANY($1) AND\n            repo.override_build_priority IS NOT NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "priority!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "53eeab98d127a1ab001d09cc2288b8c185248d428b73c6519f7ea17557c8f02a"
+}

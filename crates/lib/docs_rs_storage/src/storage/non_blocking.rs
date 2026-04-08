@@ -15,7 +15,7 @@ use crate::{
         storage_path::{rustdoc_archive_path, source_archive_path},
     },
 };
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
@@ -33,15 +33,20 @@ pub struct AsyncStorage {
 
 impl AsyncStorage {
     pub async fn new(config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
-        let otel_metrics = StorageMetrics::new(otel_meter_provider);
+        let metrics = StorageMetrics::new(otel_meter_provider);
 
         Ok(Self {
+            archive_index_cache: archive_index::Cache::new(
+                config.archive_index_cache.clone(),
+                otel_meter_provider,
+            )
+            .await
+            .context("initialize archive index cache")?,
             backend: match config.storage_backend {
                 #[cfg(any(test, feature = "testing"))]
-                StorageKind::Memory => StorageBackend::Memory(MemoryBackend::new(otel_metrics)),
-                StorageKind::S3 => StorageBackend::S3(S3Backend::new(&config, otel_metrics).await?),
+                StorageKind::Memory => StorageBackend::Memory(MemoryBackend::new(metrics)),
+                StorageKind::S3 => StorageBackend::S3(S3Backend::new(&config, metrics).await?),
             },
-            archive_index_cache: archive_index::Cache::new(&config),
             config,
         })
     }
@@ -316,7 +321,8 @@ impl AsyncStorage {
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
                         let options = zip::write::SimpleFileOptions::default()
-                            .compression_method(zip::CompressionMethod::Bzip2);
+                            .compression_method(zip::CompressionMethod::Bzip2)
+                            .compression_level(Some(3));
 
                         let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
                         for file_path in get_file_list(&root_dir) {
@@ -847,7 +853,8 @@ mod backend_tests {
 
         let local_index_location = storage
             .config
-            .local_archive_cache_path
+            .archive_index_cache
+            .path
             .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
         let (stored_files, compression_alg) = storage

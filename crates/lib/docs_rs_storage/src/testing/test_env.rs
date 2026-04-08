@@ -20,7 +20,6 @@ impl Deref for TestStorage {
 
 impl TestStorage {
     pub async fn from_kind(kind: StorageKind, meter_provider: &AnyMeterProvider) -> Result<Self> {
-        docs_rs_logging::testing::init();
         Self::from_config(
             Arc::new(Config::test_config_with_kind(kind)?),
             meter_provider,
@@ -65,8 +64,8 @@ impl Drop for TestStorage {
             });
         });
 
-        if self.config.local_archive_cache_path.exists() {
-            std::fs::remove_dir_all(&self.config.local_archive_cache_path).unwrap();
+        if self.config.archive_index_cache.path.exists() {
+            std::fs::remove_dir_all(&self.config.archive_index_cache.path).unwrap();
         }
     }
 }

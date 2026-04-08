@@ -136,6 +136,10 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         )
         .route_with_tsr("/sitemap.xml", get_internal(sitemap::sitemapindex_handler))
         .route_with_tsr(
+            "/-/sitemap/recent/{date}/sitemap.xml",
+            get_internal(sitemap::recent_sitemap_handler),
+        )
+        .route_with_tsr(
             "/-/sitemap/{letter}/sitemap.xml",
             get_internal(sitemap::sitemap_handler),
         )

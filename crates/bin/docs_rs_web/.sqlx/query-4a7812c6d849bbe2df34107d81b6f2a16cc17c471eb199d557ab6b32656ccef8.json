@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE release_build_status\n                   SET last_build_time = $1\n                   FROM releases\n                   INNER JOIN crates ON crates.id = releases.crate_id\n                   WHERE release_build_status.rid = releases.id\n                     AND crates.name = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a7812c6d849bbe2df34107d81b6f2a16cc17c471eb199d557ab6b32656ccef8"
+}

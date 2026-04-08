@@ -6,11 +6,7 @@ edition.workspace = true
 build = "build.rs"
 
 [features]
-testing = [
-    "dep:rand",
-    "docs_rs_config/testing",
-    "docs_rs_opentelemetry/testing",
-]
+testing = ["dep:rand", "docs_rs_config/testing", "docs_rs_opentelemetry/testing"]
 
 [dependencies]
 anyhow = { workspace = true }

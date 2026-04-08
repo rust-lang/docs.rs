@@ -117,6 +117,11 @@ For this to work, you need to install the `browser-ui-test` package:
 npm install browser-ui-test
 ```
 
+### Additional internal docs
+
+- [Build workspaces](./docs/build-workspaces.md)
+- [Archive storage and indexes](./docs/archive-storage-and-indexes.md)
+
 ### Pure docker-compose
 
 If you have trouble with the above commands, consider using `just compose-up-web`,
@@ -309,6 +314,27 @@ If you want to revert to a precise migration, you can run:
 
 ```sh
 cargo run --bin docs_rs_admin -- database migrate <migration number>
+```
+
+#### `queue` subcommand
+
+```sh
+# Queue a specific crate release for building.
+# The optional `--priority` defaults to 5. Lower numbers run first.
+cargo run --bin docs_rs_admin -- queue add <CRATE_NAME> <CRATE_VERSION>
+cargo run --bin docs_rs_admin -- queue add <CRATE_NAME> <CRATE_VERSION> --priority -10
+
+# Inspect or manage default priorities for crates matching a Postgres pattern.
+cargo run --bin docs_rs_admin -- queue default-priority list
+cargo run --bin docs_rs_admin -- queue default-priority get <CRATE_NAME>
+cargo run --bin docs_rs_admin -- queue default-priority set 'tokio-%' -5
+cargo run --bin docs_rs_admin -- queue default-priority remove 'tokio-%'
+
+# Inspect or manage repository-specific build priority overrides using repositories.name.
+cargo run --bin docs_rs_admin -- queue repository-priority list
+cargo run --bin docs_rs_admin -- queue repository-priority get <owner/repo>
+cargo run --bin docs_rs_admin -- queue repository-priority set <owner/repo> -10
+cargo run --bin docs_rs_admin -- queue repository-priority remove <owner/repo>
 ```
 
 
