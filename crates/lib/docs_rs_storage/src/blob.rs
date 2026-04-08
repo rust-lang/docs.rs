@@ -4,66 +4,8 @@ use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
 use docs_rs_types::CompressionAlgorithm;
 use mime::Mime;
-use std::{
-    fmt,
-    io::{Cursor, SeekFrom},
-    sync::Arc,
-};
-use tokio::{
-    fs,
-    io::{self, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncSeekExt},
-};
-
-pub enum StreamUploadSource {
-    Bytes(Arc<[u8]>),
-    File(fs::File),
-}
-
-impl StreamUploadSource {
-    pub async fn reader(&self) -> io::Result<Box<dyn AsyncRead + Unpin + Send + Sync>> {
-        Ok(match self {
-            Self::Bytes(bytes) => Box::new(Cursor::new(bytes.clone())),
-            Self::File(file) => {
-                let mut cloned = file.try_clone().await?;
-                cloned.seek(SeekFrom::Start(0)).await?;
-                Box::new(cloned)
-            }
-        })
-    }
-
-    pub async fn content_length(&self) -> io::Result<u64> {
-        Ok(match self {
-            Self::Bytes(bytes) => bytes.len() as u64,
-            Self::File(file) => file.metadata().await?.len(),
-        })
-    }
-}
-
-/// Represents a stream blob to be uploaded to storage.
-///
-/// NOTE: Right now we only support uploads where the size is known in advance.
-/// We can add support for streams with unknown size, but this would mean
-/// using an intermediate fixed-size buffer and multipart uploads for these cases.
-/// But: the multipart machinery is only worth the complexity if the stream is:
-/// - unknown size
-/// - bigger (there's a 5 MiB size limit for each part)
-pub struct StreamUpload {
-    pub path: String,
-    pub mime: Mime,
-    pub source: StreamUploadSource,
-    pub compression: Option<CompressionAlgorithm>,
-}
-
-impl From<BlobUpload> for StreamUpload {
-    fn from(value: BlobUpload) -> Self {
-        Self {
-            path: value.path,
-            mime: value.mime,
-            source: StreamUploadSource::Bytes(Arc::from(value.content)),
-            compression: value.compression,
-        }
-    }
-}
+use std::io;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 
 /// represents a blob to be uploaded to storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,7 +60,7 @@ pub struct StreamingBlob {
     pub content: Box<dyn AsyncBufRead + Unpin + Send>,
 }
 
-impl fmt::Debug for StreamingBlob {
+impl std::fmt::Debug for StreamingBlob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamingBlob")
             .field("path", &self.path)
@@ -168,7 +110,7 @@ impl StreamingBlob {
         let mut content = SizedBuffer::new(max_size);
         content.reserve(self.content_length);
 
-        io::copy(&mut self.content, &mut content).await?;
+        tokio::io::copy(&mut self.content, &mut content).await?;
 
         Ok(Blob {
             path: self.path,
@@ -190,7 +132,7 @@ impl From<Blob> for StreamingBlob {
             etag: value.etag,
             compression: value.compression,
             content_length: value.content.len(),
-            content: Box::new(Cursor::new(value.content)),
+            content: Box::new(io::Cursor::new(value.content)),
         }
     }
 }
@@ -200,10 +142,6 @@ mod test {
     use super::*;
     use crate::compress_async;
     use docs_rs_headers::compute_etag;
-    use tokio::{
-        fs,
-        io::{AsyncReadExt as _, AsyncWriteExt as _},
-    };
 
     const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
 
@@ -219,7 +157,7 @@ mod test {
             compression: alg,
             etag: Some(compute_etag(&content)),
             content_length: content.len(),
-            content: Box::new(Cursor::new(content)),
+            content: Box::new(io::Cursor::new(content)),
         }
     }
 
@@ -242,52 +180,6 @@ mod test {
             assert_eq!(blob.content, CONTENT);
             assert!(blob.compression.is_none());
         }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_stream_upload_source_bytes_creates_fresh_readers() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-
-        let source = StreamUploadSource::Bytes(Arc::from(CONTENT));
-        assert_eq!(source.content_length().await?, CONTENT.len() as u64);
-
-        let mut first = source.reader().await?;
-        let mut first_buf = Vec::new();
-        first.read_to_end(&mut first_buf).await?;
-        assert_eq!(first_buf, CONTENT);
-
-        let mut second = source.reader().await?;
-        let mut second_buf = Vec::new();
-        second.read_to_end(&mut second_buf).await?;
-        assert_eq!(second_buf, CONTENT);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_stream_upload_source_file_creates_fresh_readers() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-
-        let tempfile = tempfile::NamedTempFile::new()?;
-        let mut file = fs::File::from_std(tempfile.reopen()?);
-        file.write_all(CONTENT).await?;
-        file.seek(std::io::SeekFrom::Start(CONTENT.len() as u64))
-            .await?;
-
-        let source = StreamUploadSource::File(file);
-        assert_eq!(source.content_length().await?, CONTENT.len() as u64);
-
-        let mut first = source.reader().await?;
-        let mut first_buf = Vec::new();
-        first.read_to_end(&mut first_buf).await?;
-        assert_eq!(first_buf, CONTENT);
-
-        let mut second = source.reader().await?;
-        let mut second_buf = Vec::new();
-        second.read_to_end(&mut second_buf).await?;
-        assert_eq!(second_buf, CONTENT);
 
         Ok(())
     }
@@ -334,7 +226,7 @@ mod test {
         let mut compressed_content = Vec::new();
         let alg = CompressionAlgorithm::Zstd;
         compress_async(
-            &mut Cursor::new(CONTENT.to_vec()),
+            &mut io::Cursor::new(CONTENT.to_vec()),
             &mut compressed_content,
             alg,
         )

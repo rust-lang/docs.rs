@@ -830,7 +830,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{blob::StreamingBlob, storage::non_blocking::ZIP_BUFFER_SIZE};
+    use crate::blob::StreamingBlob;
     use chrono::Utc;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
@@ -839,15 +839,14 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     async fn create_test_archive(file_count: u32) -> Result<fs::File> {
-        let writer = spawn_blocking(move || {
+        spawn_blocking(move || {
             use std::io::Write as _;
 
             let tf = tempfile::tempfile()?;
 
             let objectcontent: Vec<u8> = (0..255).collect();
 
-            let mut archive =
-                zip::ZipWriter::new(std::io::BufWriter::with_capacity(ZIP_BUFFER_SIZE, tf));
+            let mut archive = zip::ZipWriter::new(tf);
             for i in 0..file_count {
                 archive.start_file(
                     format!("testfile{i}"),
@@ -859,9 +858,8 @@ mod tests {
             }
             Ok(archive.finish()?)
         })
-        .await?;
-
-        Ok(fs::File::from_std(writer.into_inner()?))
+        .await
+        .map(fs::File::from_std)
     }
 
     struct FakeDownloader {
