@@ -1983,6 +1983,7 @@ dependencies = [
  "docs_rs_utils",
  "docsrs-metadata",
  "log",
+ "num_cpus",
  "opentelemetry",
  "pretty_assertions",
  "regex",

@@ -40,6 +40,7 @@ http = "1.0.0"
 itertools = "0.14.0" 
 mime = "0.3.16"
 mockito = "1.0.2"
+num_cpus = "1.15.0"
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic", "metrics"] }
 opentelemetry-resource-detectors = "0.10.0"

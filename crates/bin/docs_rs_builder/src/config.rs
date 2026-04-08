@@ -125,6 +125,8 @@ pub enum ParseBuildCoresError {
     },
     #[error("build core range start must be less than or equal to end")]
     DescendingRange,
+    #[error("not enough cores, we only have {0}")]
+    NotEnoughCores(usize),
 }
 
 impl FromStr for BuildCores {
@@ -153,6 +155,15 @@ impl FromStr for BuildCores {
             return Err(ParseBuildCoresError::DescendingRange);
         }
 
+        let cpus = num_cpus::get();
+
+        if end >= cpus {
+            // NOTE: docker counts the cores zero-based, so
+            // a core-number that is exactly the cpu-count is already
+            // too high.
+            return Err(ParseBuildCoresError::NotEnoughCores(cpus));
+        }
+
         Ok(Self(start..=end))
     }
 }
@@ -163,19 +174,19 @@ mod tests {
 
     #[test]
     fn parses_build_core_range() {
-        let build_cores: BuildCores = "3-4".parse().unwrap();
+        let build_cores: BuildCores = "2-3".parse().unwrap();
 
-        assert_eq!(build_cores.start(), &3);
-        assert_eq!(build_cores.end(), &4);
+        assert_eq!(build_cores.start(), &2);
+        assert_eq!(build_cores.end(), &3);
         assert_eq!(build_cores.len(), 2);
     }
 
     #[test]
     fn parses_single_build_core() {
-        let build_cores: BuildCores = "3-3".parse().unwrap();
+        let build_cores: BuildCores = "2-2".parse().unwrap();
 
-        assert_eq!(build_cores.start(), &3);
-        assert_eq!(build_cores.end(), &3);
+        assert_eq!(build_cores.start(), &2);
+        assert_eq!(build_cores.end(), &2);
         assert_eq!(build_cores.len(), 1);
     }
 
@@ -204,6 +215,17 @@ mod tests {
         let err = "3-a".parse::<BuildCores>().unwrap_err();
 
         assert!(err.to_string().contains("invalid build core range end `a`"));
+    }
+
+    #[test]
+    fn rejects_build_core_range_with_invalid_core_number() {
+        let cpus = num_cpus::get();
+        let err = format!("0-{cpus}").parse::<BuildCores>().unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains(&format!("not enough cores, we only have {cpus}"))
+        );
     }
 
     #[test]

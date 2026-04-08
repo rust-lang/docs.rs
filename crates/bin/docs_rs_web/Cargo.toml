@@ -49,7 +49,7 @@ getrandom = "0.4.0"
 http = { workspace = true }
 lol_html = "2.0.0"
 mime = { workspace = true }
-num_cpus = "1.15.0"
+num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 postcard = { workspace = true }
 rayon-core = "1.13.0"
