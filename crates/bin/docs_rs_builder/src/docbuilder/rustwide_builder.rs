@@ -167,10 +167,17 @@ impl RustwideBuilder {
 
     #[instrument(skip(self))]
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
-        SandboxBuilder::new()
-            .cpu_limit(self.config.build_cpu_limit.map(|limit| limit as f32))
+        let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking())
+            .enable_networking(limits.networking());
+
+        if let Some(cores) = &self.config.build_cpu_cores {
+            builder.cpuset_cpus(Some(cores.0.clone()))
+        } else if let Some(limit) = &self.config.build_cpu_limit {
+            builder.cpu_limit(Some(*limit as f32))
+        } else {
+            builder
+        }
     }
 
     pub fn purge_caches(&self) -> Result<()> {
@@ -1245,8 +1252,8 @@ impl RustwideBuilder {
             // docs.rs, but once it's stable we can remove this flag.
             "-Zrustdoc-scrape-examples".into(),
         ];
-        if let Some(cpu_limit) = self.config.build_cpu_limit {
-            cargo_args.push(format!("-j{cpu_limit}"));
+        if let Some(cargo_job_limit) = self.config.cargo_job_limit() {
+            cargo_args.push(format!("-j{cargo_job_limit}"));
         }
         // Cargo has a series of frightening bugs around cross-compiling proc-macros:
         // - Passing `--target` causes RUSTDOCFLAGS to fail to be passed 🤦
@@ -1369,7 +1376,10 @@ impl BuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
+    use crate::{
+        config::BuildCores,
+        testing::{TestEnvironment, TestEnvironmentExt as _},
+    };
     use docs_rs_config::AppConfig as _;
     use docs_rs_utils::block_on_async_with_conn;
     // use crate::test::{AxumRouterTestExt, TestEnvironment};
@@ -2249,6 +2259,42 @@ mod tests {
         assert_contains(&targets, "x86_64-apple-darwin");
         // Part of the default targets.
         assert_contains(&targets, "aarch64-apple-darwin");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_with_cpu_limit() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.build_cpu_limit = Some(2);
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .successful
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_with_cpu_cores() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.build_cpu_cores = Some(BuildCores(1..=2));
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .successful
+        );
 
         Ok(())
     }
