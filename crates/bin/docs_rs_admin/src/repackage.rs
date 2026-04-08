@@ -108,6 +108,7 @@ pub async fn repackage(
 /// repackage contents of a S3 path prefix into a single archive file.
 ///
 /// Not performance optimized, for now it just tries to be simple.
+#[instrument(skip(storage))]
 async fn repackage_path(
     storage: &AsyncStorage,
     prefix: &str,
