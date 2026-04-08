@@ -850,7 +850,9 @@ mod tests {
             for i in 0..file_count {
                 archive.start_file(
                     format!("testfile{i}"),
-                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Bzip2),
+                    SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Bzip2)
+                        .compression_level(Some(1)),
                 )?;
                 archive.write_all(&objectcontent)?;
             }
