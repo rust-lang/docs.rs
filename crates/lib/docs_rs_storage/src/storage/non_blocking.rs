@@ -321,7 +321,8 @@ impl AsyncStorage {
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
                         let options = zip::write::SimpleFileOptions::default()
-                            .compression_method(zip::CompressionMethod::Bzip2);
+                            .compression_method(zip::CompressionMethod::Bzip2)
+                            .compression_level(Some(3));
 
                         let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
                         for file_path in get_file_list(&root_dir) {
