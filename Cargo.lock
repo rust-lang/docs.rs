@@ -7069,9 +7069,9 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "rustwide"
-version = "0.22.1"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3fa72fbff64d1f91621d436e1ccef551c9a6046ff0beb500ea20a9b0a74be1a"
+checksum = "ab59e80e2a33a40593e509eeb811b5f8a7f2c575cd1a2ace806e8b3a79cfb9c9"
 dependencies = [
  "anyhow",
  "attohttpc",
@@ -7079,7 +7079,7 @@ dependencies = [
  "flate2",
  "fs2",
  "futures-util",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "git2",
  "http 1.4.0",
  "log",
