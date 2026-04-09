@@ -21,8 +21,14 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{TryStreamExt as _, future, stream::BoxStream};
-use std::{fmt, io::Cursor, path::Path, pin::Pin, sync::Arc};
-use tokio::{fs, io};
+use std::{
+    fmt,
+    io::{Cursor, Write as _},
+    path::Path,
+    pin::Pin,
+    sync::Arc,
+};
+use tokio::{fs, io, io::AsyncWriteExt as _};
 use tracing::{info_span, instrument, trace, warn};
 
 /// buffer size when writing zip files.
@@ -298,11 +304,16 @@ impl AsyncStorage {
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
         let root_dir = root_dir.as_ref();
-        let (zip_file, file_paths) =
+
+        let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let zip_path = zip_temp_path.to_path_buf();
+
+        let file_paths =
             spawn_blocking({
                 use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
+                let zip_path = zip_path.clone();
 
                 move || {
                     let mut file_paths = Vec::new();
@@ -319,7 +330,7 @@ impl AsyncStorage {
                     // with a mapping in `storage::archive_index::Index::new_from_zip`.
 
 
-                    let zip_file = {
+                    {
                         let _span =
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
@@ -328,7 +339,7 @@ impl AsyncStorage {
                             .compression_level(Some(3));
 
                         // rustdoc archives can become a couple of GiB big, so we better use a tempfile.
-                        let zip_file = tempfile::tempfile()?;
+                        let zip_file = fs::File::create(&zip_path)?;
                         let mut zip = zip::ZipWriter::new(io::BufWriter::with_capacity(ZIP_BUFFER_SIZE, zip_file));
                         for file_path in get_file_list(&root_dir) {
                             let file_path = file_path?;
@@ -339,60 +350,58 @@ impl AsyncStorage {
                             file_paths.push(FileEntry{path: file_path, size: file.metadata()?.len()});
                         }
 
-                        zip.finish()?.into_inner()?
-                    };
+                        let mut zip_file = zip.finish()?.into_inner()?;
+                        zip_file.flush()?;
+                    }
 
-                    Ok((
-                        zip_file,
-                        file_paths
-                    ))
+                    Ok(file_paths)
                 }
             })
             .await?;
-        let zip_file = fs::File::from_std(zip_file);
 
         let alg = CompressionAlgorithm::default();
         let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
-        let (zip_file, compressed_index_file) = {
+        let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let compressed_index_path = compressed_index_temp_path.to_path_buf();
+        {
             let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
-            fs::create_dir_all(&self.config.temp_dir).await?;
-            let local_index_path =
-                tempfile::NamedTempFile::new_in(&self.config.temp_dir)?.into_temp_path();
+            let local_index_path = tempfile::NamedTempFile::new()?.into_temp_path();
 
-            let zip_reader =
-                archive_index::create(io::BufReader::new(zip_file), &local_index_path).await?;
-            let zip_file = zip_reader.into_inner();
-
-            // compressed index can become up to a couple 100 MiB big, so rather use a tempfile.
-            let mut compressed_index_file =
-                fs::File::from_std(spawn_blocking(|| Ok(tempfile::tempfile()?)).await?);
-            compress_async(
-                &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
-                &mut io::BufWriter::new(&mut compressed_index_file),
-                alg,
+            archive_index::create(
+                io::BufReader::new(fs::File::open(&zip_path).await?),
+                &local_index_path,
             )
             .await?;
-            (zip_file, compressed_index_file)
-        };
 
-        self.backend
-            .upload_stream(StreamUpload {
+            // compressed index can become up to a couple 100 MiB big, so rather use a tempfile.
+            let mut compressed_index_file = fs::File::create(&compressed_index_path).await?;
+            {
+                let mut compressed_index_writer = io::BufWriter::new(&mut compressed_index_file);
+                compress_async(
+                    &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
+                    &mut compressed_index_writer,
+                    alg,
+                )
+                .await?;
+                compressed_index_writer.flush().await?;
+            }
+        }
+
+        tokio::try_join!(
+            self.backend.upload_stream(StreamUpload {
                 path: archive_path.to_string(),
                 mime: mimes::APPLICATION_ZIP.clone(),
-                source: StreamUploadSource::File(zip_file),
+                source: StreamUploadSource::File(zip_path),
                 compression: None,
-            })
-            .await?;
-
-        self.backend
-            .upload_stream(StreamUpload {
+            }),
+            self.backend.upload_stream(StreamUpload {
                 path: remote_index_path,
                 mime: mime::APPLICATION_OCTET_STREAM,
-                source: StreamUploadSource::File(compressed_index_file),
+                source: StreamUploadSource::File(compressed_index_path),
                 compression: Some(alg),
             })
-            .await?;
+        )?;
 
         Ok((file_paths, CompressionAlgorithm::Bzip2))
     }

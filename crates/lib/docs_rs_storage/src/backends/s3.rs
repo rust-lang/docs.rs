@@ -1,7 +1,8 @@
 use crate::{
     Config,
     backends::StorageBackendMethods,
-    blob::{StreamUpload, StreamingBlob},
+    blob::{StreamUpload, StreamUploadSource, StreamingBlob},
+    crc32_for_path,
     errors::PathNotFoundError,
     metrics::StorageMetrics,
     types::FileRange,
@@ -13,20 +14,17 @@ use aws_sdk_s3::{
     Client,
     config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
-    primitives::ByteStream,
-    types::{Delete, ObjectIdentifier},
+    primitives::{ByteStream, Length},
+    types::{ChecksumAlgorithm, Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
+use base64::{Engine as _, engine::general_purpose::STANDARD as b64};
 use chrono::Utc;
 use docs_rs_headers::{ETag, compute_etag};
-use futures_util::{
-    TryStreamExt,
-    stream::{BoxStream, StreamExt},
-};
-use http_body::Frame;
-use http_body_util::StreamBody;
+use docs_rs_utils::spawn_blocking;
+use futures_util::stream::{BoxStream, StreamExt};
 use opentelemetry::KeyValue;
-use tokio_util::io::ReaderStream;
+use tokio::fs;
 use tracing::{error, warn};
 
 // error codes to check for when trying to determine if an error is
@@ -45,6 +43,8 @@ static NOT_FOUND_ERROR_CODES: [&str; 5] = [
     // from testing long keys with minio
     "XMinioInvalidObjectName",
 ];
+
+const S3_UPLOAD_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 
 trait S3ResultExt<T> {
     fn convert_errors(self) -> anyhow::Result<T>;
@@ -243,26 +243,66 @@ impl StorageBackendMethods for S3Backend {
             compression,
         } = upload;
 
-        let content_length = source.content_length().await?;
+        let (content_length, checksum_crc32) = match &source {
+            StreamUploadSource::Bytes(bytes) => (bytes.len() as u64, None),
+            StreamUploadSource::File(local_path) => {
+                let local_path = local_path.clone();
+
+                (
+                    fs::metadata(&local_path).await?.len(),
+                    Some(
+                        spawn_blocking(move || Ok(b64.encode(crc32_for_path(local_path)?))).await?,
+                    ),
+                )
+            }
+        };
 
         let mut last_err = None;
 
         for attempt in 1..=3 {
-            let reader = source.reader().await?;
-            let stream = ReaderStream::new(reader).map_ok(Frame::data);
+            let body = match &source {
+                StreamUploadSource::Bytes(bytes) => ByteStream::from(bytes.clone()),
+                StreamUploadSource::File(path) => {
+                    // NOTE:
+                    // reading the upload-data from a local path is
+                    // "retryable" in the AWS SDK sense.
+                    // ".file" (file pointer) is not retryable.
+                    ByteStream::read_from()
+                        .path(path)
+                        .buffer_size(S3_UPLOAD_BUFFER_SIZE)
+                        .length(Length::Exact(content_length))
+                        .build()
+                        .await?
+                }
+            };
 
-            match self
+            let mut request = self
                 .client
                 .put_object()
                 .bucket(&self.bucket)
                 .key(&path)
-                .body(ByteStream::from_body_1_x(StreamBody::new(stream)))
+                .body(body)
                 .content_length(content_length as i64)
                 .content_type(mime.to_string())
-                .set_content_encoding(compression.map(|alg| alg.to_string()))
-                .send()
-                .await
-            {
+                .set_content_encoding(compression.map(|alg| alg.to_string()));
+
+            // NOTE: when you try to stream-upload a local file, the AWS SDK by default
+            // uses a "middleware" to calculate the checksum for the content, to compare it after
+            // uploading.
+            // This piece is broken right now, but only when using S3 directly. On minio, all is
+            // fiine.
+            // I don't want to disable checksums so we're sure the files are uploaded correctly.
+            // So the only alternative (outside of trying to fix the SDK) is to calculate the
+            // checksum ourselves. This is a little annoying because this means we have to read the
+            // whole file before upload. But since I don't want to load all files into memory before
+            // upload, this is the only option.
+            if let Some(checksum_crc32) = &checksum_crc32 {
+                request = request
+                    .checksum_algorithm(ChecksumAlgorithm::Crc32)
+                    .checksum_crc32(checksum_crc32);
+            }
+
+            match request.send().await {
                 Ok(_) => {
                     self.otel_metrics
                         .uploaded_files
@@ -270,7 +310,7 @@ impl StorageBackendMethods for S3Backend {
                     return Ok(());
                 }
                 Err(err) => {
-                    warn!(?err, attempt = attempt + 1, %path, "failed to upload blob to S3");
+                    warn!(?err, attempt, %path, "failed to upload blob to S3");
                     last_err = Some(err);
                 }
             }

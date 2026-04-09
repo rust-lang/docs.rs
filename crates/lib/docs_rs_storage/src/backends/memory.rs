@@ -1,7 +1,7 @@
 use crate::{
     Blob,
     backends::StorageBackendMethods,
-    blob::{StreamUpload, StreamingBlob},
+    blob::{StreamUpload, StreamUploadSource, StreamingBlob},
     errors::PathNotFoundError,
     metrics::StorageMetrics,
     types::FileRange,
@@ -12,7 +12,7 @@ use dashmap::DashMap;
 use docs_rs_headers::compute_etag;
 use futures_util::stream::{self, BoxStream};
 use itertools::Itertools as _;
-use tokio::io;
+use tokio::fs;
 
 pub(crate) struct MemoryBackend {
     otel_metrics: StorageMetrics,
@@ -56,16 +56,17 @@ impl StorageBackendMethods for MemoryBackend {
             compression,
         } = upload;
 
-        let mut content = source.reader().await?;
-        let mut buffer = Vec::new();
-        io::copy(&mut content, &mut buffer).await?;
+        let content = match source {
+            StreamUploadSource::Bytes(content) => content.to_vec(),
+            StreamUploadSource::File(path) => fs::read(&path).await?,
+        };
 
         let blob = Blob {
             path,
             mime,
             date_updated: Utc::now(),
-            etag: Some(compute_etag(&buffer)),
-            content: buffer,
+            etag: Some(compute_etag(&content)),
+            content,
             compression,
         };
 

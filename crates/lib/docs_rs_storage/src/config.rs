@@ -75,8 +75,6 @@ impl AppConfig for ArchiveIndexCacheConfig {
 
 #[derive(Debug)]
 pub struct Config {
-    pub temp_dir: PathBuf,
-
     // Storage params
     pub storage_backend: StorageKind,
 
@@ -113,11 +111,9 @@ pub struct Config {
 
 impl AppConfig for Config {
     fn from_environment() -> anyhow::Result<Self> {
-        let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         let cores = std::thread::available_parallelism()?.get();
 
         Ok(Self {
-            temp_dir: prefix.join("tmp"),
             storage_backend: env("DOCSRS_STORAGE_BACKEND", StorageKind::default())?,
             aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?,
             s3_bucket: env("DOCSRS_S3_BUCKET", "rust-docs-rs".to_string())?,
