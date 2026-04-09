@@ -4,39 +4,13 @@ use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
 use docs_rs_types::CompressionAlgorithm;
 use mime::Mime;
-use std::{
-    fmt,
-    io::{Cursor, SeekFrom},
-    sync::Arc,
-};
-use tokio::{
-    fs,
-    io::{self, AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncSeekExt},
-};
+use std::{fmt, io::Cursor, path::PathBuf};
+use tokio::io::{self, AsyncBufRead, AsyncBufReadExt};
+use tokio_util::bytes::Bytes;
 
 pub enum StreamUploadSource {
-    Bytes(Arc<[u8]>),
-    File(fs::File),
-}
-
-impl StreamUploadSource {
-    pub async fn reader(&self) -> io::Result<Box<dyn AsyncRead + Unpin + Send + Sync>> {
-        Ok(match self {
-            Self::Bytes(bytes) => Box::new(Cursor::new(bytes.clone())),
-            Self::File(file) => {
-                let mut cloned = file.try_clone().await?;
-                cloned.seek(SeekFrom::Start(0)).await?;
-                Box::new(cloned)
-            }
-        })
-    }
-
-    pub async fn content_length(&self) -> io::Result<u64> {
-        Ok(match self {
-            Self::Bytes(bytes) => bytes.len() as u64,
-            Self::File(file) => file.metadata().await?.len(),
-        })
-    }
+    Bytes(Bytes),
+    File(PathBuf),
 }
 
 /// Represents a stream blob to be uploaded to storage.
@@ -59,7 +33,7 @@ impl From<BlobUpload> for StreamUpload {
         Self {
             path: value.path,
             mime: value.mime,
-            source: StreamUploadSource::Bytes(Arc::from(value.content)),
+            source: StreamUploadSource::Bytes(value.content.into()),
             compression: value.compression,
         }
     }
@@ -200,10 +174,6 @@ mod test {
     use super::*;
     use crate::compress_async;
     use docs_rs_headers::compute_etag;
-    use tokio::{
-        fs,
-        io::{AsyncReadExt as _, AsyncWriteExt as _},
-    };
 
     const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
 
@@ -242,52 +212,6 @@ mod test {
             assert_eq!(blob.content, CONTENT);
             assert!(blob.compression.is_none());
         }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_stream_upload_source_bytes_creates_fresh_readers() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-
-        let source = StreamUploadSource::Bytes(Arc::from(CONTENT));
-        assert_eq!(source.content_length().await?, CONTENT.len() as u64);
-
-        let mut first = source.reader().await?;
-        let mut first_buf = Vec::new();
-        first.read_to_end(&mut first_buf).await?;
-        assert_eq!(first_buf, CONTENT);
-
-        let mut second = source.reader().await?;
-        let mut second_buf = Vec::new();
-        second.read_to_end(&mut second_buf).await?;
-        assert_eq!(second_buf, CONTENT);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_stream_upload_source_file_creates_fresh_readers() -> Result<()> {
-        const CONTENT: &[u8] = b"Hello, world!";
-
-        let tempfile = tempfile::NamedTempFile::new()?;
-        let mut file = fs::File::from_std(tempfile.reopen()?);
-        file.write_all(CONTENT).await?;
-        file.seek(std::io::SeekFrom::Start(CONTENT.len() as u64))
-            .await?;
-
-        let source = StreamUploadSource::File(file);
-        assert_eq!(source.content_length().await?, CONTENT.len() as u64);
-
-        let mut first = source.reader().await?;
-        let mut first_buf = Vec::new();
-        first.read_to_end(&mut first_buf).await?;
-        assert_eq!(first_buf, CONTENT);
-
-        let mut second = source.reader().await?;
-        let mut second_buf = Vec::new();
-        second.read_to_end(&mut second_buf).await?;
-        assert_eq!(second_buf, CONTENT);
 
         Ok(())
     }
