@@ -23,8 +23,10 @@ async-stream = { workspace = true }
 aws-config = { version = "1.0.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-s3 = { version = "1.3.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-types-convert = { version = "0.60.0", features = ["convert-chrono"] }
+base64 = { workspace = true }
 bzip2 = "0.6.0"
 chrono = { workspace = true }
+crc32fast = "1.4.2"
 dashmap = { version = "6.0.0", optional = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
@@ -70,6 +72,10 @@ harness = false
 name = "archive_index_cache"
 harness = false
 required-features = ["testing"]
+
+[[bench]]
+name = "crc32"
+harness = false
 
 [lints]
 workspace = true
