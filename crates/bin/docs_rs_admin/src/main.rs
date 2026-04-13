@@ -14,7 +14,7 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{ConfigName, set_config},
+    service_config::{AlertSeverity, ConfigName, GlobalAlert, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
@@ -359,6 +359,12 @@ enum DatabaseSubcommand {
         version: Option<i64>,
     },
 
+    /// Manage the global alert shown in the site header
+    GlobalAlert {
+        #[command(subcommand)]
+        command: GlobalAlertSubcommand,
+    },
+
     /// temporary command to repackage missing crates into archive storage.
     /// starts at the earliest release and works forwards.
     Repackage {
@@ -403,6 +409,8 @@ impl DatabaseSubcommand {
                 docs_rs_database::migrate(&mut conn, version).await
             }
             .context("Failed to run database migrations")?,
+
+            Self::GlobalAlert { command } => command.handle_args(ctx).await?,
 
             Self::Repackage { limit } => {
                 let pool = ctx.pool()?;
@@ -500,6 +508,59 @@ impl DatabaseSubcommand {
 
             Self::Limits { command } => command.handle_args(ctx).await?,
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+enum GlobalAlertSubcommand {
+    /// Set the global alert shown in the site header
+    Set {
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long, default_value_t)]
+        severity: AlertSeverity,
+    },
+
+    /// Remove the global alert shown in the site header
+    Remove,
+}
+
+impl GlobalAlertSubcommand {
+    async fn handle_args(self, ctx: Context) -> Result<()> {
+        let mut conn = ctx
+            .pool()?
+            .get_async()
+            .await
+            .context("failed to get a database connection")?;
+
+        match self {
+            Self::Set {
+                url,
+                text,
+                severity,
+            } => {
+                set_config(
+                    &mut conn,
+                    ConfigName::GlobalAlert,
+                    GlobalAlert {
+                        url,
+                        text,
+                        severity,
+                    },
+                )
+                .await
+                .context("failed to set global alert in database")?;
+            }
+            Self::Remove => {
+                remove_config(&mut conn, ConfigName::GlobalAlert)
+                    .await
+                    .context("failed to remove global alert from database")?;
+            }
+        }
+
         Ok(())
     }
 }

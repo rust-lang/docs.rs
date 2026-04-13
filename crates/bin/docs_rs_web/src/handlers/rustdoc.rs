@@ -15,11 +15,11 @@ use crate::{
     metrics::WebMetrics,
     middleware::csp::Csp,
     page::{
-        TemplateData,
-        templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+        ActiveAlerts, TemplateData,
+        global_alert::GlobalAlertCache,
+        templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
     },
-    utils,
-    utils::licenses,
+    utils::{self, licenses},
 };
 use anyhow::{Context as _, anyhow};
 use askama::Template;
@@ -492,6 +492,7 @@ impl RustdocPage {
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
         if_none_match: Option<&IfNoneMatch>,
+        alerts: ActiveAlerts,
     ) -> AxumResponse {
         let crate_name = &self.metadata.name;
 
@@ -529,6 +530,7 @@ impl RustdocPage {
                     template_data,
                     rustdoc_html.content,
                     max_parse_memory,
+                    alerts,
                     self.clone(),
                     otel_metrics,
                 )),
@@ -555,6 +557,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
+    Extension(global_alert_cache): Extension<Arc<GlobalAlertCache>>,
     RawQuery(original_query): RawQuery,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
     mut conn: DbConnection,
@@ -778,6 +781,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             blob,
             config.max_parse_memory,
             if_none_match.as_deref(),
+            global_alert_cache.get().await,
         )
         .await)
 }
@@ -1070,6 +1074,7 @@ mod test {
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
     use docs_rs_cargo_metadata::Dependency;
+    use docs_rs_database::service_config::{AlertSeverity, ConfigName, GlobalAlert, set_config};
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_rustdoc_json::{
         RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
@@ -1133,6 +1138,55 @@ mod test {
         try_latest_version_redirect(krate, path, web, config)
             .await?
             .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn rustdoc_page_renders_global_alert() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let mut conn = env.async_conn().await?;
+        // NOTE: the global alert is cached inside the web-app, so we have to
+        // set it before we fetch the web-app from the test-environments.
+        set_config(
+            &mut conn,
+            ConfigName::GlobalAlert,
+            GlobalAlert {
+                url: "https://example.com/maintenance".into(),
+                text: "Scheduled maintenance".into(),
+                severity: AlertSeverity::Warn,
+            },
+        )
+        .await?;
+        drop(conn);
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .rustdoc_file("dummy/index.html")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        let page = kuchikiki::parse_html().one(
+            web.assert_success("/dummy/0.1.0/dummy/")
+                .await?
+                .text()
+                .await?,
+        );
+        let alert = page
+            .select("a.pure-menu-link.warn")
+            .expect("invalid selector")
+            .next()
+            .context("missing global alert on rustdoc page")?;
+
+        assert_eq!(
+            alert.attributes.borrow().get("href"),
+            Some("https://example.com/maintenance")
+        );
+        assert!(alert.text_contents().contains("Scheduled maintenance"));
+        Ok(())
     }
 
     #[test_case(true)]

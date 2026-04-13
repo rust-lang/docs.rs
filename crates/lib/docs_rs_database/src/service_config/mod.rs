@@ -1,5 +1,9 @@
+mod global_alert;
+
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
+
+pub use global_alert::{AlertSeverity, GlobalAlert};
 
 #[derive(strum::IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
@@ -8,6 +12,7 @@ pub enum ConfigName {
     LastSeenIndexReference,
     QueueLocked,
     Toolchain,
+    GlobalAlert,
 }
 
 pub async fn set_config(
@@ -25,6 +30,14 @@ pub async fn set_config(
     )
     .execute(conn)
     .await?;
+    Ok(())
+}
+
+pub async fn remove_config(conn: &mut sqlx::PgConnection, name: ConfigName) -> anyhow::Result<()> {
+    let name: &'static str = name.into();
+    sqlx::query!("DELETE FROM config WHERE name = $1;", name)
+        .execute(conn)
+        .await?;
     Ok(())
 }
 
@@ -56,6 +69,7 @@ mod tests {
     #[test_case(ConfigName::RustcVersion, "rustc_version")]
     #[test_case(ConfigName::QueueLocked, "queue_locked")]
     #[test_case(ConfigName::LastSeenIndexReference, "last_seen_index_reference")]
+    #[test_case(ConfigName::GlobalAlert, "global_alert")]
     fn test_configname_variants(variant: ConfigName, expected: &'static str) {
         let name: &'static str = variant.into();
         assert_eq!(name, expected);
@@ -104,6 +118,54 @@ mod tests {
         assert_eq!(
             get_config(&mut conn, ConfigName::RustcVersion).await?,
             Some("some value".to_string())
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remove_existing_config() -> anyhow::Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+
+        let mut conn = db.async_conn().await?;
+        set_config(
+            &mut conn,
+            ConfigName::RustcVersion,
+            Value::String("some value".into()),
+        )
+        .await?;
+
+        assert_eq!(
+            get_config(&mut conn, ConfigName::RustcVersion).await?,
+            Some("some value".to_string())
+        );
+
+        remove_config(&mut conn, ConfigName::RustcVersion).await?;
+
+        assert!(
+            get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                .await?
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remove_missing_config_is_noop() -> anyhow::Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+
+        let mut conn = db.async_conn().await?;
+        sqlx::query!("DELETE FROM config")
+            .execute(&mut *conn)
+            .await?;
+
+        remove_config(&mut conn, ConfigName::RustcVersion).await?;
+
+        assert!(
+            get_config::<String>(&mut conn, ConfigName::RustcVersion)
+                .await?
+                .is_none()
         );
         Ok(())
     }

@@ -9,7 +9,7 @@ use crate::{
     impl_axum_webpage,
     match_release::match_version,
     metrics::WebMetrics,
-    page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    page::templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
 };
 use anyhow::{Context as _, Result, anyhow};
 use askama::Template;
@@ -733,6 +733,7 @@ struct BuildQueuePage {
     rebuild_queue: Vec<QueuedCrate>,
     in_progress_builds: Vec<InProgressBuild>,
     expand_rebuild_queue: bool,
+    show_length_warning: bool,
 }
 
 impl_axum_webpage! { BuildQueuePage }
@@ -798,6 +799,8 @@ pub(crate) async fn build_queue_handler(
         })
         .collect::<Vec<_>>();
 
+    let show_length_warning = build_queue.build_queue_is_too_long(queue.iter());
+
     queue.retain_mut(|krate| {
         if krate.priority >= PRIORITY_CONTINUOUS {
             rebuild_queue.push(krate.clone());
@@ -817,6 +820,7 @@ pub(crate) async fn build_queue_handler(
         rebuild_queue,
         in_progress_builds,
         expand_rebuild_queue: params.expand.is_some(),
+        show_length_warning,
     })
 }
 
@@ -843,6 +847,7 @@ mod tests {
     use reqwest::StatusCode;
     use serde_json::json;
     use std::collections::HashSet;
+    use std::str::FromStr;
     use test_case::test_case;
 
     #[test]
@@ -1819,6 +1824,7 @@ mod tests {
                     .expect("missing heading")
                     .any(|el| el.text_contents().contains("active CDN deployments"))
             );
+            assert_eq!(empty.select(".warning").unwrap().count(), 0);
 
             let queue = env.build_queue()?;
             queue.add_crate(&FOO, &V1, 0, None).await?;
@@ -1852,6 +1858,30 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_releases_queue_shows_length_warning_when_threshold_is_exceeded() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let queue = env.build_queue()?;
+
+        for idx in 0..1001 {
+            let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
+            queue.add_crate(&name, &V1, 0, None).await?;
+        }
+
+        let page = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
+        let warning = page
+            .select(".warning")
+            .expect("missing warning container")
+            .next()
+            .expect("missing queue warning");
+
+        assert!(warning.text_contents().contains("build queue is too long"));
+        assert!(warning.text_contents().contains("The team is notified"));
+
+        Ok(())
     }
 
     #[test]
