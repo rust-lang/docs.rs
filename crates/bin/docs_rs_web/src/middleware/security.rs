@@ -41,7 +41,11 @@ fn validate_path(initial_path: &str) -> Result<()> {
 }
 
 fn validate_decoded_path(path: &str) -> Result<()> {
-    if path.contains("/../") || path.ends_with("/..") {
+    if path.contains("/../")
+        || path.ends_with("/..")
+        || path.contains("//\\../")
+        || path.contains("\\..\\")
+    {
         bail!("path traversal attempt");
     }
 
@@ -61,6 +65,7 @@ mod tests {
         testing::{AxumResponseTestExt as _, AxumRouterTestExt as _},
     };
     use axum::{Router, middleware, routing::get};
+
     use test_case::test_case;
     use tower::ServiceBuilder;
 
@@ -77,6 +82,14 @@ mod tests {
     #[test_case("/minidumper/latest/%252523script"; "triple encoded hash")]
     #[test_case(
         "/crate/mika-cli/latest/source/..%25c1%259c..%25c1%259c..%25c1%259c..%25c1%259c..%25c1%259c..%25c1%259c..%25c1%259c..%25c1%259c/etc/passwd"
+    )]
+    #[test_case(
+        "/crate/aether/latest/source/compiler/node_modules/@richardanaya//%5c../%5c../%5c../%5c../%5c../%5c../%5c../etc/passwd";
+        "with backslash"
+    )]
+    #[test_case(
+        "/casual_logger/0.6.4/%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5cwindows/win.ini";
+        "double backslash"
     )]
     async fn test_invalid_path(path: &str) -> Result<()> {
         let app = Router::new()
