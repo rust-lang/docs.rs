@@ -45,6 +45,7 @@ fn validate_decoded_path(path: &str) -> Result<()> {
         || path.ends_with("/..")
         || path.contains("//\\../")
         || path.contains("\\..\\")
+        || path.ends_with("\\..")
     {
         bail!("path traversal attempt");
     }
@@ -90,6 +91,10 @@ mod tests {
     #[test_case(
         "/casual_logger/0.6.4/%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5cwindows/win.ini";
         "double backslash"
+    )]
+    #[test_case(
+        "/casual_logger/0.6.4/%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e";
+        "ends with backslash dot dot"
     )]
     async fn test_invalid_path(path: &str) -> Result<()> {
         let app = Router::new()
