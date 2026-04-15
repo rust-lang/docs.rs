@@ -1,0 +1,27 @@
+{%- let abnormalities = askama::get_value::<crate::page::ActiveWarnings>("warnings").unwrap().abnormalities -%}
+
+{%- if abnormalities.len() == 1 -%}
+    <li class="pure-menu-item">
+        {% let abnormality = abnormalities.first().unwrap() %}
+        <a href="{{ abnormality.topbar_url() }}" class="pure-menu-link {{ abnormality.severity.css_class() }}">
+            {{- abnormality.severity.render_icon_solid(false, false, "") }}
+            {{ abnormality.text -}}
+        </a>
+    </li>
+{%- elif abnormalities.len() >= 2 -%}
+    {% let first = abnormalities.first().unwrap() %}
+    <li class="pure-menu-item pure-menu-has-children">
+        <a href="#" class="pure-menu-link {{ first.severity.css_class() }}">
+            {{- first.severity.render_icon_solid(false, false, "") }} {{ first.text -}}
+        </a>
+        <ul class="pure-menu-children">
+            {%- for abnormality in abnormalities -%}
+                <li class="pure-menu-item"> {#- -#}
+                    <a class="pure-menu-link {{ abnormality.severity.css_class() }}" href="{{ abnormality.topbar_url() }}">
+                        {{- abnormality.severity.render_icon_solid(false, false, "") }} {{ abnormality.text -}}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    </li>
+{% endif %}
