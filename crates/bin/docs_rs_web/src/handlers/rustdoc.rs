@@ -15,9 +15,9 @@ use crate::{
     metrics::WebMetrics,
     middleware::csp::Csp,
     page::{
-        ActiveAlerts, TemplateData,
-        global_alert::GlobalAlertCache,
+        TemplateData,
         templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
+        warnings::{ActiveWarnings, WarningsCache},
     },
     utils::{self, licenses},
 };
@@ -432,6 +432,7 @@ impl From<CrateDetails> for LimitedCrateDetails {
 pub struct RustdocPage {
     pub latest_path: EscapedURI,
     pub permalink_path: EscapedURI,
+    pub warnings: ActiveWarnings,
     // true if we are displaying the latest version of the crate, regardless
     // of whether the URL specifies a version number or the string "latest."
     pub is_latest_version: bool,
@@ -492,7 +493,6 @@ impl RustdocPage {
         rustdoc_html: StreamingBlob,
         max_parse_memory: usize,
         if_none_match: Option<&IfNoneMatch>,
-        alerts: ActiveAlerts,
     ) -> AxumResponse {
         let crate_name = &self.metadata.name;
 
@@ -530,7 +530,6 @@ impl RustdocPage {
                     template_data,
                     rustdoc_html.content,
                     max_parse_memory,
-                    alerts,
                     self.clone(),
                     otel_metrics,
                 )),
@@ -557,7 +556,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     Extension(storage): Extension<Arc<AsyncStorage>>,
     Extension(config): Extension<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
-    Extension(global_alert_cache): Extension<Arc<GlobalAlertCache>>,
+    Extension(warnings_cache): Extension<Arc<WarningsCache>>,
     RawQuery(original_query): RawQuery,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
     mut conn: DbConnection,
@@ -763,9 +762,11 @@ pub(crate) async fn rustdoc_html_server_handler(
     let current_target = params.doc_target_or_default().unwrap_or_default();
 
     // Build the page of documentation,
+    let warnings = warnings_cache.get().await;
     let page = Arc::new(RustdocPage {
         latest_path,
         permalink_path,
+        warnings,
         is_latest_version,
         is_latest_url: params.req_version().is_latest(),
         is_prerelease,
@@ -781,7 +782,6 @@ pub(crate) async fn rustdoc_html_server_handler(
             blob,
             config.max_parse_memory,
             if_none_match.as_deref(),
-            global_alert_cache.get().await,
         )
         .await)
 }
@@ -1074,7 +1074,9 @@ mod test {
     use anyhow::{Context, Result};
     use chrono::{NaiveDate, Utc};
     use docs_rs_cargo_metadata::Dependency;
-    use docs_rs_database::service_config::{AlertSeverity, ConfigName, GlobalAlert, set_config};
+    use docs_rs_database::service_config::{
+        Abnormality, AlertSeverity, AnchorId, ConfigName, set_config,
+    };
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_rustdoc_json::{
         RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
@@ -1084,6 +1086,7 @@ mod test {
         Version,
         testing::{KRATE, V2},
     };
+    use docs_rs_uri::EscapedURI;
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -1141,18 +1144,23 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn rustdoc_page_renders_global_alert() -> Result<()> {
+    async fn rustdoc_page_renders_abnormality() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         let mut conn = env.async_conn().await?;
-        // NOTE: the global alert is cached inside the web-app, so we have to
-        // set it before we fetch the web-app from the test-environments.
+        // NOTE: abnormalities are cached inside the web-app, so set them
+        // before we fetch the web-app from the test-environments.
         set_config(
             &mut conn,
-            ConfigName::GlobalAlert,
-            GlobalAlert {
-                url: "https://example.com/maintenance".into(),
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
                 text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
                 severity: AlertSeverity::Warn,
             },
         )
@@ -1179,11 +1187,11 @@ mod test {
             .select("a.pure-menu-link.warn")
             .expect("invalid selector")
             .next()
-            .context("missing global alert on rustdoc page")?;
+            .context("missing abnormality on rustdoc page")?;
 
         assert_eq!(
             alert.attributes.borrow().get("href"),
-            Some("https://example.com/maintenance")
+            Some("/-/status/#manual")
         );
         assert!(alert.text_contents().contains("Scheduled maintenance"));
         Ok(())

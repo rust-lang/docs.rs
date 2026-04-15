@@ -5,11 +5,12 @@ use crate::{
 use anyhow::{Context as _, Result};
 use docs_rs_database::{
     Pool,
-    service_config::{AlertSeverity, ConfigName, GlobalAlert, get_config, set_config},
+    service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, get_config, set_config},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{KrateName, Version};
+use docs_rs_uri::EscapedURI;
 use futures_util::TryStreamExt as _;
 use std::{
     collections::{HashMap, HashSet},
@@ -271,11 +272,11 @@ impl AsyncBuildQueue {
         queued_crates
             .filter(|qc| qc.priority < PRIORITY_MANUAL_FROM_CRATES_IO)
             .count()
-            > self.config.public_alert_threshold
+            > self.config.length_warning_threshold
     }
 
     /// fetch the current queue alerts
-    pub async fn gather_alerts(&self) -> Result<Vec<GlobalAlert>> {
+    pub async fn gather_alerts(&self) -> Result<Vec<Abnormality>> {
         let queue_pending_count = self
             .pending_count_by_priority()
             .await
@@ -286,10 +287,18 @@ impl AsyncBuildQueue {
 
         let mut alerts = Vec::with_capacity(1);
 
-        if queue_pending_count > self.config.public_alert_threshold {
-            alerts.push(GlobalAlert {
-                url: "/releases/queue".into(),
+        if queue_pending_count > self.config.length_warning_threshold {
+            alerts.push(Abnormality {
+                anchor_id: AnchorId::QueueLength,
+                url: EscapedURI::from_path("/releases/queue"),
                 text: "long build queue".into(),
+                explanation: Some(
+                    format!(
+                        "The build queue currently contains more than {} crates, so it might take a while before new published crates get documented.",
+                        self.config.length_warning_threshold,
+                    )
+                ),
+                start_time: None,
                 severity: AlertSeverity::Warn,
             });
         }
@@ -620,9 +629,9 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_public_alert_threshold_boundary() -> Result<()> {
+    async fn test_length_warning_threshold_boundary() -> Result<()> {
         let mut config = Config::from_environment()?;
-        config.public_alert_threshold = 1;
+        config.length_warning_threshold = 1;
         let env = test_queue_with_config(config).await?;
         let queue = env.queue;
 
@@ -636,9 +645,12 @@ mod tests {
         assert!(queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
         assert_eq!(
             queue.gather_alerts().await?,
-            vec![GlobalAlert {
-                url: "/releases/queue".into(),
+            vec![Abnormality {
+                anchor_id: AnchorId::QueueLength,
+                url: EscapedURI::from_path("/releases/queue"),
                 text: "long build queue".into(),
+                explanation: Some("The build queue currently contains more than 1 crates, so it might take a while before new published crates get documented.".into()),
+                start_time: None,
                 severity: AlertSeverity::Warn,
             }]
         );
@@ -649,7 +661,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_public_alert_ignores_manual_crates() -> Result<()> {
         let mut config = Config::from_environment()?;
-        config.public_alert_threshold = 0;
+        config.length_warning_threshold = 0;
         let env = test_queue_with_config(config).await?;
         let queue = env.queue;
 

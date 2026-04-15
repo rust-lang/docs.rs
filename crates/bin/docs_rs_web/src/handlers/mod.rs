@@ -15,7 +15,7 @@ pub(crate) mod status;
 use crate::Config;
 use crate::metrics::WebMetrics;
 use crate::middleware::{csp, security};
-use crate::page::{self, TemplateData, global_alert::GlobalAlertCache};
+use crate::page::{self, TemplateData, warnings::WarningsCache};
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use axum::{
@@ -75,9 +75,8 @@ async fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
-    let global_alert_cache = Arc::new(
-        GlobalAlertCache::new(context.pool()?.clone(), context.build_queue()?.clone()).await,
-    );
+    let abnormality_cache =
+        Arc::new(WarningsCache::new(context.pool()?.clone(), context.build_queue()?.clone()).await);
 
     let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
 
@@ -106,7 +105,7 @@ async fn apply_middleware(
             .layer(Extension(config.clone()))
             .layer(Extension(context.registry_api()?.clone()))
             .layer(Extension(context.storage()?.clone()))
-            .layer(Extension(global_alert_cache))
+            .layer(Extension(abnormality_cache))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(
@@ -236,8 +235,11 @@ mod tests {
         async_wrapper,
     };
     use docs_rs_config::AppConfig as _;
-    use docs_rs_database::service_config::{AlertSeverity, ConfigName, GlobalAlert, set_config};
+    use docs_rs_database::service_config::{
+        Abnormality, AlertSeverity, AnchorId, ConfigName, set_config,
+    };
     use docs_rs_types::{DocCoverage, KrateName, ReleaseId, Version, testing::V1};
+    use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
@@ -270,7 +272,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_global_alert_is_not_rendered_when_unset() -> Result<()> {
+    async fn test_abnormality_is_not_rendered_when_unset() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
@@ -281,18 +283,23 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_manual_global_alert_renders_configured_link() -> Result<()> {
+    async fn test_manual_abnormality_renders_configured_link() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         let mut conn = env.async_conn().await?;
-        // NOTE: the global alert is cached inside the web-app, so we have to
-        // set it before we fetch the web-app from the test-environments.
+        // NOTE: abnormalities are cached inside the web-app, so set them
+        // before we fetch the web-app from the test-environments.
         set_config(
             &mut conn,
-            ConfigName::GlobalAlert,
-            GlobalAlert {
-                url: "https://example.com/maintenance".into(),
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
                 text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
                 severity: AlertSeverity::Warn,
             },
         )
@@ -304,20 +311,20 @@ mod tests {
             .select("a.pure-menu-link.warn")
             .unwrap()
             .next()
-            .expect("missing global alert");
+            .expect("missing abnormality");
 
         assert_eq!(
             alert.attributes.borrow().get("href"),
-            Some("https://example.com/maintenance")
+            Some("/-/status/#manual")
         );
         assert!(alert.text_contents().contains("Scheduled maintenance"));
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_queue_alert_is_rendered_when_threshold_is_exceeded() -> Result<()> {
+    async fn test_queue_abnormality_is_rendered_when_threshold_is_exceeded() -> Result<()> {
         let mut queue_config = docs_rs_build_queue::Config::test_config()?;
-        queue_config.public_alert_threshold = 1;
+        queue_config.length_warning_threshold = 1;
         let env = TestEnvironment::builder()
             .build_queue_config(queue_config)
             .build()
@@ -339,16 +346,16 @@ mod tests {
 
         assert_eq!(
             alert.attributes.borrow().get("href"),
-            Some("/releases/queue")
+            Some("/-/status/#queue-length")
         );
         assert!(alert.text_contents().contains("long build queue"));
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_manual_alert_wins_when_multiple_alerts_are_active() -> Result<()> {
+    async fn test_manual_abnormality_wins_when_multiple_abnormalities_are_active() -> Result<()> {
         let mut queue_config = docs_rs_build_queue::Config::test_config()?;
-        queue_config.public_alert_threshold = 1;
+        queue_config.length_warning_threshold = 1;
         let env = TestEnvironment::builder()
             .build_queue_config(queue_config)
             .build()
@@ -357,10 +364,15 @@ mod tests {
         let mut conn = env.async_conn().await?;
         set_config(
             &mut conn,
-            ConfigName::GlobalAlert,
-            GlobalAlert {
-                url: "https://example.com/maintenance".into(),
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
                 text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
                 severity: AlertSeverity::Error,
             },
         )
@@ -395,12 +407,13 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(dropdown_links.iter().any(|(href, text)| {
-            href == "https://example.com/maintenance" && text.contains("Scheduled maintenance")
+            href == "/-/status/#manual" && text.contains("Scheduled maintenance")
         }));
         assert!(
             dropdown_links
                 .iter()
-                .any(|(href, text)| href == "/releases/queue" && text.contains("long build queue"))
+                .any(|(href, text)| href == "/-/status/#queue-length"
+                    && text.contains("long build queue"))
         );
         Ok(())
     }

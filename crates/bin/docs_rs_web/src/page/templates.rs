@@ -270,7 +270,7 @@ impl<T: font_awesome_as_a_crate::Brands> RenderBrands for T {
     }
 }
 
-/// how to render the Severity for a GlobalAlert
+/// how to render the severity for an abnormality
 pub(crate) trait AlertSeverityRender {
     fn css_class(&self) -> &'static str;
     fn render_icon_solid(&self, fw: bool, spin: bool, extra: &str)

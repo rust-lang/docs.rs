@@ -1,9 +1,9 @@
-mod global_alert;
+mod abnormalities;
 
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 
-pub use global_alert::{AlertSeverity, GlobalAlert};
+pub use abnormalities::{Abnormality, AlertSeverity, AnchorId};
 
 #[derive(strum::IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
@@ -12,7 +12,7 @@ pub enum ConfigName {
     LastSeenIndexReference,
     QueueLocked,
     Toolchain,
-    GlobalAlert,
+    Abnormality,
 }
 
 pub async fn set_config(
@@ -69,7 +69,7 @@ mod tests {
     #[test_case(ConfigName::RustcVersion, "rustc_version")]
     #[test_case(ConfigName::QueueLocked, "queue_locked")]
     #[test_case(ConfigName::LastSeenIndexReference, "last_seen_index_reference")]
-    #[test_case(ConfigName::GlobalAlert, "global_alert")]
+    #[test_case(ConfigName::Abnormality, "abnormality")]
     fn test_configname_variants(variant: ConfigName, expected: &'static str) {
         let name: &'static str = variant.into();
         assert_eq!(name, expected);

@@ -2,7 +2,7 @@ use crate::{
     handlers::rustdoc::RustdocPage,
     metrics::WebMetrics,
     page::{
-        ActiveAlerts, TemplateData,
+        TemplateData,
         templates::{Body, Head, Vendored},
     },
 };
@@ -39,7 +39,6 @@ pub(crate) fn rewrite_rustdoc_html_stream<R>(
     template_data: Arc<TemplateData>,
     mut reader: R,
     max_allowed_memory_usage: usize,
-    alerts: ActiveAlerts,
     data: Arc<RustdocPage>,
     otel_metrics: Arc<WebMetrics>,
 ) -> impl Stream<Item = Result<Bytes, RustdocRewritingError>> + Send + 'static
@@ -71,7 +70,7 @@ where
                         let vendored_html = Vendored.render().unwrap();
                         let body_html = Body.render().unwrap();
                         let values: HashMap<&str, &dyn Any> =
-                            HashMap::from_iter([("alerts", &alerts as &dyn Any)]);
+                            HashMap::from_iter([("warnings", &data.warnings as &dyn Any)]);
                         let topbar_html = data.render_with_values(&values).unwrap();
 
                         // Before: <body> ... rustdoc content ... </body>
