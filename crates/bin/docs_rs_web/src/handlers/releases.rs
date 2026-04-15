@@ -1490,16 +1490,17 @@ mod tests {
 
         let links = get_release_links("/releases/search?query=some_random_crate", &web).await?;
 
-        // `some_other_crate` won't be shown since we don't have it yet
-        assert_eq!(links.len(), 4);
+        // `some_other_crate` won't be shown since we don't have it yet.
+        // `yet_another_crate` only has a yanked release, so it has no canonical "latest"
+        // and renders as "Documentation not available on docs.rs" (no anchor).
+        assert_eq!(links.len(), 3);
         // * `max_version` from the crates.io search result will be ignored since we
         //   might not have it yet, or the doc-build might be in progress.
         // * ranking/order from crates.io result is preserved
         // * version used is the highest semver following our own "latest version" logic
         assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
         assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
-        assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
-        assert_eq!(links[3], "/crate/failed_hard/0.1.0");
+        assert_eq!(links[2], "/crate/failed_hard/0.1.0");
         Ok(())
     }
 

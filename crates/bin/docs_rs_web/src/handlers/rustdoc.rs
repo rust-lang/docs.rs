@@ -730,10 +730,12 @@ pub(crate) async fn rustdoc_html_server_handler(
         );
     }
 
-    let latest_release = krate.latest_release()?;
+    let latest_release = krate.latest_release();
 
     // Get the latest version of the crate
-    let latest_version = latest_release.version.clone();
+    let latest_version = latest_release
+        .map(|release| release.version.clone())
+        .unwrap_or_else(|| krate.version.clone());
     let is_latest_version = latest_version == krate.version;
     let is_prerelease = !(krate.version.pre.is_empty());
 
@@ -744,7 +746,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .rustdoc_url()
         .append_raw_query(original_query.as_deref());
 
-    let latest_path = if latest_release.build_status.is_success() {
+    let latest_path = if latest_release.is_some_and(|release| release.build_status.is_success()) {
         params
             .clone()
             .with_req_version(&ReqVersion::Latest)
@@ -1618,6 +1620,50 @@ mod test {
             let redirect =
                 latest_version_redirect("dummy", "/dummy/0.2.1/dummy/", &web, env.config()).await?;
             assert_eq!(redirect, "/crate/dummy/latest/target-redirect/dummy/");
+
+            Ok(())
+        })
+    }
+
+    #[test_case(true)]
+    #[test_case(false)]
+    fn no_latest_stable_button_when_latest_stable_is_yanked(archive_storage: bool) {
+        async fn has_latest_redirect_button(
+            path: &str,
+            web: &axum::Router,
+        ) -> Result<bool, anyhow::Error> {
+            web.assert_success(path).await?;
+            let data = web.get(path).await?.text().await?;
+            Ok(kuchikiki::parse_html()
+                .one(data)
+                .select("form > ul > li > a.warn")
+                .expect("invalid selector")
+                .next()
+                .is_some())
+        }
+
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0-pre.1")
+                .archive_storage(archive_storage)
+                .rustdoc_file("dummy/index.html")
+                .create()
+                .await?;
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0")
+                .archive_storage(archive_storage)
+                .rustdoc_file("dummy/index.html")
+                .yanked(true)
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            assert!(!has_latest_redirect_button("/dummy/latest/dummy/", &web).await?);
+            assert!(!has_latest_redirect_button("/dummy/0.2.0-pre.1/dummy/", &web).await?);
 
             Ok(())
         })
