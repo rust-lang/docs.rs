@@ -143,6 +143,7 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
             "/-/sitemap/{letter}/sitemap.xml",
             get_internal(sitemap::sitemap_handler),
         )
+        .route_with_tsr("/-/status/", get_internal(about::status_handler))
         .route_with_tsr("/about/builds", get_internal(about::about_builds_handler))
         .route_with_tsr("/about", get_internal(about::about_handler))
         .route_with_tsr("/about/{subpage}", get_internal(about::about_handler))
