@@ -1,7 +1,10 @@
 use crate::{
     error::AxumNope,
     middleware::csp::Csp,
-    page::{ActiveAlerts, global_alert::GlobalAlertCache, templates::TemplateData},
+    page::{
+        templates::TemplateData,
+        warnings::{ActiveWarnings, WarningsCache},
+    },
 };
 use axum::{
     body::Body,
@@ -17,7 +20,7 @@ pub(crate) trait AddTemplateValues: IntoResponse {
     fn render_with_template_values(
         &mut self,
         csp_nonce: String,
-        alerts: ActiveAlerts,
+        warnings: ActiveWarnings,
     ) -> askama::Result<String>;
 }
 
@@ -36,11 +39,11 @@ macro_rules! impl_axum_webpage {
             fn render_with_template_values(
                 &mut self,
                 csp_nonce: String,
-                alerts: $crate::page::ActiveAlerts,
+                warnings: $crate::page::ActiveWarnings,
             ) -> askama::Result<String> {
                 let values: std::collections::HashMap<&str, &dyn std::any::Any> = [
                     ("csp_nonce", &csp_nonce as &dyn std::any::Any),
-                    ("alerts", &alerts as &dyn std::any::Any),
+                    ("warnings", &warnings as &dyn std::any::Any),
                 ]
                 .into_iter()
                 .collect();
@@ -120,7 +123,7 @@ fn render_response(
     mut response: AxumResponse,
     templates: Arc<TemplateData>,
     csp_nonce: String,
-    alerts: ActiveAlerts,
+    warnings: ActiveWarnings,
 ) -> BoxFuture<'static, AxumResponse> {
     async move {
         if let Some(render) = response.extensions_mut().remove::<DelayedTemplateRender>() {
@@ -130,19 +133,19 @@ fn render_response(
             } = render;
             let mut template = Arc::into_inner(template).unwrap();
             let csp_nonce_clone = csp_nonce.clone();
-            let alerts_clone = alerts.clone();
+            let warnings_clone = warnings.clone();
 
             let result: Result<String, anyhow::Error> = if cpu_intensive_rendering {
                 templates
                     .render_in_threadpool(move || {
                         template
-                            .render_with_template_values(csp_nonce_clone, alerts_clone)
+                            .render_with_template_values(csp_nonce_clone, warnings_clone)
                             .map_err(|err| err.into())
                     })
                     .await
             } else {
                 template
-                    .render_with_template_values(csp_nonce_clone, alerts_clone)
+                    .render_with_template_values(csp_nonce_clone, warnings_clone)
                     .map_err(|err| err.into())
             };
 
@@ -157,7 +160,7 @@ fn render_response(
                             AxumNope::InternalError(err).into_response(),
                             templates,
                             csp_nonce,
-                            alerts,
+                            warnings,
                         )
                         .await;
                     }
@@ -190,14 +193,14 @@ pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) ->
         .nonce()
         .to_owned();
 
-    let alerts = req
+    let warnings = req
         .extensions()
-        .get::<Arc<GlobalAlertCache>>()
-        .expect("global alert cache request extension not found")
+        .get::<Arc<WarningsCache>>()
+        .expect("warnings cache request extension not found")
         .get()
         .await;
 
     let response = next.run(req).await;
 
-    render_response(response, templates, csp_nonce, alerts).await
+    render_response(response, templates, csp_nonce, warnings).await
 }

@@ -4,7 +4,7 @@ mod repackage;
 pub(crate) mod testing;
 
 use anyhow::{Context as _, Result, bail};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
 use docs_rs_build_queue::priority::{
@@ -14,12 +14,13 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{AlertSeverity, ConfigName, GlobalAlert, remove_config, set_config},
+    service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
+use docs_rs_uri::EscapedURI;
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
 use std::iter;
@@ -37,7 +38,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Parser)]
+#[derive(Debug, Clone, PartialEq, Parser)]
 #[command(
     about = env!("CARGO_PKG_DESCRIPTION"),
     version = docs_rs_utils::BUILD_VERSION,
@@ -350,7 +351,7 @@ impl BuildSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+#[derive(Debug, Clone, PartialEq, Subcommand)]
 enum DatabaseSubcommand {
     /// Run database migration
     Migrate {
@@ -359,10 +360,10 @@ enum DatabaseSubcommand {
         version: Option<i64>,
     },
 
-    /// Manage the global alert shown in the site header
-    GlobalAlert {
+    /// Manage the abnormality shown in the site header
+    Abnormality {
         #[command(subcommand)]
-        command: GlobalAlertSubcommand,
+        command: AbnormalitySubcommand,
     },
 
     /// temporary command to repackage missing crates into archive storage.
@@ -410,7 +411,7 @@ impl DatabaseSubcommand {
             }
             .context("Failed to run database migrations")?,
 
-            Self::GlobalAlert { command } => command.handle_args(ctx).await?,
+            Self::Abnormality { command } => command.handle_args(ctx).await?,
 
             Self::Repackage { limit } => {
                 let pool = ctx.pool()?;
@@ -512,23 +513,26 @@ impl DatabaseSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
-enum GlobalAlertSubcommand {
-    /// Set the global alert shown in the site header
+#[derive(Debug, Clone, PartialEq, Subcommand)]
+enum AbnormalitySubcommand {
+    /// Set the abnormality shown in the site header
     Set {
         #[arg(long)]
-        url: String,
+        url: EscapedURI,
         #[arg(long)]
         text: String,
+        /// explanation to be shown on the status page, can be HTML
+        #[arg(long)]
+        explanation: Option<String>,
         #[arg(long, default_value_t)]
         severity: AlertSeverity,
     },
 
-    /// Remove the global alert shown in the site header
+    /// Remove the abnormality shown in the site header
     Remove,
 }
 
-impl GlobalAlertSubcommand {
+impl AbnormalitySubcommand {
     async fn handle_args(self, ctx: Context) -> Result<()> {
         let mut conn = ctx
             .pool()?
@@ -540,24 +544,28 @@ impl GlobalAlertSubcommand {
             Self::Set {
                 url,
                 text,
+                explanation,
                 severity,
             } => {
                 set_config(
                     &mut conn,
-                    ConfigName::GlobalAlert,
-                    GlobalAlert {
+                    ConfigName::Abnormality,
+                    Abnormality {
+                        anchor_id: AnchorId::Manual,
                         url,
                         text,
+                        explanation,
+                        start_time: Some(Utc::now()),
                         severity,
                     },
                 )
                 .await
-                .context("failed to set global alert in database")?;
+                .context("failed to set abnormality in database")?;
             }
             Self::Remove => {
-                remove_config(&mut conn, ConfigName::GlobalAlert)
+                remove_config(&mut conn, ConfigName::Abnormality)
                     .await
-                    .context("failed to remove global alert from database")?;
+                    .context("failed to remove abnormality from database")?;
             }
         }
 
