@@ -2227,7 +2227,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let resp = env.web_app().await.get("/crate/dummy%3E").await?;
+            let resp = env.web_app().await.get("/crate/dummy%7B").await?;
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
             Ok(())
