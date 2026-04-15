@@ -118,22 +118,37 @@ fn semver_match<'a, F: Fn(&Release) -> bool>(
     req: &VersionReq,
     filter: F,
 ) -> Option<&'a Release> {
-    // first try standard semver match using `VersionReq::match`, should handle most cases.
-    if let Some(release) = releases
+    releases
         .iter()
         .filter(|release| filter(release))
         .find(|release| req.matches(&release.version))
-    {
-        Some(release)
-    } else if req == &VersionReq::STAR {
-        // semver `*` does not match pre-releases.
-        // So when we only have pre-releases, `VersionReq::STAR` would lead to an
-        // empty result.
-        // In this case we just return the latest prerelease instead of nothing.
-        releases.iter().find(|release| filter(release))
-    } else {
-        None
+}
+
+fn not_yanked(release: &Release) -> bool {
+    release.yanked.is_none() || release.yanked == Some(false)
+}
+
+fn best_release_for_req<'a>(
+    releases: &'a [Release],
+    req_semver: &VersionReq,
+) -> Option<&'a Release> {
+    // `VersionReq::STAR` ("*", "latest", "newest") is the "give me the latest" query;
+    // delegate to the canonical picker so `/latest/`, `crates.latest_version_id`, and the
+    // rustdoc topbar all agree on what "latest" means. Note: `latest_release` deliberately
+    // excludes in-progress builds — there's no canonical latest until the build finishes —
+    // so STAR returns `None` (and `/latest/` 404s) for a crate whose only non-yanked
+    // releases are still building. The non-STAR branch below keeps an in-progress fallback
+    // because there the user asked for a specific range and serving the matching
+    // in-progress release is more useful than 404.
+    if req_semver == &VersionReq::STAR {
+        return docs_rs_database::crate_details::latest_release(releases);
     }
+    // For other semver requirements: prefer non-yanked + non-in-progress, fall back to
+    // allowing in-progress builds if nothing else matches.
+    semver_match(releases, req_semver, |release: &Release| {
+        release.build_status != BuildStatus::InProgress && not_yanked(release)
+    })
+    .or_else(|| semver_match(releases, req_semver, not_yanked))
 }
 
 /// Checks the database for crate releases that match the given name and version.
@@ -210,25 +225,10 @@ pub(crate) async fn match_version(
         ReqVersion::Semver(version_req) => version_req.clone(),
     };
 
-    // when matching semver requirements,
-    // we generally only want to look at non-yanked releases,
-    // excluding releases which just contain in-progress builds
-    if let Some(release) = semver_match(&releases, &req_semver, |r: &Release| {
-        r.build_status != BuildStatus::InProgress && (r.yanked.is_none() || r.yanked == Some(false))
-    }) {
-        return Ok(MatchedRelease {
-            name: name.to_owned(),
-            corrected_name,
-            req_version: input_version.clone(),
-            release: release.clone(),
-            all_releases: releases,
-        });
-    }
-
-    // when we don't find any match with "normal" releases, we also look into in-progress releases
-    if let Some(release) = semver_match(&releases, &req_semver, |r: &Release| {
-        r.yanked.is_none() || r.yanked == Some(false)
-    }) {
+    // when matching semver requirements, we generally only want to look at non-yanked
+    // releases, excluding releases which just contain in-progress builds. If there are no
+    // matching non-in-progress releases, we also look into in-progress releases.
+    if let Some(release) = best_release_for_req(&releases, &req_semver) {
         return Ok(MatchedRelease {
             name: name.to_owned(),
             corrected_name,

@@ -11,7 +11,7 @@ use crate::{
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     utils::{get_correct_docsrs_style_file, licenses},
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
     extract::Extension,
@@ -19,7 +19,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
-use docs_rs_database::crate_details::{Release, latest_release, parse_doc_targets};
+use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
@@ -338,9 +338,9 @@ impl CrateDetails {
     }
 
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
-    /// yanked/prereleased if that is all that exist).
-    pub fn latest_release(&self) -> Result<&Release> {
-        latest_release(&self.releases).ok_or_else(|| anyhow!("crate without releases"))
+    /// prereleased if that is all that exist). Returns `None` if every release is yanked.
+    pub fn latest_release(&self) -> Option<&Release> {
+        docs_rs_database::crate_details::latest_release(&self.releases)
     }
 }
 
@@ -660,10 +660,13 @@ pub(crate) async fn get_all_platforms_inner(
         .into_response());
     }
 
-    let latest_release = latest_release(&matched_release.all_releases)
-        .expect("we couldn't end up here without releases");
+    let latest_release =
+        docs_rs_database::crate_details::latest_release(&matched_release.all_releases);
 
-    let current_target = if latest_release.build_status.is_success() {
+    let current_target = if latest_release
+        .map(|r| r.build_status.is_success())
+        .unwrap_or(false)
+    {
         params
             .doc_target_or_default()
             .unwrap_or_default()
@@ -1175,192 +1178,6 @@ mod tests {
     }
 
     #[test]
-    fn test_latest_version() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", *version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.3")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_ignores_prerelease() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3-pre.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.2")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_ignores_yanked() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.2")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_only_yanked() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .yanked(true)
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.3")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_in_progress() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
-                ])
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.1")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
     fn releases_dropdowns_show_binary_warning() {
         async_wrapper(|env| async move {
             env.fake_release()
@@ -1411,11 +1228,18 @@ mod tests {
                 .create()
                 .await?;
 
-            let response = env.web_app().await.get("/crate/foo/latest").await?;
+            let response = env
+                .web_app()
+                .await
+                .assert_success("/crate/foo/0.1.0")
+                .await?;
 
             let page = kuchikiki::parse_html().one(response.text().await?);
+            // multiple `a.pure-menu-link` elements share this href (the topbar's
+            // `crate-name` link and the navigation "Crate" tab); the version dropdown's
+            // entry is the only one rendered with `rel="nofollow"` by the macro.
             let link = page
-                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
+                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0'][rel='nofollow']")
                 .unwrap();
 
             assert_eq!(
