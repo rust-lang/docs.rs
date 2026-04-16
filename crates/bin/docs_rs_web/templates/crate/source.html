@@ -44,55 +44,9 @@
                                     Show a link to the file with a fancy icon. If the file is a directory,
                                     `/` is appended to show the contents of the folder
                                 #}
-                                <a href="./{{ file.name }}{% if file.mime == "dir" %}/{% endif %}" class="pure-menu-link">
-                                    {# Directories #}
-                                    {%- if file.mime == "dir" -%}
-                                        {{ crate::icons::IconFolderOpen.render_regular(false, false, "") }}
-
-                                    {# Rust files #}
-                                    {%- elif file.mime == "text/rust" -%}
-                                        {{ crate::icons::IconRust.render_brands(false, false, "") }}
-
-                                    {# Cargo.lock #}
-                                    {%- elif file.mime == "text/plain" && file.name == "Cargo.lock" -%}
-                                        {{ crate::icons::IconLock.render_solid(false, false, "") }}
-
-                                    {# Markdown files #}
-                                    {% elif file.mime == "text/markdown" %}
-                                        {{ crate::icons::IconMarkdown.render_brands(false, false, "") }}
-
-                                    {# .gitignore #}
-                                    {% elif file.mime == "text/plain" && file.name == ".gitignore" %}
-                                        {{ crate::icons::IconGitAlt.render_brands(false, false, "") }}
-
-                                    {#
-                                        More ideas
-                                            FontAwesome v5:
-                                                ".application/x-bzip"
-                                               |"application/gzip"
-                                               |"application/x-bzip2"
-                                               |"application/vnd.rar"
-                                               |"application/x-tar"
-                                               |"application/zip"
-                                               |"application/x-7z-compressed" => https://fontawesome.com/icons/file-archive
-                                                "text/javascript" => https://fontawesome.com/icons/js
-                                                "application/java-archive" => https://fontawesome.com/icons/java
-                                            DevOpticons (https://github.com/file-icons/DevOpicons):
-                                                "text/rust" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#Rust
-                                                "text/css" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#CSS3,%20Full
-                                                "text/html" => https://github.com/file-icons/DevOpicons/blob/master/charmap.md#HTML5
-                                    #}
-
-                                    {# Text files or files which mime starts with `text` #}
-                                    {%- elif file.mime == "text/plain" || file.mime.split('/').next() == Some("text") -%}
-                                        {{ crate::icons::IconFileLines.render_regular(false, false, "") }}
-
-                                        {# Binary files and any unrecognized types #}
-                                    {% else -%}
-                                        {{ crate::icons::IconFile.render_regular(false, false, "") }}
-                                    {%- endif -%}
-
-                                    <span class="text">{{ file.name }}</span>
+                                <a href="./{{ file.name() }}{% if file.is_dir() %}/{% endif %}" class="pure-menu-link">
+                                    {{ file.icon() }}
+                                    <span class="text">{{ file.name() }}</span>
                                 </a>
                             </li>
                         {%- endfor -%}
@@ -115,7 +69,7 @@
             {%- if let Some(file_content) = file_content -%}
                 {% decl file_name %}
                 {% if let Some(file) = file %}
-                    {% set file_name = file.name.as_str() %}
+                    {% set file_name = file.name() %}
                 {% else %}
                     {% set file_name = "" %}
                 {% endif %}

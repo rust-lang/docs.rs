@@ -3,9 +3,47 @@ pub(crate) mod html_rewrite;
 pub(crate) mod licenses;
 pub(crate) mod markdown;
 
+use crate::{
+    icons::{
+        IconFile, IconFileLines, IconFolderOpen, IconGitAlt, IconLock, IconMarkdown, IconRust,
+    },
+    page::templates::{RenderBrands, RenderRegular, RenderSolid},
+};
 use anyhow::Result;
+use askama::filters::Safe;
 use chrono::{DateTime, NaiveDate, Utc};
+use docs_rs_mimes as mimes;
+use docs_rs_storage::FolderEntry;
 use docs_rs_utils::rustc_version::parse_rustc_date;
+
+pub trait FolderEntryExt {
+    fn icon(&self) -> Safe<String>;
+}
+
+impl FolderEntryExt for FolderEntry {
+    fn icon(&self) -> Safe<String> {
+        if self.is_dir() {
+            return IconFolderOpen.render_regular(false, false, "");
+        }
+
+        let mime = self.mime().expect("files always have mime");
+        let name = self.name();
+
+        if *mime == *mimes::TEXT_RUST {
+            IconRust.render_brands(false, false, "")
+        } else if *mime == mime::TEXT_PLAIN && name == "Cargo.lock" {
+            IconLock.render_solid(false, false, "")
+        } else if *mime == *mimes::TEXT_MARKDOWN {
+            IconMarkdown.render_brands(false, false, "")
+        } else if *mime == mime::TEXT_PLAIN && name == ".gitignore" {
+            IconGitAlt.render_brands(false, false, "")
+        } else if *mime == mime::TEXT_PLAIN || mime.type_() == "text" {
+            IconFileLines.render_regular(false, false, "")
+        } else {
+            IconFile.render_regular(false, false, "")
+        }
+    }
+}
 
 /// Picks the correct "rustdoc.css" static file depending on which rustdoc version was used to
 /// generate this version of this crate.

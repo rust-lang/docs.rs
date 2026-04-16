@@ -1132,7 +1132,7 @@ mod test {
     ) -> Result<String, anyhow::Error> {
         try_latest_version_redirect(krate, path, web, config)
             .await?
-            .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
+            .with_context(|| anyhow!("no redirect found for {}", path))
     }
 
     #[test_case(true)]

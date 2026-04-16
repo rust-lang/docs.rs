@@ -2,7 +2,7 @@
 use crate::backends::memory::MemoryBackend;
 use crate::{
     Config,
-    archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION},
+    archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION, Index},
     backends::{StorageBackend, StorageBackendMethods, s3::S3Backend},
     blob::{Blob, BlobUpload, StreamingBlob},
     compression::{compress, compress_async},
@@ -53,6 +53,16 @@ impl AsyncStorage {
 
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    pub async fn find_archive_index(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+    ) -> Result<Index> {
+        self.archive_index_cache
+            .find_index(archive_path, latest_build_id, self)
+            .await
     }
 
     #[instrument(skip(self))]
