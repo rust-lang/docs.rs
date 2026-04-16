@@ -407,3 +407,53 @@ i.dependencies.normal {
     visibility: hidden;
     display: none;
 }
+
+#docsrs-alert-input {
+    display: none;
+}
+#docsrs-alert-hide {
+    z-index: 100001; // Must be one more than `#docsrs-alert`'s z-index.
+    right: 16px;
+    top: calc(#{$top-navbar-height} + 11px);
+    position: fixed;
+    cursor: pointer;
+    font-size: 1.3rem;
+    color: #ddd;
+}
+#docsrs-alert-hide:hover {
+    color: #fff;
+}
+#docsrs-alert {
+    position: fixed;
+    z-index: 100000;
+    right: 10px;
+    top: calc(#{$top-navbar-height} + 10px);
+    width: 40ch;
+    background: #3ea2ff;
+    border-radius: 6px;
+    font-family: $font-family-sans;
+    color: #fff;
+    display: flex;
+
+    > .fa {
+        padding: 0 10px;
+        align-content: center;
+        background: #64b4ff;
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+    }
+
+    > .alert-text {
+        padding: 8px;
+        padding-right: 4ch;
+
+        a {
+            color: #fff;
+            text-decoration: underline;
+        }
+    }
+}
+#docsrs-alert-input:checked + label + #docsrs-alert,
+#docsrs-alert-input:checked + label {
+    display: none;
+}
