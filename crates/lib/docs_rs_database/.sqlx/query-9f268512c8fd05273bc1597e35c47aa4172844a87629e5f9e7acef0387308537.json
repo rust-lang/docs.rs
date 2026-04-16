@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                rustc_version,\n                docsrs_version,\n                build_status as \"build_status: BuildStatus\",\n                documentation_size,\n                errors,\n                error_kind,\n                rustc_nightly_date\n                FROM builds\n                WHERE id = $1",
+  "query": "SELECT\n                rustc_version,\n                docsrs_version,\n                build_status as \"build_status: BuildStatus\",\n                documentation_size,\n                memory_peak,\n                errors,\n                error_kind,\n                rustc_nightly_date\n                FROM builds\n                WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -36,16 +36,21 @@
       },
       {
         "ordinal": 4,
+        "name": "memory_peak",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
         "name": "errors",
         "type_info": "Text"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "error_kind",
         "type_info": "Text"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "rustc_nightly_date",
         "type_info": "Date"
       }
@@ -62,8 +67,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "820a877a5fd6426b8429668d95dd9ef8eb67338b3e0e24818868a20684eb26bb"
+  "hash": "9f268512c8fd05273bc1597e35c47aa4172844a87629e5f9e7acef0387308537"
 }

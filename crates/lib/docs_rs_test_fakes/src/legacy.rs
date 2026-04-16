@@ -708,6 +708,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(42),
+            Some(23),
             None::<&SimpleBuildError>,
         )
         .await?;
