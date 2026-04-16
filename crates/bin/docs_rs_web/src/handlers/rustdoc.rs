@@ -2631,12 +2631,12 @@ mod test {
             assert_eq!(
                 latest_version_redirect(
                     "tungstenite",
-                    "/tungstenite/0.10.0/tungstenite/?search=String+-%3E+Message",
+                    "/tungstenite/0.10.0/tungstenite/?search=String+-%7B+Message",
                     &env.web_app().await,
                     env.config()
                 )
                 .await?,
-                "/crate/tungstenite/latest/target-redirect/tungstenite/?search=String+-%3E+Message",
+                "/crate/tungstenite/latest/target-redirect/tungstenite/?search=String+-%7B+Message",
             );
             Ok(())
         });
@@ -3389,7 +3389,7 @@ mod test {
 
         web.assert_redirect_cached_unchecked(
             "/minidumper/latest/%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e",
-            "/minidumper/latest/%3C/script%3E%3Cteste%3E",
+            "/minidumper/latest/%3C/script%7B%3Cteste%7B",
             CachePolicy::ForeverInCdn(KrateName::from_str("minidumper").unwrap().into()),
             env.config(),
         )
