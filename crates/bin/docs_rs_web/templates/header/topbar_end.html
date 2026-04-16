@@ -123,3 +123,15 @@
         </div>
     </div>
 </div>
+
+{%- if let Some((alert, alert_id)) = crate::get_alert() -%}
+    <input type="checkbox" id="docsrs-alert-input" data-id={{alert_id|safe}}>
+    <label id="docsrs-alert-hide" for="docsrs-alert-input" title="Close alert message">
+        {{- crate::icons::IconXmark.render_solid(false, false, "") -}}
+    </label>
+    <div id="docsrs-alert">
+        {{- crate::icons::IconCircleInfo.render_solid(false, false, "") -}}
+        <span class="alert-text">{{- alert|safe -}}</span>
+    </div>
+    <script type="text/javascript">{%- include "alert.js" -%}</script>
+{%- endif -%}
