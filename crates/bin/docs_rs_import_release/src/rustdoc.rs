@@ -129,7 +129,7 @@ pub(crate) async fn find_successful_build_targets(
 
     let mut potential_other_targets: HashSet<String> =
         other_targets.into_iter().map(ToString::to_string).collect();
-    potential_other_targets.extend(fetch_target_list().await?.into_iter());
+    potential_other_targets.extend(fetch_target_list().await?);
     potential_other_targets.remove(default_target);
 
     let mut targets: Vec<String> = vec![default_target.into()];

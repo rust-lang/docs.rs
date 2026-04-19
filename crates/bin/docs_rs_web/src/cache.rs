@@ -168,7 +168,7 @@ impl CachePolicy {
                     cache_headers
                         .surrogate_keys
                         .get_or_insert_with(SurrogateKeys::new)
-                        .try_extend(surrogate_keys.into_iter())?;
+                        .try_extend(surrogate_keys)?;
 
                     cache_headers
                 } else {
