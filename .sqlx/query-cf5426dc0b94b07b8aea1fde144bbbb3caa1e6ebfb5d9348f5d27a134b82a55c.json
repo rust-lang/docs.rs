@@ -147,7 +147,7 @@
       {
         "ordinal": 26,
         "name": "license",
-        "type_info": "Varchar"
+        "type_info": "Text"
       },
       {
         "ordinal": 27,
