@@ -305,6 +305,8 @@ impl AsyncStorage {
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
         let root_dir = root_dir.as_ref();
 
+        // Keep the TempPath guards alive until after both uploads complete; dropping them earlier
+        // would delete the files while S3 is still reading from them.
         let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let zip_path = zip_temp_path.to_path_buf();
 
@@ -513,42 +515,6 @@ impl AsyncStorage {
         self.backend
             .upload_stream(StreamUpload {
                 path,
-                mime,
-                source: StreamUploadSource::Bytes(content.into()),
-                compression: Some(alg),
-            })
-            .await?;
-
-        Ok(alg)
-    }
-
-    #[instrument(skip(self))]
-    pub async fn store_path(
-        &self,
-        target_path: impl Into<String> + fmt::Debug,
-        source_path: impl AsRef<Path> + fmt::Debug,
-    ) -> Result<CompressionAlgorithm> {
-        let target_path = target_path.into();
-        let source_path = source_path.as_ref();
-
-        let alg = CompressionAlgorithm::default();
-
-        let content = {
-            let mut buf: Vec<u8> = Vec::new();
-            compress_async(
-                io::BufReader::new(fs::File::open(source_path).await?),
-                &mut buf,
-                alg,
-            )
-            .await?;
-            buf
-        };
-
-        let mime = detect_mime(&target_path).to_owned();
-
-        self.backend
-            .upload_stream(StreamUpload {
-                path: target_path,
                 mime,
                 source: StreamUploadSource::Bytes(content.into()),
                 compression: Some(alg),
