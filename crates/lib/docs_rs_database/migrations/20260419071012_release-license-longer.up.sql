@@ -1,0 +1,1 @@
+ALTER TABLE releases ALTER COLUMN license TYPE TEXT;

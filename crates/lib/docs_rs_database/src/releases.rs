@@ -1406,4 +1406,68 @@ mod test {
 
         Ok(())
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_long_license() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+
+        let mut conn = db.async_conn().await?;
+
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+
+        // Create a license string longer than 100 characters to test the migration
+        // from VARCHAR(100) to TEXT
+        let long_license = "MIT OR Apache-2.0 ".repeat(15); // ~270 characters
+        assert!(
+            long_license.len() > 100,
+            "License should be longer than old VARCHAR(100) limit"
+        );
+
+        let tempdir = tempfile::tempdir()?;
+        finish_release(
+            &mut conn,
+            crate_id,
+            release_id,
+            &MetadataPackage {
+                id: "42".to_string(),
+                name: KRATE.to_string(),
+                version: V0_1.clone(),
+                license: Some(long_license.clone()),
+                repository: None,
+                homepage: None,
+                description: None,
+                documentation: None,
+                dependencies: Vec::new(),
+                targets: Vec::new(),
+                readme: None,
+                keywords: Vec::new(),
+                features: BTreeMap::new(),
+            },
+            tempdir.path(),
+            DEFAULT_TARGET,
+            Value::Array(vec![]),
+            vec![DEFAULT_TARGET.to_string()],
+            &ReleaseData::default(),
+            true,
+            false,
+            iter::empty(),
+            None,
+            true,
+            24,
+        )
+        .await?;
+
+        let db_license = sqlx::query_scalar!(
+            "SELECT license FROM releases WHERE id = $1",
+            release_id as _
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        assert_eq!(db_license, Some(long_license));
+
+        Ok(())
+    }
 }
