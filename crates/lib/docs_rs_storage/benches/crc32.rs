@@ -11,7 +11,7 @@ pub fn crc32_file(c: &mut Criterion) {
     let mut group = c.benchmark_group("crc32");
     group.throughput(Throughput::Bytes(fixture.len() as u64));
     group.bench_function("file_16mib", |b| {
-        b.iter(|| crc32_for_path(black_box(&fixture_path)));
+        b.iter(|| crc32_for_path(black_box(&fixture_path)).unwrap());
     });
     group.finish();
 }
