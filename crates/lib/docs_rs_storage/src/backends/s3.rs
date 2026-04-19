@@ -24,7 +24,8 @@ use docs_rs_headers::{ETag, compute_etag};
 use docs_rs_utils::spawn_blocking;
 use futures_util::stream::{BoxStream, StreamExt};
 use opentelemetry::KeyValue;
-use tokio::fs;
+use std::time::Duration;
+use tokio::{fs, time::sleep};
 use tracing::{error, warn};
 
 // error codes to check for when trying to determine if an error is
@@ -290,7 +291,7 @@ impl StorageBackendMethods for S3Backend {
             // uses a "middleware" to calculate the checksum for the content, to compare it after
             // uploading.
             // This piece is broken right now, but only when using S3 directly. On minio, all is
-            // fiine.
+            // fine.
             // I don't want to disable checksums so we're sure the files are uploaded correctly.
             // So the only alternative (outside of trying to fix the SDK) is to calculate the
             // checksum ourselves. This is a little annoying because this means we have to read the
@@ -312,6 +313,10 @@ impl StorageBackendMethods for S3Backend {
                 Err(err) => {
                     warn!(?err, attempt, %path, "failed to upload blob to S3");
                     last_err = Some(err);
+
+                    if attempt < 3 {
+                        sleep(Duration::from_millis(10 * 2u64.pow(attempt))).await;
+                    }
                 }
             }
         }
