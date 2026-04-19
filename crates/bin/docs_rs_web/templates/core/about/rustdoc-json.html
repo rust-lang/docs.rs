@@ -26,9 +26,8 @@
             <h2>URLs</h2>
             <p>
                 The download URLs can be generic or specific, depending on what you need. In case of rebuilds we
-                also keep old format versions around. The endpoints <i>redirect</i> to a download URL on
-                <code>https://static.docs.rs</code>. <b>Until we rebuilt all releases, the redirect target might
-                not exist.</b>
+                also keep old format versions around. <b>Until we rebuilt all releases, we might return
+                a `404 NOT FOUND` for some.</b>
             </p>
             <p>
                 By default we use `zstd` compression, which is more space efficient and faster to decompress. For
