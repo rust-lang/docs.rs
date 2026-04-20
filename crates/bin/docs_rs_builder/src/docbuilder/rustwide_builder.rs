@@ -36,7 +36,10 @@ use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::{
     AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, CommandError, SandboxBuilder, SandboxImage},
+    cmd::{
+        Command, CommandError, ProcessStatistics as RustwideProcessStats, SandboxBuilder,
+        SandboxImage,
+    },
     logging::{self, LogStorage},
     toolchain::ToolchainError,
 };
@@ -44,11 +47,49 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufReader,
+    ops::AddAssign,
     path::Path,
     sync::{Arc, LazyLock},
     time::Instant,
 };
 use tracing::{debug, error, info, info_span, instrument, warn};
+
+#[derive(Default)]
+struct ProcessStatistics(RustwideProcessStats);
+
+impl From<&RustwideProcessStats> for ProcessStatistics {
+    fn from(value: &RustwideProcessStats) -> Self {
+        Self(RustwideProcessStats {
+            memory_peak: value.memory_peak,
+        })
+    }
+}
+
+impl From<RustwideProcessStats> for ProcessStatistics {
+    fn from(value: RustwideProcessStats) -> Self {
+        Self(RustwideProcessStats {
+            memory_peak: value.memory_peak,
+        })
+    }
+}
+
+impl Clone for ProcessStatistics {
+    fn clone(&self) -> Self {
+        Self(RustwideProcessStats {
+            memory_peak: self.0.memory_peak,
+        })
+    }
+}
+
+impl AddAssign<ProcessStatistics> for ProcessStatistics {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0.memory_peak = match (self.0.memory_peak, rhs.0.memory_peak) {
+            (Some(lhs), Some(rhs)) => Some(lhs.max(rhs)),
+            (Some(v), None) | (None, Some(v)) => Some(v),
+            (None, None) => None,
+        };
+    }
+}
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
@@ -714,6 +755,8 @@ impl RustwideBuilder {
                             .is_dir();
                     }
 
+                let mut aggregated_build_stats = res.stats.clone();
+
                 let mut target_build_logs = HashMap::new();
                 let documentation_size = if has_docs {
                     debug!("adding documentation for the default target to the database");
@@ -743,7 +786,9 @@ impl RustwideBuilder {
                             collect_metrics,
                         )?;
                         target_build_logs.insert(target, target_res.build_log);
+                        aggregated_build_stats += target_res.stats;
                     }
+
                     let (file_list, new_alg) =
                         self.runtime.block_on(
                         self.storage.store_all_in_archive(
@@ -771,6 +816,7 @@ impl RustwideBuilder {
                         BuildStatus::Failure
                     },
                     documentation_size,
+                    aggregated_build_stats.0.memory_peak,
                     res.result.build_error.as_ref()
                 ))?;
 
@@ -963,7 +1009,7 @@ impl RustwideBuilder {
         build: &Build,
         metadata: &Metadata,
         limits: &Limits,
-    ) -> Result<()> {
+    ) -> Result<ProcessStatistics> {
         let rustdoc_flags = vec!["--output-format".to_string(), "json".to_string()];
 
         let mut storage = LogStorage::new(log::LevelFilter::Info);
@@ -974,7 +1020,6 @@ impl RustwideBuilder {
             self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)
                 .and_then(|command| command.run().map_err(Into::into))
         });
-        let successful = result.is_ok();
 
         {
             let _span = info_span!("store_json_build_logs").entered();
@@ -984,11 +1029,11 @@ impl RustwideBuilder {
                 .context("storing build log on S3")?;
         }
 
-        if !successful {
+        let Ok(stats) = result else {
             // this is a normal build error and will be visible in the uploaded build logs.
             // We don't need the Err variant here.
-            return Ok(());
-        }
+            return Ok(ProcessStatistics::default());
+        };
 
         let json_dir = if metadata.proc_macro {
             assert!(
@@ -1050,7 +1095,7 @@ impl RustwideBuilder {
             }
         }
 
-        Ok(())
+        Ok(ProcessStatistics(stats))
     }
 
     #[instrument(skip(self, build))]
@@ -1060,7 +1105,7 @@ impl RustwideBuilder {
         build: &Build,
         metadata: &Metadata,
         limits: &Limits,
-    ) -> Result<Option<DocCoverage>> {
+    ) -> Result<(ProcessStatistics, Option<DocCoverage>)> {
         let rustdoc_flags = vec![
             "--output-format".to_string(),
             "json".to_string(),
@@ -1074,7 +1119,8 @@ impl RustwideBuilder {
             items_with_examples: 0,
         };
 
-        self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
+        let stats = self
+            .prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
             .process_lines(&mut |line, _| {
                 if line.starts_with('{') && line.ends_with('}') {
                     match doc_coverage::parse_line(line) {
@@ -1086,13 +1132,14 @@ impl RustwideBuilder {
             .log_output(true)
             .run()?;
 
-        Ok(
+        Ok((
+            ProcessStatistics(stats),
             if coverage.total_items == 0 && coverage.documented_items == 0 {
                 None
             } else {
                 Some(coverage)
             },
-        )
+        ))
     }
 
     #[instrument(skip(self, build))]
@@ -1132,19 +1179,24 @@ impl RustwideBuilder {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
+        let mut aggregated_build_stats = ProcessStatistics::default();
+
         // we have to run coverage before the doc-build because currently it
         // deletes the doc-target folder.
         // https://github.com/rust-lang/cargo/issues/9447
-        let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
-            Ok(cov) => cov,
-            Err(err) => {
-                info!("error when trying to get coverage: {}", err);
-                info!("continuing anyways.");
-                None
-            }
-        };
+        let (coverage_stats, doc_coverage) =
+            match self.get_coverage(target, build, metadata, limits) {
+                Ok((stats, cov)) => (stats, cov),
+                Err(err) => {
+                    info!("error when trying to get coverage: {}", err);
+                    info!("continuing anyways.");
+                    (ProcessStatistics::default(), None)
+                }
+            };
 
-        if let Err(err) = self.execute_json_build(
+        aggregated_build_stats += coverage_stats;
+
+        let json_stats = match self.execute_json_build(
             build_id,
             name,
             version,
@@ -1154,15 +1206,23 @@ impl RustwideBuilder {
             metadata,
             limits,
         ) {
-            // FIXME: this is temporary. Theoretically all `Err` things coming out
-            // of the method should be retryable, so we could juse use `?` here.
-            // But since this is new, I want to be carful and first see what kind of
-            // errors we are seeing here.
-            error!(
-                ?err,
-                "internal error when trying to generate rustdoc JSON output"
-            );
-        }
+            Ok(stats) => stats,
+            Err(err) => {
+                // FIXME: this is temporary. Theoretically all `Err` things coming out
+                // of the method should be retryable, so we could juse use `?` here.
+                // But since this is new, I want to be carful and first see what kind of
+                // errors we are seeing here.
+                error!(
+                    ?err,
+                    "internal error when trying to generate rustdoc JSON output"
+                );
+                // at some point we also want to have stats for failed commands, but
+                // rustwide doesn't return them yet.
+                ProcessStatistics::default()
+            }
+        };
+
+        aggregated_build_stats += json_stats;
 
         let result = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
@@ -1210,6 +1270,14 @@ impl RustwideBuilder {
             std::fs::rename(old_dir, new_dir)?;
         }
 
+        let main_build_stats = result
+            .as_ref()
+            .ok()
+            .map(ProcessStatistics::from)
+            .unwrap_or_default();
+
+        aggregated_build_stats += main_build_stats;
+
         Ok(FullBuildResult {
             result: BuildResult {
                 rustc_version: self.rustc_version()?,
@@ -1220,6 +1288,7 @@ impl RustwideBuilder {
             cargo_metadata,
             build_log: storage.to_string(),
             target: target.to_string(),
+            stats: aggregated_build_stats,
         })
     }
 
@@ -1352,6 +1421,7 @@ struct FullBuildResult {
     cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
+    stats: ProcessStatistics,
 }
 
 impl FullBuildResult {
@@ -1480,7 +1550,8 @@ mod tests {
                         b.build_status::TEXT as build_status,
                         b.docsrs_version,
                         b.rustc_version,
-                        b.documentation_size
+                        b.documentation_size,
+                        b.memory_peak
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
@@ -1506,6 +1577,7 @@ mod tests {
         assert_eq!(row.build_status.unwrap(), "success");
         assert!(row.source_size > 0);
         assert!(row.documentation_size.unwrap() > 0);
+        assert!(row.memory_peak.unwrap() > 10 * 1024 * 1024); // 10 MiB, in my test it was > 100 MiB
 
         let mut targets: Vec<String> = row
             .doc_targets
@@ -1744,6 +1816,7 @@ mod tests {
                 "some-version",
                 "other-version",
                 BuildStatus::Success,
+                None,
                 None,
                 None::<&SimpleBuildError>,
             )

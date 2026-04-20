@@ -251,6 +251,7 @@ async fn import_test_release_inner(
         BUILD_VERSION,
         BuildStatus::Success,
         Some(documentation_size),
+        None,
         None::<&SimpleBuildError>,
     )
     .await?;

@@ -220,6 +220,7 @@ pub async fn add_doc_coverage(
 }
 
 /// Adds a build into database
+#[allow(clippy::too_many_arguments)]
 #[instrument(skip(conn))]
 pub async fn finish_build<E>(
     conn: &mut sqlx::PgConnection,
@@ -228,6 +229,7 @@ pub async fn finish_build<E>(
     docsrs_version: &str,
     build_status: BuildStatus,
     documentation_size: Option<u64>,
+    memory_peak: Option<u64>,
     build_error: Option<&E>,
 ) -> Result<()>
 where
@@ -261,9 +263,10 @@ where
              documentation_size = $6,
              rustc_nightly_date = $7,
              build_finished = NOW(),
-             error_kind = $8
+             error_kind = $8,
+             memory_peak = $9
          WHERE
-            id = $9
+            id = $10
          RETURNING rid as "rid: ReleaseId" "#,
         rustc_version,
         docsrs_version,
@@ -273,6 +276,7 @@ where
         documentation_size.map(|v| v as i64),
         rustc_date,
         build_error.map(|err| err.kind()),
+        memory_peak.map(|v| v as i64),
         build_id as _,
     )
     .fetch_one(&mut *conn)
@@ -751,6 +755,7 @@ mod test {
             "docsrs_version",
             BuildStatus::Success,
             None,
+            None,
             None::<&SimpleBuildError>,
         )
         .await?;
@@ -803,6 +808,7 @@ mod test {
             "docsrs_version",
             BuildStatus::Success,
             Some(42),
+            Some(23),
             None::<&SimpleBuildError>,
         )
         .await?;
@@ -813,6 +819,7 @@ mod test {
                 docsrs_version,
                 build_status as "build_status: BuildStatus",
                 documentation_size,
+                memory_peak,
                 errors,
                 error_kind,
                 rustc_nightly_date
@@ -827,6 +834,7 @@ mod test {
         assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
         assert_eq!(row.build_status, BuildStatus::Success);
         assert_eq!(row.documentation_size, Some(42));
+        assert_eq!(row.memory_peak, Some(23));
         assert!(row.rustc_nightly_date.is_none());
         assert!(row.errors.is_none());
         assert!(row.error_kind.is_none());
@@ -850,6 +858,7 @@ mod test {
             "rustc_version",
             "docsrs_version",
             BuildStatus::Failure,
+            None,
             None,
             Some(&SimpleBuildError("error message".into())),
         )
