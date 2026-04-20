@@ -55,6 +55,11 @@ fn validate_decoded_path(path: &str) -> Result<()> {
         bail!("detected `#` in request path");
     }
 
+    // `<` and `>` are never allowed — they indicate HTML injection attempts.
+    if path.contains('<') || path.contains('>') {
+        bail!("detected `<` or `>` in request path");
+    }
+
     Ok(())
 }
 
@@ -95,6 +100,9 @@ mod tests {
     #[test_case(
         "/casual_logger/0.6.4/%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e%5c%2e%2e";
         "ends with backslash dot dot"
+    )]
+    #[test_case(
+        "/mathru/0.10.0/i686-unknown-linux-gnu/mathru/special/hypergeometric/%3E%3Cscript%20defer%20src=%22https:/cdn.jsdelivr.net/npm/katex@0.10.1/dist/katex.min.js%22%20integrity=%22sha384-2BKqo+exmr9su6dir+qCw08N2ZKRucY4PrGQPP..."
     )]
     async fn test_invalid_path(path: &str) -> Result<()> {
         let app = Router::new()
