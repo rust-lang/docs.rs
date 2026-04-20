@@ -12,7 +12,7 @@ use async_stream::stream;
 use axum::body::Bytes;
 use futures_util::{Stream, StreamExt as _};
 use lol_html::{element, errors::RewritingError};
-use std::sync::Arc;
+use std::{any::Any, collections::HashMap, sync::Arc};
 use tokio::{io::AsyncRead, task::JoinHandle};
 use tokio_util::io::ReaderStream;
 use tracing::{Span, error, instrument};
@@ -69,7 +69,9 @@ where
                         let head_html = Head::new(&data).render().unwrap();
                         let vendored_html = Vendored.render().unwrap();
                         let body_html = Body.render().unwrap();
-                        let topbar_html = data.render().unwrap();
+                        let values: HashMap<&str, &dyn Any> =
+                            HashMap::from_iter([("warnings", &data.warnings as &dyn Any)]);
+                        let topbar_html = data.render_with_values(&values).unwrap();
 
                         // Before: <body> ... rustdoc content ... </body>
                         // After:

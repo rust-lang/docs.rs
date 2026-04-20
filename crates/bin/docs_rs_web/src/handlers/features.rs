@@ -8,7 +8,7 @@ use crate::{
     impl_axum_webpage,
     match_release::match_version,
     metadata::MetaData,
-    page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    page::templates::{AlertSeverityRender, RenderBrands, RenderRegular, RenderSolid, filters},
 };
 use anyhow::anyhow;
 use askama::Template;

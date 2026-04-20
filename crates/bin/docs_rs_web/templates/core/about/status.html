@@ -1,0 +1,31 @@
+{% extends "about-base.html" %}
+
+{%- block title -%} Docs.rs status {%- endblock title -%}
+
+{%- block body -%}
+    <h1>Docs.rs status</h1>
+
+    <div class="about-page">
+        <div class="container pure-u-5-6 about">
+            {%- if abnormalities.is_empty() %}
+            <p>No abnormalities detected currently.</p>
+            {%- else %}
+                {%- for abnormality in abnormalities %}
+                    <h3 id="{{ abnormality.anchor_id }}">
+                        {{- abnormality.severity.render_icon_solid(false, false, "") }}
+                        {{ abnormality.text }}
+                    </h3>
+                    {%- if let Some(explanation) = &abnormality.explanation %}
+                        <p>{{ explanation|safe }}</p>
+                    {%- endif %}
+                    {%- if let Some(start_time) = abnormality.start_time %}
+                        <p>This is ongoing since {{ start_time.format("%Y-%m-%d %H:%M:%S UTC") }}.</p>
+                    {%- endif %}
+                    <p>
+                        <a href="{{ abnormality.url }}">More details here.</a>
+                    </p>
+                {%- endfor %}
+            {%- endif %}
+        </div>
+    </div>
+{%- endblock body %}

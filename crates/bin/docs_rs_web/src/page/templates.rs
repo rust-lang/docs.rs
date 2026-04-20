@@ -1,6 +1,7 @@
 use crate::handlers::rustdoc::RustdocPage;
 use anyhow::{Context as _, Result};
 use askama::Template;
+use docs_rs_database::service_config::AlertSeverity;
 use std::sync::Arc;
 use tracing::trace;
 
@@ -266,6 +267,34 @@ pub trait RenderBrands {
 impl<T: font_awesome_as_a_crate::Brands> RenderBrands for T {
     fn render_brands(&self, fw: bool, spin: bool, extra: &str) -> askama::filters::Safe<String> {
         render("fa-brands", self.icon_name(), fw, spin, extra)
+    }
+}
+
+/// how to render the severity for an abnormality
+pub(crate) trait AlertSeverityRender {
+    fn css_class(&self) -> &'static str;
+    fn render_icon_solid(&self, fw: bool, spin: bool, extra: &str)
+    -> askama::filters::Safe<String>;
+}
+
+impl AlertSeverityRender for AlertSeverity {
+    fn css_class(&self) -> &'static str {
+        match self {
+            Self::Warn => "warn",
+            Self::Error => "error",
+        }
+    }
+
+    fn render_icon_solid(
+        &self,
+        fw: bool,
+        spin: bool,
+        extra: &str,
+    ) -> askama::filters::Safe<String> {
+        match self {
+            Self::Warn => crate::icons::IconTriangleExclamation.render_solid(fw, spin, extra),
+            Self::Error => crate::icons::IconCircleXmark.render_solid(fw, spin, extra),
+        }
     }
 }
 

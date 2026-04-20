@@ -1,12 +1,16 @@
-use crate::{Config, PRIORITY_DEFAULT, PRIORITY_DEPRIORITIZED, QueuedCrate, metrics};
-use anyhow::Result;
+use crate::{
+    Config, PRIORITY_DEFAULT, PRIORITY_DEPRIORITIZED, PRIORITY_MANUAL_FROM_CRATES_IO, QueuedCrate,
+    metrics,
+};
+use anyhow::{Context as _, Result};
 use docs_rs_database::{
     Pool,
-    service_config::{ConfigName, get_config, set_config},
+    service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, get_config, set_config},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{KrateName, Version};
+use docs_rs_uri::EscapedURI;
 use futures_util::TryStreamExt as _;
 use std::{
     collections::{HashMap, HashSet},
@@ -259,6 +263,47 @@ impl AsyncBuildQueue {
         .await?;
 
         Ok(())
+    }
+
+    pub fn build_queue_is_too_long<'a>(
+        &self,
+        queued_crates: impl Iterator<Item = &'a QueuedCrate>,
+    ) -> bool {
+        queued_crates
+            .filter(|qc| qc.priority < PRIORITY_MANUAL_FROM_CRATES_IO)
+            .count()
+            > self.config.length_warning_threshold
+    }
+
+    /// fetch the current queue alerts
+    pub async fn gather_alerts(&self) -> Result<Vec<Abnormality>> {
+        let queue_pending_count = self
+            .pending_count_by_priority()
+            .await
+            .context("failed to fetch queue length for alerts")?
+            .into_iter()
+            .filter_map(|(prio, amount)| (prio < PRIORITY_MANUAL_FROM_CRATES_IO).then_some(amount))
+            .sum::<usize>();
+
+        let mut alerts = Vec::with_capacity(1);
+
+        if queue_pending_count > self.config.length_warning_threshold {
+            alerts.push(Abnormality {
+                anchor_id: AnchorId::QueueLength,
+                url: EscapedURI::from_path("/releases/queue"),
+                text: "long build queue".into(),
+                explanation: Some(
+                    format!(
+                        "The build queue currently contains more than {} crates, so it might take a while before new published crates get documented.",
+                        self.config.length_warning_threshold,
+                    )
+                ),
+                start_time: None,
+                severity: AlertSeverity::Warn,
+            });
+        }
+
+        Ok(alerts)
     }
 }
 
@@ -579,6 +624,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(FOO, -10), (BAR, -10), (BAZ, PRIORITY_DEFAULT)]
         );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_length_warning_threshold_boundary() -> Result<()> {
+        let mut config = Config::from_environment()?;
+        config.length_warning_threshold = 1;
+        let env = test_queue_with_config(config).await?;
+        let queue = env.queue;
+
+        queue.add_crate(&FOO, &V1, 0, None).await?;
+
+        assert!(!queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
+        assert!(queue.gather_alerts().await?.is_empty());
+
+        queue.add_crate(&BAR, &V1, 0, None).await?;
+
+        assert!(queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
+        assert_eq!(
+            queue.gather_alerts().await?,
+            vec![Abnormality {
+                anchor_id: AnchorId::QueueLength,
+                url: EscapedURI::from_path("/releases/queue"),
+                text: "long build queue".into(),
+                explanation: Some("The build queue currently contains more than 1 crates, so it might take a while before new published crates get documented.".into()),
+                start_time: None,
+                severity: AlertSeverity::Warn,
+            }]
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_public_alert_ignores_manual_crates() -> Result<()> {
+        let mut config = Config::from_environment()?;
+        config.length_warning_threshold = 0;
+        let env = test_queue_with_config(config).await?;
+        let queue = env.queue;
+
+        queue
+            .add_crate(&FOO, &V1, PRIORITY_MANUAL_FROM_CRATES_IO, None)
+            .await?;
+
+        assert!(!queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
+        assert!(queue.gather_alerts().await?.is_empty());
 
         Ok(())
     }

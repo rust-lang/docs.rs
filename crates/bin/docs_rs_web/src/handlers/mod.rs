@@ -15,7 +15,7 @@ pub(crate) mod status;
 use crate::Config;
 use crate::metrics::WebMetrics;
 use crate::middleware::{csp, security};
-use crate::page::{self, TemplateData};
+use crate::page::{self, TemplateData, warnings::WarningsCache};
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use axum::{
@@ -75,6 +75,8 @@ async fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
+    let abnormality_cache =
+        Arc::new(WarningsCache::new(context.pool()?.clone(), context.build_queue()?.clone()).await);
 
     let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
 
@@ -103,6 +105,7 @@ async fn apply_middleware(
             .layer(Extension(config.clone()))
             .layer(Extension(context.registry_api()?.clone()))
             .layer(Extension(context.storage()?.clone()))
+            .layer(Extension(abnormality_cache))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(
@@ -231,9 +234,15 @@ mod tests {
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
     };
-    use docs_rs_types::{DocCoverage, ReleaseId, Version};
+    use docs_rs_config::AppConfig as _;
+    use docs_rs_database::service_config::{
+        Abnormality, AlertSeverity, AnchorId, ConfigName, set_config,
+    };
+    use docs_rs_types::{DocCoverage, KrateName, ReleaseId, Version, testing::V1};
+    use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
+    use std::str::FromStr;
     use test_case::test_case;
 
     async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
@@ -260,6 +269,153 @@ mod tests {
             assert!(web.get("/").await?.status().is_success());
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_abnormality_is_not_rendered_when_unset() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+
+        assert_eq!(page.select("a.pure-menu-link.error").unwrap().count(), 0);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_manual_abnormality_renders_configured_link() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let mut conn = env.async_conn().await?;
+        // NOTE: abnormalities are cached inside the web-app, so set them
+        // before we fetch the web-app from the test-environments.
+        set_config(
+            &mut conn,
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
+                text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
+                severity: AlertSeverity::Warn,
+            },
+        )
+        .await?;
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+        let alert = page
+            .select("a.pure-menu-link.warn")
+            .unwrap()
+            .next()
+            .expect("missing abnormality");
+
+        assert_eq!(
+            alert.attributes.borrow().get("href"),
+            Some("/-/status/#manual")
+        );
+        assert!(alert.text_contents().contains("Scheduled maintenance"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_queue_abnormality_is_rendered_when_threshold_is_exceeded() -> Result<()> {
+        let mut queue_config = docs_rs_build_queue::Config::test_config()?;
+        queue_config.length_warning_threshold = 1;
+        let env = TestEnvironment::builder()
+            .build_queue_config(queue_config)
+            .build()
+            .await?;
+        let queue = env.build_queue()?.clone();
+
+        for idx in 0..2 {
+            let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
+            queue.add_crate(&name, &V1, 0, None).await?;
+        }
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+        let alert = page
+            .select("a.pure-menu-link.warn")
+            .unwrap()
+            .next()
+            .expect("missing queue alert");
+
+        assert_eq!(
+            alert.attributes.borrow().get("href"),
+            Some("/-/status/#queue-length")
+        );
+        assert!(alert.text_contents().contains("long build queue"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_manual_abnormality_wins_when_multiple_abnormalities_are_active() -> Result<()> {
+        let mut queue_config = docs_rs_build_queue::Config::test_config()?;
+        queue_config.length_warning_threshold = 1;
+        let env = TestEnvironment::builder()
+            .build_queue_config(queue_config)
+            .build()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+        set_config(
+            &mut conn,
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
+                text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
+                severity: AlertSeverity::Error,
+            },
+        )
+        .await?;
+        drop(conn);
+
+        let queue = env.build_queue()?.clone();
+        for idx in 0..2 {
+            let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
+            queue.add_crate(&name, &V1, 0, None).await?;
+        }
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+        let alert = page
+            .select("a.pure-menu-link.error")
+            .unwrap()
+            .next()
+            .expect("missing manual alert");
+
+        assert_eq!(alert.attributes.borrow().get("href"), Some("#"));
+        assert!(alert.text_contents().contains("Scheduled maintenance"));
+        let dropdown_links = page
+            .select("ul.pure-menu-children a.pure-menu-link")
+            .unwrap()
+            .map(|link| {
+                (
+                    link.attributes.borrow().get("href").unwrap().to_string(),
+                    link.text_contents(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert!(dropdown_links.iter().any(|(href, text)| {
+            href == "/-/status/#manual" && text.contains("Scheduled maintenance")
+        }));
+        assert!(
+            dropdown_links
+                .iter()
+                .any(|(href, text)| href == "/-/status/#queue-length"
+                    && text.contains("long build queue"))
+        );
+        Ok(())
     }
 
     #[test]

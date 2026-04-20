@@ -1,4 +1,11 @@
-use crate::{error::AxumNope, middleware::csp::Csp, page::templates::TemplateData};
+use crate::{
+    error::AxumNope,
+    middleware::csp::Csp,
+    page::{
+        templates::TemplateData,
+        warnings::{ActiveWarnings, WarningsCache},
+    },
+};
 use axum::{
     body::Body,
     extract::Request as AxumRequest,
@@ -9,8 +16,12 @@ use futures_util::future::{BoxFuture, FutureExt};
 use http::header::CONTENT_LENGTH;
 use std::sync::Arc;
 
-pub(crate) trait AddCspNonce: IntoResponse {
-    fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String>;
+pub(crate) trait AddTemplateValues: IntoResponse {
+    fn render_with_template_values(
+        &mut self,
+        csp_nonce: String,
+        warnings: ActiveWarnings,
+    ) -> askama::Result<String>;
 }
 
 #[macro_export]
@@ -24,9 +35,18 @@ macro_rules! impl_axum_webpage {
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
     ) => {
-        impl $crate::page::web_page::AddCspNonce for $page {
-            fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
-                let values: (&str, &dyn std::any::Any) = ("csp_nonce", &csp_nonce);
+        impl $crate::page::web_page::AddTemplateValues for $page {
+            fn render_with_template_values(
+                &mut self,
+                csp_nonce: String,
+                warnings: $crate::page::ActiveWarnings,
+            ) -> askama::Result<String> {
+                let values: std::collections::HashMap<&str, &dyn std::any::Any> = [
+                    ("csp_nonce", &csp_nonce as &dyn std::any::Any),
+                    ("warnings", &warnings as &dyn std::any::Any),
+                ]
+                .into_iter()
+                .collect();
                 self.render_with_values(&values)
             }
         }
@@ -95,7 +115,7 @@ macro_rules! impl_axum_webpage {
 /// the context.
 #[derive(Clone)]
 pub(crate) struct DelayedTemplateRender {
-    pub template: Arc<Box<dyn AddCspNonce + Send + Sync>>,
+    pub template: Arc<Box<dyn AddTemplateValues + Send + Sync>>,
     pub cpu_intensive_rendering: bool,
 }
 
@@ -103,6 +123,7 @@ fn render_response(
     mut response: AxumResponse,
     templates: Arc<TemplateData>,
     csp_nonce: String,
+    warnings: ActiveWarnings,
 ) -> BoxFuture<'static, AxumResponse> {
     async move {
         if let Some(render) = response.extensions_mut().remove::<DelayedTemplateRender>() {
@@ -112,18 +133,19 @@ fn render_response(
             } = render;
             let mut template = Arc::into_inner(template).unwrap();
             let csp_nonce_clone = csp_nonce.clone();
+            let warnings_clone = warnings.clone();
 
             let result: Result<String, anyhow::Error> = if cpu_intensive_rendering {
                 templates
                     .render_in_threadpool(move || {
                         template
-                            .render_with_csp_nonce(csp_nonce_clone)
+                            .render_with_template_values(csp_nonce_clone, warnings_clone)
                             .map_err(|err| err.into())
                     })
                     .await
             } else {
                 template
-                    .render_with_csp_nonce(csp_nonce_clone)
+                    .render_with_template_values(csp_nonce_clone, warnings_clone)
                     .map_err(|err| err.into())
             };
 
@@ -138,6 +160,7 @@ fn render_response(
                             AxumNope::InternalError(err).into_response(),
                             templates,
                             csp_nonce,
+                            warnings,
                         )
                         .await;
                     }
@@ -170,7 +193,14 @@ pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) ->
         .nonce()
         .to_owned();
 
+    let warnings = req
+        .extensions()
+        .get::<Arc<WarningsCache>>()
+        .expect("warnings cache request extension not found")
+        .get()
+        .await;
+
     let response = next.run(req).await;
 
-    render_response(response, templates, csp_nonce).await
+    render_response(response, templates, csp_nonce, warnings).await
 }
