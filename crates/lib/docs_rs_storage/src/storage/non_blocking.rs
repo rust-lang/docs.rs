@@ -149,15 +149,11 @@ impl AsyncStorage {
         latest_build_id: Option<BuildId>,
         path: &str,
     ) -> Result<bool> {
-        match self
+        Ok(self
             .archive_index_cache
             .find(archive_path, latest_build_id, path, self)
-            .await
-        {
-            Ok(file_info) => Ok(file_info.is_some()),
-            Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => Ok(false),
-            Err(err) => Err(err),
-        }
+            .await?
+            .is_some())
     }
 
     /// get, decompress and materialize an object from store
