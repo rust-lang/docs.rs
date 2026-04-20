@@ -36,10 +36,7 @@ use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::{
     AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{
-        Command, CommandError, ProcessStatistics as RustwideProcessStats, SandboxBuilder,
-        SandboxImage,
-    },
+    cmd::{Command, CommandError, ProcessStatistics, SandboxBuilder, SandboxImage},
     logging::{self, LogStorage},
     toolchain::ToolchainError,
 };
@@ -47,49 +44,11 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufReader,
-    ops::AddAssign,
     path::Path,
     sync::{Arc, LazyLock},
     time::Instant,
 };
 use tracing::{debug, error, info, info_span, instrument, warn};
-
-#[derive(Default)]
-struct ProcessStatistics(RustwideProcessStats);
-
-impl From<&RustwideProcessStats> for ProcessStatistics {
-    fn from(value: &RustwideProcessStats) -> Self {
-        Self(RustwideProcessStats {
-            memory_peak: value.memory_peak,
-        })
-    }
-}
-
-impl From<RustwideProcessStats> for ProcessStatistics {
-    fn from(value: RustwideProcessStats) -> Self {
-        Self(RustwideProcessStats {
-            memory_peak: value.memory_peak,
-        })
-    }
-}
-
-impl Clone for ProcessStatistics {
-    fn clone(&self) -> Self {
-        Self(RustwideProcessStats {
-            memory_peak: self.0.memory_peak,
-        })
-    }
-}
-
-impl AddAssign<ProcessStatistics> for ProcessStatistics {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0.memory_peak = match (self.0.memory_peak, rhs.0.memory_peak) {
-            (Some(lhs), Some(rhs)) => Some(lhs.max(rhs)),
-            (Some(v), None) | (None, Some(v)) => Some(v),
-            (None, None) => None,
-        };
-    }
-}
 
 const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
@@ -786,7 +745,7 @@ impl RustwideBuilder {
                             collect_metrics,
                         )?;
                         target_build_logs.insert(target, target_res.build_log);
-                        aggregated_build_stats += target_res.stats;
+                        aggregated_build_stats.merge_mut(target_res.stats);
                     }
 
                     let (file_list, new_alg) =
@@ -816,7 +775,7 @@ impl RustwideBuilder {
                         BuildStatus::Failure
                     },
                     documentation_size,
-                    aggregated_build_stats.0.memory_peak,
+                    aggregated_build_stats.memory_peak,
                     res.result.build_error.as_ref()
                 ))?;
 
@@ -1095,7 +1054,7 @@ impl RustwideBuilder {
             }
         }
 
-        Ok(ProcessStatistics(stats))
+        Ok(stats)
     }
 
     #[instrument(skip(self, build))]
@@ -1133,7 +1092,7 @@ impl RustwideBuilder {
             .run()?;
 
         Ok((
-            ProcessStatistics(stats),
+            stats,
             if coverage.total_items == 0 && coverage.documented_items == 0 {
                 None
             } else {
@@ -1194,7 +1153,7 @@ impl RustwideBuilder {
                 }
             };
 
-        aggregated_build_stats += coverage_stats;
+        aggregated_build_stats.merge_mut(coverage_stats);
 
         let json_stats = match self.execute_json_build(
             build_id,
@@ -1222,7 +1181,7 @@ impl RustwideBuilder {
             }
         };
 
-        aggregated_build_stats += json_stats;
+        aggregated_build_stats.merge_mut(json_stats);
 
         let result = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
@@ -1270,13 +1229,9 @@ impl RustwideBuilder {
             std::fs::rename(old_dir, new_dir)?;
         }
 
-        let main_build_stats = result
-            .as_ref()
-            .ok()
-            .map(ProcessStatistics::from)
-            .unwrap_or_default();
+        let main_build_stats = result.as_ref().ok().cloned().unwrap_or_default();
 
-        aggregated_build_stats += main_build_stats;
+        aggregated_build_stats.merge_mut(main_build_stats);
 
         Ok(FullBuildResult {
             result: BuildResult {
