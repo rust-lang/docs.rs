@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::{fs, io};
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, info_span, instrument};
 
 /// repackage old rustdoc / source content.
 ///
@@ -108,13 +108,14 @@ pub async fn repackage(
 /// repackage contents of a S3 path prefix into a single archive file.
 ///
 /// Not performance optimized, for now it just tries to be simple.
-#[instrument(skip(storage))]
 async fn repackage_path(
     storage: &AsyncStorage,
     prefix: &str,
     target_archive: &str,
 ) -> Result<Option<(Vec<FileEntry>, CompressionAlgorithm)>> {
     const DOWNLOAD_CONCURRENCY: usize = 8;
+
+    let _span = info_span!("repackage_path", %prefix, %target_archive).entered();
 
     info!("repackage path");
     let tempdir = spawn_blocking(|| tempfile::tempdir().map_err(Into::into)).await?;

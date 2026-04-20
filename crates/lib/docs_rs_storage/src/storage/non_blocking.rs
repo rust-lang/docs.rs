@@ -4,7 +4,7 @@ use crate::{
     Config,
     archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION},
     backends::{StorageBackend, StorageBackendMethods, s3::S3Backend},
-    blob::{Blob, BlobUpload, StreamingBlob},
+    blob::{Blob, StreamUpload, StreamUploadSource, StreamingBlob},
     compression::{compress, compress_async},
     errors::PathNotFoundError,
     file::FileEntry,
@@ -21,9 +21,18 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{TryStreamExt as _, future, stream::BoxStream};
-use std::{fmt, path::Path, pin::Pin, sync::Arc};
-use tokio::{fs, io};
+use std::{
+    fmt,
+    io::{Cursor, Write as _},
+    path::Path,
+    pin::Pin,
+    sync::Arc,
+};
+use tokio::{fs, io, io::AsyncWriteExt as _};
 use tracing::{info_span, instrument, trace, warn};
+
+/// buffer size when writing zip files.
+pub(crate) const ZIP_BUFFER_SIZE: usize = 1024 * 1024;
 
 pub struct AsyncStorage {
     backend: StorageBackend,
@@ -181,8 +190,7 @@ impl AsyncStorage {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
-    /// get, decompress and materialize part of an object from store
-    #[instrument(skip(self))]
+    #[cfg(test)]
     pub(crate) async fn get_range(
         &self,
         path: &str,
@@ -296,11 +304,18 @@ impl AsyncStorage {
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
         let root_dir = root_dir.as_ref();
-        let (zip_content, file_paths) =
+
+        // Keep the TempPath guards alive until after both uploads complete; dropping them earlier
+        // would delete the files while S3 is still reading from them.
+        let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let zip_path = zip_temp_path.to_path_buf();
+
+        let file_paths =
             spawn_blocking({
                 use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
+                let zip_path = zip_path.clone();
 
                 move || {
                     let mut file_paths = Vec::new();
@@ -316,7 +331,8 @@ impl AsyncStorage {
                     // also has to be added as supported algorithm for storage compression, together
                     // with a mapping in `storage::archive_index::Index::new_from_zip`.
 
-                    let zip_content = {
+
+                    {
                         let _span =
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
@@ -324,7 +340,9 @@ impl AsyncStorage {
                             .compression_method(zip::CompressionMethod::Bzip2)
                             .compression_level(Some(3));
 
-                        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+                        // rustdoc archives can become a couple of GiB big, so we better use a tempfile.
+                        let zip_file = fs::File::create(&zip_path)?;
+                        let mut zip = zip::ZipWriter::new(io::BufWriter::with_capacity(ZIP_BUFFER_SIZE, zip_file));
                         for file_path in get_file_list(&root_dir) {
                             let file_path = file_path?;
 
@@ -334,56 +352,58 @@ impl AsyncStorage {
                             file_paths.push(FileEntry{path: file_path, size: file.metadata()?.len()});
                         }
 
-                        zip.finish()?.into_inner()
-                    };
+                        let mut zip_file = zip.finish()?.into_inner()?;
+                        zip_file.flush()?;
+                    }
 
-                    Ok((
-                        zip_content,
-                        file_paths
-                    ))
+                    Ok(file_paths)
                 }
             })
             .await?;
 
         let alg = CompressionAlgorithm::default();
         let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
-        let (zip_content, compressed_index_content) = {
+        let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let compressed_index_path = compressed_index_temp_path.to_path_buf();
+        {
             let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
-            fs::create_dir_all(&self.config.temp_dir).await?;
-            let local_index_path =
-                tempfile::NamedTempFile::new_in(&self.config.temp_dir)?.into_temp_path();
+            let local_index_path = tempfile::NamedTempFile::new()?.into_temp_path();
 
-            let zip_cursor =
-                archive_index::create(std::io::Cursor::new(zip_content), &local_index_path).await?;
-            let zip_content = zip_cursor.into_inner();
-
-            let mut buf: Vec<u8> = Vec::new();
-            compress_async(
-                &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
-                &mut buf,
-                alg,
+            archive_index::create(
+                io::BufReader::new(fs::File::open(&zip_path).await?),
+                &local_index_path,
             )
             .await?;
-            (zip_content, buf)
-        };
 
-        self.backend
-            .store_batch(vec![
-                BlobUpload {
-                    path: archive_path.to_string(),
-                    mime: mimes::APPLICATION_ZIP.clone(),
-                    content: zip_content,
-                    compression: None,
-                },
-                BlobUpload {
-                    path: remote_index_path,
-                    mime: mime::APPLICATION_OCTET_STREAM,
-                    content: compressed_index_content,
-                    compression: Some(alg),
-                },
-            ])
-            .await?;
+            // compressed index can become up to a couple 100 MiB big, so rather use a tempfile.
+            let mut compressed_index_file = fs::File::create(&compressed_index_path).await?;
+            {
+                let mut compressed_index_writer = io::BufWriter::new(&mut compressed_index_file);
+                compress_async(
+                    &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
+                    &mut compressed_index_writer,
+                    alg,
+                )
+                .await?;
+                compressed_index_writer.flush().await?;
+            }
+        }
+
+        tokio::try_join!(
+            self.backend.upload_stream(StreamUpload {
+                path: archive_path.to_string(),
+                mime: mimes::APPLICATION_ZIP.clone(),
+                source: StreamUploadSource::File(zip_path),
+                compression: None,
+            }),
+            self.backend.upload_stream(StreamUpload {
+                path: remote_index_path,
+                mime: mime::APPLICATION_OCTET_STREAM,
+                source: StreamUploadSource::File(compressed_index_path),
+                compression: Some(alg),
+            })
+        )?;
 
         Ok((file_paths, CompressionAlgorithm::Bzip2))
     }
@@ -395,65 +415,64 @@ impl AsyncStorage {
         prefix: impl AsRef<Path> + fmt::Debug,
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
-        let prefix = prefix.as_ref();
+        let prefix = prefix.as_ref().to_path_buf();
         let root_dir = root_dir.as_ref();
         let alg = CompressionAlgorithm::default();
 
-        let (file_paths_and_mimes, blobs): (Vec<_>, Vec<_>) = walk_dir_recursive(&root_dir)
+        let file_paths_and_mimes: Vec<_> = walk_dir_recursive(&root_dir)
             .err_into::<anyhow::Error>()
-            .map_ok(|item| async move {
-                // Some files have insufficient permissions
-                // (like .lock file created by cargo in documentation directory).
-                // Skip these files.
-                let Ok(file) = fs::File::open(&item).await else {
-                    return Ok(None);
-                };
+            .map_ok(|item| {
+                let prefix = prefix.clone();
+                async move {
+                    // Some files have insufficient permissions
+                    // (like .lock file created by cargo in documentation directory).
+                    // Skip these files.
+                    let Ok(file) = fs::File::open(&item).await else {
+                        return Ok(None);
+                    };
 
-                let content = {
-                    let mut buf: Vec<u8> = Vec::new();
-                    compress_async(io::BufReader::new(file), &mut buf, alg).await?;
-                    buf
-                };
+                    let content = {
+                        let mut buf: Vec<u8> = Vec::new();
+                        compress_async(io::BufReader::new(file), &mut buf, alg).await?;
+                        buf
+                    };
 
-                let bucket_path = prefix.join(&item.relative).to_string_lossy().to_string();
+                    let bucket_path = prefix.join(&item.relative).to_string_lossy().to_string();
 
-                let file_size = item.metadata.len();
+                    let file_size = item.metadata.len();
 
-                let file_info = FileEntry {
-                    path: item.relative.clone(),
-                    size: file_size,
-                };
-                let mime = file_info.mime();
+                    let file_info = FileEntry {
+                        path: item.relative.clone(),
+                        size: file_size,
+                    };
+                    let mime = file_info.mime().clone();
 
-                Ok(Some((
-                    file_info,
-                    BlobUpload {
-                        path: bucket_path,
-                        mime,
-                        content,
-                        compression: Some(alg),
-                    },
-                )))
+                    self.backend
+                        .upload_stream(StreamUpload {
+                            path: bucket_path,
+                            mime,
+                            source: StreamUploadSource::Bytes(content.into()),
+                            compression: Some(alg),
+                        })
+                        .await?;
+
+                    Ok(Some(file_info))
+                }
             })
-            .try_buffer_unordered(self.config.local_filesystem_parallelism)
+            .try_buffer_unordered(self.config.network_parallelism)
             .try_filter_map(|item| future::ready(Ok(item)))
-            .try_fold(
-                (Vec::new(), Vec::new()),
-                |(mut file_paths_and_mimes, mut blobs), (file_info, blob)| async move {
-                    file_paths_and_mimes.push(file_info);
-                    blobs.push(blob);
-                    Ok((file_paths_and_mimes, blobs))
-                },
-            )
+            .try_collect()
             .await?;
 
-        self.backend.store_batch(blobs).await?;
         Ok((file_paths_and_mimes, alg))
     }
 
     #[cfg(test)]
-    pub async fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
-        self.backend.store_batch(blobs).await
+    pub async fn store_blobs(&self, blobs: Vec<crate::BlobUpload>) -> Result<()> {
+        for blob in blobs {
+            self.backend.upload_stream(blob.into()).await?;
+        }
+        Ok(())
     }
 
     // Store file into the backend at the given path, uncompressed.
@@ -469,12 +488,12 @@ impl AsyncStorage {
         let mime = detect_mime(&path).to_owned();
 
         self.backend
-            .store_batch(vec![BlobUpload {
+            .upload_stream(StreamUpload {
                 path,
                 mime,
-                content,
+                source: StreamUploadSource::Bytes(content.into()),
                 compression: None,
-            }])
+            })
             .await?;
 
         Ok(())
@@ -489,54 +508,17 @@ impl AsyncStorage {
         content: impl Into<Vec<u8>>,
     ) -> Result<CompressionAlgorithm> {
         let path = path.into();
-        let content = content.into();
         let alg = CompressionAlgorithm::default();
-        let content = compress(&*content, alg)?;
+        let content = compress(Cursor::new(content.into()), alg)?;
         let mime = detect_mime(&path).to_owned();
 
         self.backend
-            .store_batch(vec![BlobUpload {
+            .upload_stream(StreamUpload {
                 path,
                 mime,
-                content,
+                source: StreamUploadSource::Bytes(content.into()),
                 compression: Some(alg),
-            }])
-            .await?;
-
-        Ok(alg)
-    }
-
-    #[instrument(skip(self))]
-    pub async fn store_path(
-        &self,
-        target_path: impl Into<String> + fmt::Debug,
-        source_path: impl AsRef<Path> + fmt::Debug,
-    ) -> Result<CompressionAlgorithm> {
-        let target_path = target_path.into();
-        let source_path = source_path.as_ref();
-
-        let alg = CompressionAlgorithm::default();
-
-        let content = {
-            let mut buf: Vec<u8> = Vec::new();
-            compress_async(
-                io::BufReader::new(fs::File::open(source_path).await?),
-                &mut buf,
-                alg,
-            )
-            .await?;
-            buf
-        };
-
-        let mime = detect_mime(&target_path).to_owned();
-
-        self.backend
-            .store_batch(vec![BlobUpload {
-                path: target_path,
-                mime,
-                content,
-                compression: Some(alg),
-            }])
+            })
             .await?;
 
         Ok(alg)
@@ -593,6 +575,7 @@ impl fmt::Debug for AsyncStorage {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
+    use crate::blob::BlobUpload;
     use crate::{PathNotFoundError, errors::SizeLimitReached};
     use docs_rs_headers::compute_etag;
     use docs_rs_opentelemetry::testing::TestMetrics;

@@ -22,6 +22,7 @@ pub use storage::blocking::Storage;
 pub use storage::non_blocking::AsyncStorage;
 pub use types::StorageKind;
 pub use utils::{
+    crc32::crc32_for_path,
     file_list::get_file_list,
     storage_path::{rustdoc_archive_path, rustdoc_json_path, source_archive_path},
 };
