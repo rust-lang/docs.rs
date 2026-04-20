@@ -41,3 +41,11 @@ pub(crate) static GLOBAL_ALERT: Option<GlobalAlert> = Some(GlobalAlert {
     fa_icon: "exclamation-triangle",
 });
 */
+
+pub(crate) fn get_alert() -> Option<(&'static str, usize)> {
+    Some((
+        "We are changing which targets are built by default on May 1st.<br>\
+        <a href=\"https://blog.rust-lang.org/2026/04/04/docsrs-only-default-targets/\">Learn more</a>",
+        1,
+    ))
+}
