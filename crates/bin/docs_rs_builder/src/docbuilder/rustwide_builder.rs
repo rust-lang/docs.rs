@@ -1147,8 +1147,10 @@ impl RustwideBuilder {
             match self.get_coverage(target, build, metadata, limits) {
                 Ok((stats, cov)) => (stats, cov),
                 Err(err) => {
-                    info!("error when trying to get coverage: {}", err);
-                    info!("continuing anyways.");
+                    info!(
+                        ?err,
+                        "error when trying to get coverage, continuing anyways.",
+                    );
                     (ProcessStatistics::default(), None)
                 }
             };
