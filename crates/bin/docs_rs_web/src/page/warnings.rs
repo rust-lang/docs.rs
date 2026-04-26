@@ -3,10 +3,12 @@ use chrono::Utc;
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::{
     Pool,
-    service_config::{Abnormality, ConfigName, get_config},
+    service_config::{Abnormality, AnchorId, ConfigName, get_config},
 };
+use docs_rs_fastly::{Cdn, CdnBehaviour as _};
+use docs_rs_headers::SURROGATE_KEY_WARNINGS;
 use serde::Serialize;
-use std::{sync::Arc, time::Duration};
+use std::{iter, sync::Arc, time::Duration};
 use tokio::{
     sync::RwLock,
     task::JoinHandle,
@@ -33,11 +35,20 @@ pub(crate) struct WarningsCache {
 impl WarningsCache {
     const TTL: Duration = Duration::from_secs(300); // 5 minutes
 
-    pub(crate) async fn new(pool: Pool, build_queue: Arc<AsyncBuildQueue>) -> Self {
-        Self::new_with_ttl(pool, build_queue, Self::TTL).await
+    pub(crate) async fn new(
+        pool: Pool,
+        build_queue: Arc<AsyncBuildQueue>,
+        cdn: Option<Arc<Cdn>>,
+    ) -> Self {
+        Self::new_with_ttl(pool, build_queue, cdn, Self::TTL).await
     }
 
-    async fn new_with_ttl(pool: Pool, build_queue: Arc<AsyncBuildQueue>, ttl: Duration) -> Self {
+    async fn new_with_ttl(
+        pool: Pool,
+        build_queue: Arc<AsyncBuildQueue>,
+        cdn: Option<Arc<Cdn>>,
+        ttl: Duration,
+    ) -> Self {
         async fn load_abnormalities(
             pool: &Pool,
             build_queue: &AsyncBuildQueue,
@@ -55,6 +66,7 @@ impl WarningsCache {
         let initial_abnormalities = load_abnormalities(&pool, &build_queue, &[])
             .await
             .unwrap_or_default();
+        Self::purge_cdn(cdn.as_deref()).await;
 
         let state = Arc::new(RwLock::new(ActiveWarnings {
             abnormalities: initial_abnormalities,
@@ -77,8 +89,18 @@ impl WarningsCache {
                 if let Some(abnormalities) =
                     load_abnormalities(&pool, &build_queue, &previous_abnormalities).await
                 {
+                    let automated_abnormalities_changed = !Self::non_manual_abnormalities_equal(
+                        &previous_abnormalities,
+                        &abnormalities,
+                    );
+
                     let mut state = refresh_state.write().await;
                     state.abnormalities = abnormalities;
+                    drop(state);
+
+                    if automated_abnormalities_changed {
+                        Self::purge_cdn(cdn.as_deref()).await;
+                    }
                 }
             }
         });
@@ -118,6 +140,31 @@ impl WarningsCache {
         active_abnormalities.extend(queue_abnormalities);
 
         Ok(active_abnormalities)
+    }
+
+    fn non_manual_abnormalities_equal(previous: &[Abnormality], current: &[Abnormality]) -> bool {
+        fn non_manual_abnormalities(
+            abnormalities: &[Abnormality],
+        ) -> impl Iterator<Item = &Abnormality> {
+            abnormalities
+                .iter()
+                .filter(|abnormality| abnormality.anchor_id != AnchorId::Manual)
+        }
+
+        non_manual_abnormalities(previous).eq(non_manual_abnormalities(current))
+    }
+
+    async fn purge_cdn(cdn: Option<&Cdn>) {
+        let Some(cdn) = cdn else {
+            return;
+        };
+
+        if let Err(err) = cdn
+            .purge_surrogate_keys(iter::once(SURROGATE_KEY_WARNINGS))
+            .await
+        {
+            error!(?err, "failed to purge warnings CDN cache");
+        }
     }
 
     fn same_abnormality(left: &Abnormality, right: &Abnormality) -> bool {
@@ -182,6 +229,7 @@ mod tests {
         let cache = WarningsCache::new_with_ttl(
             env.pool()?.clone(),
             env.build_queue()?.clone(),
+            None,
             Duration::from_millis(25),
         )
         .await;
@@ -306,6 +354,7 @@ mod tests {
         let cache = WarningsCache::new_with_ttl(
             env.pool()?.clone(),
             env.build_queue()?.clone(),
+            None,
             Duration::from_millis(25),
         )
         .await;
@@ -335,6 +384,72 @@ mod tests {
             first_start_time, second_start_time,
             "start_time should be preserved across cache refreshes"
         );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cache_purges_cdn_only_when_automated_abnormalities_change() -> Result<()> {
+        let mut queue_config = docs_rs_build_queue::Config::test_config()?;
+        queue_config.length_warning_threshold = 1;
+        let env = crate::testing::TestEnvironment::builder()
+            .build_queue_config(queue_config)
+            .build()
+            .await?;
+
+        let cache = WarningsCache::new_with_ttl(
+            env.pool()?.clone(),
+            env.build_queue()?.clone(),
+            Some(env.cdn().clone()),
+            Duration::from_millis(25),
+        )
+        .await;
+
+        assert_eq!(
+            env.cdn().purged_keys().await?.to_string(),
+            SURROGATE_KEY_WARNINGS.to_str().unwrap()
+        );
+
+        let mut conn = env.async_conn().await?;
+        set_config(
+            &mut conn,
+            ConfigName::Abnormality,
+            Abnormality {
+                anchor_id: AnchorId::Manual,
+                url: "https://example.com/maintenance"
+                    .parse::<EscapedURI>()
+                    .unwrap(),
+                text: "Scheduled maintenance".into(),
+                explanation: Some("Planned maintenance is in progress.".into()),
+                start_time: None,
+                severity: AlertSeverity::Warn,
+            },
+        )
+        .await?;
+        drop(conn);
+
+        sleep(Duration::from_millis(75)).await;
+        assert_eq!(
+            env.cdn().purged_keys().await?.to_string(),
+            SURROGATE_KEY_WARNINGS.to_str().unwrap()
+        );
+
+        let queue = env.build_queue()?.clone();
+        for idx in 0..2 {
+            let name = format!("queued-crate-{idx}").parse::<docs_rs_types::KrateName>()?;
+            queue
+                .add_crate(&name, &docs_rs_types::Version::parse("1.0.0")?, 0, None)
+                .await?;
+        }
+
+        sleep(Duration::from_millis(75)).await;
+
+        assert_eq!(
+            env.cdn().purged_keys().await?.to_string(),
+            SURROGATE_KEY_WARNINGS.to_str().unwrap()
+        );
+
+        drop(cache);
 
         Ok(())
     }

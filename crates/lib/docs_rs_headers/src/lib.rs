@@ -19,3 +19,7 @@ pub static SURROGATE_CONTROL: HeaderName = HeaderName::from_static("surrogate-co
 
 /// X-Robots-Tag header for search engines.
 pub static X_ROBOTS_TAG: HeaderName = HeaderName::from_static("x-robots-tag");
+
+/// A surrogate key that we apply to warnings & abnormalities.
+/// Invalidated by the CLI commands & the alert evalutation.
+pub const SURROGATE_KEY_WARNINGS: SurrogateKey = SurrogateKey::from_static("docs-rs-warnings");

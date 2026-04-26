@@ -2,7 +2,7 @@ use crate::{
     cache::CachePolicy,
     handlers::releases::Search,
     impl_axum_webpage,
-    page::templates::{AlertSeverityRender, RenderBrands, RenderSolid},
+    page::templates::{RenderBrands, RenderSolid},
 };
 use anyhow::{Result, anyhow};
 use askama::Template;
