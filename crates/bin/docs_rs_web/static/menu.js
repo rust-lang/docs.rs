@@ -312,4 +312,19 @@
             history.replaceState({}, null, permalink.href);
         }
     });
+
+    (async function loadAbnormalities() {
+        const abnormalities = document.getElementById("abnormalities");
+        if (!abnormalities) {
+            return;
+        }
+
+        try {
+            const response = await fetch(abnormalities.dataset.url);
+            abnormalities.innerHTML = await response.text();
+        } catch (ex) {
+            console.error(`Failed to load abnormalities: ${ex}`);
+            abnormalities.innerHTML = "";
+        }
+    })();
 })();
