@@ -231,7 +231,7 @@ services:
             dockerfile: ./Dockerfile-postgres
             <<: *docker-cache
         volumes:
-            - postgres-data:/var/lib/postgresql/data
+            - postgres-data:/var/lib/postgresql
         environment:
             POSTGRES_USER: cratesfyi
             POSTGRES_PASSWORD: password
