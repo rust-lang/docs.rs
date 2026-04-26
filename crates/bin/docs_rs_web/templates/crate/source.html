@@ -45,7 +45,7 @@
                                     `/` is appended to show the contents of the folder
                                 #}
                                 <a href="./{{ file.name() }}{% if file.is_dir() %}/{% endif %}" class="pure-menu-link">
-                                    {{ file.icon() }}
+                                    {{ crate::utils::folder_entry_icon(file) }}
                                     <span class="text">{{ file.name() }}</span>
                                 </a>
                             </li>

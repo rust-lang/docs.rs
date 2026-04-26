@@ -11,7 +11,6 @@ use crate::{
     match_release::match_version,
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
-    utils::FolderEntryExt,
 };
 
 use anyhow::{Context as _, Result};
