@@ -1,5 +1,3 @@
-{%- let abnormalities = askama::get_value::<crate::page::ActiveWarnings>("warnings").unwrap().abnormalities -%}
-
 {%- if abnormalities.len() == 1 -%}
     <li class="pure-menu-item">
         {% let abnormality = abnormalities.first().unwrap() %}

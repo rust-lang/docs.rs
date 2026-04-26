@@ -17,7 +17,7 @@ use docs_rs_database::{
     service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
-use docs_rs_headers::SurrogateKey;
+use docs_rs_headers::{SURROGATE_KEY_WARNINGS, SurrogateKey};
 use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
 use docs_rs_uri::EscapedURI;
@@ -567,6 +567,12 @@ impl AbnormalitySubcommand {
                     .await
                     .context("failed to remove abnormality from database")?;
             }
+        }
+
+        if let Some(cdn) = ctx.cdn() {
+            cdn.purge_surrogate_keys(iter::once(SURROGATE_KEY_WARNINGS))
+                .await
+                .context("failed to purge CDN for warnings")?;
         }
 
         Ok(())

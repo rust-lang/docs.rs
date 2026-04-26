@@ -8,7 +8,7 @@ use axum::{
     Json, extract::Extension, http::header::ACCESS_CONTROL_ALLOW_ORIGIN, response::IntoResponse,
 };
 
-pub(crate) async fn build_status_handler(
+pub(crate) async fn status_handler(
     params: RustdocParams,
     mut conn: DbConnection,
 ) -> impl IntoResponse {
