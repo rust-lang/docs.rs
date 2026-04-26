@@ -2,6 +2,7 @@
 
 pub(crate) mod about;
 pub(crate) mod build_details;
+pub(crate) mod build_status;
 pub(crate) mod builds;
 pub(crate) mod crate_details;
 pub(crate) mod features;
@@ -10,7 +11,6 @@ pub(crate) mod rustdoc;
 pub(crate) mod sitemap;
 pub(crate) mod source;
 pub(crate) mod statics;
-pub(crate) mod status;
 
 use crate::Config;
 use crate::metrics::WebMetrics;
