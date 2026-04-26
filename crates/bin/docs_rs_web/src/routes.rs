@@ -2,9 +2,9 @@ use crate::{
     cache::CachePolicy,
     error::AxumNope,
     handlers::{
-        about, build_details, builds, crate_details, features, releases, rustdoc, sitemap, source,
+        about, build_details, build_status, builds, crate_details, features, releases, rustdoc,
+        sitemap, source,
         statics::{build_static_router, static_root_dir},
-        status,
     },
     metrics::request_recorder,
 };
@@ -217,7 +217,7 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         )
         .route(
             "/crate/{name}/{version}/status.json",
-            get_internal(status::status_handler),
+            get_internal(build_status::build_status_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/builds/{id}",
