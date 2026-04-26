@@ -38,7 +38,7 @@
             <h2>processing / caveats</h2>
             <p>
                 To unpack the ZIP file you need any zip utility that supports
-                PKZIP version 4.6 and BZIP2 compression.
+                PKZIP version 4.6 and BZIP2 & Deflate compression.
             </p>
             <p>
                 The archives will contain all the documentation HTML files for all
@@ -49,7 +49,7 @@
             <p>
                 Docs.rs is running rustdoc with <code>--static-root-path "/-/rustdoc.static/"</code>,
                 which leads to all references to static assets breaking if they are not
-                available under that path. Older builds used <code>--static-root-path "/"</code>, which 
+                available under that path. Older builds used <code>--static-root-path "/"</code>, which
                 means you will have to handle both.
             </p>
             <p>

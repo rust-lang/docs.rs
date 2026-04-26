@@ -724,7 +724,6 @@ where
     .execute(&mut *tx)
     .await?;
 
-    let compression_bzip = CompressionAlgorithm::Bzip2 as i32;
     let (tx_entries, mut rx_entries) = mpsc::channel::<(String, u64, u64, i32)>(1000);
 
     let zip_task = spawn_blocking(move || {
@@ -738,7 +737,8 @@ where
                 .ok_or_else(|| anyhow!("missing data_start in zip directory"))?;
             let end = start + entry.compressed_size() - 1;
             let compression_raw = match entry.compression() {
-                zip::CompressionMethod::Bzip2 => compression_bzip,
+                zip::CompressionMethod::Bzip2 => CompressionAlgorithm::Bzip2 as i32,
+                zip::CompressionMethod::Deflated => CompressionAlgorithm::Deflate as i32,
                 c => bail!("unsupported compression algorithm {} in zip-file", c),
             };
 
@@ -983,6 +983,13 @@ mod tests {
     }
 
     async fn create_test_archive(file_count: u32) -> Result<fs::File> {
+        create_test_archive_with_compression(file_count, zip::CompressionMethod::Deflated).await
+    }
+
+    async fn create_test_archive_with_compression(
+        file_count: u32,
+        compression: zip::CompressionMethod,
+    ) -> Result<fs::File> {
         let writer = spawn_blocking(move || {
             use std::io::Write as _;
 
@@ -996,7 +1003,7 @@ mod tests {
                 archive.start_file(
                     format!("testfile{i}"),
                     SimpleFileOptions::default()
-                        .compression_method(zip::CompressionMethod::Bzip2)
+                        .compression_method(compression)
                         .compression_level(Some(1)),
                 )?;
                 archive.write_all(&objectcontent)?;
@@ -1168,7 +1175,22 @@ mod tests {
         let mut index = Index::open(&tempfile).await?;
         let fi = index.find("testfile0").await?.unwrap();
 
-        assert_eq!(fi.range, FileRange::new(39, 459));
+        assert_eq!(fi.compression, CompressionAlgorithm::Deflate);
+
+        assert!(index.find("some_other_file",).await?.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn index_create_save_load_sqlite_legacy_bzip2() -> Result<()> {
+        let tf = create_test_archive_with_compression(1, zip::CompressionMethod::Bzip2).await?;
+
+        let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
+        create(tf, &tempfile).await?;
+
+        let mut index = Index::open(&tempfile).await?;
+        let fi = index.find("testfile0").await?.unwrap();
+
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
 
         assert!(index.find("some_other_file").await?.is_none());

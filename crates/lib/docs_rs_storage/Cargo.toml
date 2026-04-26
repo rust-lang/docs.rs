@@ -14,7 +14,7 @@ testing = [
 
 [dependencies]
 anyhow = { workspace = true }
-async-compression = { version = "0.4.32", features = ["bzip2", "gzip", "tokio", "zstd"] }
+async-compression = { version = "0.4.32", features = ["bzip2", "deflate", "gzip", "tokio", "zstd"] }
 async-stream = { workspace = true }
 # The default `rustls` feature pulls in the legacy hyper 0.14 + rustls 0.21
 # stack via `aws-smithy-runtime/tls-rustls`, which includes the vulnerable

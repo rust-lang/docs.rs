@@ -65,7 +65,7 @@ toml = "1.0.0"
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
 walkdir = "2"
-zip = { version = "8.0.0", default-features = false, features = ["bzip2"] }
+zip = { version = "8.0.0", default-features = false, features = ["bzip2", "deflate-flate2"] }
 
 [workspace.lints.clippy]
 dbg_macro = "warn"
