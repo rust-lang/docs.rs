@@ -1163,7 +1163,7 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(tf, &tempfile).await?;
 
-        let mut index = Index::open(&tempfile, CacheManager::builder().build()).await?;
+        let mut index = Index::open(&tempfile).await?;
         let fi = index.find("testfile0").await?.unwrap();
 
         assert_eq!(fi.range, FileRange::new(39, 459));
@@ -1697,8 +1697,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new()?.into_temp_path();
         create(archive, &tmp).await?;
 
-        let manager = CacheManager::builder().build();
-        Index::open(&tmp, manager).await
+        Index::open(&tmp).await
     }
 
     async fn collect_folder_contents(
