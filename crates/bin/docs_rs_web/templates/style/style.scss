@@ -387,11 +387,19 @@ div.recent-releases-container {
     }
 
     .date,
-    .duration {
+    .duration,
+    .memory {
         font-weight: normal;
 
         @media #{$media-sm} {
             text-align: right;
+        }
+    }
+
+    .memory {
+        @media #{$media-sm} {
+            padding-left: 1em;
+            white-space: nowrap;
         }
     }
 

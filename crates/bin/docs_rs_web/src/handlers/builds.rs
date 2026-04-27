@@ -33,6 +33,7 @@ pub(crate) struct Build {
     build_status: BuildStatus,
     build_time: Option<DateTime<Utc>>,
     build_duration: Option<Duration>,
+    memory_peak: Option<i64>,
     errors: Option<String>,
 }
 
@@ -210,6 +211,7 @@ async fn get_builds(
                         ELSE (builds.build_finished - builds.build_started)
                     END
             END AS "build_duration?: Duration",
+            builds.memory_peak,
             builds.errors
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -275,7 +277,9 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
+            // Should have 4 mdashes: rustc_version, docsrs_version, build_time, build_duration
+            // (peak_memory_bytes shows "100 MB" from the dummy value)
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 4);
 
             Ok(())
         });
@@ -323,6 +327,49 @@ mod tests {
             assert!(rows[1].contains("docs.rs 2.0.0"));
             assert!(rows[2].contains("rustc (blabla 2019-01-01)"));
             assert!(rows[2].contains("docs.rs 1.0.0"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn build_list_shows_memory() {
+        async_wrapper(|env| async move {
+            // Use a specific memory value: 256 MiB = 256 * 1024 * 1024 = 268435456 bytes
+            // filesizeformat uses decimal (1000-based), so this will display as ~268.43 MB
+            let test_memory_bytes: u64 = 256 * 1024 * 1024;
+
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0")
+                        .memory_peak(test_memory_bytes),
+                ])
+                .create()
+                .await?;
+
+            let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
+            let page = kuchikiki::parse_html().one(response.text().await?);
+
+            // Check that memory column exists with tooltip
+            let memory_cells: Vec<_> = page
+                .select("div.memory[title='Peak memory usage']")
+                .unwrap()
+                .collect();
+            assert_eq!(memory_cells.len(), 1, "Should have one memory cell");
+
+            // Check that the specific memory value is displayed
+            // 256 MiB (268435456 bytes) is formatted as "268.43 MB" by filesizeformat
+            let memory_text = memory_cells[0].text_contents().trim().to_string();
+            assert!(
+                memory_text.contains("268") && memory_text.contains("MB"),
+                "Memory column should contain '268.xx MB' (from 256 MiB input), got: '{}'",
+                memory_text
+            );
 
             Ok(())
         });

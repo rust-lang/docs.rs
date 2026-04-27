@@ -95,6 +95,7 @@ pub struct FakeBuild {
     rustc_version: String,
     docsrs_version: String,
     build_status: BuildStatus,
+    memory_peak: Option<u64>,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -692,6 +693,13 @@ impl FakeBuild {
         }
     }
 
+    pub fn memory_peak(self, memory_peak: u64) -> Self {
+        Self {
+            memory_peak: Some(memory_peak),
+            ..self
+        }
+    }
+
     async fn create(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -708,7 +716,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(42),
-            Some(23),
+            self.memory_peak,
             None::<&SimpleBuildError>,
         )
         .await?;
@@ -752,6 +760,7 @@ impl Default for FakeBuild {
             rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
             docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
             build_status: BuildStatus::Success,
+            memory_peak: Some(23),
         }
     }
 }
