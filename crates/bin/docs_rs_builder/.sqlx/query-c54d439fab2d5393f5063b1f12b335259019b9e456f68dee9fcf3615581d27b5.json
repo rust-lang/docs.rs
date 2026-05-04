@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                        r.doc_targets,\n                        cov.total_items,\n                        cov.documented_items\n                    FROM\n                        crates as c\n                        INNER JOIN releases AS r ON c.id = r.crate_id\n                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id\n                    WHERE\n                        c.name = $1 AND\n                        r.version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "doc_targets",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_items",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "documented_items",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c54d439fab2d5393f5063b1f12b335259019b9e456f68dee9fcf3615581d27b5"
+}

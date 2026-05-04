@@ -445,6 +445,7 @@ impl RustwideBuilder {
                     build,
                     &limits,
                     &metadata,
+                    false,
                     true,
                     false,
                 )?;
@@ -675,7 +676,7 @@ impl RustwideBuilder {
 
                 // Perform an initial build
                 let mut res =
-                    self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
+                    self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, true, false, collect_metrics)?;
 
                 // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                 let cargo_lock = build.host_source_dir().join("Cargo.lock");
@@ -697,7 +698,7 @@ impl RustwideBuilder {
                             .run_capture()?;
                     }
                     res =
-                        self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
+                        self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, true, false, collect_metrics)?;
                 }
 
                 if res.successful()
@@ -932,6 +933,7 @@ impl RustwideBuilder {
             limits,
             metadata,
             false,
+            false,
             collect_metrics,
         )?;
         if target_res.successful() {
@@ -1109,6 +1111,7 @@ impl RustwideBuilder {
         build: &Build,
         limits: &Limits,
         metadata: &Metadata,
+        gather_coverage: bool,
         create_essential_files: bool,
         collect_metrics: bool,
     ) -> Result<FullBuildResult> {
@@ -1136,10 +1139,10 @@ impl RustwideBuilder {
 
         let mut aggregated_build_stats = ProcessStatistics::default();
 
-        // we have to run coverage before the doc-build because currently it
+        // We have to run coverage before the doc-build because currently it
         // deletes the doc-target folder.
         // https://github.com/rust-lang/cargo/issues/9447
-        let (coverage_stats, doc_coverage) =
+        let (coverage_stats, doc_coverage) = if gather_coverage {
             match self.get_coverage(target, build, metadata, limits) {
                 Ok((stats, cov)) => (stats, cov),
                 Err(err) => {
@@ -1149,7 +1152,10 @@ impl RustwideBuilder {
                     );
                     (ProcessStatistics::default(), None)
                 }
-            };
+            }
+        } else {
+            (ProcessStatistics::default(), None)
+        };
 
         aggregated_build_stats.merge_mut(coverage_stats);
 
@@ -2258,10 +2264,13 @@ mod tests {
         let row = block_on_async_with_conn!(env, |mut conn| async {
             sqlx::query!(
                 r#"SELECT
-                        r.doc_targets
+                        r.doc_targets,
+                        cov.total_items,
+                        cov.documented_items
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
                     WHERE
                         c.name = $1 AND
                         r.version = $2"#,
@@ -2285,6 +2294,8 @@ mod tests {
         assert_contains(&targets, "x86_64-apple-darwin");
         // Part of the default targets.
         assert_contains(&targets, "aarch64-apple-darwin");
+        assert!(row.total_items.unwrap() > 0);
+        assert!(row.documented_items.unwrap() > 0);
 
         Ok(())
     }
