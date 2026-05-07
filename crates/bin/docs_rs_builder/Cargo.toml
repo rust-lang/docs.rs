@@ -33,7 +33,7 @@ regex = { workspace = true }
 rustwide = { version = "0.23.0", features = ["unstable", "unstable-toolchain-ci"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-sysinfo = { version = "0.38.0", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
