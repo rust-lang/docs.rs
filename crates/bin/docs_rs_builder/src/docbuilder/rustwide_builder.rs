@@ -12,6 +12,7 @@ use docs_rs_database::{
     releases::{
         add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
         initialize_release, update_build_with_error, update_crate_data_in_database,
+        add_build_logs,
     },
     service_config::{ConfigName, get_config, set_config},
 };
@@ -739,7 +740,8 @@ impl RustwideBuilder {
                             &metadata,
                             collect_metrics,
                         )?;
-                        target_build_logs.insert(target, target_res.build_log);
+                        let successful = target_res.successful();
+                        target_build_logs.insert(target, (target_res.build_log, successful));
                     }
 
                     let (file_list, new_alg) =
@@ -778,13 +780,19 @@ impl RustwideBuilder {
                 let successful = res.successful();
 
                 {
+                    let mut build_logs = Vec::new();
+
                     let _span = info_span!("store_build_logs").entered();
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                    let successful = res.successful();
                     self.blocking_storage.store_one(build_log_path, res.build_log)?;
-                    for (target, log) in target_build_logs {
+                    build_logs.push((format!("{default_target}.txt"), successful));
+                    for (target, (log, successful)) in target_build_logs {
                         let build_log_path = format!("build-logs/{build_id}/{target}.txt");
                         self.blocking_storage.store_one(build_log_path, log)?;
+                        build_logs.push((format!("{target}.txt"), successful));
                     }
+                    self.runtime.block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
                 }
 
                 if successful {

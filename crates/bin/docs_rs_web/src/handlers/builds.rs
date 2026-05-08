@@ -35,6 +35,23 @@ pub(crate) struct Build {
     build_duration: Option<Duration>,
     memory_peak: Option<i64>,
     errors: Option<String>,
+    logs: Option<serde_json::Value>,
+}
+
+impl Build {
+    pub(crate) fn build_status(&self) -> BuildStatus {
+        // FIXME: Postgresql can directly interact with JSON fields, should we try to do this
+        // in the query instead?
+        if let Some(logs) = &self.logs
+            && let logs = serde_json::from_value::<Vec<(String, bool)>>(logs.clone()).expect("builds_logs table got updated")
+            && self.build_status.is_success()
+            && logs.iter().any(|(_, success)| !success)
+        {
+            BuildStatus::PartialFailure
+        } else {
+            self.build_status
+        }
+    }
 }
 
 #[derive(Template)]
@@ -191,6 +208,7 @@ async fn get_builds(
             builds.rustc_version,
             builds.docsrs_version,
             builds.build_status as "build_status: BuildStatus",
+            builds_logs.logs,
             COALESCE(builds.build_finished, builds.build_started) as build_time,
             CASE
                 WHEN builds.build_started IS NULL
@@ -211,6 +229,7 @@ async fn get_builds(
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
+         LEFT OUTER JOIN builds_logs ON builds_logs.build_id = builds.id
          WHERE
             crates.name = $1 AND
             releases.version = $2
