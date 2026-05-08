@@ -365,6 +365,9 @@ div.recent-releases-container {
         span.fa-times {
             color: var(--color-struct);
         }
+        span.fa-xmark {
+            color: red;
+        }
     }
 
     .description {

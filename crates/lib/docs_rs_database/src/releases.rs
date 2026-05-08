@@ -627,6 +627,20 @@ where
     Ok(())
 }
 
+pub async fn add_build_logs(
+    conn: &mut sqlx::PgConnection,
+    build_id: BuildId,
+    build_logs: Vec<(String, bool)>,
+) -> Result<()> {
+    sqlx::query!(
+        "INSERT INTO builds_logs(build_id, logs)
+         VALUES ($1, $2)",
+        build_id as _,
+        serde_json::to_value(build_logs)?,
+    ).execute(&mut *conn).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

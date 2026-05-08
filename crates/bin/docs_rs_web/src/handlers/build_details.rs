@@ -36,7 +36,7 @@ pub(crate) struct BuildDetails {
 struct BuildDetailsPage {
     metadata: MetaData,
     build_details: BuildDetails,
-    all_log_filenames: Vec<String>,
+    all_log_filenames: Vec<(String, Option<bool>)>,
     current_filename: Option<String>,
     params: RustdocParams,
 }
@@ -92,10 +92,12 @@ pub(crate) async fn build_details_handler(
              builds.output,
              builds.errors,
              builds.error_kind,
-             releases.default_target
+             releases.default_target,
+             builds_logs.logs
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
+         LEFT OUTER JOIN builds_logs ON builds_logs.build_id = builds.id
          WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
         id.0,
         params.name() as _,
@@ -127,16 +129,22 @@ pub(crate) async fn build_details_handler(
         // toFor a long time only for one target, then we started storing the logs for other
         // targets. In any case, all the logfiles are put into a folder we can just query.
         let prefix = format!("build-logs/{id}/");
-        let all_log_filenames: Vec<_> = storage
-            .list_prefix(&prefix) // the result from S3 is ordered by key
-            .await
-            .map_ok(|path| {
-                path.strip_prefix(&prefix)
-                    .expect("since we query for the prefix, it has to be always there")
-                    .to_owned()
-            })
-            .try_collect()
-            .await?;
+
+        // A list of `(path, build_successful)`.
+        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs {
+            serde_json::from_value::<Vec<(String, bool)>>(logs).unwrap_or_default().into_iter().map(|(path, successful)| (path, Some(successful))).collect()
+        } else {
+            storage
+                .list_prefix(&prefix) // the result from S3 is ordered by key
+                .await
+                .map_ok(|path| {
+                    (path.strip_prefix(&prefix)
+                        .expect("since we query for the prefix, it has to be always there")
+                        .to_owned(), None)
+                })
+                .try_collect()
+                .await?
+        };
 
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
@@ -145,7 +153,7 @@ pub(crate) async fn build_details_handler(
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
             let wanted_filename = format!("{default_target}.txt");
-            if all_log_filenames.contains(&wanted_filename) {
+            if all_log_filenames.iter().any(|(filename, _)| *filename == wanted_filename) {
                 Some(wanted_filename)
             } else {
                 None
