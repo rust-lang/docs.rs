@@ -21,26 +21,31 @@
     <div class="container">
         <div class="recent-releases-container">
             {%- if !builds.is_empty() -%}
-                <div class="release">
-                    <strong>Builds</strong>
-                </div>
-
+                <h4>Builds</h4>
                 <ul>
                     {%- for build in builds -%}
                         <li>
-                            {%- if build.build_status != BuildStatus::InProgress -%}
-                                <a href="{{ params.build_details_url(*build.id, None) }}" class="release"> {#- -#}
+                            {%- if build.build_status != BuildStatus::InProgress %}
+                                {%- decl icon %}
+                                {%- decl title %}
+                                {%- match build.build_status() %}
+                                    {%- when BuildStatus::Success -%}
+                                        {%- let icon = crate::icons::IconCheck.render_solid(false, false, "") %}
+                                        {%- let title = "All builds succeeded" %}
+                                    {%- when BuildStatus::PartialFailure -%}
+                                        {%- let icon = crate::icons::IconTriangleExclamation.render_solid(false, false, "") %}
+                                        {%- let title = "Some builds failed" %}
+                                    {%- when BuildStatus::Failure -%}
+                                        {%- let icon = crate::icons::IconXmark.render_solid(false, false, "") %}
+                                        {%- let title = "All builds failed" %}
+                                    {%- when BuildStatus::InProgress -%}
+                                        {%- let icon = String::new()|safe %}
+                                        {%- let title = "" %}
+                                {%- endmatch -%}
+                                <a href="{{ params.build_details_url(*build.id, None) }}" class="release" title="{{ title }}"> {#- -#}
                                     <div class="pure-g"> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-1-24 build">
-                                            {%- match build.build_status() %}
-                                                {%- when BuildStatus::Success -%}
-                                                    {{ crate::icons::IconCheck.render_solid(false, false, "") }}
-                                                {%- when BuildStatus::PartialFailure -%}
-                                                    {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
-                                                {%- when BuildStatus::Failure -%}
-                                                    {{ crate::icons::IconXmark.render_solid(false, false, "") }}
-                                                {%- when BuildStatus::InProgress -%}
-                                            {%- endmatch -%}
+                                            {{- icon -}}
                                         </div> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-7-24">
                                             {%- if let Some(rustc_version) = build.rustc_version -%}
