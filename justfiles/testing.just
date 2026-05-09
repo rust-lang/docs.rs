@@ -152,6 +152,7 @@ run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
   just cli-build-crate sysinfo 0.23.4
   just cli-build-crate sysinfo 0.23.5
   just cli-build-crate libtest 0.0.1
+  just cli-build-crate zbus 5.15.0
   just cli-build-add-essential-files
 
   just _cli gui_tests 

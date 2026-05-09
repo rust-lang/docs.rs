@@ -35,7 +35,7 @@ mod tests {
     #[test_case(BuildStatus::Success, "success")]
     #[test_case(BuildStatus::Failure, "failure")]
     #[test_case(BuildStatus::InProgress, "in_progress")]
-    #[test_case(BuildStatus::InProgress, "partial_failure")]
+    #[test_case(BuildStatus::PartialFailure, "partial_failure")]
     fn test_build_status_serialization(status: BuildStatus, expected: &str) {
         let serialized = serde_json::to_string(&status).unwrap();
         assert_eq!(serialized, format!("\"{expected}\""));
