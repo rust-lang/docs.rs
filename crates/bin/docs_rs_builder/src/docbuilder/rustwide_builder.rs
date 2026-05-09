@@ -11,9 +11,9 @@ use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
     releases::{
-        add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
-        initialize_release, update_build_with_error, update_crate_data_in_database,
-        add_build_logs,
+        add_build_logs, add_doc_coverage, finish_build, finish_release, initialize_build,
+        initialize_crate, initialize_release, update_build_with_error,
+        update_crate_data_in_database,
     },
     service_config::{ConfigName, get_config, set_config},
 };

@@ -132,15 +132,22 @@ pub(crate) async fn build_details_handler(
 
         // A list of `(path, build_successful)`.
         let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs {
-            serde_json::from_value::<Vec<(String, bool)>>(logs).unwrap_or_default().into_iter().map(|(path, successful)| (path, Some(successful))).collect()
+            serde_json::from_value::<Vec<(String, bool)>>(logs)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(path, successful)| (path, Some(successful)))
+                .collect()
         } else {
             storage
                 .list_prefix(&prefix) // the result from S3 is ordered by key
                 .await
                 .map_ok(|path| {
-                    (path.strip_prefix(&prefix)
-                        .expect("since we query for the prefix, it has to be always there")
-                        .to_owned(), None)
+                    (
+                        path.strip_prefix(&prefix)
+                            .expect("since we query for the prefix, it has to be always there")
+                            .to_owned(),
+                        None,
+                    )
                 })
                 .try_collect()
                 .await?
@@ -153,7 +160,10 @@ pub(crate) async fn build_details_handler(
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
             let wanted_filename = format!("{default_target}.txt");
-            if all_log_filenames.iter().any(|(filename, _)| *filename == wanted_filename) {
+            if all_log_filenames
+                .iter()
+                .any(|(filename, _)| *filename == wanted_filename)
+            {
                 Some(wanted_filename)
             } else {
                 None

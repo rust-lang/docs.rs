@@ -43,7 +43,8 @@ impl Build {
         // FIXME: Postgresql can directly interact with JSON fields, should we try to do this
         // in the query instead?
         if let Some(logs) = &self.logs
-            && let logs = serde_json::from_value::<Vec<(String, bool)>>(logs.clone()).expect("builds_logs table got updated")
+            && let logs = serde_json::from_value::<Vec<(String, bool)>>(logs.clone())
+                .expect("builds_logs table got updated")
             && self.build_status.is_success()
             && logs.iter().any(|(_, success)| !success)
         {

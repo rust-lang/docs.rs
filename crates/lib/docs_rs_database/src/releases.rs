@@ -637,7 +637,9 @@ pub async fn add_build_logs(
          VALUES ($1, $2)",
         build_id as _,
         serde_json::to_value(build_logs)?,
-    ).execute(&mut *conn).await?;
+    )
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }
 
