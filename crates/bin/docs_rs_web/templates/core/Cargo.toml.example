@@ -48,4 +48,7 @@ rustdoc-args = ["--example-rustdoc-arg"]
 # List of command line arguments for `cargo`.
 #
 # These cannot be a subcommand, they may only be options.
+# For security reasons, docs.rs only forwards a whitelist of unstable flags to
+# host-side cargo commands (`metadata`, `fetch`, `generate-lockfile`).
+# Currently that whitelist contains only `bindeps` (`-Zbindeps` or `-Z bindeps`).
 cargo-args = ["-Z", "build-std"]
