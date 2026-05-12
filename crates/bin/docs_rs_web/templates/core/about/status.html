@@ -12,7 +12,7 @@
             {%- else %}
                 {%- for abnormality in abnormalities %}
                     <h3>
-                        {{- abnormality.severity.render_icon_solid(false, false, "") }}
+                        {{- crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
                         {{ abnormality.text }}
                     </h3>
                     {%- if let Some(explanation) = &abnormality.explanation %}

@@ -33,7 +33,7 @@ mod tests {
     use crate::testing::TestEnvironment;
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
-    use docs_rs_database::service_config::{AlertSeverity, set_config};
+    use docs_rs_database::service_config::set_config;
     use docs_rs_types::{KrateName, Version};
     use docs_rs_uri::EscapedURI;
 
@@ -48,7 +48,6 @@ mod tests {
                 .unwrap(),
             text: "Scheduled maintenance".into(),
             explanation: Some("Planned maintenance is in progress.".into()),
-            severity: AlertSeverity::Warn,
         };
         set_config(
             &mut conn,
@@ -91,7 +90,6 @@ mod tests {
                 explanation: Some(
                     "The build queue currently contains more than 1 crates, so it might take a while before new published crates get documented.".into()
                 ),
-                severity: AlertSeverity::Warn,
             }]
         );
 

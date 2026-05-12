@@ -3,7 +3,7 @@ mod abnormalities;
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 
-pub use abnormalities::{Abnormality, AlertSeverity};
+pub use abnormalities::Abnormality;
 
 #[derive(strum::IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]

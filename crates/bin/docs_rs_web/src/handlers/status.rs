@@ -4,7 +4,7 @@ use crate::{
     extractors::DbConnection,
     impl_axum_webpage,
     page::{
-        templates::{AlertSeverityRender, RenderBrands, RenderSolid},
+        templates::{RenderBrands, RenderSolid},
         warnings::{self, ActiveAbnormalities},
     },
 };
@@ -69,7 +69,7 @@ mod tests {
     };
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
-    use docs_rs_database::service_config::{Abnormality, AlertSeverity, ConfigName, set_config};
+    use docs_rs_database::service_config::{Abnormality, ConfigName, set_config};
     use docs_rs_types::{KrateName, testing::V1};
     use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
@@ -89,7 +89,6 @@ mod tests {
                     .unwrap(),
                 text: "Scheduled maintenance".into(),
                 explanation: Some("Planned maintenance is in progress.".into()),
-                severity: AlertSeverity::Warn,
             },
         )
         .await?;
@@ -154,65 +153,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn manual_abnormality_wins_when_multiple_abnormalities_are_active() -> Result<()> {
-        let mut queue_config = docs_rs_build_queue::Config::test_config()?;
-        queue_config.length_warning_threshold = 1;
-        let env = TestEnvironment::builder()
-            .build_queue_config(queue_config)
-            .build()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-        set_config(
-            &mut conn,
-            ConfigName::Abnormality,
-            Abnormality {
-                url: "https://example.com/maintenance"
-                    .parse::<EscapedURI>()
-                    .unwrap(),
-                text: "Scheduled maintenance".into(),
-                explanation: Some("Planned maintenance is in progress.".into()),
-                severity: AlertSeverity::Error,
-            },
-        )
-        .await?;
-        drop(conn);
-
-        let queue = env.build_queue()?.clone();
-        for idx in 0..2 {
-            let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
-            queue.add_crate(&name, &V1, 0, None).await?;
-        }
-
-        let web = env.web_app().await;
-        let page = kuchikiki::parse_html().one(
-            web.assert_success_cached(
-                "/-/partial/abnormalities/",
-                CachePolicy::LongerInCdnAndBrowser,
-                env.config(),
-            )
-            .await?
-            .text()
-            .await?,
-        );
-        let alert = page
-            .select("a.pure-menu-link.error")
-            .unwrap()
-            .next()
-            .expect("missing manual alert");
-
-        assert_eq!(alert.attributes.borrow().get("href"), Some("/-/status/"));
-        assert!(alert.text_contents().trim().is_empty());
-        assert_eq!(
-            page.select("ul.pure-menu-children a.pure-menu-link")
-                .unwrap()
-                .count(),
-            0
-        );
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn about_status_page_renders_abnormality_details() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
@@ -226,7 +166,6 @@ mod tests {
                     .unwrap(),
                 text: "Scheduled maintenance".into(),
                 explanation: Some("Planned maintenance is in progress.".into()),
-                severity: AlertSeverity::Warn,
             },
         )
         .await?;
@@ -294,7 +233,6 @@ mod tests {
                 explanation: Some(
                     "Planned maintenance is <em>in progress</em>. See <a href=\"/details\">details</a>.".into(),
                 ),
-                severity: AlertSeverity::Warn,
             },
         )
         .await?;
