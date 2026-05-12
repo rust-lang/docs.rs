@@ -1,10 +1,11 @@
 use crate::{
     cache::CachePolicy,
     error::AxumResult,
+    extractors::DbConnection,
     impl_axum_webpage,
     page::{
         templates::{AlertSeverityRender, RenderBrands, RenderSolid},
-        warnings::{ActiveAbnormalities, WarningsCache},
+        warnings::{self, ActiveAbnormalities},
     },
 };
 use askama::Template;
@@ -12,8 +13,8 @@ use axum::{
     extract::Extension,
     response::{IntoResponse, Response as AxumResponse},
 };
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::service_config::Abnormality;
-use docs_rs_headers::SURROGATE_KEY_WARNINGS;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Template)]
@@ -24,7 +25,7 @@ struct AboutStatus {
 
 impl_axum_webpage!(
     AboutStatus,
-    cache_policy = |_| CachePolicy::ForeverInCdn(SURROGATE_KEY_WARNINGS.into()),
+    cache_policy = |_| CachePolicy::ShortInCdnAndBrowser
 );
 
 #[derive(Template)]
@@ -36,39 +37,39 @@ struct Abnormalities {
 
 impl_axum_webpage! {
     Abnormalities,
-    cache_policy = |_| CachePolicy::ForeverInCdn(
-        SURROGATE_KEY_WARNINGS.into()
-    ),
+    cache_policy = |_| CachePolicy::LongerInCdnAndBrowser
 }
 
 pub(crate) async fn status_handler(
-    Extension(warnings_cache): Extension<Arc<WarningsCache>>,
+    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
+    mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutStatus {
-        abnormalities: warnings_cache.get().await.abnormalities,
+        abnormalities: warnings::load_abnormalities(&mut conn, &build_queue).await?,
     })
 }
 
 pub(crate) async fn abnormalities(
-    Extension(warnings): Extension<Arc<WarningsCache>>,
+    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
+    mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     Ok(Abnormalities {
-        abnormalities: warnings.get().await.abnormalities,
+        abnormalities: warnings::load_abnormalities(&mut conn, &build_queue).await?,
     }
     .into_response())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::{
-        AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+    use crate::{
+        cache::CachePolicy,
+        testing::{
+            AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
+        },
     };
     use anyhow::Result;
-    use chrono::{TimeZone as _, Utc};
     use docs_rs_config::AppConfig as _;
-    use docs_rs_database::service_config::{
-        Abnormality, AlertSeverity, AnchorId, ConfigName, set_config,
-    };
+    use docs_rs_database::service_config::{Abnormality, AlertSeverity, ConfigName, set_config};
     use docs_rs_types::{KrateName, testing::V1};
     use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
@@ -79,19 +80,15 @@ mod tests {
         let env = TestEnvironment::new().await?;
 
         let mut conn = env.async_conn().await?;
-        // NOTE: abnormalities are cached inside the web-app, so set them
-        // before we fetch the web-app from the test-environments.
         set_config(
             &mut conn,
             ConfigName::Abnormality,
             Abnormality {
-                anchor_id: AnchorId::Manual,
                 url: "https://example.com/maintenance"
                     .parse::<EscapedURI>()
                     .unwrap(),
                 text: "Scheduled maintenance".into(),
                 explanation: Some("Planned maintenance is in progress.".into()),
-                start_time: None,
                 severity: AlertSeverity::Warn,
             },
         )
@@ -99,10 +96,14 @@ mod tests {
 
         let web = env.web_app().await;
         let page = kuchikiki::parse_html().one(
-            web.assert_success("/-/partial/abnormalities/")
-                .await?
-                .text()
-                .await?,
+            web.assert_success_cached(
+                "/-/partial/abnormalities/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
         );
         let alert = page
             .select("a.pure-menu-link.warn")
@@ -110,11 +111,8 @@ mod tests {
             .next()
             .expect("missing abnormality");
 
-        assert_eq!(
-            alert.attributes.borrow().get("href"),
-            Some("/-/status/#manual")
-        );
-        assert!(alert.text_contents().contains("Scheduled maintenance"));
+        assert_eq!(alert.attributes.borrow().get("href"), Some("/-/status/"));
+        assert!(alert.text_contents().trim().is_empty());
         Ok(())
     }
 
@@ -135,10 +133,14 @@ mod tests {
 
         let web = env.web_app().await;
         let page = kuchikiki::parse_html().one(
-            web.assert_success("/-/partial/abnormalities/")
-                .await?
-                .text()
-                .await?,
+            web.assert_success_cached(
+                "/-/partial/abnormalities/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
         );
         let alert = page
             .select("a.pure-menu-link.warn")
@@ -146,11 +148,8 @@ mod tests {
             .next()
             .expect("missing queue alert");
 
-        assert_eq!(
-            alert.attributes.borrow().get("href"),
-            Some("/-/status/#queue-length")
-        );
-        assert!(alert.text_contents().contains("long build queue"));
+        assert_eq!(alert.attributes.borrow().get("href"), Some("/-/status/"));
+        assert!(alert.text_contents().trim().is_empty());
         Ok(())
     }
 
@@ -168,13 +167,11 @@ mod tests {
             &mut conn,
             ConfigName::Abnormality,
             Abnormality {
-                anchor_id: AnchorId::Manual,
                 url: "https://example.com/maintenance"
                     .parse::<EscapedURI>()
                     .unwrap(),
                 text: "Scheduled maintenance".into(),
                 explanation: Some("Planned maintenance is in progress.".into()),
-                start_time: None,
                 severity: AlertSeverity::Error,
             },
         )
@@ -189,10 +186,14 @@ mod tests {
 
         let web = env.web_app().await;
         let page = kuchikiki::parse_html().one(
-            web.assert_success("/-/partial/abnormalities/")
-                .await?
-                .text()
-                .await?,
+            web.assert_success_cached(
+                "/-/partial/abnormalities/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
         );
         let alert = page
             .select("a.pure-menu-link.error")
@@ -200,25 +201,14 @@ mod tests {
             .next()
             .expect("missing manual alert");
 
-        assert_eq!(alert.attributes.borrow().get("href"), Some("#"));
-        assert!(alert.text_contents().contains("Scheduled maintenance"));
-        let dropdown_links = page
-            .select("ul.pure-menu-children a.pure-menu-link")
-            .unwrap()
-            .map(|link| {
-                (
-                    link.attributes.borrow().get("href").unwrap().to_string(),
-                    link.text_contents(),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        assert!(dropdown_links.iter().any(|(href, text)| {
-            href == "/-/status/#manual" && text.contains("Scheduled maintenance")
-        }));
-        assert!(dropdown_links.iter().any(|(href, text)| {
-            href == "/-/status/#queue-length" && text.contains("long build queue")
-        }));
+        assert_eq!(alert.attributes.borrow().get("href"), Some("/-/status/"));
+        assert!(alert.text_contents().trim().is_empty());
+        assert_eq!(
+            page.select("ul.pure-menu-children a.pure-menu-link")
+                .unwrap()
+                .count(),
+            0
+        );
         Ok(())
     }
 
@@ -231,13 +221,11 @@ mod tests {
             &mut conn,
             ConfigName::Abnormality,
             Abnormality {
-                anchor_id: AnchorId::Manual,
                 url: "https://example.com/maintenance"
                     .parse::<EscapedURI>()
                     .unwrap(),
                 text: "Scheduled maintenance".into(),
                 explanation: Some("Planned maintenance is in progress.".into()),
-                start_time: Some(Utc.with_ymd_and_hms(2023, 1, 30, 19, 32, 33).unwrap()),
                 severity: AlertSeverity::Warn,
             },
         )
@@ -245,13 +233,20 @@ mod tests {
         drop(conn);
 
         let web = env.web_app().await;
-        let page =
-            kuchikiki::parse_html().one(web.assert_success("/-/status/").await?.text().await?);
+        let page = kuchikiki::parse_html().one(
+            web.assert_success_cached(
+                "/-/status/",
+                CachePolicy::ShortInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
+        );
 
         let body_text = page.text_contents();
         assert!(body_text.contains("Scheduled maintenance"));
         assert!(body_text.contains("Planned maintenance is in progress."));
-        assert!(body_text.contains("2023-01-30 19:32:33 UTC"));
 
         Ok(())
     }
@@ -261,8 +256,16 @@ mod tests {
         let env = TestEnvironment::new().await?;
         let web = env.web_app().await;
 
-        let page =
-            kuchikiki::parse_html().one(web.assert_success("/-/status/").await?.text().await?);
+        let page = kuchikiki::parse_html().one(
+            web.assert_success_cached(
+                "/-/status/",
+                CachePolicy::ShortInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
+        );
 
         let body_text = page.text_contents();
         assert!(body_text.contains("No abnormalities detected currently."));
@@ -284,7 +287,6 @@ mod tests {
             &mut conn,
             ConfigName::Abnormality,
             Abnormality {
-                anchor_id: AnchorId::Manual,
                 url: "https://example.com/maintenance"
                     .parse::<EscapedURI>()
                     .unwrap(),
@@ -292,7 +294,6 @@ mod tests {
                 explanation: Some(
                     "Planned maintenance is <em>in progress</em>. See <a href=\"/details\">details</a>.".into(),
                 ),
-                start_time: None,
                 severity: AlertSeverity::Warn,
             },
         )
@@ -300,7 +301,15 @@ mod tests {
         drop(conn);
 
         let web = env.web_app().await;
-        let html = web.assert_success("/-/status/").await?.text().await?;
+        let html = web
+            .assert_success_cached(
+                "/-/status/",
+                CachePolicy::ShortInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?;
         let page = kuchikiki::parse_html().one(html.clone());
 
         // The <em> tag should be rendered as an actual HTML element, not escaped.
