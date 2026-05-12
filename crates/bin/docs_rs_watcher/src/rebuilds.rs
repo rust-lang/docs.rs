@@ -68,7 +68,7 @@ pub async fn queue_rebuilds(
         if !queue.has_build_queued(&row.name, &row.version).await? {
             info!("queueing rebuild for {} {}...", &row.name, &row.version);
             queue
-                .add_crate(&row.name, &row.version, PRIORITY_CONTINUOUS, None)
+                .add_crate(&row.name, &row.version, PRIORITY_CONTINUOUS)
                 .await?;
         }
     }
@@ -124,10 +124,10 @@ mod tests {
 
         let build_queue = env.build_queue()?;
         build_queue
-            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS)
             .await?;
         build_queue
-            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS)
             .await?;
 
         let mut conn = env.async_conn().await?;
@@ -162,10 +162,10 @@ mod tests {
 
         let build_queue = env.build_queue()?;
         build_queue
-            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS)
             .await?;
         build_queue
-            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS, None)
+            .add_crate(&BAR, &V1, PRIORITY_CONTINUOUS)
             .await?;
 
         env.fake_release()

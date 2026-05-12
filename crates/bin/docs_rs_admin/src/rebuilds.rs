@@ -54,7 +54,7 @@ pub(crate) async fn queue_rebuilds_faulty_rustdoc(
                "queueing rebuild"
             );
             queue
-                .add_crate(&row.name, &row.version, PRIORITY_BROKEN_RUSTDOC, None)
+                .add_crate(&row.name, &row.version, PRIORITY_BROKEN_RUSTDOC)
                 .await?;
         }
     }

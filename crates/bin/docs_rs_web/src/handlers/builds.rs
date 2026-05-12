@@ -172,12 +172,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
         .map_err(JsonAxumNope)?;
 
     build_queue
-        .add_crate(
-            &name,
-            &version,
-            PRIORITY_MANUAL_FROM_CRATES_IO,
-            None, /* because crates.io is the only service that calls this endpoint */
-        )
+        .add_crate(&name, &version, PRIORITY_MANUAL_FROM_CRATES_IO)
         .await
         .map_err(|e| JsonAxumNope(e.into()))?;
 

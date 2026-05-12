@@ -6,7 +6,6 @@ pub struct QueuedCrate {
     pub name: KrateName,
     pub version: Version,
     pub priority: i32,
-    pub registry: Option<String>,
     pub attempt: i32,
 }
 

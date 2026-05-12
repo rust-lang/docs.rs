@@ -148,7 +148,7 @@ impl QueueSubcommand {
                 build_priority,
             } => {
                 ctx.build_queue()?
-                    .add_crate(&crate_name, &crate_version, build_priority, None)
+                    .add_crate(&crate_name, &crate_version, build_priority)
                     .await?
             }
 

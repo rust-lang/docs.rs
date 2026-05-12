@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO queue (name, version, priority)\n             VALUES ($1, $2, $3)\n             ON CONFLICT (name, version) DO UPDATE\n                SET priority = EXCLUDED.priority,\n                    attempt = 0,\n                    last_attempt = NULL\n            ;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "505ad2a45493a67761b3907bb4c9a361255121810d3973ba53500f5e59e884cb"
+}

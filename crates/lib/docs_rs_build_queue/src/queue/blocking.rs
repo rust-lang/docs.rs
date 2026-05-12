@@ -17,15 +17,9 @@ pub struct BuildQueue {
 
 /// sync versions of async methods
 impl BuildQueue {
-    pub fn add_crate(
-        &self,
-        name: &KrateName,
-        version: &Version,
-        priority: i32,
-        registry: Option<&str>,
-    ) -> Result<()> {
+    pub fn add_crate(&self, name: &KrateName, version: &Version, priority: i32) -> Result<()> {
         self.runtime
-            .block_on(self.inner.add_crate(name, version, priority, registry))
+            .block_on(self.inner.add_crate(name, version, priority))
     }
 
     pub fn is_locked(&self) -> Result<bool> {
@@ -86,7 +80,6 @@ impl BuildQueue {
                     name as "name: KrateName",
                     version as "version: Version",
                     priority,
-                    registry,
                     attempt
                  FROM queue
                  WHERE
@@ -267,7 +260,7 @@ mod tests {
 
         let queue = &env.queue;
 
-        queue.add_crate(&KRATE, &V1, 0, None)?;
+        queue.add_crate(&KRATE, &V1, 0)?;
 
         // first let it fail
         queue.process_next_crate(|krate| {
@@ -329,7 +322,7 @@ mod tests {
             (HIGH_PRIORITY_BAZ, -1000),
         ];
         for krate in &test_crates {
-            queue.add_crate(&krate.0, &V1, krate.1, None)?;
+            queue.add_crate(&krate.0, &V1, krate.1)?;
         }
 
         let assert_next = |name| -> Result<()> {
@@ -389,9 +382,9 @@ mod tests {
         let env = test_queue(Config::default())?;
         let queue = env.queue;
         assert_eq!(queue.pending_count()?, 0);
-        queue.add_crate(&FOO, &V1, 0, None)?;
+        queue.add_crate(&FOO, &V1, 0)?;
         assert_eq!(queue.pending_count()?, 1);
-        queue.add_crate(&BAR, &V1, 0, None)?;
+        queue.add_crate(&BAR, &V1, 0)?;
         assert_eq!(queue.pending_count()?, 2);
 
         queue.process_next_crate(|krate| {
@@ -409,11 +402,11 @@ mod tests {
         let queue = env.queue;
 
         assert_eq!(queue.prioritized_count()?, 0);
-        queue.add_crate(&FOO, &V1, 0, None)?;
+        queue.add_crate(&FOO, &V1, 0)?;
         assert_eq!(queue.prioritized_count()?, 1);
-        queue.add_crate(&BAR, &V1, -100, None)?;
+        queue.add_crate(&BAR, &V1, -100)?;
         assert_eq!(queue.prioritized_count()?, 2);
-        queue.add_crate(&BAZ, &V1, 100, None)?;
+        queue.add_crate(&BAZ, &V1, 100)?;
         assert_eq!(queue.prioritized_count()?, 2);
 
         queue.process_next_crate(|krate| {
@@ -432,9 +425,9 @@ mod tests {
 
         assert!(queue.pending_count_by_priority()?.is_empty());
 
-        queue.add_crate(&FOO, &V1, 1, None)?;
-        queue.add_crate(&BAR, &V2, 2, None)?;
-        queue.add_crate(&BAZ, &V2, 2, None)?;
+        queue.add_crate(&FOO, &V1, 1)?;
+        queue.add_crate(&BAR, &V2, 2)?;
+        queue.add_crate(&BAZ, &V2, 2)?;
 
         assert_eq!(
             queue.pending_count_by_priority()?,
@@ -461,9 +454,9 @@ mod tests {
         let queue = &env.queue;
 
         assert_eq!(env.failed_count(), 0);
-        queue.add_crate(&FOO, &V1, -100, None)?;
+        queue.add_crate(&FOO, &V1, -100)?;
         assert_eq!(env.failed_count(), 0);
-        queue.add_crate(&BAR, &V1, 0, None)?;
+        queue.add_crate(&BAR, &V1, 0)?;
 
         for _ in 0..MAX_ATTEMPTS {
             assert_eq!(env.failed_count(), 0);
@@ -498,9 +491,9 @@ mod tests {
         let queue = &env.queue;
 
         assert_eq!(env.failed_count(), 0);
-        queue.add_crate(&FOO, &V1, -100, None)?;
+        queue.add_crate(&FOO, &V1, -100)?;
         assert_eq!(env.failed_count(), 0);
-        queue.add_crate(&BAR, &V1, 0, None)?;
+        queue.add_crate(&BAR, &V1, 0)?;
 
         for _ in 0..MAX_ATTEMPTS {
             assert_eq!(env.failed_count(), 0);
@@ -527,7 +520,7 @@ mod tests {
 
         let test_crates = [(BAR, 0), (FOO, -10), (BAZ, 10)];
         for krate in &test_crates {
-            queue.add_crate(&krate.0, &V1, krate.1, None)?;
+            queue.add_crate(&krate.0, &V1, krate.1)?;
         }
 
         assert_eq!(
@@ -566,7 +559,7 @@ mod tests {
 
         let name: KrateName = "krate".repeat(100)[..64].parse().unwrap();
 
-        queue.add_crate(&name, &V1, 0, None)?;
+        queue.add_crate(&name, &V1, 0)?;
 
         queue.process_next_crate(|krate| {
             assert_eq!(name, krate.name);
@@ -587,7 +580,7 @@ mod tests {
             "build".repeat(100)
         ))?;
 
-        queue.add_crate(&KRATE, &long_version, 0, None)?;
+        queue.add_crate(&KRATE, &long_version, 0)?;
 
         queue.process_next_crate(|krate| {
             assert_eq!(long_version, krate.version);

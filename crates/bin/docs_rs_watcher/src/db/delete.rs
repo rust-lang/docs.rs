@@ -324,9 +324,9 @@ mod tests {
         let mut conn = env.async_conn().await?;
 
         // crate fake entries in the build queue
-        queue.add_crate(&FOO, &V1, 0, None).await?;
-        queue.add_crate(&FOO, &V2, 0, None).await?;
-        queue.add_crate(&BAR, &V1, 0, None).await?;
+        queue.add_crate(&FOO, &V1, 0).await?;
+        queue.add_crate(&FOO, &V2, 0).await?;
+        queue.add_crate(&BAR, &V1, 0).await?;
 
         // Create fake packages in the database
         let pkg1_v1_id = env
@@ -465,8 +465,8 @@ mod tests {
         }
 
         let mut conn = env.async_conn().await?;
-        queue.add_crate(&KRATE, &V1, 0, None).await?;
-        queue.add_crate(&KRATE, &V2, 0, None).await?;
+        queue.add_crate(&KRATE, &V1, 0).await?;
+        queue.add_crate(&KRATE, &V2, 0).await?;
 
         let v1 = env
             .fake_release()
@@ -679,7 +679,7 @@ mod tests {
 
         let mut conn = env.async_conn().await?;
 
-        queue.add_crate(&krate, &version, 0, None).await?;
+        queue.add_crate(&krate, &version, 0).await?;
         let release_id = env
             .fake_release()
             .await
@@ -729,7 +729,7 @@ mod tests {
 
         let mut conn = env.async_conn().await?;
 
-        queue.add_crate(&krate, &version, 0, None).await?;
+        queue.add_crate(&krate, &version, 0).await?;
         let release_id = env
             .fake_release()
             .await

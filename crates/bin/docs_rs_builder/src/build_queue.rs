@@ -82,12 +82,6 @@ pub(crate) fn build_next_queue_package(
 
         processed = true;
 
-        let kind = krate
-            .registry
-            .as_ref()
-            .map(|r| PackageKind::Registry(r.as_str()))
-            .unwrap_or(PackageKind::CratesIo);
-
         if let Err(err) = retry(|| builder.reinitialize_workspace_if_interval_passed(), 3) {
             error!(?err, "Reinitialize workspace failed after retries");
             queue.lock()?;
@@ -100,7 +94,12 @@ pub(crate) fn build_next_queue_package(
             return Err(err);
         }
 
-        builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
+        builder.build_package(
+            &krate.name,
+            &krate.version,
+            PackageKind::CratesIo,
+            krate.attempt == 0,
+        )
     })?;
 
     Ok(processed)
@@ -124,7 +123,7 @@ mod tests {
 
         const WILL_FAIL: KrateName = KrateName::from_static("will_fail");
 
-        queue.add_crate(&WILL_FAIL, &V1, 0, None)?;
+        queue.add_crate(&WILL_FAIL, &V1, 0)?;
 
         process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_FAIL, krate.name);
@@ -146,7 +145,7 @@ mod tests {
         let builder_metrics = BuilderMetrics::new(env.meter_provider());
 
         const WILL_SUCCEED: KrateName = KrateName::from_static("will_succeed");
-        queue.add_crate(&WILL_SUCCEED, &V1, -1, None)?;
+        queue.add_crate(&WILL_SUCCEED, &V1, -1)?;
 
         process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_SUCCEED, krate.name);
