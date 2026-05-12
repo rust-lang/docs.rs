@@ -5,7 +5,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use docs_rs_database::{
     Pool,
-    service_config::{Abnormality, AlertSeverity, ConfigName, get_config, set_config},
+    service_config::{Abnormality, ConfigName, get_config, set_config},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_repository_stats::workspaces;
@@ -293,7 +293,6 @@ impl AsyncBuildQueue {
                         self.config.length_warning_threshold,
                     )
                 ),
-                severity: AlertSeverity::Warn,
             });
         }
 
@@ -643,8 +642,6 @@ mod tests {
                 url: EscapedURI::from_path("/releases/queue"),
                 text: "long build queue".into(),
                 explanation: Some("The build queue currently contains more than 1 crates, so it might take a while before new published crates get documented.".into()),
-                start_time: None,
-                severity: AlertSeverity::Warn,
             }]
         );
 
