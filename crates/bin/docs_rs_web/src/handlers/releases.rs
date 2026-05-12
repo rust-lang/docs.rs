@@ -1822,9 +1822,9 @@ mod tests {
             );
 
             let queue = env.build_queue()?;
-            queue.add_crate(&FOO, &V1, 0, None).await?;
-            queue.add_crate(&BAR, &V2, -10, None).await?;
-            queue.add_crate(&BAZ, &V3, 10, None).await?;
+            queue.add_crate(&FOO, &V1, 0).await?;
+            queue.add_crate(&BAR, &V2, -10).await?;
+            queue.add_crate(&BAZ, &V3, 10).await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
             let items = full
@@ -1862,8 +1862,8 @@ mod tests {
 
             // we have two queued releases, where the build for one is already in progress
             let queue = env.build_queue()?;
-            queue.add_crate(&FOO, &V1, 0, None).await?;
-            queue.add_crate(&BAR, &V2, 0, None).await?;
+            queue.add_crate(&FOO, &V1, 0).await?;
+            queue.add_crate(&BAR, &V2, 0).await?;
 
             env.fake_release()
                 .await
@@ -1937,15 +1937,9 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
             let queue = env.build_queue()?;
-            queue
-                .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
-                .await?;
-            queue
-                .add_crate(&BAR, &V2, PRIORITY_CONTINUOUS + 1, None)
-                .await?;
-            queue
-                .add_crate(&BAZ, &V3, PRIORITY_CONTINUOUS - 1, None)
-                .await?;
+            queue.add_crate(&FOO, &V1, PRIORITY_CONTINUOUS).await?;
+            queue.add_crate(&BAR, &V2, PRIORITY_CONTINUOUS + 1).await?;
+            queue.add_crate(&BAZ, &V3, PRIORITY_CONTINUOUS - 1).await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
             let items = full

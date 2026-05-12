@@ -106,7 +106,7 @@ where
                     if !dry_run
                         && let Err(err) = ctx
                             .build_queue()?
-                            .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
+                            .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK)
                             .await
                     {
                         warn!(?difference, ?err, "error handling CrateNotInDb");
@@ -128,7 +128,7 @@ where
                 if !dry_run
                     && let Err(err) = ctx
                         .build_queue()?
-                        .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK, None)
+                        .add_crate(name, version, PRIORITY_CONSISTENCY_CHECK)
                         .await
                 {
                     warn!(?difference, ?err, "error handling ReleaseNotInDb");

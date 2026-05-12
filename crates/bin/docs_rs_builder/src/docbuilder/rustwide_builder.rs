@@ -35,7 +35,7 @@ use docs_rs_utils::{
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::{
-    AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
+    Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, ProcessStatistics, SandboxBuilder, SandboxImage},
     logging::{self, LogStorage},
     toolchain::ToolchainError,
@@ -100,7 +100,7 @@ fn load_metadata_from_rustwide(
 ) -> Result<CargoMetadata> {
     let res = Command::new(workspace, toolchain.cargo())
         .args(&["metadata", "--format-version", "1"])
-        .cd(source_dir)
+        .current_directory(source_dir)
         .log_output(false)
         .run_capture()?;
     let [metadata] = res.stdout_lines() else {
@@ -113,7 +113,6 @@ fn load_metadata_from_rustwide(
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
-    Registry(&'a str),
 }
 
 pub struct RustwideBuilder {
@@ -622,9 +621,6 @@ impl RustwideBuilder {
             let krate = match kind {
                 PackageKind::Local(path) => Crate::local(path),
                 PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version),
-                PackageKind::Registry(registry) => {
-                    Crate::registry(AlternativeRegistry::new(registry), name.as_str(), &version)
-                }
             };
             krate.fetch(&self.workspace)?;
             krate
@@ -689,14 +685,14 @@ impl RustwideBuilder {
                     {
                         let _span = info_span!("cargo_generate_lockfile").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
+                            .current_directory(build.host_source_dir())
                             .args(&["generate-lockfile"])
                             .run_capture()?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
+                            .current_directory(build.host_source_dir())
                             .args(&["fetch", "--locked"])
                             .run_capture()?;
                     }

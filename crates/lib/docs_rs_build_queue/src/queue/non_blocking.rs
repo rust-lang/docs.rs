@@ -34,23 +34,20 @@ impl AsyncBuildQueue {
         name: &KrateName,
         version: &Version,
         priority: i32,
-        registry: Option<&str>,
     ) -> Result<()> {
         let mut conn = self.db.get_async().await?;
 
         sqlx::query!(
-            "INSERT INTO queue (name, version, priority, registry)
-             VALUES ($1, $2, $3, $4)
+            "INSERT INTO queue (name, version, priority)
+             VALUES ($1, $2, $3)
              ON CONFLICT (name, version) DO UPDATE
                 SET priority = EXCLUDED.priority,
-                    registry = EXCLUDED.registry,
                     attempt = 0,
                     last_attempt = NULL
             ;",
             name as _,
             version as _,
             priority,
-            registry,
         )
         .execute(&mut *conn)
         .await?;
@@ -105,7 +102,6 @@ impl AsyncBuildQueue {
                 name as "name: KrateName",
                 version as "version: Version",
                 priority,
-                registry,
                 attempt
              FROM queue
              ORDER BY priority ASC, attempt ASC, id ASC"#,
@@ -343,8 +339,8 @@ mod tests {
         let env = test_queue().await?;
         let queue = env.queue;
 
-        queue.add_crate(&KRATE, &V1, 0, None).await?;
-        queue.add_crate(&KRATE, &V1, 9, None).await?;
+        queue.add_crate(&KRATE, &V1, 0).await?;
+        queue.add_crate(&KRATE, &V1, 9).await?;
 
         let queued_crates = queue.queued_crates().await?;
         assert_eq!(queued_crates.len(), 1);
@@ -372,7 +368,7 @@ mod tests {
 
         assert_eq!(queue.pending_count().await?, 1);
 
-        queue.add_crate(&FAILED_KRATE, &V1, 9, None).await?;
+        queue.add_crate(&FAILED_KRATE, &V1, 9).await?;
 
         assert_eq!(queue.pending_count().await?, 1);
 
@@ -397,7 +393,7 @@ mod tests {
         let env = test_queue().await?;
         let queue = env.queue;
 
-        queue.add_crate(&KRATE, &V1, 0, None).await?;
+        queue.add_crate(&KRATE, &V1, 0).await?;
 
         let mut conn = env.db.async_conn().await?;
         assert!(queue.has_build_queued(&KRATE, &V1).await.unwrap());
@@ -419,8 +415,8 @@ mod tests {
 
         assert_eq!(queue.pending_count().await?, 0);
 
-        queue.add_crate(&KRATE, &V1, 0, None).await?;
-        queue.add_crate(&KRATE, &V2, 0, None).await?;
+        queue.add_crate(&KRATE, &V1, 0).await?;
+        queue.add_crate(&KRATE, &V2, 0).await?;
 
         assert_eq!(queue.pending_count().await?, 2);
         queue.remove_version_from_queue(&KRATE, &V1).await?;
@@ -445,8 +441,8 @@ mod tests {
 
         assert_eq!(queue.pending_count().await?, 0);
 
-        queue.add_crate(&KRATE, &V1, 0, None).await?;
-        queue.add_crate(&KRATE, &V2, 0, None).await?;
+        queue.add_crate(&KRATE, &V1, 0).await?;
+        queue.add_crate(&KRATE, &V2, 0).await?;
 
         assert_eq!(queue.pending_count().await?, 2);
         queue.remove_crate_from_queue(&KRATE).await?;
@@ -494,7 +490,7 @@ mod tests {
 
         // enqueue FOO and BAR with priority 0
         for krate in &[FOO, BAR, BAZ] {
-            queue.add_crate(krate, &V1, 0, None).await?;
+            queue.add_crate(krate, &V1, 0).await?;
         }
 
         // unchanged priorities
@@ -564,7 +560,7 @@ mod tests {
 
         let queue = env.queue;
         for krate in &[FOO, BAR, BAZ] {
-            queue.add_crate(krate, &V1, PRIORITY_DEFAULT, None).await?;
+            queue.add_crate(krate, &V1, PRIORITY_DEFAULT).await?;
         }
 
         workspaces::rewrite_repository_stats(&mut conn).await?;

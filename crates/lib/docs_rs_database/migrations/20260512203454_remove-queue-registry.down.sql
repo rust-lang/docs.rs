@@ -1,0 +1,2 @@
+ALTER TABLE queue ADD COLUMN registry TEXT;
+

@@ -115,7 +115,7 @@ pub(crate) async fn get_new_crates(
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &changes, index.repository_url(), config).await;
+    let crates_added = process_changes(context, &changes, config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -129,16 +129,11 @@ pub(crate) async fn get_new_crates(
     Ok(crates_added)
 }
 
-async fn process_changes(
-    context: &Context,
-    changes: &Vec<Change>,
-    registry: Option<&str>,
-    config: &Config,
-) -> usize {
+async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Config) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
-        match process_change(context, change, registry, config).await {
+        match process_change(context, change, config).await {
             Ok(added) => {
                 if added {
                     crates_added += 1;
@@ -153,12 +148,7 @@ async fn process_changes(
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
-async fn process_change(
-    context: &Context,
-    change: &Change,
-    registry: Option<&str>,
-    config: &Config,
-) -> Result<bool> {
+async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
     let crate_version: CrateVersion = change
         .versions()
         .first()
@@ -167,9 +157,9 @@ async fn process_change(
         .try_into()?;
 
     match change {
-        Change::Added(_release) => process_version_added(context, &crate_version, registry).await?,
+        Change::Added(_release) => process_version_added(context, &crate_version).await?,
         Change::AddedAndYanked(_release) => {
-            process_version_added(context, &crate_version, registry).await?;
+            process_version_added(context, &crate_version).await?;
             process_version_yank_status(context, &crate_version).await?;
         }
         Change::Unyanked(_release) | Change::Yanked(_release) => {
@@ -195,16 +185,12 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
     Ok(())
 }
 
-async fn process_version_added(
-    context: &Context,
-    release: &CrateVersion,
-    registry: Option<&str>,
-) -> Result<()> {
+async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
     let priority = get_crate_priority(&mut conn, &release.name).await?;
     context
         .build_queue()?
-        .add_crate(&release.name, &release.version, priority, registry)
+        .add_crate(&release.name, &release.version, priority)
         .await
         .with_context(|| {
             format!(
@@ -359,7 +345,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate, None).await?;
+        process_version_added(&env, &krate).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -370,7 +356,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate, None).await?;
+        process_version_added(&env, &krate).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -543,7 +529,6 @@ mod tests {
                 // Should error out, but the error should be handled gracefully
                 Change::VersionDeleted(non_existing_version.into()),
             ],
-            None,
             env.config(),
         )
         .await;
