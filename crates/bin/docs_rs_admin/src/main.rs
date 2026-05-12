@@ -14,7 +14,7 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{Abnormality, AlertSeverity, ConfigName, remove_config, set_config},
+    service_config::{Abnormality, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
@@ -524,8 +524,6 @@ enum AbnormalitySubcommand {
         /// explanation to be shown on the status page, can be HTML
         #[arg(long)]
         explanation: Option<String>,
-        #[arg(long, default_value_t)]
-        severity: AlertSeverity,
     },
 
     /// Remove the abnormality shown in the site header
@@ -545,7 +543,6 @@ impl AbnormalitySubcommand {
                 url,
                 text,
                 explanation,
-                severity,
             } => {
                 set_config(
                     &mut conn,
@@ -554,7 +551,6 @@ impl AbnormalitySubcommand {
                         url,
                         text,
                         explanation,
-                        severity,
                     },
                 )
                 .await

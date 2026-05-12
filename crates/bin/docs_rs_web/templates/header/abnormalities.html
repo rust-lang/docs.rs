@@ -1,8 +1,7 @@
 {%- if abnormalities.len() >= 1 -%}
     <li class="pure-menu-item">
-        {% let abnormality = abnormalities.first().unwrap() %}
-        <a href="/-/status/" class="pure-menu-link {{ abnormality.severity.css_class() }}">
-            {{- abnormality.severity.render_icon_solid(false, false, "") }}
+        <a href="/-/status/" class="pure-menu-link warn">
+            {{- crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
         </a>
     </li>
 {% endif %}
