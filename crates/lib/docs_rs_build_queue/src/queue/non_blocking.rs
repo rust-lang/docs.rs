@@ -5,7 +5,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use docs_rs_database::{
     Pool,
-    service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, get_config, set_config},
+    service_config::{Abnormality, AlertSeverity, ConfigName, get_config, set_config},
 };
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_repository_stats::workspaces;
@@ -289,7 +289,6 @@ impl AsyncBuildQueue {
 
         if queue_pending_count > self.config.length_warning_threshold {
             alerts.push(Abnormality {
-                anchor_id: AnchorId::QueueLength,
                 url: EscapedURI::from_path("/releases/queue"),
                 text: "long build queue".into(),
                 explanation: Some(
@@ -298,7 +297,6 @@ impl AsyncBuildQueue {
                         self.config.length_warning_threshold,
                     )
                 ),
-                start_time: None,
                 severity: AlertSeverity::Warn,
             });
         }
@@ -646,7 +644,6 @@ mod tests {
         assert_eq!(
             queue.gather_alerts().await?,
             vec![Abnormality {
-                anchor_id: AnchorId::QueueLength,
                 url: EscapedURI::from_path("/releases/queue"),
                 text: "long build queue".into(),
                 explanation: Some("The build queue currently contains more than 1 crates, so it might take a while before new published crates get documented.".into()),

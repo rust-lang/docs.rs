@@ -16,7 +16,7 @@ pub(crate) mod status;
 use crate::Config;
 use crate::metrics::WebMetrics;
 use crate::middleware::{csp, security};
-use crate::page::{self, TemplateData, warnings::WarningsCache};
+use crate::page::{self, TemplateData};
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use axum::{
@@ -76,15 +76,6 @@ async fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
-    let warnings_cache = Arc::new(
-        WarningsCache::new(
-            context.pool()?.clone(),
-            context.build_queue()?.clone(),
-            context.cdn().cloned(),
-        )
-        .await,
-    );
-
     let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
 
     Ok(router.layer(
@@ -112,7 +103,6 @@ async fn apply_middleware(
             .layer(Extension(config.clone()))
             .layer(Extension(context.registry_api()?.clone()))
             .layer(Extension(context.storage()?.clone()))
-            .layer(Extension(warnings_cache))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))
             .layer(option_layer(has_templates.then_some(middleware::from_fn(

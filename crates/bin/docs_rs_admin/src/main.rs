@@ -4,7 +4,7 @@ mod repackage;
 pub(crate) mod testing;
 
 use anyhow::{Context as _, Result, bail};
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
 use docs_rs_build_queue::priority::{
@@ -14,10 +14,10 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{Abnormality, AlertSeverity, AnchorId, ConfigName, remove_config, set_config},
+    service_config::{Abnormality, AlertSeverity, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
-use docs_rs_headers::{SURROGATE_KEY_WARNINGS, SurrogateKey};
+use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
 use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
 use docs_rs_uri::EscapedURI;
@@ -551,11 +551,9 @@ impl AbnormalitySubcommand {
                     &mut conn,
                     ConfigName::Abnormality,
                     Abnormality {
-                        anchor_id: AnchorId::Manual,
                         url,
                         text,
                         explanation,
-                        start_time: Some(Utc::now()),
                         severity,
                     },
                 )
@@ -567,12 +565,6 @@ impl AbnormalitySubcommand {
                     .await
                     .context("failed to remove abnormality from database")?;
             }
-        }
-
-        if let Some(cdn) = ctx.cdn() {
-            cdn.purge_surrogate_keys(iter::once(SURROGATE_KEY_WARNINGS))
-                .await
-                .context("failed to purge CDN for warnings")?;
         }
 
         Ok(())
