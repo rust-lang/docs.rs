@@ -630,13 +630,16 @@ where
 pub async fn add_build_logs(
     conn: &mut sqlx::PgConnection,
     build_id: BuildId,
-    build_logs: Vec<(String, bool)>,
+    builds_logs: Vec<(String, bool)>,
 ) -> Result<()> {
+    let (logs_filename, successes): (Vec<String>, Vec<bool>) = builds_logs.into_iter().unzip();
+
     sqlx::query!(
-        "INSERT INTO builds_logs(build_id, logs)
-         VALUES ($1, $2)",
+        "INSERT INTO builds_logs(build_id, log_filename, success)
+         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])",
         build_id as _,
-        serde_json::to_value(build_logs)?,
+        &logs_filename as &[String],
+        &successes as &[bool],
     )
     .execute(&mut *conn)
     .await?;
