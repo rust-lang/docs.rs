@@ -93,11 +93,18 @@ pub(crate) async fn build_details_handler(
              builds.errors,
              builds.error_kind,
              releases.default_target,
-             builds_logs.logs
+             (
+                 SELECT array_agg(row(bl.log_filename, bl.success))
+                 FROM (
+                     SELECT log_filename, success
+                     FROM builds_logs
+                     WHERE builds_logs.build_id = builds.id
+                     ORDER BY id
+                 ) bl
+             ) AS "logs: Vec<(String, bool)>"
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
-         LEFT OUTER JOIN builds_logs ON builds_logs.build_id = builds.id
          WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
         id.0,
         params.name() as _,
@@ -131,11 +138,11 @@ pub(crate) async fn build_details_handler(
         let prefix = format!("build-logs/{id}/");
 
         // A list of `(path, build_successful)`.
-        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs {
-            serde_json::from_value::<Vec<(String, bool)>>(logs)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(path, successful)| (path, Some(successful)))
+        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs
+            && !logs.is_empty()
+        {
+            logs.into_iter()
+                .map(|(path, success)| (path, Some(success)))
                 .collect()
         } else {
             storage

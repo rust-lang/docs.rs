@@ -28,7 +28,7 @@
                             {%- if build.build_status != BuildStatus::InProgress %}
                                 {%- decl icon %}
                                 {%- decl title %}
-                                {%- match build.build_status() %}
+                                {%- match build.build_status %}
                                     {%- when BuildStatus::Success -%}
                                         {%- let icon = crate::icons::IconCheck.render_solid(false, false, "") %}
                                         {%- let title = "All builds succeeded" %}
