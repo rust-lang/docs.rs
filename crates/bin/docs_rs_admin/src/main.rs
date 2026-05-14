@@ -494,6 +494,10 @@ impl DatabaseSubcommand {
                     &registry_data,
                 )
                 .await?;
+
+                if let Some(cdn) = ctx.cdn() {
+                    cdn.queue_crate_invalidation(&name).await?
+                }
             }
 
             Self::Blacklist { command } => command.handle_args(ctx).await?,
