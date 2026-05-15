@@ -733,7 +733,7 @@ impl FakeBuild {
 
         let prefix = format!("build-logs/{build_id}/");
 
-        if let Some(s3_build_log) = self.s3_build_log.as_deref() {
+        if let Some(s3_build_log) = self.s3_build_log.clone() {
             let path = format!("{prefix}{default_target}.txt");
             storage.store_one(path, s3_build_log).await?;
         }
@@ -743,7 +743,7 @@ impl FakeBuild {
                 bail!("build log for default target has to be set via `s3_build_log`");
             }
             let path = format!("{prefix}{target}.txt");
-            storage.store_one(path, log.as_str()).await?;
+            storage.store_one(path, log.clone()).await?;
         }
 
         Ok(())

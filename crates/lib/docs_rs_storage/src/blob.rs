@@ -33,7 +33,7 @@ impl From<BlobUpload> for StreamUpload {
         Self {
             path: value.path,
             mime: value.mime,
-            source: StreamUploadSource::Bytes(value.content.into()),
+            source: StreamUploadSource::Bytes(value.content),
             compression: value.compression,
         }
     }
@@ -44,7 +44,7 @@ impl From<BlobUpload> for StreamUpload {
 pub struct BlobUpload {
     pub path: String,
     pub mime: Mime,
-    pub content: Vec<u8>,
+    pub content: Bytes,
     pub compression: Option<CompressionAlgorithm>,
 }
 
@@ -53,7 +53,7 @@ impl From<Blob> for BlobUpload {
         Self {
             path: value.path,
             mime: value.mime,
-            content: value.content,
+            content: value.content.into(),
             compression: value.compression,
         }
     }
@@ -76,7 +76,7 @@ impl From<BlobUpload> for Blob {
             mime: value.mime,
             date_updated: Utc::now(),
             etag: compute_etag(&value.content).into(),
-            content: value.content,
+            content: value.content.into(),
             compression: value.compression,
         }
     }
