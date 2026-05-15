@@ -29,6 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{fs, io, io::AsyncWriteExt as _};
+use tokio_util::bytes::Bytes;
 use tracing::{info_span, instrument, trace, warn};
 
 /// buffer size when writing zip files.
@@ -491,7 +492,7 @@ impl AsyncStorage {
     pub async fn store_one_uncompressed(
         &self,
         path: impl Into<String> + fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<()> {
         let path = path.into();
         let content = content.into();
@@ -501,7 +502,7 @@ impl AsyncStorage {
             .upload_stream(StreamUpload {
                 path,
                 mime,
-                source: StreamUploadSource::Bytes(content.into()),
+                source: StreamUploadSource::Bytes(content),
                 compression: None,
             })
             .await?;
@@ -515,11 +516,11 @@ impl AsyncStorage {
     pub async fn store_one(
         &self,
         path: impl Into<String> + fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<CompressionAlgorithm> {
         let path = path.into();
         let alg = CompressionAlgorithm::default();
-        let content = compress(Cursor::new(content.into()), alg)?;
+        let content = compress(Cursor::new(content.into().as_ref()), alg)?;
         let mime = detect_mime(&path).to_owned();
 
         self.backend
@@ -615,7 +616,7 @@ mod backend_tests {
             path: path.into(),
             mime: mime::TEXT_PLAIN,
             compression: None,
-            content: b"test content\n".to_vec(),
+            content: "test content\n".into(),
         };
 
         storage.store_blobs(vec![blob.clone()]).await?;
@@ -646,7 +647,7 @@ mod backend_tests {
             path: "foo/bar.txt".into(),
             mime: mime::TEXT_PLAIN,
             compression: None,
-            content: b"test content\n".to_vec(),
+            content: "test content\n".into(),
         };
 
         let full_etag = compute_etag(&blob.content);
@@ -697,7 +698,7 @@ mod backend_tests {
                         path: filename.into(),
                         mime: mime::TEXT_PLAIN,
                         compression: None,
-                        content: b"test content\n".to_vec(),
+                        content: "test content\n".into(),
                     })
                     .collect(),
             )
@@ -746,13 +747,13 @@ mod backend_tests {
         let small_blob = BlobUpload {
             path: "small-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: vec![0; MAX_SIZE],
+            content: [0; MAX_SIZE].as_ref().into(),
             compression: None,
         };
         let big_blob = BlobUpload {
             path: "big-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: vec![0; MAX_SIZE * 2],
+            content: [0; MAX_SIZE * 2].as_ref().into(),
             compression: None,
         };
 
@@ -792,7 +793,7 @@ mod backend_tests {
                 path: path.into(),
                 mime: mime::TEXT_PLAIN,
                 compression: None,
-                content: b"Hello world!\n".to_vec(),
+                content: "Hello world!\n".into(),
             })
             .collect::<Vec<_>>();
 
@@ -975,14 +976,11 @@ mod backend_tests {
 
     async fn test_batched_uploads(storage: &AsyncStorage) -> Result<()> {
         let uploads: Vec<_> = (0..=100)
-            .map(|i| {
-                let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
-                BlobUpload {
-                    mime: mimes::TEXT_RUST.clone(),
-                    content,
-                    path: format!("{i}.rs"),
-                    compression: None,
-                }
+            .map(|i| BlobUpload {
+                mime: mimes::TEXT_RUST.clone(),
+                content: format!("const IDX: usize = {i};").into(),
+                path: format!("{i}.rs"),
+                compression: None,
             })
             .collect();
 
@@ -1043,7 +1041,7 @@ mod backend_tests {
                     .iter()
                     .map(|path| BlobUpload {
                         path: (*path).to_string(),
-                        content: b"foo\n".to_vec(),
+                        content: "foo\n".into(),
                         compression: None,
                         mime: mime::TEXT_PLAIN,
                     })

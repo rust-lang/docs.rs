@@ -3254,7 +3254,7 @@ mod test {
         storage
             .store_one(
                 format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}"),
-                b"static content",
+                "static content",
             )
             .await?;
 
@@ -3298,8 +3298,8 @@ mod test {
             const ROOT_ASSET: &str = "normalize-20200403-1.44.0-nightly-74bd074ee.css";
 
             let storage = env.storage()?;
-            storage.store_one(ROOT_ASSET, *b"content").await?;
-            storage.store_one(path, *b"more_content").await?;
+            storage.store_one(ROOT_ASSET, "content").await?;
+            storage.store_one(path, "more_content").await?;
 
             let web = env.web_app().await;
 

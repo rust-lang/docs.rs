@@ -3,6 +3,7 @@ use anyhow::Result;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
 use tokio::runtime;
+use tokio_util::bytes::Bytes;
 
 /// Sync wrapper around `AsyncStorage` for parts of the codebase that are not async.
 pub struct Storage {
@@ -112,7 +113,7 @@ impl Storage {
     pub fn store_one_uncompressed(
         &self,
         path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<()> {
         self.runtime
             .block_on(self.inner.store_one_uncompressed(path, content))
@@ -123,7 +124,7 @@ impl Storage {
     pub fn store_one(
         &self,
         path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<CompressionAlgorithm> {
         self.runtime.block_on(self.inner.store_one(path, content))
     }
