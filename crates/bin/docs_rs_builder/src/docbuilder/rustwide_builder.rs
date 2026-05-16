@@ -36,7 +36,7 @@ use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
 use regex::Regex;
 use rustwide::{
     Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, CommandError, ProcessStatistics, SandboxBuilder, SandboxImage},
+    cmd::{Command, CommandError, SandboxBuilder, SandboxImage},
     logging::{self, LogStorage},
     toolchain::ToolchainError,
 };
@@ -99,7 +99,7 @@ fn load_metadata_from_rustwide(
     source_dir: &Path,
 ) -> Result<CargoMetadata> {
     let res = Command::new(workspace, toolchain.cargo())
-        .args(&["metadata", "--format-version", "1"])
+        .args(["metadata", "--format-version", "1"])
         .current_directory(source_dir)
         .log_output(false)
         .run_capture()?;
@@ -179,6 +179,7 @@ impl RustwideBuilder {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn purge_caches(&self) -> Result<()> {
         self.workspace.purge_all_caches()?;
         Ok(())
@@ -380,7 +381,7 @@ impl RustwideBuilder {
     fn detect_rustc_version(&self) -> Result<String> {
         info!("detecting rustc's version...");
         let res = Command::new(&self.workspace, self.toolchain.rustc())
-            .args(&["--version"])
+            .arg("--version")
             .log_output(false)
             .run_capture()?;
         let mut iter = res.stdout_lines().iter();
@@ -686,14 +687,14 @@ impl RustwideBuilder {
                         let _span = info_span!("cargo_generate_lockfile").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .current_directory(build.host_source_dir())
-                            .args(&["generate-lockfile"])
+                            .arg("generate-lockfile")
                             .run_capture()?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .current_directory(build.host_source_dir())
-                            .args(&["fetch", "--locked"])
+                            .args(["fetch", "--locked"])
                             .run_capture()?;
                     }
                     res =
@@ -709,8 +710,6 @@ impl RustwideBuilder {
                             .join(name)
                             .is_dir();
                     }
-
-                let mut aggregated_build_stats = res.stats.clone();
 
                 let mut target_build_logs = HashMap::new();
                 let documentation_size = if has_docs {
@@ -741,7 +740,6 @@ impl RustwideBuilder {
                             collect_metrics,
                         )?;
                         target_build_logs.insert(target, target_res.build_log);
-                        aggregated_build_stats.merge_mut(target_res.stats);
                     }
 
                     let (file_list, new_alg) =
@@ -758,6 +756,8 @@ impl RustwideBuilder {
                     None
                 };
 
+                let build_stats = build.statistics();
+
                 let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
                 self.runtime.block_on(finish_build(
@@ -771,7 +771,7 @@ impl RustwideBuilder {
                         BuildStatus::Failure
                     },
                     documentation_size,
-                    aggregated_build_stats.memory_peak,
+                    build_stats.memory_peak_bytes(),
                     res.result.build_error.as_ref()
                 ))?;
 
@@ -904,7 +904,7 @@ impl RustwideBuilder {
             krate.purge_from_cache(&self.workspace)?;
             local_storage.close()?;
         }
-        Ok(successful)
+        Ok(successful.into_inner())
     }
 
     #[instrument(skip(self, build))]
@@ -961,10 +961,10 @@ impl RustwideBuilder {
         version: &Version,
         target: &str,
         is_default_target: bool,
-        build: &Build,
+        build: &Build<'_>,
         metadata: &Metadata,
         limits: &Limits,
-    ) -> Result<ProcessStatistics> {
+    ) -> Result<()> {
         let rustdoc_flags = vec!["--output-format".to_string(), "json".to_string()];
 
         let mut storage = LogStorage::new(log::LevelFilter::Info);
@@ -984,10 +984,10 @@ impl RustwideBuilder {
                 .context("storing build log on S3")?;
         }
 
-        let Ok(stats) = result else {
+        if result.is_err() {
             // this is a normal build error and will be visible in the uploaded build logs.
             // We don't need the Err variant here.
-            return Ok(ProcessStatistics::default());
+            return Ok(());
         };
 
         let json_dir = if metadata.proc_macro {
@@ -1050,17 +1050,17 @@ impl RustwideBuilder {
             }
         }
 
-        Ok(stats)
+        Ok(())
     }
 
     #[instrument(skip(self, build))]
     fn get_coverage(
         &self,
         target: &str,
-        build: &Build,
+        build: &Build<'_>,
         metadata: &Metadata,
         limits: &Limits,
-    ) -> Result<(ProcessStatistics, Option<DocCoverage>)> {
+    ) -> Result<Option<DocCoverage>> {
         let rustdoc_flags = vec![
             "--output-format".to_string(),
             "json".to_string(),
@@ -1074,8 +1074,7 @@ impl RustwideBuilder {
             items_with_examples: 0,
         };
 
-        let stats = self
-            .prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
+        self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
             .process_lines(&mut |line, _| {
                 if line.starts_with('{') && line.ends_with('}') {
                     match doc_coverage::parse_line(line) {
@@ -1087,14 +1086,13 @@ impl RustwideBuilder {
             .log_output(true)
             .run()?;
 
-        Ok((
-            stats,
+        Ok(
             if coverage.total_items == 0 && coverage.documented_items == 0 {
                 None
             } else {
                 Some(coverage)
             },
-        ))
+        )
     }
 
     #[instrument(skip(self, build))]
@@ -1106,7 +1104,7 @@ impl RustwideBuilder {
         version: &Version,
         target: &str,
         is_default_target: bool,
-        build: &Build,
+        build: &Build<'_>,
         limits: &Limits,
         metadata: &Metadata,
         create_essential_files: bool,
@@ -1134,26 +1132,21 @@ impl RustwideBuilder {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
-        let mut aggregated_build_stats = ProcessStatistics::default();
-
         // we have to run coverage before the doc-build because currently it
         // deletes the doc-target folder.
         // https://github.com/rust-lang/cargo/issues/9447
-        let (coverage_stats, doc_coverage) =
-            match self.get_coverage(target, build, metadata, limits) {
-                Ok((stats, cov)) => (stats, cov),
-                Err(err) => {
-                    info!(
-                        ?err,
-                        "error when trying to get coverage, continuing anyways.",
-                    );
-                    (ProcessStatistics::default(), None)
-                }
-            };
+        let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
+            Ok(cov) => cov,
+            Err(err) => {
+                info!(
+                    ?err,
+                    "error when trying to get coverage, continuing anyways.",
+                );
+                None
+            }
+        };
 
-        aggregated_build_stats.merge_mut(coverage_stats);
-
-        let json_stats = match self.execute_json_build(
+        if let Err(err) = self.execute_json_build(
             build_id,
             name,
             version,
@@ -1163,23 +1156,15 @@ impl RustwideBuilder {
             metadata,
             limits,
         ) {
-            Ok(stats) => stats,
-            Err(err) => {
-                // FIXME: this is temporary. Theoretically all `Err` things coming out
-                // of the method should be retryable, so we could juse use `?` here.
-                // But since this is new, I want to be carful and first see what kind of
-                // errors we are seeing here.
-                error!(
-                    ?err,
-                    "internal error when trying to generate rustdoc JSON output"
-                );
-                // at some point we also want to have stats for failed commands, but
-                // rustwide doesn't return them yet.
-                ProcessStatistics::default()
-            }
-        };
-
-        aggregated_build_stats.merge_mut(json_stats);
+            // FIXME: this is temporary. Theoretically all `Err` things coming out
+            // of the method should be retryable, so we could juse use `?` here.
+            // But since this is new, I want to be carful and first see what kind of
+            // errors we are seeing here.
+            error!(
+                ?err,
+                "internal error when trying to generate rustdoc JSON output"
+            );
+        }
 
         let result = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
@@ -1227,10 +1212,6 @@ impl RustwideBuilder {
             std::fs::rename(old_dir, new_dir)?;
         }
 
-        let main_build_stats = result.as_ref().ok().cloned().unwrap_or_default();
-
-        aggregated_build_stats.merge_mut(main_build_stats);
-
         Ok(FullBuildResult {
             result: BuildResult {
                 rustc_version: self.rustc_version()?,
@@ -1241,13 +1222,12 @@ impl RustwideBuilder {
             cargo_metadata,
             build_log: storage.to_string(),
             target: target.to_string(),
-            stats: aggregated_build_stats,
         })
     }
 
     fn prepare_command<'ws, 'pl>(
         &self,
-        build: &'ws Build,
+        build: &Build<'ws>,
         target: &str,
         metadata: &Metadata,
         limits: &Limits,
@@ -1374,7 +1354,6 @@ struct FullBuildResult {
     cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
-    stats: ProcessStatistics,
 }
 
 impl FullBuildResult {
