@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases SET default_target = 'x86_64-unknown-linux-gnu' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "86cb6c0a4d2e6b18df6339f12a98692cb4abb0a4b62d611679c956be3fb9494f"
+}
