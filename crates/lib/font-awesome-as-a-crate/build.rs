@@ -71,10 +71,12 @@ fn write_fontawesome_sprite() {
             let _ = writeln!(acc, "impl {k} for {type_name} {{}}");
             acc
         });
+        let data_html = data.replace("<svg", "<svg style=\"height:1em;\"");
         dest_file
             .write_all(
                 format!(
-                    "\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+                    "\n#[doc = r#\"{data_html}\"#]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct {type_name};
 impl IconStr for {type_name} {{
     fn icon_name(&self) -> &'static str {{ r#\"{icon}\"# }}
