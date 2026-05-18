@@ -3,6 +3,7 @@ use crate::{
     utils::copy::copy_dir_all,
 };
 use anyhow::{Context as _, Error, Result, anyhow, bail};
+use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
@@ -26,13 +27,15 @@ use docs_rs_storage::{
     rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
     doc_coverage::{self, DocCoverage},
 };
 use docs_rs_utils::{
     Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version,
+    spawn_blocking,
 };
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
+use futures_util::future::try_join_all;
 use regex::Regex;
 use rustwide::{
     Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
@@ -44,7 +47,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufReader,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock},
     time::Instant,
 };
@@ -1030,25 +1033,61 @@ impl RustwideBuilder {
                 .context("couldn't parse rustdoc json to find format version")?
         };
 
-        for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-            let compressed_json: Vec<u8> = {
-                let _span =
-                    info_span!("compress_json", file_size = json_filename.metadata()?.len(), algorithm=%alg)
-                        .entered();
+        self.runtime.block_on(try_join_all(
+            RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(move |alg| {
+                let json_filename = json_filename.clone();
+                self.upload_json_output(name, version, target, format_version, *alg, json_filename)
+            }),
+        ))?;
 
-                compress(BufReader::new(File::open(&json_filename)?), *alg)?
-            };
+        Ok(())
+    }
 
-            for format_version in [format_version, RustdocJsonFormatVersion::Latest] {
-                let path = rustdoc_json_path(name, version, target, format_version, Some(*alg));
-                let _span =
-                    info_span!("store_json", %format_version, algorithm=%alg, target_path=%path)
-                        .entered();
+    #[instrument(skip(self))]
+    async fn upload_json_output(
+        &self,
+        name: &KrateName,
+        version: &Version,
+        target: &str,
+        format_version: RustdocJsonFormatVersion,
+        alg: CompressionAlgorithm,
+        json_filename: PathBuf,
+    ) -> Result<()> {
+        let json_file_size = json_filename.metadata()?.len();
+        let compressed_json = spawn_blocking(move || {
+            let compress_span = info_span!(
+                "compress_json",
+                file_size = json_file_size,
+                algorithm = %alg
+            );
+            let _span = compress_span.enter();
 
-                self.blocking_storage
-                    .store_one_uncompressed(&path, compressed_json.clone())?;
-            }
-        }
+            let compressed = compress(BufReader::new(File::open(&json_filename)?), alg)?;
+            Ok(Bytes::from(compressed))
+        })
+        .await?;
+
+        try_join_all(
+            [
+                rustdoc_json_path(name, version, target, format_version, Some(alg)),
+                rustdoc_json_path(
+                    name,
+                    version,
+                    target,
+                    RustdocJsonFormatVersion::Latest,
+                    Some(alg),
+                ),
+            ]
+            .map(|path| {
+                let compressed_json = compressed_json.clone();
+                async move {
+                    self.storage
+                        .store_one_uncompressed(&path, compressed_json)
+                        .await
+                }
+            }),
+        )
+        .await?;
 
         Ok(())
     }
