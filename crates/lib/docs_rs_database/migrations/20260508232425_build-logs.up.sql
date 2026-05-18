@@ -1,6 +1,6 @@
 CREATE TABLE builds_logs(
     id INTEGER NOT NULL,
-    build_id INTEGER REFERENCES builds(id),
+    build_id INTEGER REFERENCES builds(id) ON DELETE CASCADE,
     log_filename TEXT,
     success BOOLEAN
 );

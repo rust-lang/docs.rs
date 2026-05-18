@@ -99,7 +99,7 @@ pub(crate) async fn build_details_handler(
                      SELECT log_filename, success
                      FROM builds_logs
                      WHERE builds_logs.build_id = builds.id
-                     ORDER BY id
+                     ORDER BY log_filename
                  ) bl
              ) AS "logs: Vec<(String, bool)>"
          FROM builds
@@ -376,7 +376,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default().s3_build_log("A build log")])
+                .builds(vec![FakeBuild::default().s3_build_log("A build log", true)])
                 .create()
                 .await?;
 
@@ -430,8 +430,8 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .s3_build_log("A build log")
-                        .build_log_for_other_target("other_target", "other target build log"),
+                        .s3_build_log("A build log", true)
+                        .build_log_for_other_target("other_target", "other target build log", true),
                 ])
                 .create()
                 .await?;
@@ -453,7 +453,8 @@ mod tests {
 
             assert!(log.contains("A build log"));
 
-            let all_log_links = get_all_log_links(&page);
+            let mut all_log_links = get_all_log_links(&page);
+            all_log_links.sort_unstable();
             assert_eq!(
                 all_log_links,
                 vec![
@@ -496,7 +497,7 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .s3_build_log("A build log")
+                        .s3_build_log("A build log", true)
                         .db_build_log("Another build log"),
                 ])
                 .create()
