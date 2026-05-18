@@ -196,7 +196,7 @@ async fn get_builds(
                         WHEN COALESCE(
                             (SELECT bool_and(builds_logs.success)
                              FROM builds_logs
-                             WHERE builds_logs.build_id = builds.id), 
+                             WHERE builds_logs.build_id = builds.id),
                             TRUE
                         ) = TRUE THEN 'success'::build_status
                         ELSE 'partial_failure'::build_status
@@ -236,6 +236,7 @@ async fn get_builds(
 
 #[cfg(test)]
 mod tests {
+    use super::get_builds;
     use crate::{
         Config,
         cache::CachePolicy,
@@ -250,10 +251,11 @@ mod tests {
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
         BuildStatus, SimpleBuildError,
-        testing::{FOO, V1, V2},
+        testing::{FOO, V0_1, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
+    use test_case::{test_case, test_matrix};
     use tower::ServiceExt;
 
     #[test]
@@ -724,5 +726,139 @@ mod tests {
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case(BuildStatus::Success)]
+    #[test_case(BuildStatus::Failure)]
+    #[test_case(BuildStatus::InProgress)]
+    async fn get_builds_legacy_logs_just_passes_build_status(
+        build_status: BuildStatus,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(build_status)
+                    .legacy_build_logs(true),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            build_status,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_matrix(
+        [BuildStatus::InProgress, BuildStatus::Failure],
+        [true, false]
+    )]
+    async fn get_builds_new_logs_just_passes_build_status_if_not_success(
+        build_status: BuildStatus,
+        build_log_success: bool,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(build_status)
+                    .s3_build_log("some log", build_log_success),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            build_status,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_builds_new_logs_all_logs_ok_means_success() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(BuildStatus::Success)
+                    .s3_build_log("some log", true)
+                    .build_log_for_other_target("other-target", "other log", true),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            BuildStatus::Success,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_builds_new_logs_partial_success() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(BuildStatus::Success)
+                    .s3_build_log("some log", true)
+                    .build_log_for_other_target("other-target", "other log", false),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            BuildStatus::PartialFailure
+        );
+
+        Ok(())
     }
 }

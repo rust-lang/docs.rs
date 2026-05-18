@@ -154,6 +154,17 @@ async fn delete_version_from_database(
     .fetch_all(&mut *transaction)
     .await?;
 
+    sqlx::query!(
+        "DELETE FROM builds_logs bl
+         USING builds b
+         JOIN releases r ON b.rid = r.id
+         WHERE bl.build_id = b.id AND r.crate_id = $1 AND r.version = $2;",
+        crate_id as _,
+        version as _
+    )
+    .execute(&mut *transaction)
+    .await?;
+
     for &(table, column) in METADATA {
         sqlx::query(
             format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)").as_str())
@@ -208,6 +219,16 @@ async fn delete_crate_from_database(
     sqlx::query!(
         "DELETE FROM sandbox_overrides WHERE crate_name = $1",
         name as _
+    )
+    .execute(&mut *transaction)
+    .await?;
+
+    sqlx::query!(
+        "DELETE FROM builds_logs AS bl
+         USING builds AS b
+         JOIN releases AS r ON b.rid = r.id
+         WHERE bl.build_id = b.id AND r.crate_id = $1;",
+        crate_id as _
     )
     .execute(&mut *transaction)
     .await?;
