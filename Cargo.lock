@@ -2030,6 +2030,7 @@ name = "docs_rs_builder"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
@@ -2049,6 +2050,7 @@ dependencies = [
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
+ "futures-util",
  "log",
  "num_cpus",
  "opentelemetry",
@@ -2340,6 +2342,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-smithy-types-convert",
  "base64",
+ "bytes",
  "bzip2",
  "chrono",
  "crc32fast",

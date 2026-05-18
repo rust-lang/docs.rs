@@ -33,6 +33,7 @@ async-stream = "0.3.5"
 axum-extra = { version = "0.12.0", features = ["middleware", "routing", "typed-header"] }
 base64 = "0.22"
 bon = { version = "3.8.1", features = ["experimental-overwritable"] }
+bytes = "1.11.0"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4.0.22", features = ["derive"] }
 futures-util = "0.3.5"
