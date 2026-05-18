@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE config SET value = $2 WHERE name = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Json"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "029cd6f3f3e44686a9259a8aa2155c044e87f75430006b1c01069d350a3e0838"
+}

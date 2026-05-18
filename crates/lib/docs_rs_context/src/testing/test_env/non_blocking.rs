@@ -1,6 +1,7 @@
 use crate::Context;
 use anyhow::Result;
 use bon::bon;
+use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_config::AppConfig;
 use docs_rs_database::{AsyncPoolClient, Config as DatabaseConfig, testing::TestDatabase};
 use docs_rs_fastly::Cdn;
@@ -43,6 +44,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         config: Option<C>,
         registry_api_config: Option<docs_rs_registry_api::Config>,
         storage_config: Option<StorageConfig>,
+        build_queue_config: Option<docs_rs_build_queue::Config>,
     ) -> Result<Self> {
         docs_rs_logging::testing::init();
 
@@ -75,6 +77,18 @@ impl<C: AppConfig> TestEnvironment<C> {
         let test_storage =
             TestStorage::from_config(storage_config.clone(), metrics.provider()).await?;
 
+        let build_queue_config = Arc::new(if let Some(config) = build_queue_config {
+            config
+        } else {
+            docs_rs_build_queue::Config::from_environment()?
+        });
+
+        let build_queue = Arc::new(AsyncBuildQueue::new(
+            db.pool().clone(),
+            build_queue_config.clone(),
+            metrics.provider(),
+        ));
+
         Ok(Self {
             config: app_config,
             context: Context::builder()
@@ -83,7 +97,7 @@ impl<C: AppConfig> TestEnvironment<C> {
                 .meter_provider(metrics.provider().clone())
                 .pool(db_config.into(), db.pool().clone())
                 .storage(storage_config.clone(), test_storage.storage())
-                .with_build_queue()?
+                .build_queue(build_queue_config, build_queue)
                 .registry_api(registry_api_config, registry_api.into())
                 .with_repository_stats()?
                 .maybe_cdn(

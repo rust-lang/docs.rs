@@ -18,8 +18,7 @@ use crate::{
         TemplateData,
         templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
-    utils,
-    utils::licenses,
+    utils::{self, licenses},
 };
 use anyhow::{Context as _, anyhow};
 use askama::Template;
