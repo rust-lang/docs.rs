@@ -10,8 +10,9 @@ use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
     releases::{
-        add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
-        initialize_release, update_build_with_error, update_crate_data_in_database,
+        add_build_logs, add_doc_coverage, finish_build, finish_release, initialize_build,
+        initialize_crate, initialize_release, update_build_with_error,
+        update_crate_data_in_database,
     },
     service_config::{ConfigName, get_config, set_config},
 };
@@ -739,7 +740,8 @@ impl RustwideBuilder {
                             &metadata,
                             collect_metrics,
                         )?;
-                        target_build_logs.insert(target, target_res.build_log);
+                        let successful = target_res.successful();
+                        target_build_logs.insert(target, (target_res.build_log, successful));
                     }
 
                     let (file_list, new_alg) =
@@ -778,13 +780,19 @@ impl RustwideBuilder {
                 let successful = res.successful();
 
                 {
+                    let mut build_logs = Vec::new();
+
                     let _span = info_span!("store_build_logs").entered();
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                    let successful = res.successful();
                     self.blocking_storage.store_one(build_log_path, res.build_log)?;
-                    for (target, log) in target_build_logs {
+                    build_logs.push((format!("{default_target}.txt"), successful));
+                    for (target, (log, successful)) in target_build_logs {
                         let build_log_path = format!("build-logs/{build_id}/{target}.txt");
                         self.blocking_storage.store_one(build_log_path, log)?;
+                        build_logs.push((format!("{target}.txt"), successful));
                     }
+                    self.runtime.block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
                 }
 
                 if successful {
@@ -1483,7 +1491,16 @@ mod tests {
                         b.docsrs_version,
                         b.rustc_version,
                         b.documentation_size,
-                        b.memory_peak
+                        b.memory_peak,
+                        (
+                            SELECT array_agg(row(bl.log_filename, bl.success))
+                            FROM (
+                                SELECT log_filename, success
+                                FROM builds_logs
+                                WHERE builds_logs.build_id = b.id
+                                ORDER BY id
+                            ) bl
+                        ) AS "logs: Vec<(String, bool)>"
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
@@ -1510,6 +1527,18 @@ mod tests {
         assert!(row.source_size > 0);
         assert!(row.documentation_size.unwrap() > 0);
         assert!(row.memory_peak.unwrap() > 10 * 1024 * 1024); // 10 MiB, in my test it was > 100 MiB
+        let mut logs = row.logs.unwrap();
+        logs.sort();
+        let mut expected = vec![
+            ("x86_64-unknown-linux-gnu.txt".to_owned(), true),
+            ("i686-pc-windows-msvc.txt".to_owned(), true),
+            ("aarch64-unknown-linux-gnu.txt".to_owned(), true),
+            ("x86_64-pc-windows-msvc.txt".to_owned(), true),
+            ("aarch64-apple-darwin.txt".to_owned(), true),
+        ];
+        expected.sort();
+
+        assert_eq!(logs, expected);
 
         let mut targets: Vec<String> = row
             .doc_targets

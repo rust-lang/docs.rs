@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                        r.rustdoc_status,\n                        r.default_target,\n                        r.doc_targets,\n                        r.archive_storage,\n                        r.source_size as \"source_size!\",\n                        cov.total_items,\n                        b.id as build_id,\n                        b.build_status::TEXT as build_status,\n                        b.docsrs_version,\n                        b.rustc_version,\n                        b.documentation_size,\n                        b.memory_peak,\n                        (\n                            SELECT array_agg(row(bl.log_filename, bl.success))\n                            FROM (\n                                SELECT log_filename, success\n                                FROM builds_logs\n                                WHERE builds_logs.build_id = b.id\n                                ORDER BY id\n                            ) bl\n                        ) AS \"logs: Vec<(String, bool)>\"\n                    FROM\n                        crates as c\n                        INNER JOIN releases AS r ON c.id = r.crate_id\n                        INNER JOIN builds as b ON r.id = b.rid\n                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id\n                    WHERE\n                        c.name = $1 AND\n                        r.version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rustdoc_status",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "default_target",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "doc_targets",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 3,
+        "name": "archive_storage",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "source_size!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_items",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "build_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "build_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "docsrs_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "rustc_version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "documentation_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "memory_peak",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "logs: Vec<(String, bool)>",
+        "type_info": "RecordArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "bff5c350f929e3fc29a23bbf3444c02087c2ac7004626c4c0c069f313500d23e"
+}

@@ -1,0 +1,34 @@
+// Checks that the builds page has the expected information.
+go-to: |DOC_PATH| + "/crate/zbus/5.15.0/builds"
+
+store-value: (success_selector, ".recent-releases-container li a.release span.fa-check")
+store-value: (failure_selector, ".recent-releases-container li a.release span.fa-xmark")
+// Some builds failed, so it should display a warning sign.
+assert: ".recent-releases-container a.release span.fa-triangle-exclamation"
+assert-attribute: (
+    ".recent-releases-container a.release",
+    {"title": "Some builds failed"},
+)
+
+// We now check the builds details
+click: ".recent-releases-container a.release"
+assert-count: (".recent-releases-container li a.release", 6)
+// Half should have succeeded, the others should have failed.
+assert-count: (|success_selector|, 3)
+assert-count: (|failure_selector|, 3)
+
+// Same checks for sysinfo.
+go-to: |DOC_PATH| + "/crate/sysinfo/0.23.5/builds"
+assert: ".recent-releases-container a.release span.fa-check"
+assert-attribute: (
+    ".recent-releases-container a.release",
+    {"title": "All builds succeeded"},
+)
+
+// We now check the builds details
+click: ".recent-releases-container a.release"
+store-count: (".recent-releases-container li a.release", nb_builds)
+assert: |nb_builds| > 0
+// All should have succeeded.
+assert-count: (|success_selector|, |nb_builds|)
+assert-count: (|failure_selector|, 0)

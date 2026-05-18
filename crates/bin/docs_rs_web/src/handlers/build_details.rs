@@ -36,7 +36,7 @@ pub(crate) struct BuildDetails {
 struct BuildDetailsPage {
     metadata: MetaData,
     build_details: BuildDetails,
-    all_log_filenames: Vec<String>,
+    all_log_filenames: Vec<(String, Option<bool>)>,
     current_filename: Option<String>,
     params: RustdocParams,
 }
@@ -92,7 +92,16 @@ pub(crate) async fn build_details_handler(
              builds.output,
              builds.errors,
              builds.error_kind,
-             releases.default_target
+             releases.default_target,
+             (
+                 SELECT array_agg(row(bl.log_filename, bl.success))
+                 FROM (
+                     SELECT log_filename, success
+                     FROM builds_logs
+                     WHERE builds_logs.build_id = builds.id
+                     ORDER BY log_filename
+                 ) bl
+             ) AS "logs: Vec<(String, bool)>"
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
@@ -127,16 +136,29 @@ pub(crate) async fn build_details_handler(
         // toFor a long time only for one target, then we started storing the logs for other
         // targets. In any case, all the logfiles are put into a folder we can just query.
         let prefix = format!("build-logs/{id}/");
-        let all_log_filenames: Vec<_> = storage
-            .list_prefix(&prefix) // the result from S3 is ordered by key
-            .await
-            .map_ok(|path| {
-                path.strip_prefix(&prefix)
-                    .expect("since we query for the prefix, it has to be always there")
-                    .to_owned()
-            })
-            .try_collect()
-            .await?;
+
+        // A list of `(path, build_successful)`.
+        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs
+            && !logs.is_empty()
+        {
+            logs.into_iter()
+                .map(|(path, success)| (path, Some(success)))
+                .collect()
+        } else {
+            storage
+                .list_prefix(&prefix) // the result from S3 is ordered by key
+                .await
+                .map_ok(|path| {
+                    (
+                        path.strip_prefix(&prefix)
+                            .expect("since we query for the prefix, it has to be always there")
+                            .to_owned(),
+                        None,
+                    )
+                })
+                .try_collect()
+                .await?
+        };
 
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
@@ -145,7 +167,10 @@ pub(crate) async fn build_details_handler(
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
             let wanted_filename = format!("{default_target}.txt");
-            if all_log_filenames.contains(&wanted_filename) {
+            if all_log_filenames
+                .iter()
+                .any(|(filename, _)| *filename == wanted_filename)
+            {
                 Some(wanted_filename)
             } else {
                 None
@@ -351,7 +376,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default().s3_build_log("A build log")])
+                .builds(vec![FakeBuild::default().s3_build_log("A build log", true)])
                 .create()
                 .await?;
 
@@ -405,8 +430,8 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .s3_build_log("A build log")
-                        .build_log_for_other_target("other_target", "other target build log"),
+                        .s3_build_log("A build log", true)
+                        .build_log_for_other_target("other_target", "other target build log", true),
                 ])
                 .create()
                 .await?;
@@ -428,7 +453,8 @@ mod tests {
 
             assert!(log.contains("A build log"));
 
-            let all_log_links = get_all_log_links(&page);
+            let mut all_log_links = get_all_log_links(&page);
+            all_log_links.sort_unstable();
             assert_eq!(
                 all_log_links,
                 vec![
@@ -471,7 +497,7 @@ mod tests {
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::default()
-                        .s3_build_log("A build log")
+                        .s3_build_log("A build log", true)
                         .db_build_log("Another build log"),
                 ])
                 .create()

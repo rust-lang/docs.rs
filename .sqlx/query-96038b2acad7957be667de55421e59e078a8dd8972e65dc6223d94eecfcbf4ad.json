@@ -20,7 +20,8 @@
               "Enum": [
                 "in_progress",
                 "success",
-                "failure"
+                "failure",
+                "partial_failure"
               ]
             }
           }
