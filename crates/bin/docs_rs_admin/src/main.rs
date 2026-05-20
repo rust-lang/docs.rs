@@ -365,6 +365,8 @@ enum DatabaseSubcommand {
         /// process at most this amount of releases
         #[arg(long)]
         limit: Option<u32>,
+        #[arg(long)]
+        download_concurrency: Option<usize>,
     },
 
     /// temporary command to update the `crates.latest_version_id` field
@@ -404,7 +406,10 @@ impl DatabaseSubcommand {
             }
             .context("Failed to run database migrations")?,
 
-            Self::Repackage { limit } => {
+            Self::Repackage {
+                limit,
+                download_concurrency,
+            } => {
                 let pool = ctx.pool()?;
                 let storage = ctx.storage()?;
                 let mut list_conn = pool.get_async().await?;
@@ -438,6 +443,7 @@ impl DatabaseSubcommand {
                         row.rid,
                         &row.name,
                         &row.version,
+                        download_concurrency.unwrap_or(8),
                     )
                     .await?;
                 }

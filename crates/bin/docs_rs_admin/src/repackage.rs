@@ -7,6 +7,7 @@ use sqlx::Acquire as _;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::io::AsyncWriteExt as _;
 use tokio::{fs, io};
 use tracing::{debug, info, info_span, instrument};
 
@@ -36,6 +37,7 @@ pub async fn repackage(
     rid: ReleaseId,
     name: &KrateName,
     version: &Version,
+    download_concurrency: usize,
 ) -> Result<()> {
     info!("repackaging");
 
@@ -49,14 +51,24 @@ pub async fn repackage(
 
     let mut algs: HashSet<CompressionAlgorithm> = HashSet::new();
 
-    if let Some((_rustdoc_file_list, alg)) =
-        repackage_path(storage, &rustdoc_prefix, &rustdoc_archive_path).await?
+    if let Some((_rustdoc_file_list, alg)) = repackage_path(
+        storage,
+        &rustdoc_prefix,
+        &rustdoc_archive_path,
+        download_concurrency,
+    )
+    .await?
     {
         algs.insert(alg);
     }
 
-    if let Some((_source_file_list, alg)) =
-        repackage_path(storage, &sources_prefix, &source_archive_path).await?
+    if let Some((_source_file_list, alg)) = repackage_path(
+        storage,
+        &sources_prefix,
+        &source_archive_path,
+        download_concurrency,
+    )
+    .await?
     {
         algs.insert(alg);
     };
@@ -112,9 +124,8 @@ async fn repackage_path(
     storage: &AsyncStorage,
     prefix: &str,
     target_archive: &str,
+    download_concurrency: usize,
 ) -> Result<Option<(Vec<FileEntry>, CompressionAlgorithm)>> {
-    const DOWNLOAD_CONCURRENCY: usize = 8;
-
     let _span = info_span!("repackage_path", %prefix, %target_archive).entered();
 
     info!("repackage path");
@@ -125,7 +136,7 @@ async fn repackage_path(
     storage
         .list_prefix(prefix)
         .await
-        .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, {
+        .try_for_each_concurrent(download_concurrency, {
             |entry| {
                 let tempdir_path = tempdir_path.clone();
                 let files = files.clone();
@@ -139,7 +150,7 @@ async fn repackage_path(
                     }
                     let mut output_file = fs::File::create(&target_path).await?;
                     io::copy(&mut stream.content, &mut output_file).await?;
-                    output_file.sync_all().await?;
+                    output_file.flush().await?;
 
                     files.fetch_add(1, Ordering::Relaxed);
                     Ok(())
@@ -263,7 +274,7 @@ mod tests {
         }
 
         let mut conn = env.async_conn().await?;
-        repackage(&mut conn, storage, rid, &KRATE, &V1).await?;
+        repackage(&mut conn, storage, rid, &KRATE, &V1, 1).await?;
 
         // afterwards it works with rustdoc archives.
         assert_eq!(
@@ -364,7 +375,7 @@ mod tests {
         }
 
         let mut conn = env.async_conn().await?;
-        repackage(&mut conn, storage, rid, &KRATE, &V1).await?;
+        repackage(&mut conn, storage, rid, &KRATE, &V1, 1).await?;
 
         // but source archive works
         assert_eq!(
@@ -453,7 +464,7 @@ mod tests {
         }
 
         let mut conn = env.async_conn().await?;
-        repackage(&mut conn, storage, rid, &KRATE, &V1).await?;
+        repackage(&mut conn, storage, rid, &KRATE, &V1, 1).await?;
 
         // afterwards it works with rustdoc archives.
         assert_eq!(
