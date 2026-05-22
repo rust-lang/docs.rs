@@ -1870,7 +1870,7 @@ mod tests {
 
         for idx in 0..1001 {
             let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
-            queue.add_crate(&name, &V1, 0, None).await?;
+            queue.add_crate(&name, &V1, 0).await?;
         }
 
         let page = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);

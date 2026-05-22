@@ -74,9 +74,7 @@ mod tests {
         let queue = env.build_queue()?.clone();
         for idx in 0..2 {
             let name = format!("queued-crate-{idx}").parse::<KrateName>()?;
-            queue
-                .add_crate(&name, &Version::parse("1.0.0")?, 0, None)
-                .await?;
+            queue.add_crate(&name, &Version::parse("1.0.0")?, 0).await?;
         }
 
         let mut conn = env.async_conn().await?;

@@ -127,7 +127,7 @@ mod tests {
 
         for idx in 0..2 {
             let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
-            queue.add_crate(&name, &V1, 0, None).await?;
+            queue.add_crate(&name, &V1, 0).await?;
         }
 
         let web = env.web_app().await;
