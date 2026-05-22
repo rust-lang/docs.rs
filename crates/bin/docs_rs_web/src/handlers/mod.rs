@@ -274,10 +274,7 @@ mod tests {
             .next()
             .expect("missing abnormalities placeholder");
 
-        assert_eq!(
-            placeholder.attributes.borrow().get("data-url"),
-            Some("/-/partial/abnormalities/")
-        );
+        assert_eq!(placeholder.attributes.borrow().get("class"), Some("hidden"));
         assert_eq!(page.select("a.pure-menu-link.error").unwrap().count(), 0);
         Ok(())
     }
