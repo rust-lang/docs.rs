@@ -5,7 +5,7 @@ use std::fmt;
 /// Identify a kind of change that occurred to a crate
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
-pub enum Change {
+pub enum ChangeV1 {
     /// A crate version was added.
     Added(CrateVersion),
     /// A crate version was unyanked.
@@ -18,11 +18,11 @@ pub enum Change {
     VersionDeleted(CrateVersion),
 }
 
-impl Change {
+impl ChangeV1 {
     /// Return the added crate, if this is this kind of change.
     pub fn added(&self) -> Option<&CrateVersion> {
         match self {
-            Change::Added(v) => Some(v),
+            ChangeV1::Added(v) => Some(v),
             _ => None,
         }
     }
@@ -30,7 +30,7 @@ impl Change {
     /// Return the yanked crate, if this is this kind of change.
     pub fn yanked(&self) -> Option<&CrateVersion> {
         match self {
-            Change::Yanked(v) => Some(v),
+            ChangeV1::Yanked(v) => Some(v),
             _ => None,
         }
     }
@@ -38,7 +38,7 @@ impl Change {
     /// Return the unyanked crate, if this is this kind of change.
     pub fn unyanked(&self) -> Option<&CrateVersion> {
         match self {
-            Change::Unyanked(v) => Some(v),
+            ChangeV1::Unyanked(v) => Some(v),
             _ => None,
         }
     }
@@ -46,7 +46,7 @@ impl Change {
     /// Return the deleted crate, if this is this kind of change.
     pub fn crate_deleted(&self) -> Option<&str> {
         match self {
-            Change::CrateDeleted { name, .. } => Some(name.as_str()),
+            ChangeV1::CrateDeleted { name, .. } => Some(name.as_str()),
             _ => None,
         }
     }
@@ -54,23 +54,23 @@ impl Change {
     /// Return the deleted version crate, if this is this kind of change.
     pub fn version_deleted(&self) -> Option<&CrateVersion> {
         match self {
-            Change::VersionDeleted(v) => Some(v),
+            ChangeV1::VersionDeleted(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl fmt::Display for Change {
+impl fmt::Display for ChangeV1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match *self {
-                Change::Added(_) => "added",
-                Change::Yanked(_) => "yanked",
-                Change::CrateDeleted { .. } => "crate deleted",
-                Change::VersionDeleted(_) => "version deleted",
-                Change::Unyanked(_) => "unyanked",
+                ChangeV1::Added(_) => "added",
+                ChangeV1::Yanked(_) => "yanked",
+                ChangeV1::CrateDeleted { .. } => "crate deleted",
+                ChangeV1::VersionDeleted(_) => "version deleted",
+                ChangeV1::Unyanked(_) => "unyanked",
             }
         )
     }
@@ -78,7 +78,7 @@ impl fmt::Display for Change {
 
 /// A conventional event envelope for crate index changes.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
-pub struct Event {
+pub struct Event<T> {
     /// Unique event identifier for deduplication and tracing.
     pub id: String,
     /// Timestamp when the underlying change occurred, as an RFC 3339 string.
@@ -89,8 +89,11 @@ pub struct Event {
     pub schema_version: u32,
     /// The typed change payload.
     #[serde(flatten)]
-    pub change: Change,
+    pub change: T,
 }
+
+/// The first version of the public event wire format.
+pub type EventV1 = Event<ChangeV1>;
 
 /// Pack all information we know about a change made to a version of a crate.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
@@ -117,8 +120,8 @@ mod tests {
         }
     }
 
-    fn event(change: Change) -> Event {
-        Event {
+    fn event(change: ChangeV1) -> EventV1 {
+        EventV1 {
             id: "evt_123".into(),
             occurred_at: "2026-05-22T12:34:56Z".into(),
             source: "crates-index".into(),
@@ -147,7 +150,7 @@ mod tests {
 
         let cases = [
             (
-                Change::Added(crate_version.clone()),
+                ChangeV1::Added(crate_version.clone()),
                 json!({
                     "type": "added",
                     "payload": {
@@ -158,7 +161,7 @@ mod tests {
                 }),
             ),
             (
-                Change::Unyanked(crate_version.clone()),
+                ChangeV1::Unyanked(crate_version.clone()),
                 json!({
                     "type": "unyanked",
                     "payload": {
@@ -169,7 +172,7 @@ mod tests {
                 }),
             ),
             (
-                Change::Yanked(crate_version.clone()),
+                ChangeV1::Yanked(crate_version.clone()),
                 json!({
                     "type": "yanked",
                     "payload": {
@@ -180,7 +183,7 @@ mod tests {
                 }),
             ),
             (
-                Change::CrateDeleted {
+                ChangeV1::CrateDeleted {
                     name: "old-crate".into(),
                 },
                 json!({
@@ -191,7 +194,7 @@ mod tests {
                 }),
             ),
             (
-                Change::VersionDeleted(crate_version),
+                ChangeV1::VersionDeleted(crate_version),
                 json!({
                     "type": "version_deleted",
                     "payload": {
@@ -210,7 +213,7 @@ mod tests {
 
     #[test]
     fn event_serializes_with_minimum_metadata() {
-        let event = event(Change::CrateDeleted {
+        let event = event(ChangeV1::CrateDeleted {
             name: "old-crate".into(),
         });
 
