@@ -628,12 +628,12 @@ mod tests {
         let env = test_queue_with_config(config).await?;
         let queue = env.queue;
 
-        queue.add_crate(&FOO, &V1, 0, None).await?;
+        queue.add_crate(&FOO, &V1, 0).await?;
 
         assert!(!queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
         assert!(queue.gather_alerts().await?.is_empty());
 
-        queue.add_crate(&BAR, &V1, 0, None).await?;
+        queue.add_crate(&BAR, &V1, 0).await?;
 
         assert!(queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
         assert_eq!(
@@ -656,7 +656,7 @@ mod tests {
         let queue = env.queue;
 
         queue
-            .add_crate(&FOO, &V1, PRIORITY_MANUAL_FROM_CRATES_IO, None)
+            .add_crate(&FOO, &V1, PRIORITY_MANUAL_FROM_CRATES_IO)
             .await?;
 
         assert!(!queue.build_queue_is_too_long(queue.queued_crates().await?.iter()));
