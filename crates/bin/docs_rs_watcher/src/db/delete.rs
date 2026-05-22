@@ -170,14 +170,18 @@ async fn delete_version_from_database(
             format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)").as_str())
         .bind(crate_id).bind(version).execute(&mut *transaction).await?;
     }
-    let is_library: bool = sqlx::query_scalar!(
+    let Some(is_library) = sqlx::query_scalar!(
         "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
         crate_id.0,
         version as _,
     )
-    .fetch_one(&mut *transaction)
+    .fetch_optional(&mut *transaction)
     .await?
-    .unwrap_or(false);
+    else {
+        transaction.commit().await?;
+        return Ok(false);
+    };
+    let is_library = is_library.unwrap_or(false);
 
     sqlx::query!(
         "DELETE FROM queue WHERE name = $1 AND version = $2;",
@@ -686,6 +690,32 @@ mod tests {
         delete_version(&mut conn, env.storage()?, env.config(), &KRATE, &V1).await?;
 
         assert!(!crate_exists(&mut conn, &KRATE).await?);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_already_deleted_version_doesnt_error() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let mut conn = env.async_conn().await?;
+
+        env.fake_release()
+            .await
+            .name(&KRATE)
+            .version(V1)
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name(&KRATE)
+            .version(V2)
+            .create()
+            .await?;
+
+        delete_version(&mut conn, env.storage()?, env.config(), &KRATE, &V1).await?;
+        delete_version(&mut conn, env.storage()?, env.config(), &KRATE, &V1).await?;
+
+        assert!(crate_exists(&mut conn, &KRATE).await?);
 
         Ok(())
     }
