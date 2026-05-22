@@ -1,6 +1,7 @@
 #![allow(clippy::disallowed_types)]
 
 use std::fmt;
+use time::OffsetDateTime;
 
 /// Identify a kind of change that occurred to a crate
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
@@ -81,10 +82,9 @@ impl fmt::Display for ChangeV1 {
 pub struct Event<T> {
     /// Unique event identifier for deduplication and tracing.
     pub id: String,
-    /// Timestamp when the underlying change occurred, as an RFC 3339 string.
-    pub occurred_at: String,
-    /// System that emitted the event.
-    pub source: String,
+    /// Timestamp when the underlying change occurred.
+    #[serde(with = "time::serde::rfc3339")]
+    pub occurred_at: OffsetDateTime,
     /// Version of the serialized event schema.
     pub schema_version: u32,
     /// The typed change payload.
@@ -123,8 +123,11 @@ mod tests {
     fn event(change: ChangeV1) -> EventV1 {
         EventV1 {
             id: "evt_123".into(),
-            occurred_at: "2026-05-22T12:34:56Z".into(),
-            source: "crates-index".into(),
+            occurred_at: OffsetDateTime::parse(
+                "2026-05-22T12:34:56Z",
+                &time::format_description::well_known::Rfc3339,
+            )
+            .unwrap(),
             schema_version: 1,
             change,
         }
@@ -222,13 +225,35 @@ mod tests {
             json!({
                 "id": "evt_123",
                 "occurred_at": "2026-05-22T12:34:56Z",
-                "source": "crates-index",
                 "schema_version": 1,
                 "type": "crate_deleted",
                 "payload": {
                     "name": "old-crate"
                 }
             })
+        );
+    }
+
+    #[test]
+    fn event_deserializes_rfc3339_occurred_at() {
+        let event: EventV1 = serde_json::from_value(json!({
+            "id": "evt_123",
+            "occurred_at": "2026-05-22T12:34:56Z",
+            "schema_version": 1,
+            "type": "crate_deleted",
+            "payload": {
+                "name": "old-crate"
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            event.occurred_at,
+            OffsetDateTime::parse(
+                "2026-05-22T12:34:56Z",
+                &time::format_description::well_known::Rfc3339,
+            )
+            .unwrap()
         );
     }
 }
