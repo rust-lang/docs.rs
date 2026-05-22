@@ -2,12 +2,13 @@ use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{path::PathBuf, time::Duration};
+use url::Url;
 
 #[derive(Debug)]
 pub struct Config {
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
-    pub sqs_queue_url: Option<String>,
+    pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
 
     /// How long to wait between registry checks
