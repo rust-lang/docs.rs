@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 
+use chrono::{DateTime, Utc};
 use std::fmt;
-use time::OffsetDateTime;
 
 /// Identify a kind of change that occurred to a crate
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
@@ -83,8 +83,7 @@ pub struct Event<T> {
     /// Unique event identifier for deduplication and tracing.
     pub id: String,
     /// Timestamp when the underlying change occurred.
-    #[serde(with = "time::serde::rfc3339")]
-    pub occurred_at: OffsetDateTime,
+    pub occurred_at: DateTime<Utc>,
     /// Version of the serialized event schema.
     pub schema_version: u32,
     /// The typed change payload.
@@ -123,11 +122,9 @@ mod tests {
     fn event(change: ChangeV1) -> EventV1 {
         EventV1 {
             id: "evt_123".into(),
-            occurred_at: OffsetDateTime::parse(
-                "2026-05-22T12:34:56Z",
-                &time::format_description::well_known::Rfc3339,
-            )
-            .unwrap(),
+            occurred_at: DateTime::parse_from_rfc3339("2026-05-22T12:34:56Z")
+                .unwrap()
+                .with_timezone(&Utc),
             schema_version: 1,
             change,
         }
@@ -249,11 +246,9 @@ mod tests {
 
         assert_eq!(
             event.occurred_at,
-            OffsetDateTime::parse(
-                "2026-05-22T12:34:56Z",
-                &time::format_description::well_known::Rfc3339,
-            )
-            .unwrap()
+            DateTime::parse_from_rfc3339("2026-05-22T12:34:56Z")
+                .unwrap()
+                .with_timezone(&Utc)
         );
     }
 }
