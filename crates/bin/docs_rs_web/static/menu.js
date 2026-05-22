@@ -307,7 +307,7 @@
         if (ev.key === "y" && ev.target.tagName !== "INPUT") {
             const permalink = document.getElementById("permalink");
             if (document.location.hash !== "") {
-              permalink.href += document.location.hash;
+                permalink.href += document.location.hash;
             }
             history.replaceState({}, null, permalink.href);
         }
@@ -320,11 +320,13 @@
         }
 
         try {
-            const response = await fetch(abnormalities.dataset.url);
+            const response = await fetch("/-/partial/abnormalities/");
             abnormalities.innerHTML = await response.text();
+            abnormalities.classList.remove("hidden");
         } catch (ex) {
             console.error(`Failed to load abnormalities: ${ex}`);
             abnormalities.innerHTML = "";
         }
+
     })();
 })();
