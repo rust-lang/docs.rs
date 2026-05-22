@@ -76,6 +76,22 @@ impl fmt::Display for Change {
     }
 }
 
+/// A conventional event envelope for crate index changes.
+#[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
+pub struct Event {
+    /// Unique event identifier for deduplication and tracing.
+    pub id: String,
+    /// Timestamp when the underlying change occurred, as an RFC 3339 string.
+    pub occurred_at: String,
+    /// System that emitted the event.
+    pub source: String,
+    /// Version of the serialized event schema.
+    pub schema_version: u32,
+    /// The typed change payload.
+    #[serde(flatten)]
+    pub change: Change,
+}
+
 /// Pack all information we know about a change made to a version of a crate.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 pub struct CrateVersion {
@@ -98,6 +114,16 @@ mod tests {
             name: "clap".into(),
             yanked: false,
             version: semver::Version::new(4, 5, 0),
+        }
+    }
+
+    fn event(change: Change) -> Event {
+        Event {
+            id: "evt_123".into(),
+            occurred_at: "2026-05-22T12:34:56Z".into(),
+            source: "crates-index".into(),
+            schema_version: 1,
+            change,
         }
     }
 
@@ -180,5 +206,26 @@ mod tests {
         for (event, expected) in cases {
             assert_eq!(serde_json::to_value(&event).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn event_serializes_with_minimum_metadata() {
+        let event = event(Change::CrateDeleted {
+            name: "old-crate".into(),
+        });
+
+        assert_eq!(
+            serde_json::to_value(&event).unwrap(),
+            json!({
+                "id": "evt_123",
+                "occurred_at": "2026-05-22T12:34:56Z",
+                "source": "crates-index",
+                "schema_version": 1,
+                "type": "crate_deleted",
+                "payload": {
+                    "name": "old-crate"
+                }
+            })
+        );
     }
 }
