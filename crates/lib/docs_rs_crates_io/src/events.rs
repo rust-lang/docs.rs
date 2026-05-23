@@ -84,8 +84,6 @@ pub struct Event<T> {
     pub id: String,
     /// Timestamp when the underlying change occurred.
     pub occurred_at: DateTime<Utc>,
-    /// Version of the serialized event schema.
-    pub schema_version: u32,
     /// The typed change payload.
     #[serde(flatten)]
     pub change: T,
@@ -125,7 +123,6 @@ mod tests {
             occurred_at: DateTime::parse_from_rfc3339("2026-05-22T12:34:56Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            schema_version: 1,
             change,
         }
     }
@@ -222,7 +219,6 @@ mod tests {
             json!({
                 "id": "evt_123",
                 "occurred_at": "2026-05-22T12:34:56Z",
-                "schema_version": 1,
                 "type": "crate_deleted",
                 "payload": {
                     "name": "old-crate"
@@ -236,7 +232,6 @@ mod tests {
         let event: EventV1 = serde_json::from_value(json!({
             "id": "evt_123",
             "occurred_at": "2026-05-22T12:34:56Z",
-            "schema_version": 1,
             "type": "crate_deleted",
             "payload": {
                 "name": "old-crate"
