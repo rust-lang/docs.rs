@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use std::fmt;
 
-/// Identify a kind of change that occurred to a crate
+/// A change that can happen to a crate on our index.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum IndexChangeV1 {
@@ -17,48 +17,6 @@ pub enum IndexChangeV1 {
     CrateDeleted { name: String },
     /// A crate version was deleted.
     VersionDeleted(CrateVersion),
-}
-
-impl IndexChangeV1 {
-    /// Return the added crate, if this is this kind of change.
-    pub fn added(&self) -> Option<&CrateVersion> {
-        match self {
-            IndexChangeV1::Added(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Return the yanked crate, if this is this kind of change.
-    pub fn yanked(&self) -> Option<&CrateVersion> {
-        match self {
-            IndexChangeV1::Yanked(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Return the unyanked crate, if this is this kind of change.
-    pub fn unyanked(&self) -> Option<&CrateVersion> {
-        match self {
-            IndexChangeV1::Unyanked(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Return the deleted crate, if this is this kind of change.
-    pub fn crate_deleted(&self) -> Option<&str> {
-        match self {
-            IndexChangeV1::CrateDeleted { name, .. } => Some(name.as_str()),
-            _ => None,
-        }
-    }
-
-    /// Return the deleted version crate, if this is this kind of change.
-    pub fn version_deleted(&self) -> Option<&CrateVersion> {
-        match self {
-            IndexChangeV1::VersionDeleted(v) => Some(v),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Display for IndexChangeV1 {
