@@ -6,7 +6,7 @@ use std::fmt;
 /// Identify a kind of change that occurred to a crate
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
-pub enum ChangeV1 {
+pub enum IndexChangeV1 {
     /// A crate version was added.
     Added(CrateVersion),
     /// A crate version was unyanked.
@@ -19,11 +19,11 @@ pub enum ChangeV1 {
     VersionDeleted(CrateVersion),
 }
 
-impl ChangeV1 {
+impl IndexChangeV1 {
     /// Return the added crate, if this is this kind of change.
     pub fn added(&self) -> Option<&CrateVersion> {
         match self {
-            ChangeV1::Added(v) => Some(v),
+            IndexChangeV1::Added(v) => Some(v),
             _ => None,
         }
     }
@@ -31,7 +31,7 @@ impl ChangeV1 {
     /// Return the yanked crate, if this is this kind of change.
     pub fn yanked(&self) -> Option<&CrateVersion> {
         match self {
-            ChangeV1::Yanked(v) => Some(v),
+            IndexChangeV1::Yanked(v) => Some(v),
             _ => None,
         }
     }
@@ -39,7 +39,7 @@ impl ChangeV1 {
     /// Return the unyanked crate, if this is this kind of change.
     pub fn unyanked(&self) -> Option<&CrateVersion> {
         match self {
-            ChangeV1::Unyanked(v) => Some(v),
+            IndexChangeV1::Unyanked(v) => Some(v),
             _ => None,
         }
     }
@@ -47,7 +47,7 @@ impl ChangeV1 {
     /// Return the deleted crate, if this is this kind of change.
     pub fn crate_deleted(&self) -> Option<&str> {
         match self {
-            ChangeV1::CrateDeleted { name, .. } => Some(name.as_str()),
+            IndexChangeV1::CrateDeleted { name, .. } => Some(name.as_str()),
             _ => None,
         }
     }
@@ -55,42 +55,42 @@ impl ChangeV1 {
     /// Return the deleted version crate, if this is this kind of change.
     pub fn version_deleted(&self) -> Option<&CrateVersion> {
         match self {
-            ChangeV1::VersionDeleted(v) => Some(v),
+            IndexChangeV1::VersionDeleted(v) => Some(v),
             _ => None,
         }
     }
 }
 
-impl fmt::Display for ChangeV1 {
+impl fmt::Display for IndexChangeV1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match *self {
-                ChangeV1::Added(_) => "added",
-                ChangeV1::Yanked(_) => "yanked",
-                ChangeV1::CrateDeleted { .. } => "crate deleted",
-                ChangeV1::VersionDeleted(_) => "version deleted",
-                ChangeV1::Unyanked(_) => "unyanked",
+                IndexChangeV1::Added(_) => "added",
+                IndexChangeV1::Yanked(_) => "yanked",
+                IndexChangeV1::CrateDeleted { .. } => "crate deleted",
+                IndexChangeV1::VersionDeleted(_) => "version deleted",
+                IndexChangeV1::Unyanked(_) => "unyanked",
             }
         )
     }
 }
 
-/// A conventional event envelope for crate index changes.
+/// A conventional event envelope for our events between crates.io & docs.rs
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 pub struct Event<T> {
     /// Unique event identifier for deduplication and tracing.
     pub id: String,
-    /// Timestamp when the underlying change occurred.
+    /// Timestamp when the event occured
     pub occurred_at: DateTime<Utc>,
-    /// The typed change payload.
+    /// The typed payload.
     #[serde(flatten)]
     pub change: T,
 }
 
 /// The first version of the public event wire format.
-pub type EventV1 = Event<ChangeV1>;
+pub type IndexChangeEventV1 = Event<IndexChangeV1>;
 
 /// Pack all information we know about a change made to a version of a crate.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
@@ -117,8 +117,8 @@ mod tests {
         }
     }
 
-    fn event(change: ChangeV1) -> EventV1 {
-        EventV1 {
+    fn event(change: IndexChangeV1) -> IndexChangeEventV1 {
+        IndexChangeEventV1 {
             id: "evt_123".into(),
             occurred_at: DateTime::parse_from_rfc3339("2026-05-22T12:34:56Z")
                 .unwrap()
@@ -147,7 +147,7 @@ mod tests {
 
         let cases = [
             (
-                ChangeV1::Added(crate_version.clone()),
+                IndexChangeV1::Added(crate_version.clone()),
                 json!({
                     "type": "added",
                     "payload": {
@@ -158,7 +158,7 @@ mod tests {
                 }),
             ),
             (
-                ChangeV1::Unyanked(crate_version.clone()),
+                IndexChangeV1::Unyanked(crate_version.clone()),
                 json!({
                     "type": "unyanked",
                     "payload": {
@@ -169,7 +169,7 @@ mod tests {
                 }),
             ),
             (
-                ChangeV1::Yanked(crate_version.clone()),
+                IndexChangeV1::Yanked(crate_version.clone()),
                 json!({
                     "type": "yanked",
                     "payload": {
@@ -180,7 +180,7 @@ mod tests {
                 }),
             ),
             (
-                ChangeV1::CrateDeleted {
+                IndexChangeV1::CrateDeleted {
                     name: "old-crate".into(),
                 },
                 json!({
@@ -191,7 +191,7 @@ mod tests {
                 }),
             ),
             (
-                ChangeV1::VersionDeleted(crate_version),
+                IndexChangeV1::VersionDeleted(crate_version),
                 json!({
                     "type": "version_deleted",
                     "payload": {
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn event_serializes_with_minimum_metadata() {
-        let event = event(ChangeV1::CrateDeleted {
+        let event = event(IndexChangeV1::CrateDeleted {
             name: "old-crate".into(),
         });
 
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn event_deserializes_rfc3339_occurred_at() {
-        let event: EventV1 = serde_json::from_value(json!({
+        let event: IndexChangeEventV1 = serde_json::from_value(json!({
             "id": "evt_123",
             "occurred_at": "2026-05-22T12:34:56Z",
             "type": "crate_deleted",
