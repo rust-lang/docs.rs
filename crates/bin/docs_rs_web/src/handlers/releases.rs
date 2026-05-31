@@ -266,7 +266,7 @@ async fn get_search_results(
         }
         Some(format!("?{}", serializer.finish()))
     } else {
-        None
+        meta.prev_page
     };
 
     let next_page = meta.next_page.map(|np| {
@@ -1266,7 +1266,7 @@ mod tests {
             other_search_links[1],
             format!(
                 "/releases/search?paginate={}",
-                b64.encode("?some=parameters&that=cratesio&might=return")
+                b64.encode("?some=parameters&that=cratesio&might=return&page=2")
             )
         );
 
