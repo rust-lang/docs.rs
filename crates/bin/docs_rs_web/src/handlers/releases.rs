@@ -245,9 +245,33 @@ async fn get_search_results(
         }
     }));
 
+    let page: i64 = form_urlencoded::parse(query_params.as_bytes())
+        .find_map(|(k, v)| {
+            if k == "page" {
+                v.parse().ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or(1);
+
+    let prev_page = if page > 1 {
+        let mut serializer = form_urlencoded::Serializer::new(String::new());
+        for (k, v) in form_urlencoded::parse(query_params.as_bytes()) {
+            if k == "page" {
+                serializer.append_pair("page", &(page - 1).to_string());
+            } else {
+                serializer.append_pair(&k, &v);
+            }
+        }
+        Some(format!("?{}", serializer.finish()))
+    } else {
+        None
+    };
+
     Ok(SearchResult {
         results,
-        prev_page: meta.prev_page,
+        prev_page,
         next_page: meta.next_page,
     })
 }
@@ -614,6 +638,7 @@ pub(crate) async fn search_handler(
             .append_pair("q", &query)
             .append_pair("sort", &sort_by)
             .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
+            .append_pair("page", "1")
             .finish();
 
         get_search_results(&mut conn, &registry, &query_params, &query).await
