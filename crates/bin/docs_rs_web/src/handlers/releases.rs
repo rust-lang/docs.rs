@@ -269,10 +269,29 @@ async fn get_search_results(
         None
     };
 
+    let next_page = meta.next_page.map(|np| {
+        // crates.io pagination links may not include the page number.
+        // Ensure page is preserved so prev_page works on subsequent pages.
+        let mut serializer = form_urlencoded::Serializer::new(String::new());
+        let mut page_injected = false;
+        for (k, v) in form_urlencoded::parse(np.as_bytes()) {
+            if k == "page" {
+                serializer.append_pair("page", &(page + 1).to_string());
+                page_injected = true;
+            } else {
+                serializer.append_pair(&k, &v);
+            }
+        }
+        if !page_injected {
+            serializer.append_pair("page", &(page + 1).to_string());
+        }
+        format!("?{}", serializer.finish())
+    });
+
     Ok(SearchResult {
         results,
         prev_page,
-        next_page: meta.next_page,
+        next_page,
     })
 }
 
