@@ -1,5 +1,5 @@
 use crate::{
-    Config, MIB,
+    Config,
     backends::StorageBackendMethods,
     blob::{StreamUpload, StreamUploadSource, StreamingBlob},
     crc32_for_path,
@@ -47,11 +47,11 @@ static NOT_FOUND_ERROR_CODES: [&str; 5] = [
     "XMinioInvalidObjectName",
 ];
 
-const S3_UPLOAD_BUFFER_SIZE: usize = MIB as usize;
+const S3_UPLOAD_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 // AWS recommends multipart uploads for > 100 MiB.
 // normal uploads only work up to 5 GiB.
-const S3_MULTIPART_UPLOAD_THRESHOLD: u64 = 100 * MIB;
-const S3_MULTIPART_PART_SIZE: u64 = 100 * MIB;
+const S3_MULTIPART_UPLOAD_THRESHOLD: u64 = 100 * 1024 * 1024; // 100 MiB
+const S3_MULTIPART_PART_SIZE: u64 = S3_MULTIPART_UPLOAD_THRESHOLD; // 100 MiB
 
 trait S3ResultExt<T> {
     fn convert_errors(self) -> anyhow::Result<T>;
