@@ -51,23 +51,23 @@ pub async fn repackage(
 
     let mut algs: HashSet<CompressionAlgorithm> = HashSet::new();
 
-    if let Some((_rustdoc_file_list, alg)) = repackage_path(
+    if let Some((_rustdoc_file_list, alg)) = Box::pin(repackage_path(
         storage,
         &rustdoc_prefix,
         &rustdoc_archive_path,
         download_concurrency,
-    )
+    ))
     .await?
     {
         algs.insert(alg);
     }
 
-    if let Some((_source_file_list, alg)) = repackage_path(
+    if let Some((_source_file_list, alg)) = Box::pin(repackage_path(
         storage,
         &sources_prefix,
         &source_archive_path,
         download_concurrency,
-    )
+    ))
     .await?
     {
         algs.insert(alg);

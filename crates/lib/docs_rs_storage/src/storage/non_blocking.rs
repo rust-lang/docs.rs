@@ -994,6 +994,41 @@ mod backend_tests {
         Ok(())
     }
 
+    async fn test_s3_large_file_upload_uses_multipart(storage: &AsyncStorage) -> Result<()> {
+        if matches!(storage.config.storage_backend, StorageKind::Memory) {
+            return Ok(());
+        }
+
+        const MULTIPART_UPLOAD_SIZE: usize = 100 * 1024 * 1024 + 10;
+        const REMOTE_PATH: &str = "multipart-upload-test.bin";
+
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-multipart-upload-test")
+            .tempdir()?;
+        let local_path = dir.path().join("large.bin");
+        let content = (0..MULTIPART_UPLOAD_SIZE)
+            .map(|i| (i % 251) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&local_path, &content).await?;
+
+        storage
+            .backend
+            .upload_stream(StreamUpload {
+                path: REMOTE_PATH.into(),
+                mime: mime::APPLICATION_OCTET_STREAM,
+                source: StreamUploadSource::File(local_path),
+                compression: None,
+            })
+            .await?;
+
+        assert!(storage.exists(REMOTE_PATH).await?);
+        let stored = storage.get(REMOTE_PATH, usize::MAX).await?;
+        assert_eq!(stored.content, content);
+        storage.delete_prefix(REMOTE_PATH).await?;
+
+        Ok(())
+    }
+
     async fn test_delete_prefix_without_matches(storage: &AsyncStorage) -> Result<()> {
         storage.delete_prefix("prefix_without_objects").await
     }
@@ -1132,6 +1167,7 @@ mod backend_tests {
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
+            test_s3_large_file_upload_uses_multipart,
         }
 
         tests_with_metrics {
