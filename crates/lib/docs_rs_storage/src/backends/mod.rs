@@ -5,6 +5,7 @@ pub(crate) mod s3;
 use crate::{StreamingBlob, blob::StreamUpload, types::FileRange};
 use anyhow::Result;
 use futures_util::stream::BoxStream;
+use tracing::instrument;
 
 pub(crate) trait StorageBackendMethods {
     async fn exists(&self, path: &str) -> Result<bool>;
@@ -35,10 +36,26 @@ impl StorageBackendMethods for StorageBackend {
         call_inner!(self, exists(path))
     }
 
+    #[instrument(
+          skip_all,
+          fields(
+                // fields are populated in StorageMetrics::record_download_metrics
+                storage.download_type = tracing::field::Empty,
+                storage.content_length = tracing::field::Empty
+          )
+    )]
     async fn get_stream(&self, path: &str, range: Option<FileRange>) -> Result<StreamingBlob> {
         call_inner!(self, get_stream(path, range))
     }
 
+    #[instrument(
+          skip_all,
+          fields(
+                // fields are populated in StorageMetrics::record_upload_metrics
+                storage.upload_type = tracing::field::Empty,
+                storage.content_length = tracing::field::Empty
+          )
+    )]
     async fn upload_stream(&self, upload: StreamUpload) -> Result<()> {
         call_inner!(self, upload_stream(upload))
     }
