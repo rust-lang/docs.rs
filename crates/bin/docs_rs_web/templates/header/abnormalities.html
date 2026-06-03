@@ -1,0 +1,7 @@
+{%- if abnormalities.len() >= 1 -%}
+    <li class="pure-menu-item">
+        <a href="/-/status/" class="pure-menu-link warn">
+            {{- crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
+        </a>
+    </li>
+{% endif %}

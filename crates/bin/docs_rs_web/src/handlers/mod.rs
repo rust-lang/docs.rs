@@ -2,6 +2,7 @@
 
 pub(crate) mod about;
 pub(crate) mod build_details;
+pub(crate) mod build_status;
 pub(crate) mod builds;
 pub(crate) mod crate_details;
 pub(crate) mod features;
@@ -75,7 +76,6 @@ async fn apply_middleware(
     template_data: Option<Arc<TemplateData>>,
 ) -> Result<AxumRouter> {
     let has_templates = template_data.is_some();
-
     let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
 
     Ok(router.layer(
@@ -260,6 +260,23 @@ mod tests {
             assert!(web.get("/").await?.status().is_success());
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_abnormalities_placeholder_is_rendered() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(web.assert_success("/").await?.text().await?);
+        let placeholder = page
+            .select("#abnormalities")
+            .unwrap()
+            .next()
+            .expect("missing abnormalities placeholder");
+
+        assert_eq!(placeholder.attributes.borrow().get("class"), Some("hidden"));
+        assert_eq!(page.select("a.pure-menu-link.error").unwrap().count(), 0);
+        Ok(())
     }
 
     #[test]
