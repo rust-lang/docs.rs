@@ -25,3 +25,7 @@ pub use utils::{
     file_list::get_file_list,
     storage_path::{rustdoc_archive_path, rustdoc_json_path, source_archive_path},
 };
+
+pub(crate) const KIB: u64 = 1024;
+pub(crate) const MIB: u64 = 1024 * KIB;
+pub(crate) const GIB: u64 = 1024 * MIB;

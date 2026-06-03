@@ -118,7 +118,7 @@ impl AppConfig for Config {
             max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
             #[cfg(any(test, feature = "testing"))]
             s3_bucket_is_temporary: false,
-            network_parallelism: env("DOCSRS_NETWORK_PARALLELISM", 8usize.min(cores))?,
+            network_parallelism: env("DOCSRS_NETWORK_PARALLELISM", 8usize.min(cores))?.max(1),
         })
     }
 
