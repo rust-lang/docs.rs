@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "rustc_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "docsrs_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
       },
       {
         "ordinal": 2,
@@ -28,17 +40,35 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "build_status"
+          }
         }
       },
       {
         "ordinal": 3,
         "name": "error_kind",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "error_kind"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "errors",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "errors"
+          }
+        }
       }
     ],
     "parameters": {

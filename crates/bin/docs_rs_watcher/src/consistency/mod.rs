@@ -158,12 +158,12 @@ mod tests {
     };
     use sqlx::Row as _;
 
-    async fn count(env: &TestEnvironment, sql: &str) -> Result<i64> {
+    async fn count(env: &TestEnvironment, sql: &'static str) -> Result<i64> {
         let mut conn = env.async_conn().await?;
         Ok(sqlx::query_scalar(sql).fetch_one(&mut *conn).await?)
     }
 
-    async fn single_row<O>(env: &TestEnvironment, sql: &str) -> Result<Vec<O>>
+    async fn single_row<O>(env: &TestEnvironment, sql: &'static str) -> Result<Vec<O>>
     where
         O: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
     {

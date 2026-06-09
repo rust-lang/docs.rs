@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "rustc_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "docsrs_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
       },
       {
         "ordinal": 2,
@@ -28,32 +40,68 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "build_status"
+          }
         }
       },
       {
         "ordinal": 3,
         "name": "documentation_size",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "documentation_size"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "memory_peak",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "memory_peak"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "errors",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "errors"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "error_kind",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "error_kind"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "rustc_nightly_date",
-        "type_info": "Date"
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_nightly_date"
+          }
+        }
       }
     ],
     "parameters": {

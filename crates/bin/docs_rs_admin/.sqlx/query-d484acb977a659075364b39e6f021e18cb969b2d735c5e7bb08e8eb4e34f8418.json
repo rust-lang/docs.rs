@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "crate_name: KrateName",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "blacklisted_crates",
+            "name": "crate_name"
+          }
+        }
       }
     ],
     "parameters": {
