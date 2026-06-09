@@ -139,6 +139,11 @@ pub fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T
     unreachable!()
 }
 
+pub fn retry_backoff(failed_attempt: u32) -> Duration {
+    let sleep_for = 2u32.pow(failed_attempt.max(1));
+    Duration::from_secs(sleep_for as u64)
+}
+
 pub async fn retry_async<T, E, Fut, F: FnMut() -> Fut>(mut f: F, max_attempts: u32) -> Result<T, E>
 where
     Fut: Future<Output = Result<T, E>>,
@@ -151,12 +156,14 @@ where
                 if attempt > max_attempts {
                     return Err(err);
                 } else {
-                    let sleep_for = 2u32.pow(attempt);
+                    let backoff = retry_backoff(attempt);
                     warn!(
                         "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt, sleep_for, err
+                        attempt,
+                        backoff.as_secs(),
+                        err
                     );
-                    tokio::time::sleep(Duration::from_secs(sleep_for as u64)).await;
+                    tokio::time::sleep(backoff).await;
                 }
             }
         }
