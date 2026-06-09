@@ -4,7 +4,7 @@ use sqlx::migrate::{Migrate, Migrator};
 pub static MIGRATOR: Migrator = sqlx::migrate!(); // defaults to "./migrations"
 
 pub async fn migrate(conn: &mut sqlx::PgConnection, target: Option<i64>) -> Result<()> {
-    conn.ensure_migrations_table().await?;
+    conn.ensure_migrations_table(&MIGRATOR.table_name).await?;
 
     // `database_versions` is the table that tracked the old `schemamama` migrations.
     // If we find the table, and it contains records, we insert a fake record

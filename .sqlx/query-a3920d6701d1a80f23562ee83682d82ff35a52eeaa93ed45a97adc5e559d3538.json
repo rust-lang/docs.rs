@@ -6,22 +6,46 @@
       {
         "ordinal": 0,
         "name": "crate_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "crate_name"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "max_memory_bytes",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "max_memory_bytes"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "timeout_seconds",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "timeout_seconds"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "max_targets",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "max_targets"
+          }
+        }
       }
     ],
     "parameters": {

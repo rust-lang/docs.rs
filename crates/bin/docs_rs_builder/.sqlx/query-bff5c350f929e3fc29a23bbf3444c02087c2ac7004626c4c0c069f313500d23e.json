@@ -6,67 +6,135 @@
       {
         "ordinal": 0,
         "name": "rustdoc_status",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "rustdoc_status"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "default_target",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "default_target"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "doc_targets",
-        "type_info": "Json"
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "doc_targets"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "archive_storage",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "archive_storage"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "source_size!",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "source_size"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "total_items",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "total_items"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "build_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "build_status",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 8,
         "name": "docsrs_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "rustc_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "documentation_size",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "documentation_size"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "memory_peak",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "memory_peak"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "logs: Vec<(String, bool)>",
-        "type_info": "RecordArray"
+        "type_info": "RecordArray",
+        "origin": "Expression"
       }
     ],
     "parameters": {

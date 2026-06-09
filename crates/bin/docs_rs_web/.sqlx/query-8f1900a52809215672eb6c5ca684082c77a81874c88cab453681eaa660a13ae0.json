@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "pattern",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "crate_priorities",
+            "name": "pattern"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "priority",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "crate_priorities",
+            "name": "priority"
+          }
+        }
       }
     ],
     "parameters": {

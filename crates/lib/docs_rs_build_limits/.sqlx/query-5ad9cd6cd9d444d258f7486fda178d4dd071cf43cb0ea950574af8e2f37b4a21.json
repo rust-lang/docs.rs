@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "value",
-        "type_info": "Json"
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "config",
+            "name": "value"
+          }
+        }
       }
     ],
     "parameters": {

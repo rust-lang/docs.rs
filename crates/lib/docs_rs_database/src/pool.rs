@@ -1,7 +1,7 @@
 use crate::{Config, errors::PoolError, metrics::PoolMetrics};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{future::BoxFuture, stream::BoxStream};
-use sqlx::{Executor, postgres::PgPoolOptions};
+use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -67,9 +67,9 @@ impl Pool {
                         let schema = schema.clone();
 
                         async move {
-                            conn.execute(
-                                format!("SET search_path TO {schema}, {DEFAULT_SCHEMA};").as_str(),
-                            )
+                            conn.execute(AssertSqlSafe(format!(
+                                "SET search_path TO {schema}, {DEFAULT_SCHEMA};"
+                            )))
                             .await?;
 
                             Ok(())
@@ -105,10 +105,10 @@ impl Pool {
 }
 
 /// This impl allows us to use our own pool as an executor for SQLx queries.
-impl sqlx::Executor<'_> for &'_ Pool
+impl<'c> sqlx::Executor<'c> for &'c Pool
 where
-    for<'c> &'c mut <sqlx::Postgres as sqlx::Database>::Connection:
-        sqlx::Executor<'c, Database = sqlx::Postgres>,
+    for<'conn> &'conn mut <sqlx::Postgres as sqlx::Database>::Connection:
+        sqlx::Executor<'conn, Database = sqlx::Postgres>,
 {
     type Database = sqlx::Postgres;
 
@@ -126,6 +126,7 @@ where
         >,
     >
     where
+        'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_many(query)
@@ -136,23 +137,30 @@ where
         query: E,
     ) -> BoxFuture<'e, Result<Option<<sqlx::Postgres as sqlx::Database>::Row>, sqlx::Error>>
     where
+        'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_optional(query)
     }
 
-    fn prepare_with<'e, 'q: 'e>(
+    fn prepare_with<'e>(
         self,
-        sql: &'q str,
+        sql: SqlStr,
         parameters: &'e [<Self::Database as sqlx::Database>::TypeInfo],
-    ) -> BoxFuture<'e, Result<<Self::Database as sqlx::Database>::Statement<'q>, sqlx::Error>> {
+    ) -> BoxFuture<'e, Result<<Self::Database as sqlx::Database>::Statement, sqlx::Error>>
+    where
+        'c: 'e,
+    {
         self.async_pool.prepare_with(sql, parameters)
     }
 
-    fn describe<'e, 'q: 'e>(
+    fn describe<'e>(
         self,
-        sql: &'q str,
-    ) -> BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>> {
+        sql: SqlStr,
+    ) -> BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>>
+    where
+        'c: 'e,
+    {
         self.async_pool.describe(sql)
     }
 }

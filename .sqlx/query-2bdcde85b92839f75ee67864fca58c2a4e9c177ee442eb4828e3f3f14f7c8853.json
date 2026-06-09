@@ -6,17 +6,30 @@
       {
         "ordinal": 0,
         "name": "name: KrateName",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "version: Version",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "version"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "last_build_attempt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       }
     ],
     "parameters": {

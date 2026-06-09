@@ -166,8 +166,8 @@ async fn delete_version_from_database(
     .await?;
 
     for &(table, column) in METADATA {
-        sqlx::query(
-            format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)").as_str())
+        sqlx::query(sqlx::AssertSqlSafe(
+            format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)")))
         .bind(crate_id).bind(version).execute(&mut *transaction).await?;
     }
     let is_library: bool = sqlx::query_scalar!(
@@ -234,11 +234,12 @@ async fn delete_crate_from_database(
     .await?;
 
     for &(table, column) in METADATA {
-        sqlx::query(
-            format!(
-                "DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1)"
-            )
-            .as_str()).bind(crate_id).execute(&mut *transaction).await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1)"
+        )))
+        .bind(crate_id)
+        .execute(&mut *transaction)
+        .await?;
     }
     sqlx::query!("DELETE FROM owner_rels WHERE cid = $1;", crate_id as _)
         .execute(&mut *transaction)
