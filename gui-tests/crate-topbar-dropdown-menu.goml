@@ -1,0 +1,38 @@
+// Checks that the same padding is applied to the items of the "crate" dropdown menu
+// from the topbar.
+
+define-function: (
+    "check-padding",
+    [width],
+    block {
+        set-window-size: (|width|, 800)
+        // They should all have the same padding.
+        store-css: (|crate_main_info_items| + "> *", {"padding": padding})
+        assert-css: (
+            |crate_main_info_items| + "> *",
+            {"padding": |padding|},
+	    ALL,
+        )
+    },
+)
+
+go-to: |DOC_PATH| + "/sysinfo"
+
+store-value: (active_crate_dropdown_selector, "#nav-search-form .crate-dropdown.pure-menu-active")
+
+// The dropdown should not be "open" for now.
+assert-false: |active_crate_dropdown_selector|
+// We open it.
+click: "#nav-search-form .crate-dropdown"
+// This time it should be open.
+wait-for: |active_crate_dropdown_selector|
+
+store-value: (crate_main_info_items, ".package-details-menu > ul > .pure-menu-item")
+// There should be 3 items.
+assert-count: (|crate_main_info_items|, 3)
+
+// Now we check the paddings with various widths.
+call-function: ("check-padding", {"width": 900})
+call-function: ("check-padding", {"width": 730})
+call-function: ("check-padding", {"width": 690})
+call-function: ("check-padding", {"width": 510})
