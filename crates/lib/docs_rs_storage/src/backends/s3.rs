@@ -589,10 +589,10 @@ impl S3Backend {
             }
 
             let mut retry_keys = Vec::with_capacity(errs.len());
-            for err in errs {
-                let key = err.key;
-                let code = err.code;
-                let message = err.message;
+            for aws_sdk_s3::types::Error {
+                key, code, message, ..
+            } in errs
+            {
                 let retryable = code
                     .as_deref()
                     .is_some_and(|c| RETRYABLE_DELETE_OBJECT_ERROR_CODES.contains(&c));
