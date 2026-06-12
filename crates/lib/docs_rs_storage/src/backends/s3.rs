@@ -4,7 +4,7 @@ use crate::{
     blob::{StreamUpload, StreamUploadSource, StreamingBlob},
     crc32_for_path,
     errors::PathNotFoundError,
-    metrics::StorageMetrics,
+    metrics::{StorageMetrics, UploadType},
     types::FileRange,
     utils::crc32::crc32_for_path_range,
 };
@@ -200,7 +200,8 @@ impl S3Backend {
 
         request.send().await?;
 
-        self.otel_metrics.uploaded_files.add(1, &[]);
+        self.otel_metrics
+            .record_upload_metrics(content_length, UploadType::Single);
 
         Ok(())
     }
@@ -256,7 +257,8 @@ impl S3Backend {
 
         match result {
             Ok(()) => {
-                self.otel_metrics.uploaded_files.add(1, &[]);
+                self.otel_metrics
+                    .record_upload_metrics(content_length, UploadType::MultiPart);
                 Ok(())
             }
             Err(err) => {
@@ -358,6 +360,8 @@ impl S3Backend {
 
 impl StorageBackendMethods for S3Backend {
     async fn exists(&self, path: &str) -> Result<bool, Error> {
+        self.otel_metrics.exist_calls.add(1, &[]);
+
         match self
             .client
             .head_object()
@@ -404,7 +408,7 @@ impl StorageBackendMethods for S3Backend {
         let etag = if let Some(s3_etag) = res.e_tag
             && !s3_etag.is_empty()
         {
-            if let Some(range) = range {
+            if let Some(range) = &range {
                 // we can generate a unique etag for a range of the remote object too,
                 // by just concatenating the original etag with the range start and end.
                 //
@@ -436,6 +440,17 @@ impl StorageBackendMethods for S3Backend {
             None
         };
 
+        let content_length: usize = res
+            .content_length
+            .and_then(|length| length.try_into().ok())
+            .unwrap_or(0);
+
+        // NOTE: we record the download, even though we don't know if the caller
+        // actually consumes the stream.
+        // For the current usage, that's fine.
+        self.otel_metrics
+            .record_download_metrics(content_length as u64, range.as_ref());
+
         Ok(StreamingBlob {
             path: path.into(),
             mime: res
@@ -446,10 +461,7 @@ impl StorageBackendMethods for S3Backend {
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated,
             etag,
-            content_length: res
-                .content_length
-                .and_then(|length| length.try_into().ok())
-                .unwrap_or(0),
+            content_length,
             content: Box::new(res.body.into_async_read()),
             compression,
         })
@@ -544,6 +556,8 @@ impl StorageBackendMethods for S3Backend {
         while let Some(batch) = chunks.next().await {
             let batch: Vec<_> = batch.into_iter().collect::<anyhow::Result<_>>()?;
 
+            let batch_size = batch.len() as u64;
+
             let to_delete = Delete::builder()
                 .set_objects(Some(
                     batch
@@ -563,12 +577,21 @@ impl StorageBackendMethods for S3Backend {
                 .await?;
 
             if let Some(errs) = resp.errors {
+                let successful_deletes = batch_size - errs.len() as u64;
+                if successful_deletes > 0 {
+                    // we can have partial success, where some of the objects were deleted,
+                    // and some not.
+                    self.otel_metrics.deleted_files.add(successful_deletes, &[]);
+                }
+
                 for err in &errs {
                     error!("error deleting file from s3: {:?}", err);
                 }
 
                 anyhow::bail!("deleting from s3 failed");
             }
+
+            self.otel_metrics.deleted_files.add(batch_size, &[]);
         }
         Ok(())
     }

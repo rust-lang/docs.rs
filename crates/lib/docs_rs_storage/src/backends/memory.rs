@@ -3,7 +3,7 @@ use crate::{
     backends::StorageBackendMethods,
     blob::{StreamUpload, StreamUploadSource, StreamingBlob},
     errors::PathNotFoundError,
-    metrics::StorageMetrics,
+    metrics::{StorageMetrics, UploadType},
     types::FileRange,
 };
 use anyhow::{Result, anyhow};
@@ -30,6 +30,7 @@ impl MemoryBackend {
 
 impl StorageBackendMethods for MemoryBackend {
     async fn exists(&self, path: &str) -> Result<bool> {
+        self.otel_metrics.exist_calls.add(1, &[]);
         Ok(self.objects.contains_key(path))
     }
 
@@ -37,7 +38,7 @@ impl StorageBackendMethods for MemoryBackend {
         let mut blob = self.objects.get(path).ok_or(PathNotFoundError)?.clone();
         debug_assert!(blob.etag.is_some());
 
-        if let Some(r) = range {
+        if let Some(r) = &range {
             blob.content = blob
                 .content
                 .get(*r.start() as usize..=*r.end() as usize)
@@ -45,6 +46,10 @@ impl StorageBackendMethods for MemoryBackend {
                 .to_vec();
             blob.etag = Some(compute_etag(&blob.content));
         }
+
+        self.otel_metrics
+            .record_download_metrics(blob.content.len() as u64, range.as_ref());
+
         Ok(blob.into())
     }
 
@@ -60,6 +65,7 @@ impl StorageBackendMethods for MemoryBackend {
             StreamUploadSource::Bytes(content) => content.to_vec(),
             StreamUploadSource::File(path) => fs::read(&path).await?,
         };
+        let content_len = content.len();
 
         let blob = Blob {
             path,
@@ -70,7 +76,9 @@ impl StorageBackendMethods for MemoryBackend {
             compression,
         };
 
-        self.otel_metrics.uploaded_files.add(1, &[]);
+        self.otel_metrics
+            .record_upload_metrics(content_len as u64, UploadType::Single);
+
         self.objects.insert(blob.path.clone(), blob);
         Ok(())
     }
@@ -93,7 +101,14 @@ impl StorageBackendMethods for MemoryBackend {
     }
 
     async fn delete_prefix(&self, prefix: &str) -> Result<()> {
+        let object_count = self.objects.len();
+
         self.objects.retain(|key, _| !key.starts_with(prefix));
+
+        self.otel_metrics
+            .deleted_files
+            .add((object_count - self.objects.len()) as u64, &[]);
+
         Ok(())
     }
 }

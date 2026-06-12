@@ -1,6 +1,6 @@
 use crate::{
     PathNotFoundError, blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry,
-    types::FileRange, utils::file_list::walk_dir_recursive,
+    metrics::FILE_SIZE_HISTOGRAM_BUCKETS, types::FileRange, utils::file_list::walk_dir_recursive,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
@@ -68,28 +68,6 @@ impl Metrics {
     fn new(meter_provider: &AnyMeterProvider) -> Self {
         let meter = meter_provider.meter("storage");
         const PREFIX: &str = "docsrs.storage.archive_index_cache";
-        const KIB: f64 = 1024.0;
-        const MIB: f64 = 1024.0 * KIB;
-        const GIB: f64 = 1024.0 * MIB;
-
-        let entry_size_boundaries = vec![
-            500.0 * KIB,
-            1.0 * MIB,
-            2.0 * MIB,
-            4.0 * MIB,
-            8.0 * MIB,
-            16.0 * MIB,
-            32.0 * MIB,
-            64.0 * MIB,
-            128.0 * MIB,
-            256.0 * MIB,
-            512.0 * MIB,
-            1.0 * GIB,
-            2.0 * GIB,
-            4.0 * GIB,
-            8.0 * GIB,
-            10.0 * GIB,
-        ];
 
         Self {
             find_calls: meter
@@ -115,12 +93,12 @@ impl Metrics {
             evicted_entry_size: meter
                 .u64_histogram(format!("{PREFIX}.evicted_entry_size"))
                 .with_unit("By")
-                .with_boundaries(entry_size_boundaries.clone())
+                .with_boundaries(FILE_SIZE_HISTOGRAM_BUCKETS.to_vec())
                 .build(),
             downloaded_entry_size: meter
                 .u64_histogram(format!("{PREFIX}.downloaded_entry_size"))
                 .with_unit("By")
-                .with_boundaries(entry_size_boundaries)
+                .with_boundaries(FILE_SIZE_HISTOGRAM_BUCKETS.to_vec())
                 .build(),
             weighted_size_bytes: meter
                 .u64_gauge(format!("{PREFIX}.weighted_size_bytes"))

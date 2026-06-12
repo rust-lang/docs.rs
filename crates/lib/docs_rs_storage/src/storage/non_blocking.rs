@@ -596,7 +596,7 @@ mod backend_tests {
         files.iter().find(|info| info.path == path)
     }
 
-    async fn test_exists(storage: &AsyncStorage) -> Result<()> {
+    async fn test_exists(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         assert!(!storage.exists("path/to/file.txt").await.unwrap());
         let blob = BlobUpload {
             path: "path/to/file.txt".into(),
@@ -607,10 +607,19 @@ mod backend_tests {
         storage.store_blobs(vec![blob]).await?;
         assert!(storage.exists("path/to/file.txt").await?);
 
+        let collected_metrics = metrics.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.exist_calls")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
+
         Ok(())
     }
 
-    async fn test_get_object(storage: &AsyncStorage) -> Result<()> {
+    async fn test_get_object(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         let path: &str = "foo/bar.txt";
         let blob = BlobUpload {
             path: path.into(),
@@ -639,10 +648,26 @@ mod backend_tests {
             );
         }
 
+        let collected_metrics = metrics.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_files")?
+                .get_u64_counter()
+                .value(),
+            1,
+        );
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_bytes")?
+                .get_u64_counter()
+                .value(),
+            blob.content.len() as u64,
+        );
+
         Ok(())
     }
 
-    async fn test_get_range(storage: &AsyncStorage) -> Result<()> {
+    async fn test_get_range(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         let blob = BlobUpload {
             path: "foo/bar.txt".into(),
             mime: mime::TEXT_PLAIN,
@@ -683,6 +708,22 @@ mod backend_tests {
                     .is_some()
             );
         }
+
+        let collected_metrics = metrics.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_bytes")?
+                .get_u64_counter()
+                .value(),
+            blob.content.len() as u64,
+        );
 
         Ok(())
     }
@@ -813,6 +854,27 @@ mod backend_tests {
                 .get_u64_counter()
                 .value(),
             NAMES.len() as u64,
+        );
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.uploaded_bytes")?
+                .get_u64_counter()
+                .value(),
+            (NAMES.len() * "Hello world!\n".len()) as u64,
+        );
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_files")?
+                .get_u64_counter()
+                .value(),
+            NAMES.len() as u64,
+        );
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.downloaded_bytes")?
+                .get_u64_counter()
+                .value(),
+            (NAMES.len() * "Hello world!\n".len()) as u64,
         );
 
         Ok(())
@@ -1033,7 +1095,7 @@ mod backend_tests {
         storage.delete_prefix("prefix_without_objects").await
     }
 
-    async fn test_delete_prefix(storage: &AsyncStorage) -> Result<()> {
+    async fn test_delete_prefix(storage: &AsyncStorage, metrics: &TestMetrics) -> Result<()> {
         test_deletion(
             storage,
             "foo/bar/",
@@ -1047,7 +1109,18 @@ mod backend_tests {
             &["foo.txt", "foo/bar.txt", "bar.txt"],
             &["foo/bar/baz.txt", "foo/bar/foobar.txt"],
         )
-        .await
+        .await?;
+
+        let collected_metrics = metrics.collected_metrics();
+        assert_eq!(
+            collected_metrics
+                .get_metric("storage", "docsrs.storage.deleted_files")?
+                .get_u64_counter()
+                .value(),
+            2,
+        );
+
+        Ok(())
     }
 
     async fn test_delete_percent(storage: &AsyncStorage) -> Result<()> {
@@ -1157,13 +1230,9 @@ mod backend_tests {
 
         tests {
             test_batched_uploads,
-            test_exists,
-            test_get_object,
-            test_get_range,
             test_get_too_big,
             test_too_long_filename,
             test_list_prefix,
-            test_delete_prefix,
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
@@ -1171,6 +1240,10 @@ mod backend_tests {
         }
 
         tests_with_metrics {
+            test_exists,
+            test_get_object,
+            test_get_range,
+            test_delete_prefix,
             test_store_blobs,
             test_store_all,
             test_store_all_in_archive,
