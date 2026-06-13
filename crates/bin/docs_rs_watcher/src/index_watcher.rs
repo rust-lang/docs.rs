@@ -2,6 +2,7 @@ use crate::{
     Config,
     db::{delete_crate, delete_version},
     index::Index,
+    synchronization::CrateLocks,
 };
 use anyhow::{Context as _, Result};
 use crates_index_diff::Change;
@@ -40,6 +41,30 @@ impl TryFrom<crates_index_diff::CrateVersion> for CrateVersion {
         Ok(Self {
             name: value.name.parse()?,
             version: value.version.parse()?,
+            yanked: value.yanked,
+        })
+    }
+}
+
+impl TryFrom<&docs_rs_crates_io::events::CrateVersion> for CrateVersion {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &docs_rs_crates_io::events::CrateVersion) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name.parse()?,
+            version: value.version.clone().into(),
+            yanked: value.yanked,
+        })
+    }
+}
+
+impl TryFrom<docs_rs_crates_io::events::CrateVersion> for CrateVersion {
+    type Error = anyhow::Error;
+
+    fn try_from(value: docs_rs_crates_io::events::CrateVersion) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name.parse()?,
+            version: value.version.into(),
             yanked: value.yanked,
         })
     }
@@ -92,6 +117,7 @@ async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
 /// Returns the number of crates added
 pub(crate) async fn get_new_crates(
     context: &Context,
+    locks: &CrateLocks,
     index: &Index,
     config: &Config,
 ) -> Result<usize> {
@@ -115,7 +141,7 @@ pub(crate) async fn get_new_crates(
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &changes, config).await;
+    let crates_added = process_changes(context, locks, &changes, config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -129,11 +155,16 @@ pub(crate) async fn get_new_crates(
     Ok(crates_added)
 }
 
-async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Config) -> usize {
+async fn process_changes(
+    context: &Context,
+    locks: &CrateLocks,
+    changes: &Vec<Change>,
+    config: &Config,
+) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
-        match process_change(context, change, config).await {
+        match process_change(context, locks, change, config).await {
             Ok(added) => {
                 if added {
                     crates_added += 1;
@@ -148,13 +179,20 @@ async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Conf
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
-async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
+pub(crate) async fn process_change(
+    context: &Context,
+    locks: &CrateLocks,
+    change: &Change,
+    config: &Config,
+) -> Result<bool> {
     let crate_version: CrateVersion = change
         .versions()
         .first()
         .expect("always exists")
         .clone()
         .try_into()?;
+
+    let _guard = locks.lock(crate_version.name.to_string()).await;
 
     match change {
         Change::Added(_release) => process_version_added(context, &crate_version).await?,
@@ -177,7 +215,10 @@ async fn process_change(context: &Context, change: &Change, config: &Config) -> 
 }
 
 /// Processes crate changes, whether they got yanked or unyanked.
-async fn process_version_yank_status(context: &Context, release: &CrateVersion) -> Result<()> {
+pub(crate) async fn process_version_yank_status(
+    context: &Context,
+    release: &CrateVersion,
+) -> Result<()> {
     // FIXME: delay yanks of crates that have not yet finished building
     // https://github.com/rust-lang/docs.rs/issues/1934
     set_yanked(context, &release.name, &release.version, release.yanked).await?;
@@ -185,7 +226,7 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
     Ok(())
 }
 
-async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
+pub(crate) async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
     let priority = get_crate_priority(&mut conn, &release.name).await?;
     context
@@ -216,7 +257,7 @@ async fn process_version_added(context: &Context, release: &CrateVersion) -> Res
     Ok(())
 }
 
-async fn process_version_deleted(
+pub(crate) async fn process_version_deleted(
     context: &Context,
     config: &Config,
     release: &CrateVersion,
@@ -250,7 +291,7 @@ async fn process_version_deleted(
     Ok(())
 }
 
-async fn process_crate_deleted(
+pub(crate) async fn process_crate_deleted(
     context: &Context,
     config: &Config,
     krate: &KrateName,
@@ -517,8 +558,10 @@ mod tests {
             version: V2,
             ..Default::default()
         };
+        let locks = CrateLocks::new();
         let added = process_changes(
             &env,
+            &locks,
             &vec![
                 // Should be added correctly
                 Change::Added(krate1.into()),
