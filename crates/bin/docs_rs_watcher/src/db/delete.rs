@@ -453,6 +453,13 @@ mod tests {
             );
         }
 
+        // running delete-crate again doesn't error.
+        assert!(
+            delete_crate(&mut conn, storage, env.config(), &FOO)
+                .await
+                .is_ok()
+        );
+
         Ok(())
     }
 
@@ -615,6 +622,13 @@ mod tests {
         assert_eq!(
             owners(&mut conn, crate_id).await?,
             vec!["Peter Rabbit".to_string()]
+        );
+
+        // running delete-version again doesn't fail.
+        assert!(
+            delete_version(&mut conn, storage, env.config(), &KRATE, &V1)
+                .await
+                .is_ok()
         );
 
         // FIXME: remove for now until test frontend is async
