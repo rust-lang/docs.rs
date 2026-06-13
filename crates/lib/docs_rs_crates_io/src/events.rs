@@ -59,6 +59,16 @@ impl IndexChangeV1 {
             _ => None,
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            IndexChangeV1::Added(crate_version) => &crate_version.name,
+            IndexChangeV1::Unyanked(crate_version) => &crate_version.name,
+            IndexChangeV1::Yanked(crate_version) => &crate_version.name,
+            IndexChangeV1::CrateDeleted { name } => &name,
+            IndexChangeV1::VersionDeleted(crate_version) => &crate_version.name,
+        }
+    }
 }
 
 impl fmt::Display for IndexChangeV1 {

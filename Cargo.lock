@@ -2453,6 +2453,7 @@ name = "docs_rs_watcher"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "aws-config",
  "aws-sdk-sqs",
  "clap",
  "crates-index",
@@ -2460,6 +2461,7 @@ dependencies = [
  "docs_rs_build_queue",
  "docs_rs_config",
  "docs_rs_context",
+ "docs_rs_crates_io",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_fastly",
@@ -2476,6 +2478,7 @@ dependencies = [
  "opentelemetry",
  "pretty_assertions",
  "rayon",
+ "serde_json",
  "sqlx",
  "test-case",
  "tokio",

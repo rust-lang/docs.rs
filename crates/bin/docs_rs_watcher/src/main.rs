@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
-use docs_rs_watcher::{Config, Index, index_watcher};
+use docs_rs_watcher::{Config, Index, index_watcher, synchronization::CrateLocks};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -81,7 +81,11 @@ impl CommandLine {
                 // which should only run once, and all the time.
                 docs_rs_watcher::start_background_service_metric_collector(&ctx).await?;
 
-                docs_rs_watcher::watch_registry(&config, &ctx).await?;
+                let locks = CrateLocks::new();
+                tokio::try_join!(
+                    docs_rs_watcher::watch_registry(&config, &ctx, &locks),
+                    docs_rs_watcher::subscriber::listen(&config, &ctx, &locks),
+                )?;
             }
             Self::Queue { subcommand } => subcommand.handle_args(config, ctx).await?,
             Self::Database { subcommand } => subcommand.handle_args(config, ctx).await?,

@@ -10,6 +10,7 @@ pub struct Config {
     pub registry_url: Option<String>,
     pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
+    pub aws_sdk_max_retries: u32,
 
     /// How long to wait between registry checks
     pub delay_between_registry_fetches: Duration,
@@ -32,8 +33,11 @@ impl AppConfig for Config {
         Ok(Self {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
+
             sqs_queue_url: maybe_env("DOCSRS_SQS_QUEUE_URL")?,
             sqs_region: maybe_env("DOCSRS_SQS_REGION")?,
+            aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?,
+
             delay_between_registry_fetches: Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 60,
