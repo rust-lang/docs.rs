@@ -141,7 +141,7 @@ pub(crate) async fn get_new_crates(
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &locks, &changes, config).await;
+    let crates_added = process_changes(context, locks, &changes, config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -558,8 +558,10 @@ mod tests {
             version: V2,
             ..Default::default()
         };
+        let locks = CrateLocks::new();
         let added = process_changes(
             &env,
+            &locks,
             &vec![
                 // Should be added correctly
                 Change::Added(krate1.into()),
