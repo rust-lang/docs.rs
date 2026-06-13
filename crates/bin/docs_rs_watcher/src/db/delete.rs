@@ -67,7 +67,13 @@ pub async fn delete_version(
         return Ok(());
     };
 
-    let is_library = delete_version_from_database(conn, config, name, crate_id, version).await?;
+    let Some(is_library) =
+        delete_version_from_database(conn, config, name, crate_id, version).await?
+    else {
+        // release doesn't exist
+        return Ok(());
+    };
+
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
@@ -133,7 +139,18 @@ async fn delete_version_from_database(
     name: &KrateName,
     crate_id: CrateId,
     version: &Version,
-) -> Result<bool> {
+) -> Result<Option<bool>> {
+    let Some(release_id) = sqlx::query_scalar!(
+        "SELECT id FROM releases WHERE crate_id = $1 AND version = $2",
+        crate_id as _,
+        version as _
+    )
+    .fetch_optional(&mut *conn)
+    .await?
+    else {
+        return Ok(None);
+    };
+
     let mut transaction = conn.begin().await?;
 
     let delete_lock_timeout = format!("{}ms", config.delete_lock_timeout.as_millis());
@@ -157,31 +174,27 @@ async fn delete_version_from_database(
     sqlx::query!(
         "DELETE FROM builds_logs bl
          USING builds b
-         JOIN releases r ON b.rid = r.id
-         WHERE bl.build_id = b.id AND r.crate_id = $1 AND r.version = $2;",
-        crate_id as _,
-        version as _
+         WHERE bl.build_id = b.id AND b.rid = $1;",
+        release_id as _,
     )
     .execute(&mut *transaction)
     .await?;
 
     for &(table, column) in METADATA {
-        sqlx::query(sqlx::AssertSqlSafe(
-            format!("DELETE FROM {table} WHERE {column} IN (SELECT id FROM releases WHERE crate_id = $1 AND version = $2)")))
-        .bind(crate_id).bind(version).execute(&mut *transaction).await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE {column} = $1"
+        )))
+        .bind(release_id)
+        .execute(&mut *transaction)
+        .await?;
     }
-    let Some(is_library) = sqlx::query_scalar!(
-        "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
-        crate_id.0,
-        version as _,
+    let is_library: bool = sqlx::query_scalar!(
+        "DELETE FROM releases WHERE id = $1 RETURNING is_library",
+        release_id as _,
     )
-    .fetch_optional(&mut *transaction)
+    .fetch_one(&mut *transaction)
     .await?
-    else {
-        transaction.commit().await?;
-        return Ok(false);
-    };
-    let is_library = is_library.unwrap_or(false);
+    .unwrap_or(false);
 
     sqlx::query!(
         "DELETE FROM queue WHERE name = $1 AND version = $2;",
@@ -194,7 +207,7 @@ async fn delete_version_from_database(
     update_latest_version_id(&mut transaction, crate_id).await?;
 
     transaction.commit().await?;
-    Ok(is_library)
+    Ok(Some(is_library))
 }
 
 /// Returns whether any release in this crate was a library
