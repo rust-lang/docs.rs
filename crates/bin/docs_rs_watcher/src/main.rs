@@ -82,6 +82,7 @@ impl CommandLine {
                 docs_rs_watcher::start_background_service_metric_collector(&ctx).await?;
 
                 let locks = CrateLocks::new();
+                // FIXME: we don't want to exit in error case, do we?
                 tokio::try_join!(
                     docs_rs_watcher::watch_registry(&config, &ctx, &locks),
                     docs_rs_watcher::subscriber::listen(&config, &ctx, &locks),
