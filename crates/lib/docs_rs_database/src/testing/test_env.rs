@@ -2,7 +2,7 @@ use crate::{AsyncPoolClient, Config, Pool, migrations};
 use anyhow::{Context as _, Result};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::TryStreamExt as _;
-use sqlx::Connection as _;
+use sqlx::{AssertSqlSafe, Connection as _};
 use tokio::{runtime, task::block_in_place};
 use tracing::error;
 
@@ -27,14 +27,16 @@ impl TestDatabase {
         let pool = Pool::new_with_schema(config, &schema, otel_meter_provider).await?;
 
         let mut conn = sqlx::PgConnection::connect(&config.database_url).await?;
-        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+        sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA {schema}")))
             .execute(&mut conn)
             .await
             .context("error creating schema")?;
-        sqlx::query(&format!("SET search_path TO {schema}, public"))
-            .execute(&mut conn)
-            .await
-            .context("error setting search path")?;
+        sqlx::query(AssertSqlSafe(format!(
+            "SET search_path TO {schema}, public"
+        )))
+        .execute(&mut conn)
+        .await
+        .context("error setting search path")?;
         migrations::migrate(&mut conn, None)
             .await
             .context("error running migrations")?;
@@ -57,9 +59,9 @@ impl TestDatabase {
 
         for (i, sequence) in sequence_names.into_iter().enumerate() {
             let offset = (i + 1) * 10000;
-            sqlx::query(&format!(
+            sqlx::query(AssertSqlSafe(format!(
                 r#"ALTER SEQUENCE "{sequence}" RESTART WITH {offset};"#
-            ))
+            )))
             .execute(&mut conn)
             .await?;
         }
@@ -95,7 +97,7 @@ impl Drop for TestDatabase {
 
                 let migration_result = migrations::migrate(&mut conn, Some(0)).await;
 
-                if let Err(e) = sqlx::query(format!("DROP SCHEMA {} CASCADE;", schema).as_str())
+                if let Err(e) = sqlx::query(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE;")))
                     .execute(&mut *conn)
                     .await
                 {

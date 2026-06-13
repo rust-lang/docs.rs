@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "crate_count",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "crate_count"
+          }
+        }
       }
     ],
     "parameters": {

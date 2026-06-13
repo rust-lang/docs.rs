@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "id: BuildId",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "rustc_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "docsrs_version",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
       },
       {
         "ordinal": 3,
@@ -33,27 +51,42 @@
               ]
             }
           }
-        }
+        },
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
         "name": "build_time",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
         "name": "build_duration?: Duration",
-        "type_info": "Interval"
+        "type_info": "Interval",
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
         "name": "memory_peak",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "memory_peak"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "errors",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "errors"
+          }
+        }
       }
     ],
     "parameters": {

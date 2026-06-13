@@ -16,11 +16,11 @@ pub enum StreamUploadSource {
 /// Represents a stream blob to be uploaded to storage.
 ///
 /// NOTE: Right now we only support uploads where the size is known in advance.
+/// This is how the AWS S3 SDK is mostly built.
+///
 /// We can add support for streams with unknown size, but this would mean
-/// using an intermediate fixed-size buffer and multipart uploads for these cases.
-/// But: the multipart machinery is only worth the complexity if the stream is:
-/// - unknown size
-/// - bigger (there's a 5 MiB size limit for each part)
+/// using an intermediate fixed-size buffer and multipart uploads for these cases, which
+/// has other downsides.
 pub struct StreamUpload {
     pub path: String,
     pub mime: Mime,

@@ -115,7 +115,7 @@ pub(crate) async fn get_releases(
         }
     );
 
-    Ok(sqlx::query(query.as_str())
+    Ok(sqlx::query(sqlx::AssertSqlSafe(query))
         .bind(limit)
         .bind(offset)
         .bind(filter_failed)

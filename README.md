@@ -1,7 +1,7 @@
 # Docs.rs
 
 [![Build Status](https://github.com/rust-lang/docs.rs/workflows/CI/badge.svg)](https://github.com/rust-lang/docs.rs/actions?workflow=CI)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/master/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/main/LICENSE)
 
 Docs.rs (formerly cratesfyi) is an open source project to host documentation
 of crates for the Rust Programming Language.
@@ -14,7 +14,7 @@ This readme is for developing docs.rs. See [the about page](https://docs.rs/abou
 
 ## How the documentation is generated
 
-docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/master/src/librustdoc) to generate the documentation for every crate release on crates.io.
+docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/main/src/librustdoc) to generate the documentation for every crate release on crates.io.
 You can read the [the rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/what-is-rustdoc.html) for more details.
 
 ## Changing the build environment
@@ -103,7 +103,7 @@ just run-gui-tests
 ```
 
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
-can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
+can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/main/goml-script.md).
 
 Alternatively, you can start the web server and run the test manually:
 

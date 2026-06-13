@@ -18,6 +18,12 @@
               ]
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "release_build_status",
+            "name": "build_status"
+          }
         }
       }
     ],

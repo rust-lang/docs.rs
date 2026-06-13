@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "priority",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "priority"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "attempt",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "attempt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "last_attempt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "last_attempt"
+          }
+        }
       }
     ],
     "parameters": {
