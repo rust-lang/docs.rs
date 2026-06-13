@@ -557,9 +557,7 @@ impl StorageBackendMethods for S3Backend {
         stream
             .chunks(S3_DELETE_OBJECTS_LIMIT)
             .map(|batch| batch.into_iter().collect::<Result<Vec<_>, Error>>())
-            .try_for_each_concurrent(Some(self.network_parallelism), |batch| {
-                self.delete_batch_with_retry(batch)
-            })
+            .try_for_each(|batch| self.delete_batch_with_retry(batch))
             .await
     }
 }
@@ -568,13 +566,30 @@ impl S3Backend {
     async fn delete_batch_with_retry(&self, keys: Vec<String>) -> Result<(), Error> {
         let mut remaining = keys;
         for attempt in 1.. {
-            let resp = self
+            let resp = match self
                 .client
                 .delete_objects()
                 .bucket(&self.bucket)
-                .delete(Self::delete_request(remaining)?)
+                .delete(Self::delete_request(&remaining)?)
                 .send()
-                .await?;
+                .await
+            {
+                Ok(resp) => resp,
+                Err(err)
+                    if attempt <= self.max_retries && Self::is_retryable_delete_error(&err) =>
+                {
+                    let backoff = retry_backoff(attempt);
+                    warn!(
+                        attempt,
+                        ?backoff,
+                        ?err,
+                        "retrying s3 delete_objects request after transient error",
+                    );
+                    time::sleep(backoff).await;
+                    continue;
+                }
+                Err(err) => return Err(err.into()),
+            };
 
             let Some(errs) = resp.errors.filter(|e| !e.is_empty()) else {
                 return Ok(());
@@ -625,12 +640,31 @@ impl S3Backend {
         unreachable!("unbounded retry loop should return or fail internally")
     }
 
-    fn delete_request(keys: Vec<String>) -> Result<Delete, Error> {
+    fn is_retryable_delete_error<E>(err: &SdkError<E>) -> bool
+    where
+        E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
+    {
+        if let Some(err_code) = err.code()
+            && RETRYABLE_DELETE_OBJECT_ERROR_CODES.contains(&err_code)
+        {
+            return true;
+        }
+
+        if let SdkError::ServiceError(err) = err
+            && err.raw().status().is_server_error()
+        {
+            return true;
+        }
+
+        false
+    }
+
+    fn delete_request(keys: &[String]) -> Result<Delete, Error> {
         let objects: Vec<_> = keys
-            .into_iter()
+            .iter()
             .map(|key| {
                 ObjectIdentifier::builder()
-                    .key(key)
+                    .key(key.clone())
                     .build()
                     .expect("can never fail, the keys come from list_prefix")
             })
