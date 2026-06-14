@@ -17,6 +17,9 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
 
+// TODO:
+// * when should we run deprioritize_workspaces ?
+
 /// visibility timeout:
 /// should be longer than the longest time our server takes to handle a message.
 ///
