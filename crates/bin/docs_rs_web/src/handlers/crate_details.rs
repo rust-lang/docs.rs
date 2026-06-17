@@ -5,6 +5,7 @@ use crate::{
         DbConnection,
         rustdoc::{PageKind, RustdocParams},
     },
+    handlers::builds::{self, Build},
     impl_axum_webpage,
     match_release::{MatchedRelease, match_version},
     metadata::MetaData,
@@ -45,6 +46,7 @@ pub(crate) struct CrateDetails {
     build_status: BuildStatus,
     pub latest_build_id: Option<BuildId>,
     last_successful_build: Option<Version>,
+    pub latest_build: Option<Build>,
     pub rustdoc_status: Option<bool>,
     pub archive_storage: bool,
     pub repository_url: Option<String>,
@@ -218,6 +220,14 @@ impl CrateDetails {
             .map(Into::into)
             .collect();
 
+        let builds = builds::get_builds(conn, &krate.name, version).await?;
+        let latest_build = builds
+            .into_iter()
+            .filter(|build| {
+                build.build_status == BuildStatus::Success && build.build_time.is_some()
+            })
+            .max_by_key(|build| build.build_time);
+
         let mut crate_details = CrateDetails {
             name: krate.name,
             version: version.clone(),
@@ -230,6 +240,7 @@ impl CrateDetails {
             build_status: krate.build_status,
             latest_build_id: krate.latest_build_id,
             last_successful_build: None,
+            latest_build,
             rustdoc_status: krate.rustdoc_status,
             archive_storage: krate.archive_storage,
             repository_url: krate.repository_url,

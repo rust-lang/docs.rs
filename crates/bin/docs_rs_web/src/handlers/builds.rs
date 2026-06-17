@@ -28,10 +28,10 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Build {
     id: BuildId,
-    rustc_version: Option<String>,
+    pub rustc_version: Option<String>,
     docsrs_version: Option<String>,
-    build_status: BuildStatus,
-    build_time: Option<DateTime<Utc>>,
+    pub build_status: BuildStatus,
+    pub build_time: Option<DateTime<Utc>>,
     build_duration: Option<Duration>,
     memory_peak: Option<i64>,
     errors: Option<String>,
@@ -179,7 +179,7 @@ pub(crate) async fn build_trigger_rebuild_handler(
     Ok((StatusCode::CREATED, Json(serde_json::json!({}))))
 }
 
-async fn get_builds(
+pub(super) async fn get_builds(
     conn: &mut sqlx::PgConnection,
     name: &KrateName,
     version: &Version,
