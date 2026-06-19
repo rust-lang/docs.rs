@@ -28,8 +28,8 @@ click: "#nav-search-form .crate-dropdown"
 wait-for: |active_crate_dropdown_selector|
 
 store-value: (crate_main_info_items, ".package-details-menu > ul > .pure-menu-item")
-// There should be 3 items.
-assert-count: (|crate_main_info_items|, 3)
+// There should be 4 items.
+assert-count: (|crate_main_info_items|, 4)
 
 // Now we check the paddings with various widths.
 call-function: ("check-padding", {"width": 900})
