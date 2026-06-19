@@ -28,7 +28,7 @@ jobs:
     outputs:
       need_pr: ${{ steps.sqlx_check.outputs.need_pr }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Ensure repository is up to date
         run: |
