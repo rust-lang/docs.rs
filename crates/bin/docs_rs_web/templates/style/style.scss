@@ -378,12 +378,14 @@ div.recent-releases-container {
     .description {
         font-family: $font-family-serif;
         font-weight: normal;
+        overflow-wrap: break-word;
 
         @media #{$media-sm} {
             font-size: 1em;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            overflow-wrap: normal;
         }
     }
 
