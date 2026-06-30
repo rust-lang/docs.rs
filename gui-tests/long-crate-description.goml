@@ -7,8 +7,8 @@ store-value: (description_selector, "div.recent-releases-container .description"
 set-text: (|description_selector|, "SOME/VERYVERY/LONG/SEQUENCE/OF/TEXT/SEPARATED/BY/SLASHES\nAnotherveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylongWord")
 
 // Set width to size smaller than media-sm as that's when we don't truncate the text
-store-value(screen_width, 567)
-set-window-size(|screen_width|, 800)
+store-value: (screen_width, 567)
+set-window-size: (|screen_width|, 800)
 
 store-property: (|description_selector|, {"scrollWidth": description_width})
 
