@@ -212,3 +212,176 @@ pub(crate) async fn process_change(
     };
     Ok(change.added().is_some())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::TestEnvironment;
+    use docs_rs_config::AppConfig as _;
+    use docs_rs_crates_io::events::CrateVersion;
+    use docs_rs_types::testing::{KRATE, V1, V2};
+    use pretty_assertions::assert_eq;
+
+    fn added_event_json(name: &str, version: &str) -> String {
+        format!(
+            r#"{{"id":"evt_123","occurred_at":"2026-06-01T12:00:00Z","type":"added","payload":{{"name":"{name}","vers":"{version}"}}}}"#
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_change_added_queues_crate() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let added = process_change(
+            &env,
+            &IndexChangeV1::Added(CrateVersion {
+                name: KRATE.to_string(),
+                version: V1.to_string(),
+            }),
+            env.config(),
+        )
+        .await?;
+
+        assert!(added);
+        let queue = env.build_queue()?.queued_crates().await?;
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].name, KRATE);
+        assert_eq!(queue[0].version, V1);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_change_yanked_updates_release() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let mut conn = env.async_conn().await?;
+
+        let id = env
+            .fake_release()
+            .await
+            .name("krate")
+            .version(V1)
+            .create()
+            .await?;
+
+        let added = process_change(
+            &env,
+            &IndexChangeV1::Yanked(CrateVersion {
+                name: KRATE.to_string(),
+                version: V1.to_string(),
+            }),
+            env.config(),
+        )
+        .await?;
+
+        assert!(!added);
+        let row = sqlx::query!(
+            "SELECT yanked
+             FROM releases
+             WHERE id = $1",
+            id.0
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        assert_eq!(row.yanked, Some(true));
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_change_version_deleted_removes_release() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let mut conn = env.async_conn().await?;
+
+        let rid_1 = env
+            .fake_release()
+            .await
+            .name("krate")
+            .version(V1)
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name("krate")
+            .version(V2)
+            .create()
+            .await?;
+
+        let added = process_change(
+            &env,
+            &IndexChangeV1::VersionDeleted(CrateVersion {
+                name: KRATE.to_string(),
+                version: V2.to_string(),
+            }),
+            env.config(),
+        )
+        .await?;
+
+        assert!(!added);
+        let rows = sqlx::query!(
+            "SELECT id
+             FROM releases",
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, rid_1.0);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_message_dispatches_added_event() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.sqs_dry_run = false;
+        let env = TestEnvironment::builder().config(config).build().await?;
+
+        process_message(
+            &env,
+            env.config(),
+            &CrateLocks::new(),
+            &added_event_json("krate", &V1.to_string()),
+        )
+        .await?;
+
+        let queue = env.build_queue()?.queued_crates().await?;
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].name, KRATE);
+        assert_eq!(queue[0].version, V1);
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_message_respects_sqs_dry_run() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        process_message(
+            &env,
+            env.config(),
+            &CrateLocks::new(),
+            &added_event_json("krate", &V1.to_string()),
+        )
+        .await?;
+
+        assert!(env.build_queue()?.queued_crates().await?.is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_process_message_rejects_invalid_json() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let err = process_message(&env, env.config(), &CrateLocks::new(), "{not json").await;
+
+        assert!(err.is_err());
+        let err = format!("{:?}", err.unwrap_err());
+        assert!(
+            err.contains("error parsing event from json"),
+            "unexpected error: {err}"
+        );
+
+        Ok(())
+    }
+}

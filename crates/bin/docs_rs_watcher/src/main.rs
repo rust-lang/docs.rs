@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
-use docs_rs_watcher::{Config, Index, index_watcher, synchronization::CrateLocks};
+use docs_rs_watcher::{Config, Index, index_watcher};
 use futures_util::FutureExt as _;
 use std::sync::Arc;
 

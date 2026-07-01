@@ -30,8 +30,8 @@ pub async fn watch(config: &Config, context: &Context) {
 
     loop {
         if let Err(err) = tokio::try_join!(
-            crate::watch_registry(&config, &context, &locks),
-            crate::subscriber::listen(&config, &context, &locks),
+            crate::watch_registry(config, context, &locks),
+            crate::subscriber::listen(config, context, &locks),
         ) {
             error!(
                 ?err,
