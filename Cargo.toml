@@ -29,6 +29,7 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 askama = "0.16.0"
+async-trait  = "0.1.89"
 async-stream = "0.3.5"
 # The default `rustls` feature pulls in the legacy hyper 0.14 + rustls 0.21
 # stack via `aws-smithy-runtime/tls-rustls`, which includes the vulnerable

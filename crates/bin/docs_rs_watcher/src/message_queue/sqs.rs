@@ -5,7 +5,6 @@ use crate::{
 use anyhow::Result;
 use aws_config::{BehaviorVersion, Region, retry::RetryConfig};
 use aws_sdk_sqs::Client;
-use futures_util::future::BoxFuture;
 use std::time::Duration;
 use url::Url;
 
@@ -35,56 +34,47 @@ impl AwsSqsClient {
     }
 }
 
+#[async_trait::async_trait]
 impl MessageQueueClient for AwsSqsClient {
-    fn receive_messages<'a>(&'a self) -> BoxFuture<'a, Result<Vec<ReceivedMessage>>> {
-        Box::pin(async move {
-            let response = self
-                .inner
-                .receive_message()
-                .queue_url(&self.queue_url)
-                .max_number_of_messages(10)
-                .wait_time_seconds(WAIT_TIME.as_secs() as i32)
-                .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
-                .send()
-                .await?;
+    async fn receive_messages(&self) -> Result<Vec<ReceivedMessage>> {
+        let response = self
+            .inner
+            .receive_message()
+            .queue_url(&self.queue_url)
+            .max_number_of_messages(10)
+            .wait_time_seconds(WAIT_TIME.as_secs() as i32)
+            .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
+            .send()
+            .await?;
 
-            Ok(response
-                .messages()
-                .iter()
-                .map(|message| ReceivedMessage {
-                    body: message.body().map(str::to_owned),
-                    receipt_handle: message.receipt_handle().map(str::to_owned),
-                })
-                .collect())
-        })
+        Ok(response
+            .messages()
+            .iter()
+            .map(|message| ReceivedMessage {
+                body: message.body().map(str::to_owned),
+                receipt_handle: message.receipt_handle().map(str::to_owned),
+            })
+            .collect())
     }
 
-    fn delete_message<'a>(&'a self, receipt_handle: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            self.inner
-                .delete_message()
-                .queue_url(&self.queue_url)
-                .receipt_handle(receipt_handle)
-                .send()
-                .await?;
-            Ok(())
-        })
+    async fn delete_message(&self, receipt_handle: &str) -> Result<()> {
+        self.inner
+            .delete_message()
+            .queue_url(&self.queue_url)
+            .receipt_handle(receipt_handle)
+            .send()
+            .await?;
+        Ok(())
     }
 
-    fn retry_message<'a>(
-        &'a self,
-        receipt_handle: &'a str,
-        delay: Duration,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            self.inner
-                .change_message_visibility()
-                .queue_url(&self.queue_url)
-                .receipt_handle(receipt_handle)
-                .visibility_timeout(delay.as_secs() as i32)
-                .send()
-                .await?;
-            Ok(())
-        })
+    async fn retry_message(&self, receipt_handle: &str, delay: Duration) -> Result<()> {
+        self.inner
+            .change_message_visibility()
+            .queue_url(&self.queue_url)
+            .receipt_handle(receipt_handle)
+            .visibility_timeout(delay.as_secs() as i32)
+            .send()
+            .await?;
+        Ok(())
     }
 }

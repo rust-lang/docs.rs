@@ -197,7 +197,6 @@ mod tests {
     use docs_rs_config::AppConfig as _;
     use docs_rs_crates_io::events::CrateVersion;
     use docs_rs_types::testing::{KRATE, V1, V2};
-    use futures_util::future::BoxFuture;
     use pretty_assertions::assert_eq;
     use std::sync::{Arc, Mutex};
 
@@ -244,46 +243,37 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl MessageQueueClient for FakeMessageQueueClient {
-        fn receive_messages<'a>(&'a self) -> BoxFuture<'a, Result<Vec<ReceivedMessage>>> {
-            Box::pin(async move {
-                self.receive_result
-                    .lock()
-                    .unwrap()
-                    .clone()
-                    .map_err(|err| anyhow!(err))
-            })
+        async fn receive_messages(&self) -> Result<Vec<ReceivedMessage>> {
+            self.receive_result
+                .lock()
+                .unwrap()
+                .clone()
+                .map_err(|err| anyhow!(err))
         }
 
-        fn delete_message<'a>(&'a self, receipt_handle: &'a str) -> BoxFuture<'a, Result<()>> {
-            Box::pin(async move {
-                self.actions.lock().unwrap().push(FakeAction::Delete {
-                    receipt_handle: receipt_handle.to_string(),
-                });
-                if let Some(err) = self.delete_error.lock().unwrap().clone() {
-                    Err(anyhow!(err))
-                } else {
-                    Ok(())
-                }
-            })
+        async fn delete_message(&self, receipt_handle: &str) -> Result<()> {
+            self.actions.lock().unwrap().push(FakeAction::Delete {
+                receipt_handle: receipt_handle.to_string(),
+            });
+            if let Some(err) = self.delete_error.lock().unwrap().clone() {
+                Err(anyhow!(err))
+            } else {
+                Ok(())
+            }
         }
 
-        fn retry_message<'a>(
-            &'a self,
-            receipt_handle: &'a str,
-            delay: Duration,
-        ) -> BoxFuture<'a, Result<()>> {
-            Box::pin(async move {
-                self.actions.lock().unwrap().push(FakeAction::Retry {
-                    receipt_handle: receipt_handle.to_string(),
-                    delay,
-                });
-                if let Some(err) = self.retry_error.lock().unwrap().clone() {
-                    Err(anyhow!(err))
-                } else {
-                    Ok(())
-                }
-            })
+        async fn retry_message(&self, receipt_handle: &str, delay: Duration) -> Result<()> {
+            self.actions.lock().unwrap().push(FakeAction::Retry {
+                receipt_handle: receipt_handle.to_string(),
+                delay,
+            });
+            if let Some(err) = self.retry_error.lock().unwrap().clone() {
+                Err(anyhow!(err))
+            } else {
+                Ok(())
+            }
         }
     }
 
