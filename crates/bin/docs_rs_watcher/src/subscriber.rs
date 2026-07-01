@@ -6,7 +6,7 @@ use crate::{
     },
     synchronization::CrateLocks,
 };
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use aws_config::{BehaviorVersion, Region, retry::RetryConfig};
 use aws_sdk_sqs::Client;
 use docs_rs_context::Context;
@@ -43,8 +43,10 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 
 pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
-        bail!("missing sqs region or url, disabling crates.io subscriber");
+        warn!("missing sqs region or url, disabling crates.io SQS subscriber");
+        return Ok(());
     };
+
     let queue_url = queue_url.to_string();
 
     let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
