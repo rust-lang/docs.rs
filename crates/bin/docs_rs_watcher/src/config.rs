@@ -8,11 +8,10 @@ use url::Url;
 pub struct Config {
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
-    pub registry_dry_run: bool,
     pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
     pub sqs_endpoint_url: Option<String>,
-    pub sqs_dry_run: bool,
+    pub sqs_active: bool,
     pub aws_sdk_max_retries: u32,
 
     /// How long to wait between registry checks
@@ -36,12 +35,11 @@ impl AppConfig for Config {
         Ok(Self {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
-            registry_dry_run: env("DOCS_RS_REGISTRY_DRY_RUN", false)?,
 
             sqs_queue_url: maybe_env("DOCSRS_SQS_QUEUE_URL")?,
             sqs_region: maybe_env("DOCSRS_SQS_REGION")?,
             sqs_endpoint_url: maybe_env("DOCSRS_SQS_ENDPOINT_URL")?,
-            sqs_dry_run: env("DOCS_RS_SQS_DRY_RUN", true)?,
+            sqs_active: env("DOCS_RS_SQS_DRY_RUN", true)?,
             aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?,
 
             delay_between_registry_fetches: Duration::from_secs(env::<u64>(

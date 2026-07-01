@@ -6,7 +6,6 @@ pub mod index_watcher;
 mod rebuilds;
 mod service_metrics;
 pub mod subscriber;
-pub mod synchronization;
 #[cfg(test)]
 mod testing;
 
@@ -15,9 +14,7 @@ pub use db::{delete_crate, delete_version};
 pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
-use crate::{
-    index_watcher::get_new_crates, service_metrics::OtelServiceMetrics, synchronization::CrateLocks,
-};
+use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
 use anyhow::Result;
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
@@ -26,12 +23,10 @@ use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
 
 pub async fn watch(config: &Config, context: &Context) {
-    let locks = CrateLocks::new();
-
     loop {
         if let Err(err) = tokio::try_join!(
-            crate::watch_registry(config, context, &locks),
-            crate::subscriber::listen(config, context, &locks),
+            crate::watch_registry(config, context),
+            crate::subscriber::listen(config, context),
         ) {
             error!(
                 ?err,
@@ -45,7 +40,7 @@ pub async fn watch(config: &Config, context: &Context) {
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub async fn watch_registry(config: &Config, context: &Context, locks: &CrateLocks) -> Result<()> {
+pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
     let mut last_gc = Instant::now();
 
     let queue = context.build_queue()?;
@@ -57,7 +52,7 @@ pub async fn watch_registry(config: &Config, context: &Context, locks: &CrateLoc
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, locks, &index, config).await {
+            match get_new_crates(context, &index, config).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
                     error!(?e, "Failed to get new crates");

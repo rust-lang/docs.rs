@@ -2,7 +2,6 @@ use crate::{
     Config,
     db::{delete_crate, delete_version},
     index::Index,
-    synchronization::CrateLocks,
 };
 use anyhow::{Context as _, Result};
 use crates_index_diff::Change;
@@ -111,7 +110,6 @@ async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
 /// Returns the number of crates added
 pub(crate) async fn get_new_crates(
     context: &Context,
-    locks: &CrateLocks,
     index: &Index,
     config: &Config,
 ) -> Result<usize> {
@@ -135,7 +133,7 @@ pub(crate) async fn get_new_crates(
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, locks, &changes, config).await;
+    let crates_added = process_changes(context, &changes, config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -149,22 +147,17 @@ pub(crate) async fn get_new_crates(
     Ok(crates_added)
 }
 
-async fn process_changes(
-    context: &Context,
-    locks: &CrateLocks,
-    changes: &Vec<Change>,
-    config: &Config,
-) -> usize {
+async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Config) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
         debug!(?change, "received change from git index");
 
-        if config.registry_dry_run {
+        if config.sqs_active {
             continue;
         }
 
-        match process_change(context, locks, change, config).await {
+        match process_change(context, change, config).await {
             Ok(added) => {
                 if added {
                     crates_added += 1;
@@ -181,7 +174,6 @@ async fn process_changes(
 /// Process a crate change, returning whether the change was a crate addition or not.
 pub(crate) async fn process_change(
     context: &Context,
-    locks: &CrateLocks,
     change: &Change,
     config: &Config,
 ) -> Result<bool> {
@@ -191,8 +183,6 @@ pub(crate) async fn process_change(
         .expect("always exists")
         .clone()
         .try_into()?;
-
-    let _guard = locks.lock(crate_version.name.to_string()).await;
 
     match change {
         Change::Added(_release) => process_version_added(context, &crate_version).await?,
@@ -553,10 +543,8 @@ mod tests {
             name: "krate_already_present".parse()?,
             version: V2,
         };
-        let locks = CrateLocks::new();
         let added = process_changes(
             &env,
-            &locks,
             &vec![
                 // Should be added correctly
                 Change::Added(krate1.into()),

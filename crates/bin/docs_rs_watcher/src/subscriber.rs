@@ -4,7 +4,6 @@ use crate::{
         process_crate_deleted, process_version_added, process_version_deleted,
         process_version_yank_status,
     },
-    synchronization::CrateLocks,
 };
 use anyhow::{Context as _, Result};
 use aws_config::{BehaviorVersion, Region, retry::RetryConfig};
@@ -49,7 +48,7 @@ enum MessageOutcome {
     Ignore,
 }
 
-pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> Result<()> {
+pub async fn listen(config: &Config, context: &Context) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
         warn!("missing sqs region or url, disabling crates.io SQS subscriber");
         return Ok(());
@@ -98,7 +97,7 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
         };
 
         for message in messages {
-            match handle_message(context, config, locks, message.body.as_deref()).await {
+            match handle_message(context, config, message.body.as_deref()).await {
                 MessageOutcome::Ack => {
                     if let Some(receipt_handle) = message.receipt_handle.as_deref()
                         && let Err(err) = client
@@ -149,18 +148,13 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
     }
 }
 
-async fn handle_message(
-    context: &Context,
-    config: &Config,
-    locks: &CrateLocks,
-    body: Option<&str>,
-) -> MessageOutcome {
+async fn handle_message(context: &Context, config: &Config, body: Option<&str>) -> MessageOutcome {
     let Some(body) = body else {
         return MessageOutcome::Ignore;
     };
 
     match retry_async(
-        || async move { process_message(context, config, locks, body).await },
+        || async move { process_message(context, config, body).await },
         3,
     )
     .await
@@ -178,21 +172,14 @@ async fn handle_message(
     }
 }
 
-#[instrument(skip(context, config, locks))]
-async fn process_message(
-    context: &Context,
-    config: &Config,
-    locks: &CrateLocks,
-    body: &str,
-) -> Result<()> {
+#[instrument(skip(context, config))]
+async fn process_message(context: &Context, config: &Config, body: &str) -> Result<()> {
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
 
     debug!(?event, "received event from sqs");
 
-    let _guard = locks.lock(event.change.name()).await;
-
-    if !config.sqs_dry_run {
+    if !config.sqs_active {
         process_change(context, &event.change, config)
             .await
             .context("error processing change")?;
@@ -348,13 +335,12 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_message_dispatches_added_event() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.sqs_dry_run = false;
+        config.sqs_active = false;
         let env = TestEnvironment::builder().config(config).build().await?;
 
         process_message(
             &env,
             env.config(),
-            &CrateLocks::new(),
             &added_event_json("krate", &V1.to_string()),
         )
         .await?;
@@ -374,7 +360,6 @@ mod tests {
         process_message(
             &env,
             env.config(),
-            &CrateLocks::new(),
             &added_event_json("krate", &V1.to_string()),
         )
         .await?;
@@ -388,7 +373,7 @@ mod tests {
     async fn test_process_message_rejects_invalid_json() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let err = process_message(&env, env.config(), &CrateLocks::new(), "{not json").await;
+        let err = process_message(&env, env.config(), "{not json").await;
 
         assert!(err.is_err());
         let err = format!("{:?}", err.unwrap_err());
@@ -403,14 +388,13 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_message_acknowledges_success() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.sqs_dry_run = false;
+        config.sqs_active = false;
         let env = TestEnvironment::builder().config(config).build().await?;
 
         assert_eq!(
             handle_message(
                 &env,
                 env.config(),
-                &CrateLocks::new(),
                 Some(&added_event_json("krate", &V1.to_string())),
             )
             .await,
@@ -425,7 +409,7 @@ mod tests {
         let env = TestEnvironment::new().await?;
 
         assert_eq!(
-            handle_message(&env, env.config(), &CrateLocks::new(), Some("{bad json")).await,
+            handle_message(&env, env.config(), Some("{bad json")).await,
             MessageOutcome::RetryLater(RETRY_DELAY)
         );
 
@@ -437,7 +421,7 @@ mod tests {
         let env = TestEnvironment::new().await?;
 
         assert_eq!(
-            handle_message(&env, env.config(), &CrateLocks::new(), None).await,
+            handle_message(&env, env.config(), None).await,
             MessageOutcome::Ignore
         );
         assert!(env.build_queue()?.queued_crates().await?.is_empty());
