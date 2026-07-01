@@ -13,6 +13,7 @@ use docs_rs_context::Context;
 use docs_rs_crates_io::events::{IndexChangeEventV1, IndexChangeV1};
 use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
+use futures_util::future::BoxFuture;
 use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
@@ -41,6 +42,96 @@ const RETRY_DELAY: Duration = Duration::from_secs(30);
 /// How long to wait before rechecking the priorities of queued crates.
 const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReceivedMessage {
+    body: Option<String>,
+    receipt_handle: Option<String>,
+}
+
+trait SqsClient: Sync {
+    fn receive_messages<'a>(
+        &'a self,
+        queue_url: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<ReceivedMessage>>>;
+    fn delete_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+    ) -> BoxFuture<'a, Result<()>>;
+    fn retry_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+        delay: Duration,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
+struct AwsSqsClient {
+    inner: Client,
+}
+
+impl SqsClient for AwsSqsClient {
+    fn receive_messages<'a>(
+        &'a self,
+        queue_url: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<ReceivedMessage>>> {
+        Box::pin(async move {
+            let response = self
+                .inner
+                .receive_message()
+                .queue_url(queue_url)
+                .max_number_of_messages(10)
+                .wait_time_seconds(WAIT_TIME.as_secs() as i32)
+                .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
+                .send()
+                .await?;
+
+            Ok(response
+                .messages()
+                .iter()
+                .map(|message| ReceivedMessage {
+                    body: message.body().map(str::to_owned),
+                    receipt_handle: message.receipt_handle().map(str::to_owned),
+                })
+                .collect())
+        })
+    }
+
+    fn delete_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            self.inner
+                .delete_message()
+                .queue_url(queue_url)
+                .receipt_handle(receipt_handle)
+                .send()
+                .await?;
+            Ok(())
+        })
+    }
+
+    fn retry_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+        delay: Duration,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            self.inner
+                .change_message_visibility()
+                .queue_url(queue_url)
+                .receipt_handle(receipt_handle)
+                .visibility_timeout(delay.as_secs() as i32)
+                .send()
+                .await?;
+            Ok(())
+        })
+    }
+}
+
 pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
         warn!("missing sqs region or url, disabling crates.io SQS subscriber");
@@ -50,13 +141,25 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
     let queue_url = queue_url.to_string();
 
     let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let client = Client::from_conf(
-        aws_sdk_sqs::config::Builder::from(&shared_config)
-            .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
-            .region(Region::new(region.clone()))
-            .build(),
-    );
+    let client = AwsSqsClient {
+        inner: Client::from_conf(
+            aws_sdk_sqs::config::Builder::from(&shared_config)
+                .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
+                .region(Region::new(region.clone()))
+                .build(),
+        ),
+    };
 
+    listen_with_client(&client, &queue_url, config, context, locks).await
+}
+
+async fn listen_with_client(
+    client: &dyn SqsClient,
+    queue_url: &str,
+    config: &Config,
+    context: &Context,
+    locks: &CrateLocks,
+) -> Result<()> {
     let mut last_priority_recheck = Instant::now();
     let queue = context.build_queue()?;
 
@@ -67,88 +170,13 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             continue;
         }
 
-        let response = match client
-            .receive_message()
-            .queue_url(queue_url.clone())
-            .max_number_of_messages(10)
-            .wait_time_seconds(WAIT_TIME.as_secs() as i32)
-            .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(err) => {
-                error!(
-                    ?err,
-                    queue_url, "error receiving messages from sqs, retrying"
-                );
-                time::sleep(WAIT_TIME).await;
-                continue;
-            }
-        };
-
-        for message in response.messages() {
-            let Some(body) = message.body() else {
-                continue;
-            };
-
-            match retry_async(
-                || async move { process_message(context, config, locks, body).await },
-                3,
-            )
-            .await
-            {
-                Ok(_) => {
-                    if let Some(receipt_handle) = message.receipt_handle() {
-                        // mark the message as "done"
-                        if let Err(err) = client
-                            .delete_message()
-                            .queue_url(queue_url.clone())
-                            .receipt_handle(receipt_handle)
-                            .send()
-                            .await
-                        {
-                            // sqs will redeliver the message after the visibility timeout passed
-                            error!(
-                                ?err,
-                                receipt_handle, queue_url, "error deleting message from queue"
-                            );
-                        }
-                    }
-                }
-                Err(err) => {
-                    error!(
-                        ?err,
-                        ?message,
-                        ?RETRY_DELAY,
-                        body,
-                        "error handling message. Retrying."
-                    );
-
-                    if let Some(receipt_handle) = message.receipt_handle() {
-                        // Don't delete the message.
-                        // It will become visible again after the visibility timeout.
-                        if let Err(err) = client
-                            .change_message_visibility()
-                            .queue_url(queue_url.clone())
-                            .receipt_handle(receipt_handle)
-                            // retry after some time
-                            .visibility_timeout(RETRY_DELAY.as_secs() as i32) // retry
-                            .send()
-                            .await
-                        {
-                            // this error doesn't really matter, without the changed visibility
-                            // timeout sqs will redeliver after the default visibility timeout.
-                            warn!(
-                                ?err,
-                                receipt_handle,
-                                queue_url,
-                                "error setting visibility_timeout for retry"
-                            );
-                        }
-                    }
-                }
-            }
+        if let Err(err) = poll_once(client, queue_url, context, config, locks).await {
+            error!(
+                ?err,
+                queue_url, "error receiving messages from sqs, retrying"
+            );
+            time::sleep(WAIT_TIME).await;
+            continue;
         }
 
         if last_priority_recheck.elapsed() >= DELAY_BETWEEN_PRIORITY_RECHECK {
@@ -160,6 +188,73 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
         }
 
         time::sleep(SLEEP_BETWEEN_REQUESTS).await;
+    }
+}
+
+async fn poll_once(
+    client: &dyn SqsClient,
+    queue_url: &str,
+    context: &Context,
+    config: &Config,
+    locks: &CrateLocks,
+) -> Result<()> {
+    let messages = client.receive_messages(queue_url).await?;
+
+    for message in messages {
+        handle_message(client, queue_url, &message, context, config, locks).await;
+    }
+
+    Ok(())
+}
+
+async fn handle_message(
+    client: &dyn SqsClient,
+    queue_url: &str,
+    message: &ReceivedMessage,
+    context: &Context,
+    config: &Config,
+    locks: &CrateLocks,
+) {
+    let Some(body) = message.body.as_deref() else {
+        return;
+    };
+
+    match retry_async(
+        || async move { process_message(context, config, locks, body).await },
+        3,
+    )
+    .await
+    {
+        Ok(_) => {
+            if let Some(receipt_handle) = message.receipt_handle.as_deref()
+                && let Err(err) = client.delete_message(queue_url, receipt_handle).await
+            {
+                error!(
+                    ?err,
+                    receipt_handle, queue_url, "error deleting message from queue"
+                );
+            }
+        }
+        Err(err) => {
+            error!(
+                ?err,
+                ?message,
+                ?RETRY_DELAY,
+                body,
+                "error handling message. Retrying."
+            );
+
+            if let Some(receipt_handle) = message.receipt_handle.as_deref()
+                && let Err(err) = client
+                    .retry_message(queue_url, receipt_handle, RETRY_DELAY)
+                    .await
+            {
+                warn!(
+                    ?err,
+                    receipt_handle, queue_url, "error setting visibility_timeout for retry"
+                );
+            }
+        }
     }
 }
 
@@ -217,10 +312,110 @@ pub(crate) async fn process_change(
 mod tests {
     use super::*;
     use crate::testing::TestEnvironment;
+    use anyhow::anyhow;
     use docs_rs_config::AppConfig as _;
     use docs_rs_crates_io::events::CrateVersion;
     use docs_rs_types::testing::{KRATE, V1, V2};
     use pretty_assertions::assert_eq;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum FakeAction {
+        Delete {
+            queue_url: String,
+            receipt_handle: String,
+        },
+        Retry {
+            queue_url: String,
+            receipt_handle: String,
+            delay: Duration,
+        },
+    }
+
+    #[derive(Clone)]
+    struct FakeSqsClient {
+        receive_result: Arc<Mutex<Result<Vec<ReceivedMessage>, String>>>,
+        actions: Arc<Mutex<Vec<FakeAction>>>,
+        delete_error: Arc<Mutex<Option<String>>>,
+        retry_error: Arc<Mutex<Option<String>>>,
+    }
+
+    impl FakeSqsClient {
+        fn new() -> Self {
+            Self::default()
+        }
+
+        fn with_messages(messages: Vec<ReceivedMessage>) -> Self {
+            Self {
+                receive_result: Arc::new(Mutex::new(Ok(messages))),
+                ..Self::default()
+            }
+        }
+    }
+
+    impl Default for FakeSqsClient {
+        fn default() -> Self {
+            Self {
+                receive_result: Arc::new(Mutex::new(Ok(Vec::new()))),
+                actions: Arc::new(Mutex::new(Vec::new())),
+                delete_error: Arc::new(Mutex::new(None)),
+                retry_error: Arc::new(Mutex::new(None)),
+            }
+        }
+    }
+
+    impl SqsClient for FakeSqsClient {
+        fn receive_messages<'a>(
+            &'a self,
+            _queue_url: &'a str,
+        ) -> BoxFuture<'a, Result<Vec<ReceivedMessage>>> {
+            Box::pin(async move {
+                self.receive_result
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .map_err(|err| anyhow!(err))
+            })
+        }
+
+        fn delete_message<'a>(
+            &'a self,
+            queue_url: &'a str,
+            receipt_handle: &'a str,
+        ) -> BoxFuture<'a, Result<()>> {
+            Box::pin(async move {
+                self.actions.lock().unwrap().push(FakeAction::Delete {
+                    queue_url: queue_url.to_string(),
+                    receipt_handle: receipt_handle.to_string(),
+                });
+                if let Some(err) = self.delete_error.lock().unwrap().clone() {
+                    Err(anyhow!(err))
+                } else {
+                    Ok(())
+                }
+            })
+        }
+
+        fn retry_message<'a>(
+            &'a self,
+            queue_url: &'a str,
+            receipt_handle: &'a str,
+            delay: Duration,
+        ) -> BoxFuture<'a, Result<()>> {
+            Box::pin(async move {
+                self.actions.lock().unwrap().push(FakeAction::Retry {
+                    queue_url: queue_url.to_string(),
+                    receipt_handle: receipt_handle.to_string(),
+                    delay,
+                });
+                if let Some(err) = self.retry_error.lock().unwrap().clone() {
+                    Err(anyhow!(err))
+                } else {
+                    Ok(())
+                }
+            })
+        }
+    }
 
     fn added_event_json(name: &str, version: &str) -> String {
         format!(
@@ -380,6 +575,107 @@ mod tests {
         assert!(
             err.contains("error parsing event from json"),
             "unexpected error: {err}"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_message_acknowledges_success() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.sqs_dry_run = false;
+        let env = TestEnvironment::builder().config(config).build().await?;
+        let client = FakeSqsClient::new();
+
+        handle_message(
+            &client,
+            "https://example.invalid/queue",
+            &ReceivedMessage {
+                body: Some(added_event_json("krate", &V1.to_string())),
+                receipt_handle: Some("receipt-1".to_string()),
+            },
+            &env,
+            env.config(),
+            &CrateLocks::new(),
+        )
+        .await;
+
+        assert_eq!(
+            *client.actions.lock().unwrap(),
+            vec![FakeAction::Delete {
+                queue_url: "https://example.invalid/queue".to_string(),
+                receipt_handle: "receipt-1".to_string(),
+            }]
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_message_retries_failed_processing() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let client = FakeSqsClient::new();
+
+        handle_message(
+            &client,
+            "https://example.invalid/queue",
+            &ReceivedMessage {
+                body: Some("{bad json".to_string()),
+                receipt_handle: Some("receipt-2".to_string()),
+            },
+            &env,
+            env.config(),
+            &CrateLocks::new(),
+        )
+        .await;
+
+        assert_eq!(
+            *client.actions.lock().unwrap(),
+            vec![FakeAction::Retry {
+                queue_url: "https://example.invalid/queue".to_string(),
+                receipt_handle: "receipt-2".to_string(),
+                delay: RETRY_DELAY,
+            }]
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_poll_once_processes_batch() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.sqs_dry_run = false;
+        let env = TestEnvironment::builder().config(config).build().await?;
+        let client = FakeSqsClient::with_messages(vec![
+            ReceivedMessage {
+                body: Some(added_event_json("krate", &V1.to_string())),
+                receipt_handle: Some("receipt-1".to_string()),
+            },
+            ReceivedMessage {
+                body: None,
+                receipt_handle: Some("receipt-ignored".to_string()),
+            },
+        ]);
+
+        poll_once(
+            &client,
+            "https://example.invalid/queue",
+            &env,
+            env.config(),
+            &CrateLocks::new(),
+        )
+        .await?;
+
+        let queue = env.build_queue()?.queued_crates().await?;
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].name, KRATE);
+        assert_eq!(queue[0].version, V1);
+        assert_eq!(
+            *client.actions.lock().unwrap(),
+            vec![FakeAction::Delete {
+                queue_url: "https://example.invalid/queue".to_string(),
+                receipt_handle: "receipt-1".to_string(),
+            }]
         );
 
         Ok(())
