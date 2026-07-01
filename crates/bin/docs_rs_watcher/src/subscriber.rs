@@ -39,6 +39,8 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 /// If we fetch a message, and don't delete it in this time, it will be redelivered.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Result type for `handle_message`, so we can unit-test it without needing
+/// fake SQS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MessageOutcome {
     Ack,
