@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM releases WHERE crate_id = $1 AND version = $2 RETURNING is_library",
+  "query": "DELETE FROM releases WHERE id = $1 RETURNING is_library",
   "describe": {
     "columns": [
       {
@@ -17,13 +17,12 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Text"
+        "Int4"
       ]
     },
     "nullable": [
       true
     ]
   },
-  "hash": "014a054d852f0937191e1a54f742d4b4c454361689fb3841cc12fd7dd1094948"
+  "hash": "fab139cabc0987a1f2ad706060a3f4254924db75fc7f76a6c78d17a3fc06d663"
 }

@@ -11,6 +11,7 @@ pub struct Config {
     pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
     pub sqs_endpoint_url: Option<String>,
+    /// temporary, to switch between the sources for the index (git index vs SQS)
     pub sqs_active: bool,
     pub aws_sdk_max_retries: u32,
 
