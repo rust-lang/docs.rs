@@ -14,7 +14,7 @@ use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
 use std::time::{Duration, Instant};
 use tokio::time;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, warn};
 
 /// wait-time (long polling):
 ///
@@ -39,7 +39,7 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 /// If we fetch a message, and don't delete it in this time, it will be redelivered.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Result type for `handle_message`, so we can unit-test it without needing
+/// Result type for `handle_message_body`, so we can unit-test it without needing
 /// fake SQS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MessageOutcome {
@@ -48,7 +48,7 @@ enum MessageOutcome {
     Ignore,
 }
 
-pub async fn listen(config: &Config, context: &Context) -> Result<()> {
+pub async fn run_sqs_subscriber(config: &Config, context: &Context) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
         warn!("missing sqs region or url, disabling crates.io SQS subscriber");
         return Ok(());
@@ -97,7 +97,7 @@ pub async fn listen(config: &Config, context: &Context) -> Result<()> {
         };
 
         for message in messages {
-            match handle_message(context, config, message.body.as_deref()).await {
+            match handle_message_body(context, config, message.body.as_deref()).await {
                 MessageOutcome::Ack => {
                     if let Some(receipt_handle) = message.receipt_handle.as_deref()
                         && let Err(err) = client
@@ -148,13 +148,17 @@ pub async fn listen(config: &Config, context: &Context) -> Result<()> {
     }
 }
 
-async fn handle_message(context: &Context, config: &Config, body: Option<&str>) -> MessageOutcome {
+async fn handle_message_body(
+    context: &Context,
+    config: &Config,
+    body: Option<&str>,
+) -> MessageOutcome {
     let Some(body) = body else {
         return MessageOutcome::Ignore;
     };
 
     match retry_async(
-        || async move { process_message(context, config, body).await },
+        || async move { process_sqs_event(context, config, body).await },
         3,
     )
     .await
@@ -172,8 +176,7 @@ async fn handle_message(context: &Context, config: &Config, body: Option<&str>) 
     }
 }
 
-#[instrument(skip(context, config))]
-async fn process_message(context: &Context, config: &Config, body: &str) -> Result<()> {
+async fn process_sqs_event(context: &Context, config: &Config, body: &str) -> Result<()> {
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
 
@@ -333,12 +336,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_process_message_dispatches_added_event() -> Result<()> {
+    async fn test_process_sqs_event_dispatches_added_event() -> Result<()> {
         let mut config = Config::test_config()?;
         config.sqs_active = true;
         let env = TestEnvironment::builder().config(config).build().await?;
 
-        process_message(
+        process_sqs_event(
             &env,
             env.config(),
             &added_event_json("krate", &V1.to_string()),
@@ -354,12 +357,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_process_message_respects_sqs_active() -> Result<()> {
+    async fn test_process_sqs_event_respects_sqs_active() -> Result<()> {
         let mut config = Config::test_config()?;
         config.sqs_active = false;
         let env = TestEnvironment::builder().config(config).build().await?;
 
-        process_message(
+        process_sqs_event(
             &env,
             env.config(),
             &added_event_json("krate", &V1.to_string()),
@@ -372,10 +375,10 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_process_message_rejects_invalid_json() -> Result<()> {
+    async fn test_process_sqs_event_rejects_invalid_json() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let err = process_message(&env, env.config(), "{not json").await;
+        let err = process_sqs_event(&env, env.config(), "{not json").await;
 
         assert!(err.is_err());
         let err = format!("{:?}", err.unwrap_err());
@@ -388,12 +391,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_handle_message_acknowledges_success() -> Result<()> {
+    async fn test_handle_message_body_acknowledges_success() -> Result<()> {
         let config = Config::test_config()?;
         let env = TestEnvironment::builder().config(config).build().await?;
 
         assert_eq!(
-            handle_message(
+            handle_message_body(
                 &env,
                 env.config(),
                 Some(&added_event_json("krate", &V1.to_string())),
@@ -406,11 +409,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_handle_message_retries_failed_processing() -> Result<()> {
+    async fn test_handle_message_body_retries_failed_processing() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         assert_eq!(
-            handle_message(&env, env.config(), Some("{bad json")).await,
+            handle_message_body(&env, env.config(), Some("{bad json")).await,
             MessageOutcome::RetryLater(RETRY_DELAY)
         );
 
@@ -418,11 +421,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_handle_message_ignores_missing_body() -> Result<()> {
+    async fn test_handle_message_body_ignores_missing_body() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         assert_eq!(
-            handle_message(&env, env.config(), None).await,
+            handle_message_body(&env, env.config(), None).await,
             MessageOutcome::Ignore
         );
         assert!(env.build_queue()?.queued_crates().await?.is_empty());

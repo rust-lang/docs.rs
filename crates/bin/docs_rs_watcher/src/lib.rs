@@ -29,7 +29,7 @@ use tracing::{debug, error, info, trace};
 pub async fn watch(config: &Config, context: &Context) {
     loop {
         if config.sqs_active {
-            if let Err(err) = crate::subscriber::listen(config, context).await {
+            if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context).await {
                 error!(?err, "unexpected error watching SQS, will retry");
                 time::sleep(Duration::from_secs(10)).await;
             }
@@ -41,7 +41,7 @@ pub async fn watch(config: &Config, context: &Context) {
             // Later: just SQS
             if let Err(err) = tokio::try_join!(
                 crate::watch_registry(config, context),
-                crate::subscriber::listen(config, context),
+                crate::subscriber::run_sqs_subscriber(config, context),
             ) {
                 error!(
                     ?err,
