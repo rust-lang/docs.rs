@@ -180,7 +180,6 @@ services:
         image: softwaremill/elasticmq
         ports:
             - "127.0.0.1:9324:9324"
-            - "127.0.0.1:9325:9325"
         volumes:
             - "./dockerfiles/elasticmq.conf:/opt/elasticmq.conf:ro"
         command: ["-Dconfig.file=/opt/elasticmq.conf"]
