@@ -97,8 +97,6 @@ pub type IndexChangeEventV1 = Event<IndexChangeV1>;
 pub struct CrateVersion {
     /// The crate name, i.e. `clap`.
     pub name: String,
-    /// is the release yanked?
-    pub yanked: bool,
     /// The semantic version of the crate.
     #[serde(rename = "vers")]
     pub version: semver::Version,
@@ -112,7 +110,6 @@ mod tests {
     fn crate_version() -> CrateVersion {
         CrateVersion {
             name: "clap".into(),
-            yanked: false,
             version: semver::Version::new(4, 5, 0),
         }
     }
@@ -135,7 +132,6 @@ mod tests {
             serde_json::to_value(&event).unwrap(),
             json!({
                 "name": "clap",
-                "yanked": false,
                 "vers": "4.5.0",
             })
         );
@@ -152,7 +148,6 @@ mod tests {
                     "type": "added",
                     "payload": {
                         "name": "clap",
-                        "yanked": false,
                         "vers": "4.5.0",
                     }
                 }),
@@ -163,7 +158,6 @@ mod tests {
                     "type": "unyanked",
                     "payload": {
                         "name": "clap",
-                        "yanked": false,
                         "vers": "4.5.0",
                     }
                 }),
@@ -174,7 +168,6 @@ mod tests {
                     "type": "yanked",
                     "payload": {
                         "name": "clap",
-                        "yanked": false,
                         "vers": "4.5.0",
                     }
                 }),
@@ -196,7 +189,6 @@ mod tests {
                     "type": "version_deleted",
                     "payload": {
                         "name": "clap",
-                        "yanked": false,
                         "vers": "4.5.0",
                     }
                 }),
