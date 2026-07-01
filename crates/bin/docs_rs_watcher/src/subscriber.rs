@@ -23,7 +23,8 @@ use tracing::{debug, error, instrument, warn};
 /// wait-time (long polling):
 ///
 /// How long should the request be kept open when there are no messages.
-pub(crate) const WAIT_TIME: Duration = Duration::from_secs(30);
+/// SQS only accepts values in the range 0..=20 seconds.
+pub(crate) const WAIT_TIME: Duration = Duration::from_secs(20);
 
 /// when one long-polling request is finished, how long to sleep before starting the next?
 const SLEEP_BETWEEN_REQUESTS: Duration = Duration::from_secs(1);
