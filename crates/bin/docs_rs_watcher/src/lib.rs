@@ -3,7 +3,6 @@ pub mod consistency;
 mod db;
 mod index;
 pub mod index_watcher;
-mod message_queue;
 mod rebuilds;
 mod service_metrics;
 pub mod subscriber;
