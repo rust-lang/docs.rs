@@ -158,6 +158,12 @@ async fn process_changes(
     let mut crates_added = 0;
 
     for change in changes {
+        debug!(?change, "received change from git index");
+
+        if config.registry_dry_run {
+            continue;
+        }
+
         match process_change(context, locks, change, config).await {
             Ok(added) => {
                 if added {

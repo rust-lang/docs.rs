@@ -13,7 +13,7 @@ use docs_rs_context::Context;
 use docs_rs_crates_io::events::{IndexChangeEventV1, IndexChangeV1};
 use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
 
@@ -38,6 +38,9 @@ const SLEEP_BETWEEN_REQUESTS: Duration = Duration::from_secs(1);
 /// it redelivers this message.
 const RETRY_DELAY: Duration = Duration::from_secs(30);
 
+/// How long to wait before rechecking the priorities of queued crates.
+const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
+
 pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
         bail!("missing sqs region or url, disabling crates.io subscriber");
@@ -52,6 +55,7 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             .build(),
     );
 
+    let mut last_priority_recheck = Instant::now();
     let queue = context.build_queue()?;
 
     loop {
@@ -145,6 +149,14 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             }
         }
 
+        if last_priority_recheck.elapsed() >= DELAY_BETWEEN_PRIORITY_RECHECK {
+            if let Err(err) = queue.deprioritize_workspaces().await {
+                error!(?err, "error deprioritizing workspaces");
+            }
+
+            last_priority_recheck = Instant::now();
+        }
+
         time::sleep(SLEEP_BETWEEN_REQUESTS).await;
     }
 }
@@ -163,9 +175,11 @@ async fn process_message(
 
     let _guard = locks.lock(event.change.name()).await;
 
-    process_change(context, &event.change, config)
-        .await
-        .context("error processing change")?;
+    if !config.sqs_dry_run {
+        process_change(context, &event.change, config)
+            .await
+            .context("error processing change")?;
+    }
 
     Ok(())
 }
