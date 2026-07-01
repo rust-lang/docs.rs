@@ -22,6 +22,10 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
 
+/// main index-watcher / subscriber loop.
+/// mostly wraps either the git index watcher loop, or the sqs subscriber loop.
+/// Only here so unexpected errors lead to a sentry report & restart instead of
+/// the daemon / watcher just stopping.
 pub async fn watch(config: &Config, context: &Context) {
     loop {
         if config.sqs_active {

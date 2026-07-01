@@ -16,14 +16,11 @@ use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
 
-// TODO:
-// * when should we run deprioritize_workspaces ?
-
 /// wait-time (long polling):
 ///
 /// How long should the request be kept open when there are no messages.
 /// SQS only accepts values in the range 0..=20 seconds.
-pub(crate) const WAIT_TIME: Duration = Duration::from_secs(20);
+const WAIT_TIME: Duration = Duration::from_secs(20);
 
 /// when one long-polling request is finished, how long to sleep before starting the next?
 const SLEEP_BETWEEN_REQUESTS: Duration = Duration::from_secs(1);
@@ -33,12 +30,13 @@ const SLEEP_BETWEEN_REQUESTS: Duration = Duration::from_secs(1);
 const RETRY_DELAY: Duration = Duration::from_secs(30);
 
 /// How long to wait before rechecking the priorities of queued crates.
+/// Right now only runs `deprioritize_workspaces`.
 const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 
 /// visibility timeout:
 /// should be longer than the longest time our server takes to handle a message.
 ///
-/// if we fetch a message, and don't delete it in this time, it will be redelivered.
+/// If we fetch a message, and don't delete it in this time, it will be redelivered.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,7 +177,7 @@ async fn process_message(context: &Context, config: &Config, body: &str) -> Resu
 
     debug!(?event, "received event from sqs");
 
-    if !config.sqs_active {
+    if config.sqs_active {
         process_change(context, &event.change, config)
             .await
             .context("error processing change")?;
@@ -354,8 +352,10 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_process_message_respects_sqs_dry_run() -> Result<()> {
-        let env = TestEnvironment::new().await?;
+    async fn test_process_message_respects_sqs_active() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.sqs_active = false;
+        let env = TestEnvironment::builder().config(config).build().await?;
 
         process_message(
             &env,
@@ -387,8 +387,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_message_acknowledges_success() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.sqs_active = false;
+        let config = Config::test_config()?;
         let env = TestEnvironment::builder().config(config).build().await?;
 
         assert_eq!(
