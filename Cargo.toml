@@ -43,7 +43,7 @@ chrono = { version = "0.4.11", default-features = false, features = ["clock", "s
 clap = { version = "4.0.22", features = ["derive"] }
 futures-util = "0.3.5"
 http = "1.0.0"
-itertools = "0.14.0" 
+itertools = "0.15.0" 
 mime = "0.3.16"
 mockito = "1.0.2"
 num_cpus = "1.15.0"

@@ -4,13 +4,14 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_watcher::{Config, Index, index_watcher, synchronization::CrateLocks};
+use futures_util::FutureExt as _;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
-    if let Err(err) = CommandLine::parse().handle_args().await {
+    if let Err(err) = CommandLine::parse().handle_args().boxed().await {
         eprintln!("error running watcher: {:?}", err);
         drop(_guard);
         std::process::exit(1);

@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository_owner == 'rust-lang'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: install
         run: |
           rustup override set stable

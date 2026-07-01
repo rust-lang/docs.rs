@@ -32,6 +32,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_database::Pool;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
@@ -397,6 +398,8 @@ pub struct LimitedCrateDetails {
     dependencies: Vec<Dependency>,
     total_items: Option<i32>,
     documented_items: Option<i32>,
+    latest_build_time: Option<DateTime<Utc>>,
+    latest_build_rustc_version: Option<String>,
 }
 
 impl From<CrateDetails> for LimitedCrateDetails {
@@ -410,8 +413,15 @@ impl From<CrateDetails> for LimitedCrateDetails {
             dependencies,
             total_items,
             documented_items,
+            latest_build,
             ..
         } = value;
+
+        let (latest_build_time, latest_build_rustc_version) = if let Some(b) = latest_build {
+            (b.build_time, b.rustc_version)
+        } else {
+            (None, None)
+        };
 
         Self {
             total_items,
@@ -422,6 +432,8 @@ impl From<CrateDetails> for LimitedCrateDetails {
             repository_url,
             owners,
             dependencies,
+            latest_build_time,
+            latest_build_rustc_version,
         }
     }
 }
