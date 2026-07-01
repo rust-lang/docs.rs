@@ -39,17 +39,37 @@ pub async fn watch(config: &Config, context: &Context) {
             // - listen so SQS, and log the events so we can test SQS connection, and compare events
             //
             // Later: just SQS
-            if let Err(err) = tokio::try_join!(
-                crate::watch_registry(config, context),
-                crate::subscriber::run_sqs_subscriber(config, context),
-            ) {
-                error!(
-                    ?err,
-                    "unexpected error watching registry or SQS, will retry"
-                );
+            let sqs_is_configured = config.sqs_region.is_some() && config.sqs_queue_url.is_some();
+
+            let registry_result = if sqs_is_configured {
+                tokio::select! {
+                    result = crate::watch_registry(config, context) => result,
+                    _ = supervise_sqs_subscriber(config, context) => unreachable!("SQS supervisor never returns"),
+                }
+            } else {
+                crate::watch_registry(config, context).await
+            };
+
+            if let Err(err) = registry_result {
+                error!(?err, "unexpected error watching registry, will retry");
                 time::sleep(Duration::from_secs(10)).await;
             }
         }
+    }
+}
+
+async fn supervise_sqs_subscriber(config: &Config, context: &Context) {
+    loop {
+        match crate::subscriber::run_sqs_subscriber(config, context).await {
+            Ok(()) => {
+                error!("SQS subscriber exited unexpectedly, restarting");
+            }
+            Err(err) => {
+                error!(?err, "unexpected error watching SQS, restarting");
+            }
+        }
+
+        time::sleep(Duration::from_secs(10)).await;
     }
 }
 
