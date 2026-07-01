@@ -33,7 +33,10 @@ pub async fn watch(config: &Config, context: &Context) {
             crate::watch_registry(&config, &context, &locks),
             crate::subscriber::listen(&config, &context, &locks),
         ) {
-            error!(?err, "error watching registry or SQS, will retry");
+            error!(
+                ?err,
+                "unexpected error watching registry or SQS, will retry"
+            );
             time::sleep(Duration::from_secs(10)).await;
         }
     }
