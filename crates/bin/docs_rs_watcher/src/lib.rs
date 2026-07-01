@@ -25,6 +25,20 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
 
+pub async fn watch(config: &Config, context: &Context) {
+    let locks = CrateLocks::new();
+
+    loop {
+        if let Err(err) = tokio::try_join!(
+            crate::watch_registry(&config, &context, &locks),
+            crate::subscriber::listen(&config, &context, &locks),
+        ) {
+            error!(?err, "error watching registry or SQS, will retry");
+            time::sleep(Duration::from_secs(10)).await;
+        }
+    }
+}
+
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
