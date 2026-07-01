@@ -56,12 +56,13 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
     let mut last_priority_recheck = Instant::now();
     let queue = context.build_queue()?;
     let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let client = Client::from_conf(
-        aws_sdk_sqs::config::Builder::from(&shared_config)
-            .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
-            .region(Region::new(region.to_string()))
-            .build(),
-    );
+    let mut client_config = aws_sdk_sqs::config::Builder::from(&shared_config)
+        .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
+        .region(Region::new(region.to_string()));
+    if let Some(endpoint_url) = &config.sqs_endpoint_url {
+        client_config = client_config.endpoint_url(endpoint_url);
+    }
+    let client = Client::from_conf(client_config.build());
 
     let queue_url = queue_url.to_string();
 

@@ -11,6 +11,7 @@ pub struct Config {
     pub registry_dry_run: bool,
     pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
+    pub sqs_endpoint_url: Option<String>,
     pub sqs_dry_run: bool,
     pub aws_sdk_max_retries: u32,
 
@@ -39,6 +40,7 @@ impl AppConfig for Config {
 
             sqs_queue_url: maybe_env("DOCSRS_SQS_QUEUE_URL")?,
             sqs_region: maybe_env("DOCSRS_SQS_REGION")?,
+            sqs_endpoint_url: maybe_env("DOCSRS_SQS_ENDPOINT_URL")?,
             sqs_dry_run: env("DOCS_RS_SQS_DRY_RUN", true)?,
             aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?,
 

@@ -19,6 +19,7 @@
 #     - repo-stats updater
 #     - cdn invalidator
 #     - release-rebuild-enqueuer
+# * `elasticmq` -> local SQS-compatible queue for watcher testing
 #
 # optional profile: `metrics`:
 # * `opentelemetry` -> a debug opentelemetry receiver
@@ -120,6 +121,7 @@ x-registry-watcher: &registry-watcher
     depends_on:
         - db
         - s3
+        - elasticmq
     volumes:
         - "./ignored/docker-registry-watcher/prefix:/opt/docsrs/prefix"
         - crates-io-index:/opt/docsrs/crates.io-index
@@ -132,6 +134,10 @@ x-registry-watcher: &registry-watcher
         REGISTRY_INDEX_PATH: /opt/docsrs/crates.io-index
         # configure the rebuild-queuer,
         DOCSRS_MAX_QUEUED_REBUILDS: ${DOCSRS_MAX_QUEUED_REBUILDS:-10}
+        DOCSRS_SQS_QUEUE_URL: ${DOCSRS_SQS_QUEUE_URL:-http://elasticmq:9324/queue/docsrs-events}
+        DOCSRS_SQS_REGION: ${DOCSRS_SQS_REGION:-elasticmq}
+        DOCSRS_SQS_ENDPOINT_URL: ${DOCSRS_SQS_ENDPOINT_URL:-http://elasticmq:9324}
+        DOCS_RS_SQS_DRY_RUN: ${DOCS_RS_SQS_DRY_RUN:-false}
     env_file:
         - .docker.env
 
@@ -168,6 +174,19 @@ services:
         <<: *registry-watcher
         profiles:
             # watcher-CLI should not be run as background daemon, just manually
+            - manual
+
+    elasticmq:
+        image: softwaremill/elasticmq
+        ports:
+            - "127.0.0.1:9324:9324"
+            - "127.0.0.1:9325:9325"
+        volumes:
+            - "./dockerfiles/elasticmq.conf:/opt/elasticmq.conf:ro"
+        command: ["-Dconfig.file=/opt/elasticmq.conf"]
+        profiles:
+            - watcher
+            - full
             - manual
 
     builder-a:
