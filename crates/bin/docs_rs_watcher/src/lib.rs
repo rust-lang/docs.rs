@@ -24,15 +24,27 @@ use tracing::{debug, error, info, trace};
 
 pub async fn watch(config: &Config, context: &Context) {
     loop {
-        if let Err(err) = tokio::try_join!(
-            crate::watch_registry(config, context),
-            crate::subscriber::listen(config, context),
-        ) {
-            error!(
-                ?err,
-                "unexpected error watching registry or SQS, will retry"
-            );
-            time::sleep(Duration::from_secs(10)).await;
+        if config.sqs_active {
+            if let Err(err) = crate::subscriber::listen(config, context).await {
+                error!(?err, "unexpected error watching SQS, will retry");
+                time::sleep(Duration::from_secs(10)).await;
+            }
+        } else {
+            // intermediate mode:
+            // - still fetch from git for events
+            // - listen so SQS, and log the events so we can test SQS connection, and compare events
+            //
+            // Later: just SQS
+            if let Err(err) = tokio::try_join!(
+                crate::watch_registry(config, context),
+                crate::subscriber::listen(config, context),
+            ) {
+                error!(
+                    ?err,
+                    "unexpected error watching registry or SQS, will retry"
+                );
+                time::sleep(Duration::from_secs(10)).await;
+            }
         }
     }
 }
