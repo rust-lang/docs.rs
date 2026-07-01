@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::time::Duration;
 
+#[cfg(test)]
+pub(crate) mod fake;
 pub(crate) mod sqs;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

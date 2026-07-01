@@ -192,90 +192,14 @@ pub(crate) async fn process_change(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::TestEnvironment;
-    use anyhow::anyhow;
+    use crate::{
+        message_queue::fake::{FakeAction, FakeMessageQueueClient},
+        testing::TestEnvironment,
+    };
     use docs_rs_config::AppConfig as _;
     use docs_rs_crates_io::events::CrateVersion;
     use docs_rs_types::testing::{KRATE, V1, V2};
     use pretty_assertions::assert_eq;
-    use std::sync::{Arc, Mutex};
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    enum FakeAction {
-        Delete {
-            receipt_handle: String,
-        },
-        Retry {
-            receipt_handle: String,
-            delay: Duration,
-        },
-    }
-
-    #[derive(Clone)]
-    struct FakeMessageQueueClient {
-        receive_result: Arc<Mutex<Result<Vec<ReceivedMessage>, String>>>,
-        actions: Arc<Mutex<Vec<FakeAction>>>,
-        delete_error: Arc<Mutex<Option<String>>>,
-        retry_error: Arc<Mutex<Option<String>>>,
-    }
-
-    impl FakeMessageQueueClient {
-        fn new() -> Self {
-            Self::default()
-        }
-
-        fn with_messages(messages: Vec<ReceivedMessage>) -> Self {
-            Self {
-                receive_result: Arc::new(Mutex::new(Ok(messages))),
-                ..Self::default()
-            }
-        }
-    }
-
-    impl Default for FakeMessageQueueClient {
-        fn default() -> Self {
-            Self {
-                receive_result: Arc::new(Mutex::new(Ok(Vec::new()))),
-                actions: Arc::new(Mutex::new(Vec::new())),
-                delete_error: Arc::new(Mutex::new(None)),
-                retry_error: Arc::new(Mutex::new(None)),
-            }
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl MessageQueueClient for FakeMessageQueueClient {
-        async fn receive_messages(&self) -> Result<Vec<ReceivedMessage>> {
-            self.receive_result
-                .lock()
-                .unwrap()
-                .clone()
-                .map_err(|err| anyhow!(err))
-        }
-
-        async fn delete_message(&self, receipt_handle: &str) -> Result<()> {
-            self.actions.lock().unwrap().push(FakeAction::Delete {
-                receipt_handle: receipt_handle.to_string(),
-            });
-            if let Some(err) = self.delete_error.lock().unwrap().clone() {
-                Err(anyhow!(err))
-            } else {
-                Ok(())
-            }
-        }
-
-        async fn retry_message(&self, receipt_handle: &str, delay: Duration) -> Result<()> {
-            self.actions.lock().unwrap().push(FakeAction::Retry {
-                receipt_handle: receipt_handle.to_string(),
-                delay,
-            });
-            if let Some(err) = self.retry_error.lock().unwrap().clone() {
-                Err(anyhow!(err))
-            } else {
-                Ok(())
-            }
-        }
-    }
 
     fn added_event_json(name: &str, version: &str) -> String {
         format!(
