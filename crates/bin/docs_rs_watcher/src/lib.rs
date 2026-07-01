@@ -15,7 +15,7 @@ pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
 use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
-use anyhow::Result;
+use anyhow::{Error, Result};
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
 use std::{sync::Arc, time::Duration};
@@ -38,38 +38,20 @@ pub async fn watch(config: &Config, context: &Context) {
             // - still fetch from git for events
             // - listen so SQS, and log the events so we can test SQS connection, and compare events
             //
-            // Later: just SQS
-            let sqs_is_configured = config.sqs_region.is_some() && config.sqs_queue_url.is_some();
+            // We don't retry on unespected SQS errors yet.
 
-            let registry_result = if sqs_is_configured {
-                tokio::select! {
-                    result = crate::watch_registry(config, context) => result,
-                    _ = supervise_sqs_subscriber(config, context) => unreachable!("SQS supervisor never returns"),
+            if let (Err(err), _) = tokio::join!(crate::watch_registry(config, context), async {
+                // unexpected SQS errors are caught here, and we don't retry.
+                if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context).await {
+                    error!(?err, "error setting up SQS test subscriber");
                 }
-            } else {
-                crate::watch_registry(config, context).await
-            };
-
-            if let Err(err) = registry_result {
+                Ok::<_, Error>(())
+            }) {
+                // unexpected index watcher errors lead to a report & retry.
                 error!(?err, "unexpected error watching registry, will retry");
                 time::sleep(Duration::from_secs(10)).await;
             }
         }
-    }
-}
-
-async fn supervise_sqs_subscriber(config: &Config, context: &Context) {
-    loop {
-        match crate::subscriber::run_sqs_subscriber(config, context).await {
-            Ok(()) => {
-                error!("SQS subscriber exited unexpectedly, restarting");
-            }
-            Err(err) => {
-                error!(?err, "unexpected error watching SQS, restarting");
-            }
-        }
-
-        time::sleep(Duration::from_secs(10)).await;
     }
 }
 
