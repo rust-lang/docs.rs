@@ -41,12 +41,6 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 /// if we fetch a message, and don't delete it in this time, it will be redelivered.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ReceivedMessage {
-    body: Option<String>,
-    receipt_handle: Option<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MessageOutcome {
     Ack,
@@ -80,14 +74,7 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             .send()
             .await
         {
-            Ok(response) => response
-                .messages()
-                .iter()
-                .map(|message| ReceivedMessage {
-                    body: message.body().map(str::to_owned),
-                    receipt_handle: message.receipt_handle().map(str::to_owned),
-                })
-                .collect::<Vec<ReceivedMessage>>(),
+            Ok(response) => response.messages().to_vec(),
             Err(err) => {
                 error!(
                     ?err,
