@@ -56,4 +56,11 @@ impl AppConfig for Config {
             repository: docs_rs_repository_stats::Config::from_environment()?,
         })
     }
+
+    #[cfg(test)]
+    fn test_config() -> Result<Self> {
+        let mut config = Self::from_environment()?;
+        config.sqs_active = false;
+        Ok(config)
+    }
 }

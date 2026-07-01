@@ -333,7 +333,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_message_dispatches_added_event() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.sqs_active = false;
+        config.sqs_active = true;
         let env = TestEnvironment::builder().config(config).build().await?;
 
         process_message(
