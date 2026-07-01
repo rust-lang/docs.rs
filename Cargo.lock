@@ -2115,7 +2115,6 @@ name = "docs_rs_crates_io"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "semver",
  "serde",
  "serde_json",
 ]

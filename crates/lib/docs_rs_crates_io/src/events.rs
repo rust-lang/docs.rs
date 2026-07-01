@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_types)]
-
 use chrono::{DateTime, Utc};
 use std::fmt;
 
@@ -99,7 +97,7 @@ pub struct CrateVersion {
     pub name: String,
     /// The semantic version of the crate.
     #[serde(rename = "vers")]
-    pub version: semver::Version,
+    pub version: String,
 }
 
 #[cfg(test)]
@@ -110,7 +108,7 @@ mod tests {
     fn crate_version() -> CrateVersion {
         CrateVersion {
             name: "clap".into(),
-            version: semver::Version::new(4, 5, 0),
+            version: "4.5.0".into(),
         }
     }
 
