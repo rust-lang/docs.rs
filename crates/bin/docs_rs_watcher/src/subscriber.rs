@@ -55,6 +55,8 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
     };
     let mut last_priority_recheck = Instant::now();
     let queue = context.build_queue()?;
+
+    debug!("creating SQS client...");
     let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
     let mut client_config = aws_sdk_sqs::config::Builder::from(&shared_config)
         .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
@@ -73,6 +75,7 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             continue;
         }
 
+        debug!("receiving messages...");
         let messages = match client
             .receive_message()
             .queue_url(&queue_url)

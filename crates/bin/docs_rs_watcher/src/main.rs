@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use docs_rs_config::AppConfig as _;
