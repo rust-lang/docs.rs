@@ -71,8 +71,23 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             continue;
         }
 
-        let messages = match receive_messages(&client, &queue_url).await {
-            Ok(messages) => messages,
+        let messages = match client
+            .receive_message()
+            .queue_url(&queue_url)
+            .max_number_of_messages(10)
+            .wait_time_seconds(WAIT_TIME.as_secs() as i32)
+            .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
+            .send()
+            .await
+        {
+            Ok(response) => response
+                .messages()
+                .iter()
+                .map(|message| ReceivedMessage {
+                    body: message.body().map(str::to_owned),
+                    receipt_handle: message.receipt_handle().map(str::to_owned),
+                })
+                .collect::<Vec<ReceivedMessage>>(),
             Err(err) => {
                 error!(
                     ?err,
@@ -87,7 +102,12 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
             match handle_message(context, config, locks, message.body.as_deref()).await {
                 MessageOutcome::Ack => {
                     if let Some(receipt_handle) = message.receipt_handle.as_deref()
-                        && let Err(err) = delete_message(&client, &queue_url, receipt_handle).await
+                        && let Err(err) = client
+                            .delete_message()
+                            .queue_url(&queue_url)
+                            .receipt_handle(receipt_handle)
+                            .send()
+                            .await
                     {
                         error!(?err, receipt_handle, "error deleting message from queue");
                     }
@@ -100,8 +120,13 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
                         "error handling message. Retrying."
                     );
                     if let Some(receipt_handle) = message.receipt_handle.as_deref()
-                        && let Err(err) =
-                            retry_message(&client, &queue_url, receipt_handle, delay).await
+                        && let Err(err) = client
+                            .change_message_visibility()
+                            .queue_url(&queue_url)
+                            .receipt_handle(receipt_handle)
+                            .visibility_timeout(delay.as_secs() as i32)
+                            .send()
+                            .await
                     {
                         warn!(
                             ?err,
@@ -134,52 +159,6 @@ async fn build_client(region: &str, max_retries: u32) -> Client {
             .region(Region::new(region.to_string()))
             .build(),
     )
-}
-
-async fn receive_messages(client: &Client, queue_url: &str) -> Result<Vec<ReceivedMessage>> {
-    let response = client
-        .receive_message()
-        .queue_url(queue_url)
-        .max_number_of_messages(10)
-        .wait_time_seconds(WAIT_TIME.as_secs() as i32)
-        .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
-        .send()
-        .await?;
-
-    Ok(response
-        .messages()
-        .iter()
-        .map(|message| ReceivedMessage {
-            body: message.body().map(str::to_owned),
-            receipt_handle: message.receipt_handle().map(str::to_owned),
-        })
-        .collect())
-}
-
-async fn delete_message(client: &Client, queue_url: &str, receipt_handle: &str) -> Result<()> {
-    client
-        .delete_message()
-        .queue_url(queue_url)
-        .receipt_handle(receipt_handle)
-        .send()
-        .await?;
-    Ok(())
-}
-
-async fn retry_message(
-    client: &Client,
-    queue_url: &str,
-    receipt_handle: &str,
-    delay: Duration,
-) -> Result<()> {
-    client
-        .change_message_visibility()
-        .queue_url(queue_url)
-        .receipt_handle(receipt_handle)
-        .visibility_timeout(delay.as_secs() as i32)
-        .send()
-        .await?;
-    Ok(())
 }
 
 async fn handle_message(
