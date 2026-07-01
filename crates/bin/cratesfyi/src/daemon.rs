@@ -2,9 +2,10 @@ use anyhow::{Error, anyhow};
 use docs_rs_builder::{RustwideBuilder, queue_builder};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
+use docs_rs_watcher::synchronization::CrateLocks;
 use docs_rs_watcher::{
     start_background_queue_rebuild, start_background_repository_stats_updater,
-    start_background_service_metric_collector, watch_registry,
+    start_background_service_metric_collector,
 };
 use docs_rs_web::run_web_server;
 use std::sync::Arc;
@@ -21,7 +22,13 @@ fn start_registry_watcher(
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(&config, &context).await
+        let locks = CrateLocks::new();
+        // FIXME: we don't want to exit in error case, do we?
+        // This is a spawn, so in the background, so we probably want to at least log the error?
+        tokio::try_join!(
+            docs_rs_watcher::watch_registry(&config, &context, &locks),
+            docs_rs_watcher::subscriber::listen(&config, &context, &locks),
+        )
     });
 
     Ok(())

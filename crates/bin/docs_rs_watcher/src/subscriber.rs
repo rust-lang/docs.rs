@@ -180,8 +180,11 @@ pub(crate) async fn process_change(
         IndexChangeV1::Added(crate_version) => {
             process_version_added(context, &crate_version.try_into().unwrap()).await?
         }
-        IndexChangeV1::Unyanked(crate_version) | IndexChangeV1::Yanked(crate_version) => {
-            process_version_yank_status(context, &crate_version.try_into().unwrap()).await?
+        IndexChangeV1::Yanked(crate_version) => {
+            process_version_yank_status(context, &crate_version.try_into().unwrap(), true).await?
+        }
+        IndexChangeV1::Unyanked(crate_version) => {
+            process_version_yank_status(context, &crate_version.try_into().unwrap(), false).await?
         }
         IndexChangeV1::CrateDeleted { name, .. } => {
             let name: KrateName = name.parse()?;
