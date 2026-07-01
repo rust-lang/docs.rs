@@ -55,7 +55,14 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
     };
     let mut last_priority_recheck = Instant::now();
     let queue = context.build_queue()?;
-    let client = build_client(region, config.aws_sdk_max_retries).await;
+    let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+    let client = Client::from_conf(
+        aws_sdk_sqs::config::Builder::from(&shared_config)
+            .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
+            .region(Region::new(region.to_string()))
+            .build(),
+    );
+
     let queue_url = queue_url.to_string();
 
     loop {
@@ -135,17 +142,6 @@ pub async fn listen(config: &Config, context: &Context, locks: &CrateLocks) -> R
 
         time::sleep(SLEEP_BETWEEN_REQUESTS).await;
     }
-}
-
-async fn build_client(region: &str, max_retries: u32) -> Client {
-    let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-
-    Client::from_conf(
-        aws_sdk_sqs::config::Builder::from(&shared_config)
-            .retry_config(RetryConfig::standard().with_max_attempts(max_retries))
-            .region(Region::new(region.to_string()))
-            .build(),
-    )
 }
 
 async fn handle_message(
