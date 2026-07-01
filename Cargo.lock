@@ -600,31 +600,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws-sdk-sqs"
-version = "1.102.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0246bf049cfc003ce44599dff955b9353758de3afa68a053da9b2c7de20a07d8"
-dependencies = [
- "arc-swap",
- "aws-credential-types",
- "aws-runtime",
- "aws-smithy-async",
- "aws-smithy-http",
- "aws-smithy-json",
- "aws-smithy-observability",
- "aws-smithy-runtime",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "aws-types",
- "bytes",
- "fastrand",
- "http 0.2.12",
- "http 1.4.1",
- "regex-lite",
- "tracing",
-]
-
-[[package]]
 name = "aws-sdk-sts"
 version = "1.107.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,10 +1235,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
- "js-sys",
  "num-traits",
  "serde",
- "wasm-bindgen",
  "windows-link",
 ]
 
@@ -2136,16 +2109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "docs_rs_crates_io"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "semver",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "docs_rs_database"
 version = "0.0.0"
 dependencies = [
@@ -2484,15 +2447,12 @@ name = "docs_rs_watcher"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "aws-config",
- "aws-sdk-sqs",
  "clap",
  "crates-index",
  "crates-index-diff",
  "docs_rs_build_queue",
  "docs_rs_config",
  "docs_rs_context",
- "docs_rs_crates_io",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_fastly",
@@ -2509,12 +2469,10 @@ dependencies = [
  "opentelemetry",
  "pretty_assertions",
  "rayon",
- "serde_json",
  "sqlx",
  "test-case",
  "tokio",
  "tracing",
- "url",
 ]
 
 [[package]]
