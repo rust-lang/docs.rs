@@ -2109,6 +2109,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_crate_zip"
+version = "0.1.0"
+dependencies = [
+ "async-compression",
+ "docs_rs_utils",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "docs_rs_database"
 version = "0.0.0"
 dependencies = [

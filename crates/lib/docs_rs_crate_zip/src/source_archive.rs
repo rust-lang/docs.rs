@@ -1,0 +1,119 @@
+use crate::{
+    error::Error,
+    manifest::{FileEntry, Manifest},
+};
+use async_compression::tokio::bufread::DeflateDecoder;
+use docs_rs_utils::APP_USER_AGENT;
+use futures_util::TryStreamExt as _;
+use reqwest::{
+    IntoUrl, StatusCode, Url,
+    header::{HeaderValue, RANGE, USER_AGENT},
+};
+use tokio::io::{self, AsyncWrite, AsyncWriteExt as _};
+use tokio_util::io::StreamReader;
+
+pub struct SourceArchive {
+    manifest: Manifest,
+    zip_url: Url,
+    client: reqwest::Client,
+}
+
+impl SourceArchive {
+    pub async fn load(name: impl AsRef<str>, version: impl AsRef<str>) -> Result<Self, Error> {
+        Self::load_from("https://static.crates.io/", name, version).await
+    }
+
+    pub async fn load_from(
+        base_url: impl IntoUrl,
+        name: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> Result<Self, Error> {
+        let mut base_url = base_url.into_url().map_err(|_| Error::UrlParse)?;
+        base_url.set_path("crates/");
+
+        let index_url = base_url
+            .join(&format!(
+                "{0}/{0}-{1}.zip.json",
+                name.as_ref(),
+                version.as_ref()
+            ))
+            .map_err(|_| Error::UrlParse)?;
+
+        let headers = vec![(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT))]
+            .into_iter()
+            .collect();
+
+        let client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?;
+
+        let response = client.get(index_url.clone()).send().await?;
+        if is_not_found_error(&response.status()) {
+            return Err(Error::ManifestNotFound(index_url));
+        }
+        let response = response.error_for_status()?;
+
+        Ok(Self {
+            manifest: response.json().await?,
+            zip_url: base_url
+                .join(&format!("{0}/{0}-{1}.zip", name.as_ref(), version.as_ref()))
+                .map_err(|_| Error::UrlParse)?,
+            client,
+        })
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = &FileEntry> {
+        self.manifest.files.iter()
+    }
+
+    pub fn by_name(&self, path: impl AsRef<str>) -> Option<&FileEntry> {
+        let path = path.as_ref();
+        self.manifest.files.iter().find(|e| e.path == path)
+    }
+
+    pub async fn fetch<W>(&self, entry: &FileEntry, writer: &mut W) -> Result<(), Error>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let range_start = entry.data_offset;
+        let range_end = entry.data_offset + entry.compressed_size - 1;
+
+        let response = self
+            .client
+            .get(self.zip_url.clone())
+            .header(RANGE, format!("bytes={range_start}-{range_end}",))
+            .send()
+            .await?;
+
+        if is_not_found_error(&response.status()) {
+            return Err(Error::ArchiveNotFound(
+                self.zip_url.clone(),
+                range_start,
+                range_end,
+            ));
+        }
+        let response = response.error_for_status()?;
+
+        let stream = response.bytes_stream().map_err(std::io::Error::other);
+        let mut reader = StreamReader::new(stream);
+
+        match entry.compression.as_str() {
+            "deflate" => {
+                let mut decoder = DeflateDecoder::new(reader);
+                io::copy(&mut decoder, writer).await?;
+            }
+            "store" => {
+                io::copy(&mut reader, writer).await?;
+            }
+            compression => return Err(Error::UnsupportedZipCompression(compression.into())),
+        }
+
+        writer.flush().await?;
+
+        Ok(())
+    }
+}
+
+fn is_not_found_error(status: &StatusCode) -> bool {
+    matches!(status, &StatusCode::NOT_FOUND | &StatusCode::FORBIDDEN)
+}
