@@ -16,7 +16,7 @@ use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
 use std::time::{Duration, Instant};
 use tokio::time;
-use tracing::{debug, error, field, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 /// wait-time (long polling):
 ///
@@ -403,7 +403,7 @@ mod tests {
             .to_string();
         assert_eq!(change_type, "added");
         assert_eq!(applied.value(), 1);
-        let lag_metric = collected.get_metric("watcher", "docsrs.watcher.sqs_event_lag_seconds")?;
+        let lag_metric = collected.get_metric("watcher", "docsrs.watcher.sqs_event_lag")?;
         assert_eq!(lag_metric.get_f64_histogram().count(), 1);
 
         Ok(())
@@ -458,7 +458,7 @@ mod tests {
         );
         let collected = env.collected_metrics();
         let processing_metric =
-            collected.get_metric("watcher", "docsrs.watcher.sqs_message_processing_seconds")?;
+            collected.get_metric("watcher", "docsrs.watcher.sqs_message_processing_time")?;
         assert_eq!(processing_metric.get_f64_histogram().count(), 1);
 
         Ok(())
