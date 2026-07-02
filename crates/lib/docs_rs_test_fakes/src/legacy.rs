@@ -462,11 +462,7 @@ impl<'a> FakeRelease<'a> {
         let source_tmp = create_temp_dir();
         store_files_into(&self.source_files, source_tmp.path())?;
 
-        let mut owned_source_files: Vec<_> = self
-            .source_files
-            .iter()
-            .map(|(n, c)| (n.to_string(), c.to_vec()))
-            .collect();
+        let mut additional_source_files: Vec<(String, Vec<u8>)> = Vec::new();
 
         if !self.no_cargo_toml
             && !self
@@ -483,7 +479,7 @@ impl<'a> FakeRelease<'a> {
             "#
             );
             store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
-            owned_source_files.push(("Cargo.toml".into(), content.as_bytes().to_vec()));
+            additional_source_files.push(("Cargo.toml".into(), content.as_bytes().to_vec()));
         }
 
         let krate_name: KrateName = package.name.parse()?;
@@ -491,7 +487,11 @@ impl<'a> FakeRelease<'a> {
         if let Some(static_crates_io) = self.static_crates_io {
             let (manifest, zip) =
                 docs_rs_registry_api::testing::static_test_env::create_test_source_archive(
-                    owned_source_files,
+                    self.source_files.iter().cloned().chain(
+                        additional_source_files
+                            .iter()
+                            .map(|(n, c)| (n.as_str(), c.as_slice())),
+                    ),
                 )?;
             static_crates_io
                 .add(&krate_name, &package.version, manifest, zip)
