@@ -1376,7 +1376,7 @@ mod test {
             );
             let body = resp.text().await?;
             assert!(
-                body.contains("<a href=\"/crate/dummy/latest/source/\""),
+                body.contains("<a href=\"https://crates.io/crates/dummy/0.1.0/code/\""),
                 "{}",
                 body
             );
