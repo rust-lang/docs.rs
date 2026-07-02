@@ -62,7 +62,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         };
 
         let static_crates_io = TestStaticCratesIo::new().await?;
-        registry_api_config.static_host = static_crates_io.url().parse().unwrap();
+        registry_api_config.static_host = static_crates_io.url().await.parse().unwrap();
 
         let registry_api = RegistryApi::from_config(&registry_api_config)?;
 
@@ -139,6 +139,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         FakeRelease::new(
             self.context.pool().unwrap().clone(),
             self.context.storage().unwrap().clone(),
+            self.static_crates_io.clone(),
         )
     }
 

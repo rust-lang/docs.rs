@@ -1908,21 +1908,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn readme() -> Result<()> {
-        let (storage_readme_manifest, storage_readme_archive) =
-            docs_rs_registry_api::testing::static_test_env::create_test_source_archive([(
-                "README.md",
-                "storage readme",
-            )])?;
-
-        let mut static_crates_io =
-            docs_rs_registry_api::testing::static_test_env::TestStaticCratesIo::new().await?;
-
         let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .static_host(static_crates_io.url().parse().unwrap())
-                    .build(),
-            )
+            .registry_api_config(docs_rs_registry_api::Config::builder().build())
             .build()
             .await?;
 
@@ -1943,30 +1930,12 @@ mod tests {
             .create()
             .await?;
 
-        static_crates_io
-            .add(
-                "dummy",
-                "0.2.0",
-                storage_readme_manifest.clone(),
-                storage_readme_archive.clone(),
-            )
-            .await?;
-
         env.fake_release()
             .await
             .name("dummy")
             .version("0.3.0")
             .source_file("README.md", b"storage readme")
             .create()
-            .await?;
-
-        static_crates_io
-            .add(
-                "dummy",
-                "0.3.0",
-                storage_readme_manifest.clone(),
-                storage_readme_archive.clone(),
-            )
             .await?;
 
         env.fake_release()
@@ -1979,21 +1948,6 @@ mod tests {
             .create()
             .await?;
 
-        let (storage_readme_manifest_2, storage_readme_archive_2) =
-            docs_rs_registry_api::testing::static_test_env::create_test_source_archive([
-                ("MEREAD", "storage meread"),
-                ("Cargo.toml", r#"package.readme = "MEREAD""#),
-            ])?;
-
-        static_crates_io
-            .add(
-                "dummy",
-                "0.4.0",
-                storage_readme_manifest_2,
-                storage_readme_archive_2,
-            )
-            .await?;
-
         env.fake_release()
             .await
             .name("dummy")
@@ -2002,15 +1956,6 @@ mod tests {
             .source_file("README.md", b"storage readme")
             .no_cargo_toml()
             .create()
-            .await?;
-
-        static_crates_io
-            .add(
-                "dummy",
-                "0.5.0",
-                storage_readme_manifest.clone(),
-                storage_readme_archive.clone(),
-            )
             .await?;
 
         async fn check_readme(env: &TestEnvironment, path: &str, content: &str) {
@@ -2033,49 +1978,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn no_readme() -> Result<()> {
-        let mut static_crates_io =
-            docs_rs_registry_api::testing::static_test_env::TestStaticCratesIo::new().await?;
-
         let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .static_host(static_crates_io.url().parse().unwrap())
-                    .build(),
-            )
+            .registry_api_config(docs_rs_registry_api::Config::builder().build())
             .build()
-            .await?;
-
-        let (storage_readme_manifest, storage_readme_archive) =
-            docs_rs_registry_api::testing::static_test_env::create_test_source_archive([
-                (
-                    "Cargo.toml",
-                    r#"[package]
-name = "dummy"
-version = "0.2.0"
-
-[lib]
-name = "dummy"
-path = "src/lib.rs"
-"#,
-                ),
-                (
-                    "src/lib.rs",
-                    "//! # Crate-level docs
-//!
-//! ```
-//! let x = 21;
-//! ```
-",
-                ),
-            ])?;
-
-        static_crates_io
-            .add(
-                "dummy",
-                "0.2.0",
-                storage_readme_manifest,
-                storage_readme_archive,
-            )
             .await?;
 
         env.fake_release()
@@ -2109,7 +2014,7 @@ path = "src/lib.rs"
         let web = env.web_app().await;
         let response = web.assert_success("/crate/dummy/0.2.0").await?;
 
-        let dom = kuchikiki::parse_html().one(dbg!(response.text().await?));
+        let dom = kuchikiki::parse_html().one(response.text().await?);
         dom.select_first("#main").expect("not main crate docs");
         // First we check that the crate-level docs have been rendered as expected.
         assert_eq!(
