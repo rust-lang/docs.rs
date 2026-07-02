@@ -1,6 +1,6 @@
 define-function: (
     "check-tab",
-    [tab_name, centered, click_next],
+    [tab_name, centered, click_next_offset],
     block {
         // We check the tab's name is the one expected.
         assert-text: (|tabs_menu_selector| + " > li a.pure-menu-active .title", |tab_name|)
@@ -26,8 +26,9 @@ define-function: (
                 "margin-right": "0px",
             })
         }
-        if: (|click_next|, block {
-            store-value: (current_tab, |current_tab| + 1)
+        store-value: (tab_to_click, |current_tab| + |click_next_offset|)
+        if: (|click_next_offset| > 0, block {
+            store-value: (current_tab, |tab_to_click|)
             click: |tabs_menu_selector| + " > li:nth-of-type(" + |current_tab| + ")"
         })
     }
@@ -35,22 +36,22 @@ define-function: (
 
 define-function: (
     "check-tab-centered",
-    [tab_name, click_next],
+    [tab_name, click_next_offset],
     block {
         call-function: (
             "check-tab",
-            {"tab_name": |tab_name|, "centered": true, "click_next": |click_next|},
+            {"tab_name": |tab_name|, "centered": true, "click_next_offset": |click_next_offset|},
         )
     }
 )
 
 define-function: (
     "check-tab-not-centered",
-    [tab_name, click_next],
+    [tab_name, click_next_offset],
     block {
         call-function: (
             "check-tab",
-            {"tab_name": |tab_name|, "centered": false, "click_next": |click_next|},
+            {"tab_name": |tab_name|, "centered": false, "click_next_offset": |click_next_offset|},
         )
     }
 )

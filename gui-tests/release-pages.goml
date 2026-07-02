@@ -12,11 +12,11 @@ store-value: (nb_tabs, 6)
 // updated.
 assert-count: (|tabs_menu_selector| + " > li", |nb_tabs|)
 
-call-function: ("check-tab-centered", {"tab_name": "Recent", "click_next": true})
-call-function: ("check-tab-centered", {"tab_name": "Stars", "click_next": true})
-call-function: ("check-tab-centered", {"tab_name": "Recent Failures", "click_next": true})
-call-function: ("check-tab-centered", {"tab_name": "Failures By Stars", "click_next": true})
-call-function: ("check-tab-centered", {"tab_name": "Activity", "click_next": true})
-call-function: ("check-tab-centered", {"tab_name": "Queue", "click_next": false})
+call-function: ("check-tab-centered", {"tab_name": "Recent", "click_next_offset": 1})
+call-function: ("check-tab-centered", {"tab_name": "Stars", "click_next_offset": 1})
+call-function: ("check-tab-centered", {"tab_name": "Recent Failures", "click_next_offset": 1})
+call-function: ("check-tab-centered", {"tab_name": "Failures By Stars", "click_next_offset": 1})
+call-function: ("check-tab-centered", {"tab_name": "Activity", "click_next_offset": 1})
+call-function: ("check-tab-centered", {"tab_name": "Queue", "click_next_offset": 0})
 
 assert: |nb_tabs| == |current_tab|

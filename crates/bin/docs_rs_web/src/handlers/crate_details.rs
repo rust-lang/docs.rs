@@ -1729,8 +1729,6 @@ mod tests {
 
             run_check_links_redir(&env, "/crate/dummy/0.4.0/features", false).await;
             run_check_links_redir(&env, "/crate/dummy/0.4.0/builds", false).await;
-            run_check_links_redir(&env, "/crate/dummy/0.4.0/source/", false).await;
-            run_check_links_redir(&env, "/crate/dummy/0.4.0/source/README.md", false).await;
             run_check_links_redir(&env, "/crate/dummy/0.4.0", false).await;
 
             run_check_links_redir(&env, "/dummy/latest/dummy/", true).await;
@@ -1888,7 +1886,7 @@ mod tests {
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/dummy/latest/features\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/dummy/latest/source/\""));
+            assert!(body.contains("<a href=\"https://crates.io/crates/dummy/0.4.0/code/\""));
             assert!(body.contains("<a href=\"/crate/dummy/latest\""));
 
             web.assert_redirect("/crate/dummy/latest/", "/crate/dummy/latest")
