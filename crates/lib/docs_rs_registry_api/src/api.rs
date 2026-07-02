@@ -239,7 +239,7 @@ impl RegistryApi {
         SourceArchive::load(
             self.client.clone(),
             self.static_base.clone(),
-            &name,
+            name.as_str(),
             &version.to_string(),
         )
         .await?

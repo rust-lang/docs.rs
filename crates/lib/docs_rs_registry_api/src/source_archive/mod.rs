@@ -4,10 +4,22 @@ use crate::source_archive::manifest::{FileEntry, Manifest};
 use anyhow::{Result, bail};
 use async_compression::tokio::bufread::DeflateDecoder;
 use futures_util::TryStreamExt as _;
-use reqwest::{IntoUrl, StatusCode, Url, header::RANGE};
+use reqwest::{
+    StatusCode, Url,
+    header::{HeaderMap, HeaderName, RANGE},
+};
 use tokio::io::{self, AsyncWrite, AsyncWriteExt as _};
 use tokio_util::io::StreamReader;
-use tracing::info;
+use tracing::{field, info, instrument};
+
+pub static X_CACHE: HeaderName = HeaderName::from_static("x-cache");
+
+fn is_cache_hit(hm: &HeaderMap) -> bool {
+    hm.get(&X_CACHE)
+        .and_then(|hv| hv.to_str().ok())
+        .map(|hv| hv.contains("HIT"))
+        .unwrap_or(false)
+}
 
 pub struct SourceArchive {
     manifest: Manifest,
@@ -16,20 +28,16 @@ pub struct SourceArchive {
 }
 
 impl SourceArchive {
+    #[instrument(skip_all, fields( %base_url, %name, %version, cache_hit=field::Empty))]
     pub(crate) async fn load(
         client: reqwest::Client,
-        base_url: impl IntoUrl,
-        name: impl AsRef<str>,
-        version: impl AsRef<str>,
+        mut base_url: Url,
+        name: &str,
+        version: &str,
     ) -> Result<Option<Self>> {
-        let mut base_url = base_url.into_url()?;
         base_url.set_path("crates/");
 
-        let index_url = base_url.join(&format!(
-            "{0}/{0}-{1}.zip.json",
-            name.as_ref(),
-            version.as_ref()
-        ))?;
+        let index_url = base_url.join(&format!("{0}/{0}-{1}.zip.json", name, version))?;
 
         info!(%index_url, "fetching source archive manifest");
         let response = client.get(index_url.clone()).send().await?;
@@ -41,9 +49,11 @@ impl SourceArchive {
         }
         let response = response.error_for_status()?;
 
+        tracing::Span::current().record("cache_hit", is_cache_hit(response.headers()));
+
         Ok(Some(Self {
             manifest: response.json().await?,
-            zip_url: base_url.join(&format!("{0}/{0}-{1}.zip", name.as_ref(), version.as_ref()))?,
+            zip_url: base_url.join(&format!("{0}/{0}-{1}.zip", name, version))?,
             client,
         }))
     }
@@ -57,6 +67,7 @@ impl SourceArchive {
         self.manifest.files.iter().find(|e| e.path == path)
     }
 
+    #[instrument(skip_all, fields(zip_url=%self.zip_url, path=%entry.path, cache_hit=field::Empty))]
     pub async fn fetch<W>(&self, entry: &FileEntry, writer: &mut W) -> Result<()>
     where
         W: AsyncWrite + Unpin,
@@ -64,7 +75,7 @@ impl SourceArchive {
         let range_start = entry.data_offset;
         let range_end = entry.data_offset + entry.compressed_size - 1;
 
-        info!(%self.zip_url, entry.path, "fetching file from source archive");
+        info!("fetching file from source archive");
         let response = self
             .client
             .get(self.zip_url.clone())
@@ -72,6 +83,8 @@ impl SourceArchive {
             .send()
             .await?
             .error_for_status()?;
+
+        tracing::Span::current().record("cache_hit", is_cache_hit(response.headers()));
 
         let stream = response.bytes_stream().map_err(std::io::Error::other);
         let mut reader = StreamReader::new(stream);

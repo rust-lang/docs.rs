@@ -4,6 +4,7 @@ use docs_rs_types::{KrateName, Version};
 use reqwest::header::RANGE;
 use std::io::{self, Write as _};
 use tokio::sync::Mutex;
+use url::Url;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 /// create a manifest & zip file the same way (roughly, for our tests) as crates.io does.
@@ -126,8 +127,8 @@ impl TestStaticCratesIo {
         Ok(())
     }
 
-    pub async fn url(&self) -> String {
+    pub async fn url(&self) -> Url {
         let inner = self.inner.lock().await;
-        inner.server.url()
+        Url::parse(&inner.server.url()).unwrap()
     }
 }
