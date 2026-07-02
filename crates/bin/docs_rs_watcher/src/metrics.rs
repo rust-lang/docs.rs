@@ -8,7 +8,6 @@ use opentelemetry::{
 pub(crate) struct WatcherMetrics {
     pub(crate) sqs_messages_received_total: Counter<u64>,
     pub(crate) sqs_poll_errors_total: Counter<u64>,
-    pub(crate) sqs_message_failures_total: Counter<u64>,
     pub(crate) sqs_retries_total: Counter<u64>,
     pub(crate) changes_applied_total: Counter<u64>,
     pub(crate) sqs_message_processing_seconds: Histogram<f64>,
@@ -26,10 +25,6 @@ impl WatcherMetrics {
                 .build(),
             sqs_poll_errors_total: meter
                 .u64_counter(format!("{PREFIX}.sqs_poll_errors_total"))
-                .with_unit("1")
-                .build(),
-            sqs_message_failures_total: meter
-                .u64_counter(format!("{PREFIX}.sqs_message_failures_total"))
                 .with_unit("1")
                 .build(),
             sqs_retries_total: meter

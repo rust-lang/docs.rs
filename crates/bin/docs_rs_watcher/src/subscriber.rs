@@ -16,7 +16,7 @@ use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
 use std::time::{Duration, Instant};
 use tokio::time;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, field, instrument, warn};
 
 /// wait-time (long polling):
 ///
@@ -189,7 +189,6 @@ async fn handle_message_body(
             metrics
                 .sqs_message_processing_seconds
                 .record(start.elapsed().as_secs_f64(), &[]);
-            metrics.sqs_message_failures_total.add(1, &[]);
             metrics.sqs_retries_total.add(1, &[]);
             error!(
                 ?err,
@@ -202,6 +201,7 @@ async fn handle_message_body(
     }
 }
 
+#[instrument(skip_all, fields(change_type = field::Empty, krate = field::Empty))]
 async fn process_sqs_event(
     context: &Context,
     config: &Config,
@@ -211,6 +211,14 @@ async fn process_sqs_event(
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
 
+    let change_type = change_type(&event.change);
+
+    {
+        let span = tracing::Span::current();
+        span.record("change_type", change_type);
+        span.record("krate", event.change.name());
+    }
+
     debug!(?event, "received event from sqs");
     let lag_seconds = (Utc::now() - event.occurred_at).num_milliseconds().max(0) as f64 / 1000.0;
     metrics.sqs_event_lag_seconds.record(lag_seconds, &[]);
@@ -219,7 +227,7 @@ async fn process_sqs_event(
         process_change(context, &event.change, config)
             .await
             .context("error processing change")?;
-        metrics.record_change_applied(change_type(&event.change));
+        metrics.record_change_applied(change_type);
     }
 
     Ok(())
@@ -487,13 +495,6 @@ mod tests {
             MessageOutcome::RetryLater(RETRY_DELAY)
         );
         let collected = env.collected_metrics();
-        assert_eq!(
-            collected
-                .get_metric("watcher", "docsrs.watcher.sqs_message_failures_total")?
-                .get_u64_counter()
-                .value(),
-            1
-        );
         assert_eq!(
             collected
                 .get_metric("watcher", "docsrs.watcher.sqs_retries_total")?
