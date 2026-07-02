@@ -1,7 +1,7 @@
 use crate::{FileEntry, Manifest};
 use anyhow::Result;
 use docs_rs_types::{KrateName, Version};
-use reqwest::header::RANGE;
+use reqwest::header::{HeaderMap, RANGE};
 use std::io::{self, Write as _};
 use tokio::sync::Mutex;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
@@ -91,18 +91,20 @@ impl TestStaticCratesIo {
             .server
             .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip"))
             .with_body_from_request(move |request| {
-                let range = request
+                let Some((lhs, rhs)) = request
                     .headers()
                     .get(RANGE)
-                    .expect("range header must exists");
-                let range = range.to_str().unwrap();
-
-                let bytes = range.strip_prefix("bytes=").unwrap();
-
-                let (lhs, rhs) = bytes.split_once("-").unwrap();
-
-                let lhs: usize = lhs.parse().unwrap();
-                let rhs: usize = rhs.parse().unwrap();
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.strip_prefix("bytes="))
+                    .and_then(|r| r.split_once("-"))
+                    .and_then(|(lhs, rhs)| {
+                        let lhs: usize = lhs.parse().ok()?;
+                        let rhs: usize = rhs.parse().ok()?;
+                        Some((lhs, rhs))
+                    })
+                else {
+                    return zip.clone();
+                };
 
                 zip.get(lhs..=rhs).unwrap().to_vec()
             })

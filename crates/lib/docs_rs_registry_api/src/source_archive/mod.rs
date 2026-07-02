@@ -100,6 +100,11 @@ impl SourceArchive {
 mod tests {
     use super::*;
     use crate::testing::static_test_env::{TestStaticCratesIo, create_test_source_archive};
+    use docs_rs_types::testing::{KRATE, V0_1};
+
+    fn client() -> reqwest::Client {
+        reqwest::Client::builder().build().unwrap()
+    }
 
     #[tokio::test]
     async fn test_fetch() -> anyhow::Result<()> {
@@ -108,13 +113,12 @@ mod tests {
             ("Cargo.toml", "Cargo.toml"),
         ])?;
 
-        let mut test_env = TestStaticCratesIo::new().await?;
-        test_env.add("krate", "0.1.0", manifest, zip).await?;
+        let test_env = TestStaticCratesIo::new().await?;
+        test_env.add(&KRATE, &V0_1, manifest, zip).await?;
 
-        let source_archive =
-            SourceArchive::load(test_env.client().clone(), test_env.url(), "krate", "0.1.0")
-                .await?
-                .expect("not found");
+        let source_archive = SourceArchive::load(client(), test_env.url().await, "krate", "0.1.0")
+            .await?
+            .expect("not found");
 
         {
             let info = source_archive.by_name("src/main.rs").expect("should exist");
