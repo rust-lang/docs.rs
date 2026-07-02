@@ -3,6 +3,7 @@ pub mod consistency;
 mod db;
 mod index;
 pub mod index_watcher;
+mod metrics;
 mod rebuilds;
 mod service_metrics;
 pub mod subscriber;
@@ -14,7 +15,9 @@ pub use db::{delete_crate, delete_version};
 pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
-use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
+use crate::{
+    index_watcher::get_new_crates, metrics::WatcherMetrics, service_metrics::OtelServiceMetrics,
+};
 use anyhow::{Error, Result};
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
@@ -27,9 +30,12 @@ use tracing::{debug, error, info, trace};
 /// Only here so unexpected errors lead to a sentry report & restart instead of
 /// the daemon / watcher just stopping.
 pub async fn watch(config: &Config, context: &Context) {
+    let metrics = WatcherMetrics::new(context.meter_provider());
+
     loop {
         if config.sqs_active {
-            if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context).await {
+            if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
+            {
                 error!(?err, "unexpected error watching SQS, will retry");
                 time::sleep(Duration::from_secs(10)).await;
             }
@@ -42,7 +48,9 @@ pub async fn watch(config: &Config, context: &Context) {
 
             if let (Err(err), _) = tokio::join!(crate::watch_registry(config, context), async {
                 // unexpected SQS errors are caught here, and we don't retry.
-                if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context).await {
+                if let Err(err) =
+                    crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
+                {
                     error!(?err, "error setting up SQS test subscriber");
                 }
                 Ok::<_, Error>(())

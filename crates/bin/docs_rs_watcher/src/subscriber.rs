@@ -4,6 +4,7 @@ use crate::{
         process_crate_deleted, process_version_added, process_version_deleted,
         process_version_yank_status,
     },
+    metrics::WatcherMetrics,
 };
 use anyhow::{Context as _, Result};
 use aws_config::{BehaviorVersion, Region, retry::RetryConfig};
@@ -52,7 +53,11 @@ enum MessageOutcome {
     Ignore,
 }
 
-pub async fn run_sqs_subscriber(config: &Config, context: &Context) -> Result<()> {
+pub async fn run_sqs_subscriber(
+    config: &Config,
+    context: &Context,
+    metrics: &WatcherMetrics,
+) -> Result<()> {
     let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
         warn!("missing sqs region or url, disabling crates.io SQS subscriber");
         return Ok(());
