@@ -4,7 +4,7 @@ use reqwest::header::RANGE;
 use std::io::{self, Write as _};
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
-pub fn create_test_archive<I, N, B>(files: I) -> Result<(Manifest, Vec<u8>)>
+pub fn create_test_source_archive<I, N, B>(files: I) -> Result<(Manifest, Vec<u8>)>
 where
     I: IntoIterator<Item = (N, B)>,
     N: ToString,
@@ -50,16 +50,18 @@ where
     Ok((Manifest { files }, bytes))
 }
 
-pub struct TestEnv {
+pub struct StaticTestEnv {
     mocks: Vec<mockito::Mock>,
     server: mockito::ServerGuard,
+    client: reqwest::Client,
 }
 
-impl TestEnv {
+impl StaticTestEnv {
     pub async fn new() -> Result<Self> {
         Ok(Self {
             mocks: Vec::new(),
             server: mockito::Server::new_async().await,
+            client: reqwest::Client::builder().build()?,
         })
     }
     pub async fn add(
@@ -108,5 +110,9 @@ impl TestEnv {
 
     pub fn url(&self) -> String {
         self.server.url()
+    }
+
+    pub fn client(&self) -> &reqwest::Client {
+        &self.client
     }
 }

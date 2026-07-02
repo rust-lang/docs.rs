@@ -31,7 +31,6 @@ docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
 docs_rs_config = { path = "../../lib/docs_rs_config" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }
-docs_rs_crate_zip = { path = "../../lib/docs_rs_crate_zip" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
 docs_rs_headers = { path = "../../lib/docs_rs_headers" }
@@ -84,8 +83,8 @@ docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
-docs_rs_crate_zip = { path = "../../lib/docs_rs_crate_zip", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 http-body-util = "0.1.0"

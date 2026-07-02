@@ -2109,23 +2109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "docs_rs_crate_zip"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-compression",
- "docs_rs_utils",
- "futures-util",
- "mockito",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "zip",
-]
-
-[[package]]
 name = "docs_rs_database"
 version = "0.0.0"
 dependencies = [
@@ -2311,6 +2294,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "zip",
 ]
 
 [[package]]
@@ -2515,7 +2499,6 @@ dependencies = [
  "docs_rs_cargo_metadata",
  "docs_rs_config",
  "docs_rs_context",
- "docs_rs_crate_zip",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_headers",

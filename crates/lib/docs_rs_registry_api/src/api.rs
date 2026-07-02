@@ -1,5 +1,5 @@
 use crate::{
-    Config,
+    Config, SourceArchive,
     error::{Error, Result},
     models::{ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchResponse},
 };
@@ -17,6 +17,7 @@ use url::Url;
 #[derive(Debug)]
 pub struct RegistryApi {
     api_base: Url,
+    static_base: Url,
     max_retries: u32,
     client: reqwest::Client,
 }
@@ -25,11 +26,12 @@ impl RegistryApi {
     pub fn from_config(config: &Config) -> Result<Self> {
         Self::new(
             config.registry_api_host.clone(),
+            config.static_host.clone(),
             config.crates_io_api_call_retries,
         )
     }
 
-    pub fn new(api_base: Url, max_retries: u32) -> Result<Self> {
+    pub fn new(api_base: Url, static_base: Url, max_retries: u32) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
             (ACCEPT, HeaderValue::from_static("application/json")),
@@ -43,6 +45,7 @@ impl RegistryApi {
 
         Ok(Self {
             api_base,
+            static_base,
             client,
             max_retries,
         })
@@ -224,6 +227,27 @@ impl RegistryApi {
             meta: response.meta.ok_or(Error::MissingMetadata)?,
         })
     }
+
+    /// open the crates.io source archive zip for this crate / version.
+    ///
+    /// We directly fetch the manifest JSON file.
+    ///
+    /// The returned object can be used to inspect the file-list, and
+    /// fetch single files from the archive via range request.
+    pub async fn open_source_archive(
+        &self,
+        name: &KrateName,
+        version: &Version,
+    ) -> Result<SourceArchive> {
+        SourceArchive::load(
+            self.client.clone(),
+            self.static_base.clone(),
+            &name,
+            &version.to_string(),
+        )
+        .await?
+        .ok_or(Error::MissingReleases)
+    }
 }
 
 #[cfg(test)]
@@ -238,6 +262,7 @@ mod tests {
 
     async fn test_search(status: StatusCode, body: impl Serialize) -> Result<Search> {
         let mut crates_io_api = mockito::Server::new_async().await;
+        let static_server = mockito::Server::new_async().await;
 
         let _m = crates_io_api
             .mock("GET", "/api/v1/crates?q=foo")
@@ -247,7 +272,11 @@ mod tests {
             .create_async()
             .await;
 
-        let api = RegistryApi::new(crates_io_api.url().parse().unwrap(), 0)?;
+        let api = RegistryApi::new(
+            crates_io_api.url().parse().unwrap(),
+            static_server.url().parse().unwrap(),
+            0,
+        )?;
         api.search("q=foo").await
     }
 
@@ -257,6 +286,7 @@ mod tests {
         version: &Version,
     ) -> Result<Option<ReleaseData>> {
         let mut crates_io_api = mockito::Server::new_async().await;
+        let static_server = mockito::Server::new_async().await;
 
         let _m = crates_io_api
             .mock("GET", "/api/v1/crates/krate/versions")
@@ -266,7 +296,11 @@ mod tests {
             .create_async()
             .await;
 
-        let api = RegistryApi::new(crates_io_api.url().parse().unwrap(), 0)?;
+        let api = RegistryApi::new(
+            crates_io_api.url().parse().unwrap(),
+            static_server.url().parse().unwrap(),
+            0,
+        )?;
         api.get_release_data(&KRATE, version).await
     }
 
