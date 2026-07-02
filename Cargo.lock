@@ -2118,7 +2118,6 @@ dependencies = [
  "futures-util",
  "reqwest",
  "serde",
- "thiserror",
  "tokio",
  "tokio-util",
 ]

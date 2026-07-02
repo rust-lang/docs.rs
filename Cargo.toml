@@ -27,10 +27,9 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [workspace.dependencies]
-async-compression = { version = "0.4.32", features = ["bzip2", "deflate", "gzip", "tokio", "zstd"] }
 anyhow = { version = "1.0.42", features = ["backtrace"] }
-tokio-util = { version = "0.7.15", default-features = false, features = ["io-util"] }
 askama = "0.16.0"
+async-compression = { version = "0.4.32", features = ["bzip2", "deflate", "gzip", "tokio", "zstd"] }
 async-stream = "0.3.5"
 axum-extra = { version = "0.12.0", features = ["middleware", "routing", "typed-header"] }
 base64 = "0.22"
@@ -64,6 +63,7 @@ tempfile = "3.1.0"
 test-case = "3.0.0"
 thiserror = "2.0.3"
 tokio = { version = "1.0", features = ["macros", "process", "rt-multi-thread", "signal", "sync"] }
+tokio-util = { version = "0.7.15", default-features = false, features = ["io-util"] }
 toml = "1.0.0"
 tracing = "0.1.37"
 url = { version = "2.1.1", features = ["serde"] }
