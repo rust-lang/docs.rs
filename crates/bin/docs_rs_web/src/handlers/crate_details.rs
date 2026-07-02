@@ -20,6 +20,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
+use docs_rs_crate_zip::{Error as CratesIoZipError, SourceArchive};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
@@ -293,25 +294,20 @@ impl CrateDetails {
     }
 
     async fn fetch_readme(&self, storage: &AsyncStorage) -> anyhow::Result<Option<String>> {
-        let manifest = match storage
-            .fetch_source_file(
-                &self.name,
-                &self.version,
-                self.latest_build_id,
-                "Cargo.toml",
-                self.archive_storage,
-            )
-            .await
-        {
-            Ok(manifest) => manifest,
-            Err(err) if err.is::<PathNotFoundError>() => {
-                return Ok(None);
-            }
-            Err(err) => {
-                return Err(err);
-            }
+        let source_archive = match SourceArchive::load(&self.name, self.version.to_string()).await {
+            Ok(source_archive) => source_archive,
+            Err(err) if matches!(err, CratesIoZipError::ManifestNotFound(_)) => return Ok(None),
+            Err(err) => return Err(err.into()),
         };
-        let manifest = String::from_utf8(manifest.content)
+
+        let Some(cargo_toml) = source_archive.by_name("Cargo.toml") else {
+            return Ok(None);
+        };
+
+        let mut manifest = Vec::new();
+        source_archive.fetch(&cargo_toml, &mut manifest).await?;
+
+        let manifest = String::from_utf8(manifest)
             .context("parsing Cargo.toml")?
             .parse::<toml::Table>()
             .context("parsing Cargo.toml")?;
@@ -322,27 +318,15 @@ impl CrateDetails {
             _ => vec!["README.md", "README.txt", "README"],
         };
         for path in &paths {
-            match storage
-                .fetch_source_file(
-                    &self.name,
-                    &self.version,
-                    self.latest_build_id,
-                    path,
-                    self.archive_storage,
-                )
-                .await
-            {
-                Ok(readme) => {
-                    let readme = String::from_utf8(readme.content)
-                        .with_context(|| format!("parsing {path} content"))?;
-                    return Ok(Some(readme));
-                }
-                Err(err) if err.is::<PathNotFoundError>() => {
-                    continue;
-                }
-                Err(err) => {
-                    return Err(err);
-                }
+            let Some(readme) = source_archive.by_name(path) else {
+                continue;
+            };
+
+            let mut content = Vec::new();
+            match source_archive.fetch(&readme, &mut content).await {
+                Ok(()) => return Ok(Some(String::from_utf8_lossy(&content).to_string())),
+                Err(err) if matches!(err, CratesIoZipError::ArchiveNotFound(_, _, _)) => continue,
+                Err(err) => return Err(err.into()),
             }
         }
         Ok(None)

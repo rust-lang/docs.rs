@@ -2509,6 +2509,7 @@ dependencies = [
  "docs_rs_cargo_metadata",
  "docs_rs_config",
  "docs_rs_context",
+ "docs_rs_crate_zip",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_headers",
