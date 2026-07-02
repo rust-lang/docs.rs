@@ -112,6 +112,12 @@ impl SourceArchive {
 
         Ok(())
     }
+
+    pub async fn fetch_bytes(&self, entry: &FileEntry) -> Result<Vec<u8>, Error> {
+        let mut buf = Vec::new();
+        self.fetch(entry, &mut buf).await?;
+        Ok(buf)
+    }
 }
 
 fn is_not_found_error(status: &StatusCode) -> bool {

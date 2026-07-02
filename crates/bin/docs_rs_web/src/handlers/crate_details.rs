@@ -299,8 +299,7 @@ impl CrateDetails {
             return Ok(None);
         };
 
-        let mut manifest = Vec::new();
-        source_archive.fetch(&cargo_toml, &mut manifest).await?;
+        let manifest = source_archive.fetch_bytes(&cargo_toml).await?;
 
         let manifest = String::from_utf8(manifest)
             .context("parsing Cargo.toml")?
@@ -317,10 +316,11 @@ impl CrateDetails {
                 continue;
             };
 
-            let mut content = Vec::new();
-            match source_archive.fetch(&readme, &mut content).await {
-                Ok(()) => return Ok(Some(String::from_utf8_lossy(&content).to_string())),
-                Err(err) if matches!(err, CratesIoZipError::ArchiveNotFound(_, _, _)) => continue,
+            match source_archive.fetch_bytes(&readme).await {
+                Ok(content) => return Ok(Some(String::from_utf8_lossy(&content).to_string())),
+                Err(err) if matches!(err, CratesIoZipError::ArchiveNotFound(_, _, _)) => {
+                    return Ok(None);
+                }
                 Err(err) => return Err(err.into()),
             }
         }
