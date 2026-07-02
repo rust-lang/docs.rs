@@ -277,10 +277,13 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_config::AppConfig as _;
     use docs_rs_crates_io::events::CrateVersion;
-    use docs_rs_types::testing::{KRATE, V1, V2};
+    use docs_rs_types::{
+        Version,
+        testing::{KRATE, V1, V2},
+    };
     use pretty_assertions::assert_eq;
 
-    fn added_event_json(name: &str, version: &str) -> String {
+    fn added_event_json(name: &KrateName, version: &Version) -> String {
         format!(
             r#"{{"id":"evt_123","occurred_at":"2026-06-01T12:00:00Z","type":"added","payload":{{"name":"{name}","vers":"{version}"}}}}"#
         )
@@ -392,13 +395,7 @@ mod tests {
         let env = TestEnvironment::builder().config(config).build().await?;
         let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
-        process_sqs_event(
-            &env,
-            env.config(),
-            &metrics,
-            &added_event_json("krate", &V1.to_string()),
-        )
-        .await?;
+        process_sqs_event(&env, env.config(), &metrics, &added_event_json(&KRATE, &V1)).await?;
 
         let queue = env.build_queue()?.queued_crates().await?;
         assert_eq!(queue.len(), 1);
@@ -429,13 +426,7 @@ mod tests {
         let env = TestEnvironment::builder().config(config).build().await?;
         let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
-        process_sqs_event(
-            &env,
-            env.config(),
-            &metrics,
-            &added_event_json("krate", &V1.to_string()),
-        )
-        .await?;
+        process_sqs_event(&env, env.config(), &metrics, &added_event_json(&KRATE, &V1)).await?;
 
         assert!(env.build_queue()?.queued_crates().await?.is_empty());
 
@@ -470,7 +461,7 @@ mod tests {
                 &env,
                 env.config(),
                 &metrics,
-                Some(&added_event_json("krate", &V1.to_string())),
+                Some(&added_event_json(&KRATE, &V1)),
             )
             .await,
             MessageOutcome::Ack
