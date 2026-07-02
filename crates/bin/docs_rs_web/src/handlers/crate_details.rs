@@ -14,23 +14,18 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use askama::Template;
-use axum::{
-    extract::Extension,
-    response::{IntoResponse, Response as AxumResponse},
-};
+use axum::response::{IntoResponse, Response as AxumResponse};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
 use docs_rs_crate_zip::{Error as CratesIoZipError, SourceArchive};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
-use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{
     BuildId, BuildStatus, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
 };
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
-use std::sync::Arc;
 use tracing::warn;
 
 // TODO: Add target name and versions
@@ -293,7 +288,7 @@ impl CrateDetails {
         Ok(Some(crate_details))
     }
 
-    async fn fetch_readme(&self, storage: &AsyncStorage) -> anyhow::Result<Option<String>> {
+    async fn fetch_readme(&self) -> anyhow::Result<Option<String>> {
         let source_archive = match SourceArchive::load(&self.name, self.version.to_string()).await {
             Ok(source_archive) => source_archive,
             Err(err) if matches!(err, CratesIoZipError::ManifestNotFound(_)) => return Ok(None),
@@ -434,10 +429,9 @@ impl_axum_webpage! {
     cpu_intensive_rendering = true,
 }
 
-#[tracing::instrument(skip(conn, storage))]
+#[tracing::instrument(skip(conn))]
 pub(crate) async fn crate_details_handler(
     params: RustdocParams,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
@@ -471,7 +465,7 @@ pub(crate) async fn crate_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    match details.fetch_readme(&storage).await {
+    match details.fetch_readme().await {
         Ok(readme) => details.readme = readme.or(details.readme),
         Err(e) => warn!(?e, "error fetching readme"),
     }
@@ -1973,10 +1967,7 @@ mod tests {
 
             let mut conn = env.async_conn().await?;
             let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
-            assert!(matches!(
-                details.fetch_readme(env.storage()?).await,
-                Ok(None)
-            ));
+            assert!(matches!(details.fetch_readme().await, Ok(None)));
             Ok(())
         });
     }
