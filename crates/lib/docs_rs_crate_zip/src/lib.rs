@@ -5,6 +5,9 @@
 //! https://github.com/rust-lang/crates.io/blob/5274087feb193ee490e9a6bbdf2e18e74e9ddaeb/crates/crates_io_crate_zip/src/lib.rs
 //! Also we copied the manifest structs from there.
 
+#[cfg(any(test, feature = "testing"))]
+pub mod test_env;
+
 use anyhow::{Result, bail};
 use async_compression::tokio::bufread::DeflateDecoder;
 use docs_rs_utils::APP_USER_AGENT;
@@ -144,87 +147,16 @@ impl SourceArchive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{self, Write};
-    use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
-
-    fn test_archive() -> Result<(Manifest, Vec<u8>)> {
-        let options = SimpleFileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(9));
-
-        let buf = Vec::new();
-        let mut zip = ZipWriter::new(io::Cursor::new(buf));
-
-        for filename in ["src/main.rs", "Cargo.toml"] {
-            zip.start_file(filename, options)?;
-            zip.write_all(filename.as_bytes())?;
-        }
-
-        let mut archive = zip.finish_into_readable()?;
-
-        let mut files = Vec::with_capacity(archive.len());
-        for i in 0..archive.len() {
-            // `_raw` because we only read each entry's metadata, never its bytes,
-            // so there is no need to set up a decompressor.
-            let entry = archive.by_index_raw(i)?;
-
-            let path = entry.name().to_string();
-            let data_offset = entry.data_start().expect("missing data start");
-
-            debug_assert!(matches!(entry.compression(), CompressionMethod::Deflated));
-
-            files.push(FileEntry {
-                data_offset,
-                compressed_size: entry.compressed_size(),
-                uncompressed_size: entry.size(),
-                compression: "deflate".into(),
-                sha256: "dummy".into(),
-                path,
-            });
-        }
-
-        // Order the manifest alphabetically (case-insensitive) by path.
-        files.sort_by_cached_key(|f| (f.path.to_lowercase(), f.path.clone()));
-
-        let bytes = archive.into_inner().into_inner();
-
-        Ok((Manifest { files }, bytes))
-    }
+    use crate::test_env::{TestEnv, create_test_archive};
 
     #[tokio::test]
     async fn test_fetch() -> anyhow::Result<()> {
-        let mut server = mockito::Server::new_async().await;
+        let (manifest, zip) =
+            create_test_archive([("src/main.rs", "src/main.rs"), ("Cargo.toml", "Cargo.toml")])?;
 
-        let (manifest, zip) = test_archive()?;
+        let test_env = TestEnv::new("krate", "0.1.0", manifest, zip).await?;
 
-        let _json_mock = server
-            .mock("GET", "/crates/krate/krate-0.1.0.zip.json")
-            .with_body(serde_json::to_string(&manifest).unwrap())
-            .create_async()
-            .await;
-
-        let _content_mock = server
-            .mock("GET", "/crates/krate/krate-0.1.0.zip")
-            .with_body_from_request(move |request| {
-                let range = request
-                    .headers()
-                    .get(RANGE)
-                    .expect("range header must exists");
-                let range = range.to_str().unwrap();
-
-                let bytes = range.strip_prefix("bytes=").unwrap();
-
-                let (lhs, rhs) = bytes.split_once("-").unwrap();
-
-                let lhs: usize = lhs.parse().unwrap();
-                let rhs: usize = rhs.parse().unwrap();
-
-                zip.get(lhs..=rhs).unwrap().to_vec()
-            })
-            .create_async()
-            .await;
-
-        let source_archive = SourceArchive::load_from(server.url(), "krate", "0.1.0")
+        let source_archive = SourceArchive::load_from(test_env.url(), "krate", "0.1.0")
             .await?
             .expect("not found");
 

@@ -4,6 +4,13 @@ description = "read specific files from the crates.io source zip archive"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+testing = [
+    "dep:zip",
+    "dep:mockito",
+    "dep:serde_json",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 async-compression = { workspace = true }
@@ -13,10 +20,12 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+zip = { workspace = true, optional = true }
+mockito = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 zip = { workspace = true }
 mockito = { workspace = true }
-tempfile = { workspace = true }
 tokio = { workspace = true, features = ["io-std"] }
 serde_json = { workspace = true }

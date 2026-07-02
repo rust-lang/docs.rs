@@ -1901,6 +1901,14 @@ mod tests {
     #[test]
     fn readme() {
         async_wrapper(|env| async move {
+            let (storage_readme_manifest, storage_readme_archive) =
+                docs_rs_crate_zip::test_env::create_test_archive([(
+                    "README.md",
+                    "storage readme",
+                )])?;
+
+            let mut static_crates_io = docs_rs_crate_zip::test_env::TestEnv::new().await?;
+
             env.fake_release()
                 .await
                 .name("dummy")
@@ -1918,12 +1926,30 @@ mod tests {
                 .create()
                 .await?;
 
+            static_crates_io
+                .add(
+                    "dummy",
+                    "0.2.0",
+                    storage_readme_manifest.clone(),
+                    storage_readme_archive.clone(),
+                )
+                .await?;
+
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.3.0")
                 .source_file("README.md", b"storage readme")
                 .create()
+                .await?;
+
+            static_crates_io
+                .add(
+                    "dummy",
+                    "0.3.0",
+                    storage_readme_manifest.clone(),
+                    storage_readme_archive.clone(),
+                )
                 .await?;
 
             env.fake_release()
@@ -1936,6 +1962,18 @@ mod tests {
                 .create()
                 .await?;
 
+            let (storage_readme_manifest_2, storage_readme_archive_2) =
+                docs_rs_crate_zip::test_env::create_test_archive([("MEREAD", "storage meread")])?;
+
+            static_crates_io
+                .add(
+                    "dummy",
+                    "0.4.0",
+                    storage_readme_manifest_2,
+                    storage_readme_archive_2,
+                )
+                .await?;
+
             env.fake_release()
                 .await
                 .name("dummy")
@@ -1944,6 +1982,15 @@ mod tests {
                 .source_file("README.md", b"storage readme")
                 .no_cargo_toml()
                 .create()
+                .await?;
+
+            static_crates_io
+                .add(
+                    "dummy",
+                    "0.5.0",
+                    storage_readme_manifest.clone(),
+                    storage_readme_archive.clone(),
+                )
                 .await?;
 
             let check_readme = |path: String, content: String| {
