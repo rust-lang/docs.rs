@@ -72,7 +72,7 @@ where
 pub struct FakeRelease<'a> {
     pool: Pool,
     storage: Arc<AsyncStorage>,
-    static_crates_io: Arc<TestStaticCratesIo>,
+    static_crates_io: Option<Arc<TestStaticCratesIo>>,
     package: MetadataPackage,
     builds: Option<Vec<FakeBuild>>,
     /// name, content
@@ -113,7 +113,7 @@ impl<'a> FakeRelease<'a> {
     pub fn new(
         pool: Pool,
         storage: Arc<AsyncStorage>,
-        static_crates_io: Arc<TestStaticCratesIo>,
+        static_crates_io: Option<Arc<TestStaticCratesIo>>,
     ) -> Self {
         FakeRelease {
             pool,
@@ -488,12 +488,12 @@ impl<'a> FakeRelease<'a> {
 
         let krate_name: KrateName = package.name.parse()?;
 
-        {
+        if let Some(static_crates_io) = self.static_crates_io {
             let (manifest, zip) =
                 docs_rs_registry_api::testing::static_test_env::create_test_source_archive(
                     owned_source_files,
                 )?;
-            self.static_crates_io
+            static_crates_io
                 .add(&krate_name, &package.version, manifest, zip)
                 .await?;
         }
