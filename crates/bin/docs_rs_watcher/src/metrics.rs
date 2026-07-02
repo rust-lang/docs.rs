@@ -1,3 +1,4 @@
+use docs_rs_crates_io::events::IndexChangeV1;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use opentelemetry::{
     KeyValue,
@@ -52,8 +53,8 @@ impl WatcherMetrics {
         }
     }
 
-    pub(crate) fn record_change_applied(&self, change_type: &'static str) {
+    pub(crate) fn record_change_applied(&self, change: &IndexChangeV1) {
         self.changes_applied_total
-            .add(1, &[KeyValue::new("type", change_type)]);
+            .add(1, &[KeyValue::new("type", change.kind())]);
     }
 }

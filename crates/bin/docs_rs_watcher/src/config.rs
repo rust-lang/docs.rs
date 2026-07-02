@@ -6,20 +6,21 @@ use url::Url;
 
 #[derive(Debug)]
 pub struct Config {
+    /// registry watching config. Also used for database-synchonize
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
+    /// How long to wait between registry checks
+    pub delay_between_registry_fetches: Duration,
+    // Time between 'git gc --auto' calls in seconds
+    pub registry_gc_interval: u64,
+
+    /// SQS watching config.
     pub sqs_queue_url: Option<Url>,
     pub sqs_region: Option<String>,
-    pub sqs_endpoint_url: Option<String>,
+    pub sqs_endpoint_url: Option<Url>,
     /// temporary, to switch between the sources for the index (git index vs SQS)
     pub sqs_active: bool,
     pub aws_sdk_max_retries: u32,
-
-    /// How long to wait between registry checks
-    pub delay_between_registry_fetches: Duration,
-
-    // Time between 'git gc --auto' calls in seconds
-    pub registry_gc_interval: u64,
 
     // automatic rebuild configuration
     pub max_queued_rebuilds: Option<u16>,

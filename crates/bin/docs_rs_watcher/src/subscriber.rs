@@ -72,7 +72,7 @@ pub(crate) async fn run_sqs_subscriber(
         .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
         .region(Region::new(region.to_string()));
     if let Some(endpoint_url) = &config.sqs_endpoint_url {
-        client_config = client_config.endpoint_url(endpoint_url);
+        client_config = client_config.endpoint_url(endpoint_url.to_string());
     }
     let client = Client::from_conf(client_config.build());
 
@@ -227,7 +227,7 @@ async fn process_sqs_event(
         process_change(context, &event.change, config)
             .await
             .context("error processing change")?;
-        metrics.record_change_applied(change_type);
+        metrics.record_change_applied(&event.change);
     }
 
     Ok(())
@@ -243,32 +243,32 @@ fn change_type(change: &IndexChangeV1) -> &'static str {
     }
 }
 
-/// Process a crate change, returning whether the change was a crate addition or not.
+/// Process a crate change
 #[instrument(skip(context, config))]
 pub(crate) async fn process_change(
     context: &Context,
     change: &IndexChangeV1,
     config: &Config,
-) -> Result<bool> {
+) -> Result<()> {
     match change {
         IndexChangeV1::Added(crate_version) => {
-            process_version_added(context, &crate_version.try_into().unwrap()).await?
+            process_version_added(context, &crate_version.try_into()?).await?
         }
         IndexChangeV1::Yanked(crate_version) => {
-            process_version_yank_status(context, &crate_version.try_into().unwrap(), true).await?
+            process_version_yank_status(context, &crate_version.try_into()?, true).await?
         }
         IndexChangeV1::Unyanked(crate_version) => {
-            process_version_yank_status(context, &crate_version.try_into().unwrap(), false).await?
+            process_version_yank_status(context, &crate_version.try_into()?, false).await?
         }
         IndexChangeV1::CrateDeleted { name, .. } => {
             let name: KrateName = name.parse()?;
             process_crate_deleted(context, config, &name).await?
         }
         IndexChangeV1::VersionDeleted(crate_version) => {
-            process_version_deleted(context, config, &crate_version.try_into().unwrap()).await?
+            process_version_deleted(context, config, &crate_version.try_into()?).await?
         }
     };
-    Ok(change.added().is_some())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -290,7 +290,7 @@ mod tests {
     async fn test_process_change_added_queues_crate() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        let added = process_change(
+        process_change(
             &env,
             &IndexChangeV1::Added(CrateVersion {
                 name: KRATE.to_string(),
@@ -300,7 +300,6 @@ mod tests {
         )
         .await?;
 
-        assert!(added);
         let queue = env.build_queue()?.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].name, KRATE);
@@ -322,7 +321,7 @@ mod tests {
             .create()
             .await?;
 
-        let added = process_change(
+        process_change(
             &env,
             &IndexChangeV1::Yanked(CrateVersion {
                 name: KRATE.to_string(),
@@ -332,8 +331,7 @@ mod tests {
         )
         .await?;
 
-        assert!(!added);
-        let row = sqlx::query!(
+        let yanked = sqlx::query_scalar!(
             "SELECT yanked
              FROM releases
              WHERE id = $1",
@@ -341,7 +339,7 @@ mod tests {
         )
         .fetch_one(&mut *conn)
         .await?;
-        assert_eq!(row.yanked, Some(true));
+        assert_eq!(yanked, Some(true));
 
         Ok(())
     }
@@ -365,7 +363,7 @@ mod tests {
             .create()
             .await?;
 
-        let added = process_change(
+        process_change(
             &env,
             &IndexChangeV1::VersionDeleted(CrateVersion {
                 name: KRATE.to_string(),
@@ -375,15 +373,14 @@ mod tests {
         )
         .await?;
 
-        assert!(!added);
-        let rows = sqlx::query!(
+        let rows = sqlx::query_scalar!(
             "SELECT id
              FROM releases",
         )
         .fetch_all(&mut *conn)
         .await?;
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, rid_1.0);
+        assert_eq!(rows[0], rid_1.0);
 
         Ok(())
     }
