@@ -16,3 +16,15 @@ store-property: (|description_selector|, {"scrollWidth": description_width})
 // It should be smaller due to padding, but if it overflows it'll be wider than the screen anyway.
 assert-false: |description_width| > |screen_width|
 
+// Desktop release descriptions are truncated, but hovering them should not change
+// the row height and make the release list jump around.
+set-window-size: (1200, 800)
+store-value: (release_selector, "div.recent-releases-container a.release")
+set-text: (|description_selector|, "A very long crate description that should remain on one line when hovered instead of expanding and moving nearby release rows")
+
+store-property: (|release_selector|, {"clientHeight": release_height})
+move-cursor-to: |description_selector|
+store-property: (|release_selector|, {"clientHeight": release_height_after_hover})
+
+assert: |release_height_after_hover| == |release_height|
+
