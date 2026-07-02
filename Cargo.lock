@@ -2291,12 +2291,14 @@ name = "docs_rs_registry_api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-compression",
  "bon",
  "chrono",
  "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_types",
  "docs_rs_utils",
+ "futures-util",
  "mime",
  "mockito",
  "reqwest",
@@ -2306,6 +2308,7 @@ dependencies = [
  "test-case",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
 ]

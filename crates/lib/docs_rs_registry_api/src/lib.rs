@@ -2,6 +2,7 @@ mod api;
 mod config;
 mod error;
 mod models;
+mod source_archive;
 
 pub use api::RegistryApi;
 pub use config::Config;
