@@ -181,13 +181,13 @@ async fn handle_message_body(
     {
         Ok(_) => {
             metrics
-                .sqs_message_processing_seconds
+                .sqs_message_processing_time
                 .record(start.elapsed().as_secs_f64(), &[]);
             MessageOutcome::Ack
         }
         Err(err) => {
             metrics
-                .sqs_message_processing_seconds
+                .sqs_message_processing_time
                 .record(start.elapsed().as_secs_f64(), &[]);
             metrics.sqs_retries_total.add(1, &[]);
             error!(
@@ -211,17 +211,16 @@ async fn process_sqs_event(
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
 
-    let change_type = change_type(&event.change);
-
     {
         let span = tracing::Span::current();
-        span.record("change_type", change_type);
+        span.record("change_type", event.change.kind());
         span.record("krate", event.change.name());
     }
 
     debug!(?event, "received event from sqs");
-    let lag_seconds = (Utc::now() - event.occurred_at).num_milliseconds().max(0) as f64 / 1000.0;
-    metrics.sqs_event_lag_seconds.record(lag_seconds, &[]);
+    metrics
+        .sqs_event_lag
+        .record((Utc::now() - event.occurred_at).as_seconds_f64(), &[]);
 
     if config.sqs_active {
         process_change(context, &event.change, config)
@@ -231,16 +230,6 @@ async fn process_sqs_event(
     }
 
     Ok(())
-}
-
-fn change_type(change: &IndexChangeV1) -> &'static str {
-    match change {
-        IndexChangeV1::Added(_) => "added",
-        IndexChangeV1::Yanked(_) => "yanked",
-        IndexChangeV1::Unyanked(_) => "unyanked",
-        IndexChangeV1::CrateDeleted { .. } => "crate_deleted",
-        IndexChangeV1::VersionDeleted(_) => "version_deleted",
-    }
 }
 
 /// Process a crate change
@@ -284,9 +273,16 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     fn added_event_json(name: &KrateName, version: &Version) -> String {
-        format!(
-            r#"{{"id":"evt_123","occurred_at":"2026-06-01T12:00:00Z","type":"added","payload":{{"name":"{name}","vers":"{version}"}}}}"#
-        )
+        serde_json::to_string(&serde_json::json!({
+            "id":"evt_123",
+            "occurred_at":"2026-06-01T12:00:00Z",
+            "type":"added",
+            "payload":{
+                "name": name.to_string(),
+                "vers": version.to_string(),
+            }
+        }))
+        .unwrap()
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -319,7 +315,7 @@ mod tests {
         let id = env
             .fake_release()
             .await
-            .name("krate")
+            .name(KRATE)
             .version(V1)
             .create()
             .await?;
@@ -355,13 +351,13 @@ mod tests {
         let rid_1 = env
             .fake_release()
             .await
-            .name("krate")
+            .name(KRATE)
             .version(V1)
             .create()
             .await?;
         env.fake_release()
             .await
-            .name("krate")
+            .name(KRATE)
             .version(V2)
             .create()
             .await?;
