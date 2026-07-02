@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     cache::CachePolicy,
     error::{AxumNope, AxumResult},
@@ -30,6 +28,7 @@ use docs_rs_types::{
 };
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
+use std::sync::Arc;
 use tracing::warn;
 
 // TODO: Add target name and versions
