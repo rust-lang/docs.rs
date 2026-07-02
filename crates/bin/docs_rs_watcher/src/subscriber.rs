@@ -244,6 +244,7 @@ fn change_type(change: &IndexChangeV1) -> &'static str {
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
+#[instrument(skip(context, config))]
 pub(crate) async fn process_change(
     context: &Context,
     change: &IndexChangeV1,
