@@ -1,11 +1,12 @@
 use crate::{FileEntry, Manifest};
 use anyhow::Result;
 use docs_rs_types::{KrateName, Version};
-use reqwest::header::{HeaderMap, RANGE};
+use reqwest::header::RANGE;
 use std::io::{self, Write as _};
 use tokio::sync::Mutex;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
+/// create a manifest & zip file the same way (roughly, for our tests) as crates.io does.
 pub fn create_test_source_archive<I, N, B>(files: I) -> Result<(Manifest, Vec<u8>)>
 where
     I: IntoIterator<Item = (N, B)>,
@@ -52,6 +53,12 @@ where
     Ok((Manifest { files }, bytes))
 }
 
+/// simlulated `static.crates.io` server for our tests, and configured by
+/// default in our test environment.
+///
+/// Right now just for the source-zip archives.
+/// Our shared test-env, and also `FakeRelease`, fill it with
+/// data when needed.
 pub struct TestStaticCratesIo {
     inner: Mutex<TestStaticCratesIoInner>,
 }
@@ -91,7 +98,9 @@ impl TestStaticCratesIo {
             .server
             .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip"))
             .with_body_from_request(move |request| {
-                let Some((lhs, rhs)) = request
+                // NOTE: mockito itself doesn't understand range requests.
+                // So we have to parse the header ourselves, and return the correct chunk here.
+                if let Some((lhs, rhs)) = request
                     .headers()
                     .get(RANGE)
                     .and_then(|h| h.to_str().ok())
@@ -102,11 +111,11 @@ impl TestStaticCratesIo {
                         let rhs: usize = rhs.parse().ok()?;
                         Some((lhs, rhs))
                     })
-                else {
-                    return zip.clone();
-                };
-
-                zip.get(lhs..=rhs).unwrap().to_vec()
+                {
+                    zip.get(lhs..=rhs).expect("should exist").to_vec()
+                } else {
+                    zip.clone()
+                }
             })
             .create_async()
             .await;
