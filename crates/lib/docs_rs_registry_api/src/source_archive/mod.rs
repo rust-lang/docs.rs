@@ -7,6 +7,7 @@ use futures_util::TryStreamExt as _;
 use reqwest::{IntoUrl, StatusCode, Url, header::RANGE};
 use tokio::io::{self, AsyncWrite, AsyncWriteExt as _};
 use tokio_util::io::StreamReader;
+use tracing::info;
 
 pub struct SourceArchive {
     manifest: Manifest,
@@ -30,6 +31,7 @@ impl SourceArchive {
             version.as_ref()
         ))?;
 
+        info!(%index_url, "fetching source archive manifest");
         let response = client.get(index_url.clone()).send().await?;
         if matches!(
             response.status(),
@@ -62,6 +64,7 @@ impl SourceArchive {
         let range_start = entry.data_offset;
         let range_end = entry.data_offset + entry.compressed_size - 1;
 
+        info!(%self.zip_url, entry.path, "fetching file from source archive");
         let response = self
             .client
             .get(self.zip_url.clone())
