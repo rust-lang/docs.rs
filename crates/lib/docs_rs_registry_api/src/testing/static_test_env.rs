@@ -1,7 +1,9 @@
 use crate::{FileEntry, Manifest};
 use anyhow::Result;
+use docs_rs_types::{KrateName, Version};
 use reqwest::header::RANGE;
 use std::io::{self, Write as _};
+use tokio::sync::Mutex;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 pub fn create_test_source_archive<I, N, B>(files: I) -> Result<(Manifest, Vec<u8>)>
@@ -50,69 +52,69 @@ where
     Ok((Manifest { files }, bytes))
 }
 
-pub struct StaticTestEnv {
-    mocks: Vec<mockito::Mock>,
-    server: mockito::ServerGuard,
-    client: reqwest::Client,
+pub struct TestStaticCratesIo {
+    inner: Mutex<TestStaticCratesIoInner>,
 }
 
-impl StaticTestEnv {
+struct TestStaticCratesIoInner {
+    mocks: Vec<mockito::Mock>,
+    server: mockito::ServerGuard,
+}
+
+impl TestStaticCratesIo {
     pub async fn new() -> Result<Self> {
         Ok(Self {
-            mocks: Vec::new(),
-            server: mockito::Server::new_async().await,
-            client: reqwest::Client::builder().build()?,
+            inner: Mutex::new(TestStaticCratesIoInner {
+                mocks: Vec::new(),
+                server: mockito::Server::new_async().await,
+            }),
         })
     }
     pub async fn add(
-        &mut self,
-        name: impl AsRef<str>,
-        version: impl AsRef<str>,
+        &self,
+        name: &KrateName,
+        version: &Version,
         manifest: Manifest,
         zip: Vec<u8>,
     ) -> Result<()> {
-        let name = name.as_ref();
-        let version = version.as_ref();
+        let mut inner = self.inner.lock().await;
 
-        self.mocks.push(
-            self.server
-                .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip.json"))
-                .with_body(serde_json::to_string(&manifest).unwrap())
-                .create_async()
-                .await,
-        );
+        let mock_json = inner
+            .server
+            .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip.json"))
+            .with_body(serde_json::to_string(&manifest).unwrap())
+            .create_async()
+            .await;
+        inner.mocks.push(mock_json);
 
-        self.mocks.push(
-            self.server
-                .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip"))
-                .with_body_from_request(move |request| {
-                    let range = request
-                        .headers()
-                        .get(RANGE)
-                        .expect("range header must exists");
-                    let range = range.to_str().unwrap();
+        let mock_zip = inner
+            .server
+            .mock("GET", &*format!("/crates/{name}/{name}-{version}.zip"))
+            .with_body_from_request(move |request| {
+                let range = request
+                    .headers()
+                    .get(RANGE)
+                    .expect("range header must exists");
+                let range = range.to_str().unwrap();
 
-                    let bytes = range.strip_prefix("bytes=").unwrap();
+                let bytes = range.strip_prefix("bytes=").unwrap();
 
-                    let (lhs, rhs) = bytes.split_once("-").unwrap();
+                let (lhs, rhs) = bytes.split_once("-").unwrap();
 
-                    let lhs: usize = lhs.parse().unwrap();
-                    let rhs: usize = rhs.parse().unwrap();
+                let lhs: usize = lhs.parse().unwrap();
+                let rhs: usize = rhs.parse().unwrap();
 
-                    zip.get(lhs..=rhs).unwrap().to_vec()
-                })
-                .create_async()
-                .await,
-        );
+                zip.get(lhs..=rhs).unwrap().to_vec()
+            })
+            .create_async()
+            .await;
+        inner.mocks.push(mock_zip);
 
         Ok(())
     }
 
-    pub fn url(&self) -> String {
-        self.server.url()
-    }
-
-    pub fn client(&self) -> &reqwest::Client {
-        &self.client
+    pub async fn url(&self) -> String {
+        let inner = self.inner.lock().await;
+        inner.server.url()
     }
 }

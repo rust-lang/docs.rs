@@ -1915,7 +1915,7 @@ mod tests {
             )])?;
 
         let mut static_crates_io =
-            docs_rs_registry_api::testing::static_test_env::StaticTestEnv::new().await?;
+            docs_rs_registry_api::testing::static_test_env::TestStaticCratesIo::new().await?;
 
         let env = TestEnvironment::builder()
             .registry_api_config(
@@ -2034,7 +2034,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn no_readme() -> Result<()> {
         let mut static_crates_io =
-            docs_rs_registry_api::testing::static_test_env::StaticTestEnv::new().await?;
+            docs_rs_registry_api::testing::static_test_env::TestStaticCratesIo::new().await?;
 
         let env = TestEnvironment::builder()
             .registry_api_config(

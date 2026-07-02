@@ -99,7 +99,7 @@ impl SourceArchive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::static_test_env::{StaticTestEnv, create_test_source_archive};
+    use crate::testing::static_test_env::{TestStaticCratesIo, create_test_source_archive};
 
     #[tokio::test]
     async fn test_fetch() -> anyhow::Result<()> {
@@ -108,7 +108,7 @@ mod tests {
             ("Cargo.toml", "Cargo.toml"),
         ])?;
 
-        let mut test_env = StaticTestEnv::new().await?;
+        let mut test_env = TestStaticCratesIo::new().await?;
         test_env.add("krate", "0.1.0", manifest, zip).await?;
 
         let source_archive =

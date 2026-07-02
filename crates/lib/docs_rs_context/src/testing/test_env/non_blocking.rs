@@ -6,7 +6,7 @@ use docs_rs_config::AppConfig;
 use docs_rs_database::{AsyncPoolClient, Config as DatabaseConfig, testing::TestDatabase};
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
-use docs_rs_registry_api::RegistryApi;
+use docs_rs_registry_api::{RegistryApi, testing::static_test_env::TestStaticCratesIo};
 use docs_rs_storage::{Config as StorageConfig, testing::TestStorage};
 use docs_rs_test_fakes::FakeRelease;
 use std::{ops::Deref, sync::Arc};
@@ -14,6 +14,7 @@ use std::{ops::Deref, sync::Arc};
 pub struct TestEnvironment<C> {
     context: Arc<Context>,
     config: Arc<C>,
+    static_crates_io: Arc<TestStaticCratesIo>,
     // so we can allow asserting collected metrics later.
     metrics: TestMetrics,
     #[allow(dead_code)] // we need to keep the storage so it can be cleaned up.
@@ -54,12 +55,14 @@ impl<C: AppConfig> TestEnvironment<C> {
             C::test_config()?
         });
 
-        let registry_api_config =
-            Arc::new(if let Some(registry_api_config) = registry_api_config {
-                registry_api_config
-            } else {
-                docs_rs_registry_api::Config::from_environment()?
-            });
+        let mut registry_api_config = if let Some(registry_api_config) = registry_api_config {
+            registry_api_config
+        } else {
+            docs_rs_registry_api::Config::from_environment()?
+        };
+
+        let static_crates_io = TestStaticCratesIo::new().await?;
+        registry_api_config.static_host = static_crates_io.url().parse().unwrap();
 
         let registry_api = RegistryApi::from_config(&registry_api_config)?;
 
@@ -90,6 +93,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         ));
 
         Ok(Self {
+            static_crates_io: Arc::new(static_crates_io),
             config: app_config,
             context: Context::builder()
                 .with_runtime()
@@ -98,7 +102,7 @@ impl<C: AppConfig> TestEnvironment<C> {
                 .pool(db_config.into(), db.pool().clone())
                 .storage(storage_config.clone(), test_storage.storage())
                 .build_queue(build_queue_config, build_queue)
-                .registry_api(registry_api_config, registry_api.into())
+                .registry_api(Arc::new(registry_api_config), registry_api.into())
                 .with_repository_stats()?
                 .maybe_cdn(
                     Arc::new(docs_rs_fastly::Config::test_config()?),
