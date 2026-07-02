@@ -137,7 +137,7 @@ x-registry-watcher: &registry-watcher
         DOCSRS_SQS_QUEUE_URL: ${DOCSRS_SQS_QUEUE_URL:-http://elasticmq:9324/queue/docsrs-events}
         DOCSRS_SQS_REGION: ${DOCSRS_SQS_REGION:-elasticmq}
         DOCSRS_SQS_ENDPOINT_URL: ${DOCSRS_SQS_ENDPOINT_URL:-http://elasticmq:9324}
-        DOCS_RS_SQS_DRY_RUN: ${DOCS_RS_SQS_DRY_RUN:-false}
+        DOCSRS_SQS_ACTIVE: ${DOCSRS_SQS_ACTIVE:-false}
     env_file:
         - .docker.env
 
