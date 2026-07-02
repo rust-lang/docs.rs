@@ -201,7 +201,7 @@ async fn handle_message_body(
     }
 }
 
-#[instrument(skip_all, fields(change_type = field::Empty, krate = field::Empty))]
+#[instrument(skip_all)]
 async fn process_sqs_event(
     context: &Context,
     config: &Config,
@@ -210,12 +210,6 @@ async fn process_sqs_event(
 ) -> Result<()> {
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
-
-    {
-        let span = tracing::Span::current();
-        span.record("change_type", event.change.kind());
-        span.record("krate", event.change.name());
-    }
 
     debug!(?event, "received event from sqs");
     metrics
