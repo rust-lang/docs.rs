@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 aws-config = { workspace = true }
 aws-sdk-sqs = { version = "1.99.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 clap = { workspace = true }
+chrono = { workspace = true }
 # NOTE: on the new infra, switch back from `git-https-reqwest` to `git-https` (curl) once the curl version is new enough
 crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https-reqwest", "git-performance", "parallel"] }
 # NOTE: on the new infra, switch back from `http-reqwest` to `http-curl` once the curl version is new enough

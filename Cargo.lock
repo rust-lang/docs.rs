@@ -2485,6 +2485,7 @@ dependencies = [
  "anyhow",
  "aws-config",
  "aws-sdk-sqs",
+ "chrono",
  "clap",
  "crates-index",
  "crates-index-diff",

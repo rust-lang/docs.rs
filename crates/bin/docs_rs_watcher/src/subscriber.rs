@@ -9,6 +9,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 use aws_config::{BehaviorVersion, Region, retry::RetryConfig};
 use aws_sdk_sqs::Client;
+use chrono::Utc;
 use docs_rs_context::Context;
 use docs_rs_crates_io::events::{IndexChangeEventV1, IndexChangeV1};
 use docs_rs_types::KrateName;
@@ -53,7 +54,7 @@ enum MessageOutcome {
     Ignore,
 }
 
-pub async fn run_sqs_subscriber(
+pub(crate) async fn run_sqs_subscriber(
     config: &Config,
     context: &Context,
     metrics: &WatcherMetrics,
@@ -96,6 +97,7 @@ pub async fn run_sqs_subscriber(
         {
             Ok(response) => response.messages().to_vec(),
             Err(err) => {
+                metrics.sqs_poll_errors_total.add(1, &[]);
                 error!(
                     ?err,
                     queue_url, "error receiving messages from sqs, retrying"
@@ -104,9 +106,12 @@ pub async fn run_sqs_subscriber(
                 continue;
             }
         };
+        metrics
+            .sqs_messages_received_total
+            .add(messages.len() as u64, &[]);
 
         for message in messages {
-            match handle_message_body(context, config, message.body.as_deref()).await {
+            match handle_message_body(context, config, metrics, message.body.as_deref()).await {
                 MessageOutcome::Ack => {
                     if let Some(receipt_handle) = message.receipt_handle.as_deref()
                         && let Err(err) = client
@@ -160,20 +165,32 @@ pub async fn run_sqs_subscriber(
 async fn handle_message_body(
     context: &Context,
     config: &Config,
+    metrics: &WatcherMetrics,
     body: Option<&str>,
 ) -> MessageOutcome {
     let Some(body) = body else {
         return MessageOutcome::Ignore;
     };
+    let start = Instant::now();
 
     match retry_async(
-        || async move { process_sqs_event(context, config, body).await },
+        || async move { process_sqs_event(context, config, metrics, body).await },
         3,
     )
     .await
     {
-        Ok(_) => MessageOutcome::Ack,
+        Ok(_) => {
+            metrics
+                .sqs_message_processing_seconds
+                .record(start.elapsed().as_secs_f64(), &[]);
+            MessageOutcome::Ack
+        }
         Err(err) => {
+            metrics
+                .sqs_message_processing_seconds
+                .record(start.elapsed().as_secs_f64(), &[]);
+            metrics.sqs_message_failures_total.add(1, &[]);
+            metrics.sqs_retries_total.add(1, &[]);
             error!(
                 ?err,
                 ?RETRY_DELAY,
@@ -185,19 +202,37 @@ async fn handle_message_body(
     }
 }
 
-async fn process_sqs_event(context: &Context, config: &Config, body: &str) -> Result<()> {
+async fn process_sqs_event(
+    context: &Context,
+    config: &Config,
+    metrics: &WatcherMetrics,
+    body: &str,
+) -> Result<()> {
     let event: IndexChangeEventV1 =
         serde_json::from_str(body).context("error parsing event from json")?;
 
     debug!(?event, "received event from sqs");
+    let lag_seconds = (Utc::now() - event.occurred_at).num_milliseconds().max(0) as f64 / 1000.0;
+    metrics.sqs_event_lag_seconds.record(lag_seconds, &[]);
 
     if config.sqs_active {
         process_change(context, &event.change, config)
             .await
             .context("error processing change")?;
+        metrics.record_change_applied(change_type(&event.change));
     }
 
     Ok(())
+}
+
+fn change_type(change: &IndexChangeV1) -> &'static str {
+    match change {
+        IndexChangeV1::Added(_) => "added",
+        IndexChangeV1::Yanked(_) => "yanked",
+        IndexChangeV1::Unyanked(_) => "unyanked",
+        IndexChangeV1::CrateDeleted { .. } => "crate_deleted",
+        IndexChangeV1::VersionDeleted(_) => "version_deleted",
+    }
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
@@ -349,10 +384,12 @@ mod tests {
         let mut config = Config::test_config()?;
         config.sqs_active = true;
         let env = TestEnvironment::builder().config(config).build().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
         process_sqs_event(
             &env,
             env.config(),
+            &metrics,
             &added_event_json("krate", &V1.to_string()),
         )
         .await?;
@@ -361,6 +398,20 @@ mod tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].name, KRATE);
         assert_eq!(queue[0].version, V1);
+        let collected = env.collected_metrics();
+        let applied_metric =
+            collected.get_metric("watcher", "docsrs.watcher.changes_applied_total")?;
+        let applied = applied_metric.get_u64_counter();
+        let change_type = applied
+            .attributes()
+            .find(|kv| kv.key.as_str() == "type")
+            .unwrap()
+            .value
+            .to_string();
+        assert_eq!(change_type, "added");
+        assert_eq!(applied.value(), 1);
+        let lag_metric = collected.get_metric("watcher", "docsrs.watcher.sqs_event_lag_seconds")?;
+        assert_eq!(lag_metric.get_f64_histogram().count(), 1);
 
         Ok(())
     }
@@ -370,10 +421,12 @@ mod tests {
         let mut config = Config::test_config()?;
         config.sqs_active = false;
         let env = TestEnvironment::builder().config(config).build().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
         process_sqs_event(
             &env,
             env.config(),
+            &metrics,
             &added_event_json("krate", &V1.to_string()),
         )
         .await?;
@@ -386,8 +439,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_sqs_event_rejects_invalid_json() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
-        let err = process_sqs_event(&env, env.config(), "{not json").await;
+        let err = process_sqs_event(&env, env.config(), &metrics, "{not json").await;
 
         assert!(err.is_err());
         let err = format!("{:?}", err.unwrap_err());
@@ -403,16 +457,22 @@ mod tests {
     async fn test_handle_message_body_acknowledges_success() -> Result<()> {
         let config = Config::test_config()?;
         let env = TestEnvironment::builder().config(config).build().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
         assert_eq!(
             handle_message_body(
                 &env,
                 env.config(),
+                &metrics,
                 Some(&added_event_json("krate", &V1.to_string())),
             )
             .await,
             MessageOutcome::Ack
         );
+        let collected = env.collected_metrics();
+        let processing_metric =
+            collected.get_metric("watcher", "docsrs.watcher.sqs_message_processing_seconds")?;
+        assert_eq!(processing_metric.get_f64_histogram().count(), 1);
 
         Ok(())
     }
@@ -420,10 +480,26 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_message_body_retries_failed_processing() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
         assert_eq!(
-            handle_message_body(&env, env.config(), Some("{bad json")).await,
+            handle_message_body(&env, env.config(), &metrics, Some("{bad json")).await,
             MessageOutcome::RetryLater(RETRY_DELAY)
+        );
+        let collected = env.collected_metrics();
+        assert_eq!(
+            collected
+                .get_metric("watcher", "docsrs.watcher.sqs_message_failures_total")?
+                .get_u64_counter()
+                .value(),
+            1
+        );
+        assert_eq!(
+            collected
+                .get_metric("watcher", "docsrs.watcher.sqs_retries_total")?
+                .get_u64_counter()
+                .value(),
+            1
         );
 
         Ok(())
@@ -432,9 +508,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_message_body_ignores_missing_body() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
         assert_eq!(
-            handle_message_body(&env, env.config(), None).await,
+            handle_message_body(&env, env.config(), &metrics, None).await,
             MessageOutcome::Ignore
         );
         assert!(env.build_queue()?.queued_crates().await?.is_empty());
