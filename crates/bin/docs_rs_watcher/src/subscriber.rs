@@ -27,16 +27,20 @@ const SLEEP_BETWEEN_REQUESTS: Duration = Duration::from_secs(1);
 
 /// when we have an error handling a message, how long should SQS wait until
 /// it redelivers this message.
+///
+/// With FIFO queues, other messages will wait behind.
 const RETRY_DELAY: Duration = Duration::from_secs(30);
 
-/// How long to wait before rechecking the priorities of queued crates.
+/// How regularly to recheck the priorities of queued crates.
 /// Right now only runs `deprioritize_workspaces`.
 const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 
 /// visibility timeout:
-/// should be longer than the longest time our server takes to handle a message.
+/// SQS visibility timeout is the period after a consumer receives a message during
+/// which that message is hidden from other consumers, and if it is not deleted before
+/// the timeout expires, it becomes visible again for redelivery.
 ///
-/// If we fetch a message, and don't delete it in this time, it will be redelivered.
+/// Should be longer than the longest time our server takes to handle a message.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Result type for `handle_message_body`, so we can unit-test it without needing
