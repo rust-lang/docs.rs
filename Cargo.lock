@@ -2116,10 +2116,14 @@ dependencies = [
  "async-compression",
  "docs_rs_utils",
  "futures-util",
+ "mockito",
  "reqwest",
  "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
+ "zip",
 ]
 
 [[package]]

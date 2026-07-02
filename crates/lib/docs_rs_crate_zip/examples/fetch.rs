@@ -1,4 +1,4 @@
-use fetch_from_crate::SourceArchive;
+use docs_rs_crate_zip::SourceArchive;
 use tokio::io;
 
 #[tokio::main]
@@ -19,7 +19,8 @@ async fn main() {
             eprintln!("error loading: {:?}", err);
             return;
         }
-    };
+    }
+    .expect("krate / version not found");
 
     let entry = archive
         .by_name(&file)

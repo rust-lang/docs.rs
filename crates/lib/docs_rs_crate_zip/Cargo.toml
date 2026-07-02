@@ -13,3 +13,10 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+
+[dev-dependencies]
+zip = { workspace = true }
+mockito = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["io-std"] }
+serde_json = { workspace = true }
