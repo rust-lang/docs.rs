@@ -1,1 +1,1 @@
-pub(crate) mod static_test_env;
+pub mod static_test_env;
