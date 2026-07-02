@@ -6,7 +6,7 @@ pub mod index_watcher;
 mod metrics;
 mod rebuilds;
 mod service_metrics;
-pub mod subscriber;
+mod subscriber;
 #[cfg(test)]
 mod testing;
 
