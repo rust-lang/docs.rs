@@ -41,7 +41,7 @@ impl AppConfig for Config {
             sqs_queue_url: maybe_env("DOCSRS_SQS_QUEUE_URL")?,
             sqs_region: maybe_env("DOCSRS_SQS_REGION")?,
             sqs_endpoint_url: maybe_env("DOCSRS_SQS_ENDPOINT_URL")?,
-            sqs_active: env("DOCS_RS_SQS_ACTIVE", false)?,
+            sqs_active: env("DOCSRS_SQS_ACTIVE", false)?,
             aws_sdk_max_retries: env("DOCSRS_AWS_SDK_MAX_RETRIES", 6u32)?,
 
             delay_between_registry_fetches: Duration::from_secs(env::<u64>(
