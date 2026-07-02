@@ -10,7 +10,7 @@ use reqwest::{
 };
 use tokio::io::{self, AsyncWrite, AsyncWriteExt as _};
 use tokio_util::io::StreamReader;
-use tracing::{field, info, instrument};
+use tracing::{debug, field, instrument};
 
 pub static X_CACHE: HeaderName = HeaderName::from_static("x-cache");
 
@@ -39,7 +39,7 @@ impl SourceArchive {
 
         let index_url = base_url.join(&format!("{0}/{0}-{1}.zip.json", name, version))?;
 
-        info!(%index_url, "fetching source archive manifest");
+        debug!(%index_url, "fetching source archive manifest");
         let response = client.get(index_url.clone()).send().await?;
         if matches!(
             response.status(),
@@ -75,7 +75,7 @@ impl SourceArchive {
         let range_start = entry.data_offset;
         let range_end = entry.data_offset + entry.compressed_size - 1;
 
-        info!("fetching file from source archive");
+        debug!(range_start, range_end, "fetching file from source archive");
         let response = self
             .client
             .get(self.zip_url.clone())
