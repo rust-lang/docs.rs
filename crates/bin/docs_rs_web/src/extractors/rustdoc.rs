@@ -7,9 +7,10 @@ use axum::{
     extract::{FromRequestParts, MatchedPath},
     http::{Uri, request::Parts},
 };
-use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, ReqVersion};
-use docs_rs_uri::{EscapedURI, url_decode};
+use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, ReqVersion, Version};
+use docs_rs_uri::{EscapedURI, encode_url_path, url_decode};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 const INDEX_HTML: &str = "index.html";
 const FOLDER_AND_INDEX_HTML: &str = "/index.html";
@@ -45,6 +46,7 @@ pub(crate) struct RustdocParams {
     original_uri: Option<EscapedURI>,
     name: KrateName,
     req_version: ReqVersion,
+    matched_version: Option<Version>,
     doc_target: Option<String>,
     inner_path: Option<String>,
     static_route_suffix: Option<String>,
@@ -63,6 +65,7 @@ impl std::fmt::Debug for RustdocParams {
             .field("original_uri", &self.original_uri)
             .field("name", &self.name)
             .field("req_version", &self.req_version)
+            .field("matched_version", &self.matched_version)
             .field("doc_target", &self.doc_target)
             .field("inner_path", &self.inner_path)
             .field("doc_targets", &self.doc_targets)
@@ -149,6 +152,7 @@ impl RustdocParams {
         Self {
             name: name.into(),
             req_version: ReqVersion::default(),
+            matched_version: None,
             original_uri: None,
             doc_target: None,
             inner_path: None,
@@ -212,6 +216,7 @@ impl RustdocParams {
     pub(crate) fn apply_metadata(self, metadata: &MetaData) -> RustdocParams {
         self.with_name(metadata.name.clone())
             .with_req_version(&metadata.req_version)
+            .with_matched_version(metadata.version.clone())
             // first set the doc-target list
             .with_maybe_doc_targets(metadata.doc_targets.clone())
             // then the default target, so we can validate it.
@@ -227,6 +232,7 @@ impl RustdocParams {
         let release = &matched_release.release;
         self.with_name(matched_release.name.clone())
             .with_req_version(&matched_release.req_version)
+            .with_matched_version(matched_release.release.version.clone())
             .with_maybe_doc_targets(release.doc_targets.as_deref())
             .with_maybe_default_target(release.default_target.as_deref())
             .with_maybe_target_name(release.target_name.as_deref())
@@ -261,6 +267,19 @@ impl RustdocParams {
         self.try_update(|mut params| {
             params.req_version = version.try_into().context("couldn't parse version")?;
             Ok(params)
+        })
+    }
+
+    pub(crate) fn matched_version(&self) -> Option<&Version> {
+        self.matched_version.as_ref()
+    }
+    pub(crate) fn with_matched_version(self, version: impl Into<Version>) -> Self {
+        self.with_maybe_matched_version(Some(version))
+    }
+    pub(crate) fn with_maybe_matched_version(self, version: Option<impl Into<Version>>) -> Self {
+        self.update(|mut params| {
+            params.matched_version = version.map(Into::into);
+            params
         })
     }
 
@@ -627,10 +646,47 @@ impl RustdocParams {
         } else {
             ""
         };
-        EscapedURI::from_path(format!(
-            "/crate/{}/{}/source/{}",
-            self.name, self.req_version, inner_path
-        ))
+
+        // crates.io doesn't have semver redirects, just a special "latest version" URL.
+        let crates_io_version = if let Some(matched_version) = &self.matched_version {
+            // if these `RustdocParams` got handed a specific matched version, we will use that
+            // for the redirect to crates.io.
+            format!("/{matched_version}")
+        } else {
+            match &self.req_version {
+                // exact version can be redirected to exact version.
+                ReqVersion::Exact(version) => format!("/{version}"),
+                // latest / * can be redirect to the root / latest on crates.io
+                ReqVersion::Latest => "".to_string(),
+                // This is just a fallback for an edge case, for the cases where these
+                // `RustdocParams` are used without applied metadata or matched-release.
+                //
+                // This shouldn't happen in our use-cases / handlers.
+                //
+                // In these cases we just redirect to the source root of the latest version.
+                ReqVersion::Semver(version_req) => {
+                    warn!(
+                        %self.name,
+                        %version_req,
+                        "got request to generate source_url with semver. falling back to latest version"
+                    );
+
+                    "".to_string()
+                }
+            }
+        };
+
+        EscapedURI::from_uri(
+            Uri::builder()
+                .scheme("https")
+                .authority("crates.io")
+                .path_and_query(encode_url_path(&format!(
+                    "/crates/{}{}/code/{}",
+                    self.name, crates_io_version, inner_path
+                )))
+                .build()
+                .unwrap(),
+        )
     }
 
     pub(crate) fn target_redirect_url(&self) -> EscapedURI {
@@ -1280,11 +1336,70 @@ mod tests {
         assert_eq!(params.rustdoc_url().to_string(), "/dummy/0.4.0/dummy/");
         assert_eq!(
             params.source_url().to_string(),
-            "/crate/dummy/0.4.0/source/README.md"
+            "https://crates.io/crates/dummy/0.4.0/code/README.md"
         );
         assert_eq!(
             params.target_redirect_url().to_string(),
             "/crate/dummy/0.4.0/target-redirect/dummy/"
+        );
+    }
+
+    #[test_case("0.4.0", "/0.4.0"; "crates.io can handle exact version")]
+    #[test_case("latest", ""; "latest will become latest")]
+    #[test_case("^0.4", ""; "semver will fall back to latest")]
+    fn test_source_url_with_req_version_only(
+        req_version: &'static str,
+        crates_io_version: &'static str,
+    ) {
+        let params = RustdocParams::new(DUMMY)
+            .try_with_req_version(req_version)
+            .unwrap()
+            .with_maybe_matched_version(None::<Version>)
+            .with_inner_path("README.md")
+            .with_page_kind(PageKind::Source)
+            .try_with_original_uri(format!("/crate/dummy/{req_version}/source/README.md"))
+            .unwrap()
+            .with_default_target(DEFAULT_TARGET)
+            .with_target_name("dummy")
+            .with_doc_targets(TARGETS.iter().cloned());
+
+        assert_eq!(
+            params.rustdoc_url().to_string(),
+            format!("/dummy/{req_version}/dummy/")
+        );
+        assert_eq!(
+            params.source_url().to_string(),
+            format!("https://crates.io/crates/dummy{crates_io_version}/code/README.md")
+        );
+        assert_eq!(
+            params.target_redirect_url().to_string(),
+            format!("/crate/dummy/{req_version}/target-redirect/dummy/")
+        );
+    }
+
+    #[test]
+    fn test_source_url_with_overwritten_matched_version() {
+        let params = RustdocParams::new(DUMMY)
+            // semver would normally fall back to the latest/root on crates.io
+            .try_with_req_version("^0.4.0")
+            .unwrap()
+            .with_matched_version(Version::parse("0.4.0").unwrap())
+            .with_inner_path("README.md")
+            .with_page_kind(PageKind::Source)
+            .try_with_original_uri("/crate/dummy/^0.4.0/source/README.md")
+            .unwrap()
+            .with_default_target(DEFAULT_TARGET)
+            .with_target_name("dummy")
+            .with_doc_targets(TARGETS.iter().cloned());
+
+        assert_eq!(params.rustdoc_url().to_string(), "/dummy/^0.4.0/dummy/");
+        assert_eq!(
+            params.source_url().to_string(),
+            "https://crates.io/crates/dummy/0.4.0/code/README.md"
+        );
+        assert_eq!(
+            params.target_redirect_url().to_string(),
+            "/crate/dummy/^0.4.0/target-redirect/dummy/"
         );
     }
 
@@ -1521,7 +1636,7 @@ mod tests {
 
         // without page kind, rustdoc path doesn' thave a path, and static suffix ignored
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+        assert_eq!(params.source_url(), "https://crates.io/crates/krate/code/");
         assert_eq!(
             params.target_redirect_url(),
             "/crate/krate/latest/target-redirect/krate/"
@@ -1529,7 +1644,7 @@ mod tests {
 
         let params = params.with_page_kind(PageKind::Rustdoc);
         assert_eq!(params.rustdoc_url(), "/krate/latest/path_add/static.html");
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+        assert_eq!(params.source_url(), "https://crates.io/crates/krate/code/");
         assert_eq!(
             params.target_redirect_url(),
             "/crate/krate/latest/target-redirect/path_add/static.html"
@@ -1538,7 +1653,10 @@ mod tests {
         let params = params.with_page_kind(PageKind::Source);
         assert_eq!(params.rustdoc_url(), "/krate/latest/krate/");
         // just path added, not static suffix
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
+        assert_eq!(
+            params.source_url(),
+            "https://crates.io/crates/krate/code/path_add"
+        );
         assert_eq!(
             params.target_redirect_url(),
             "/crate/krate/latest/target-redirect/krate/"
@@ -1562,7 +1680,8 @@ mod tests {
             params.rustdoc_url(),
             format!("/krate/latest/{OTHER_TARGET}/krate/")
         );
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/");
+        assert_eq!(params.source_url(), "https://crates.io/crates/krate/code/");
+
         assert_eq!(
             params.target_redirect_url(),
             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
@@ -1574,7 +1693,10 @@ mod tests {
             params.rustdoc_url(),
             format!("/krate/latest/{OTHER_TARGET}/krate/")
         );
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/path_add");
+        assert_eq!(
+            params.source_url(),
+            "https://crates.io/crates/krate/code/path_add"
+        );
         assert_eq!(
             params.target_redirect_url(),
             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/krate/")
@@ -1586,7 +1708,7 @@ mod tests {
             params.rustdoc_url(),
             format!("/krate/latest/{OTHER_TARGET}/path_add/static.html")
         );
-        assert_eq!(params.source_url(), format!("/crate/krate/latest/source/"));
+        assert_eq!(params.source_url(), "https://crates.io/crates/krate/code/");
         assert_eq!(
             params.target_redirect_url(),
             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/path_add/static.html")

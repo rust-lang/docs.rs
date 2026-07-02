@@ -1,10 +1,9 @@
 use crate::{
-    PathNotFoundError, blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry,
-    types::FileRange, utils::file_list::walk_dir_recursive,
+    PathNotFoundError, blob::StreamingBlob, config::ArchiveIndexCacheConfig, types::FileRange,
+    utils::file_list::walk_dir_recursive,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
-use docs_rs_mimes::detect_mime;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm};
 use docs_rs_utils::spawn_blocking;
@@ -16,7 +15,6 @@ use opentelemetry::{
 };
 use sqlx::{ConnectOptions as _, Connection as _, QueryBuilder, Row as _, Sqlite};
 use std::{
-    collections::HashSet,
     fmt,
     future::Future,
     path::{Path, PathBuf},
@@ -904,80 +902,6 @@ impl Index {
             }
         }
     }
-
-    /// get the folder contents inside the zip archive.
-    /// * missing folder = list the root
-    /// * given folder: just lists the files in there, and subfolders, but not their contents.
-    ///
-    /// You'll need this method when you build a file-browser for the archive, like
-    /// in our source pages.
-    #[instrument(skip(self))]
-    pub fn folder_contents<P>(
-        &mut self,
-        folder: Option<P>,
-    ) -> impl Stream<Item = Result<FolderEntry>> + '_
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        // Build the path prefix string used in GLOB patterns.
-        // For root (None): prefix = ""
-        // For a folder:    prefix = "some/folder/"
-        let prefix: Option<String> = folder.as_ref().map(|f| {
-            let s = f.as_ref().to_string_lossy();
-            // Normalize: strip any trailing slash, then re-add exactly one.
-            format!("{}/", s.trim_end_matches('/'))
-        });
-
-        try_stream! {
-            // Seen-dirs is the only state we must accumulate: one String per unique
-            // immediate subdirectory name. File rows are yielded as they arrive.
-            let mut seen_dirs: HashSet<String> = HashSet::new();
-
-
-            let mut rows = if let Some(prefix) = &prefix {
-                let prefix_upper_bound = format!("{prefix}\u{10ffff}");
-
-                // NOTE: we're using >= and < for the prefix matching here.
-                // Using `GLOB` would mean we have to escape the path.
-                // Other techniques like sqlite string functions would mean the index on the
-                // table can't be used.
-
-                sqlx::query("SELECT path FROM files WHERE path >= ? AND path < ?")
-                    .bind(prefix)
-                    .bind(prefix_upper_bound)
-                    .fetch(&mut self.conn)
-            } else {
-                sqlx::query("SELECT path FROM files")
-                    .fetch(&mut self.conn)
-            };
-
-            while let Some(row) = rows.try_next().await.context("error fetching entries from SQLite")? {
-                let full_path: String = row.try_get(0)?;
-                // The relative part is everything after the prefix.
-                let rel = if let Some(prefix) = &prefix {
-                    // Archive paths are stored as UTF-8 strings, and `full_path` comes from
-                    // the same prefix string used in the range query above.
-                    debug_assert!(full_path.is_char_boundary(prefix.len()));
-                    &full_path[prefix.len()..]
-                } else {
-                    &full_path
-                };
-
-                if let Some(slash_pos) = rel.find('/') {
-                    // It's inside a subdirectory. Extract and deduplicate the first component.
-                    let dir_name = &rel[..slash_pos];
-                    if seen_dirs.insert(dir_name.to_string()) {
-                        yield FolderEntry::Dir(dir_name.to_string());
-                    }
-                } else {
-                    // Direct file — yield only the name relative to the queried folder.
-                    let rel = rel.to_string();
-                    let mime = detect_mime(&rel);
-                    yield FolderEntry::File(rel, mime);
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1757,153 +1681,6 @@ mod tests {
         Index::open(&tmp).await
     }
 
-    async fn collect_folder_contents(
-        index: &mut Index,
-        folder: Option<&str>,
-    ) -> Result<(Vec<String>, Vec<String>)> {
-        let entries: Vec<FolderEntry> = index
-            .folder_contents(folder.map(Path::new))
-            .try_collect()
-            .await?;
-
-        let mut files = Vec::new();
-        let mut dirs = Vec::new();
-        for entry in entries {
-            match entry {
-                FolderEntry::File(path, _) => files.push(path),
-                FolderEntry::Dir(name) => dirs.push(name),
-            }
-        }
-        files.sort();
-        dirs.sort();
-        Ok((files, dirs))
-    }
-
-    #[tokio::test]
-    async fn folder_contents_root_lists_files_and_dirs() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("index.html", b""),
-            ("style.css", b""),
-            ("sub/page.html", b""),
-            ("other/file.js", b""),
-        ])
-        .await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, None).await?;
-
-        assert_eq!(files, vec!["index.html", "style.css"]);
-        assert_eq!(dirs, vec!["other", "sub"]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_subfolder_lists_direct_children_only() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("src/main.rs", b""),
-            ("src/lib.rs", b""),
-            ("src/utils/helper.rs", b""),
-            ("src/utils/mod.rs", b""),
-            ("README.md", b""),
-        ])
-        .await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("src")).await?;
-
-        assert_eq!(files, vec!["lib.rs", "main.rs"]);
-        assert_eq!(dirs, vec!["utils"]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_nested_subfolder() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("a/b/c/deep.txt", b""),
-            ("a/b/file.txt", b""),
-            ("a/b/other.txt", b""),
-        ])
-        .await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("a/b")).await?;
-
-        assert_eq!(files, vec!["file.txt", "other.txt"]);
-        assert_eq!(dirs, vec!["c"]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_empty_folder_returns_nothing() -> Result<()> {
-        let mut index = index_from_entries(vec![("a/file.txt", b"")]).await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("nonexistent")).await?;
-
-        assert!(files.is_empty());
-        assert!(dirs.is_empty());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_root_with_only_files() -> Result<()> {
-        let mut index = index_from_entries(vec![("a.txt", b""), ("b.txt", b"")]).await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, None).await?;
-
-        assert_eq!(files, vec!["a.txt", "b.txt"]);
-        assert!(dirs.is_empty());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_subdir_deduplicated() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("sub/a.txt", b""),
-            ("sub/b.txt", b""),
-            ("sub/c.txt", b""),
-        ])
-        .await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, None).await?;
-
-        assert!(files.is_empty());
-        // "sub" should appear exactly once despite three files inside it
-        assert_eq!(dirs, vec!["sub"]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_treats_glob_chars_literally() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("src[abc]/literal.rs", b""),
-            ("srca/wildcard.rs", b""),
-            ("srcb/wildcard.rs", b""),
-            ("srcc/wildcard.rs", b""),
-            ("src*/star.rs", b""),
-            ("srcx/star.rs", b""),
-            ("src?/question.rs", b""),
-            ("srcy/question.rs", b""),
-        ])
-        .await?;
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("src[abc]")).await?;
-        assert_eq!(files, vec!["literal.rs"]);
-        assert!(dirs.is_empty());
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("src*")).await?;
-        assert_eq!(files, vec!["star.rs"]);
-        assert!(dirs.is_empty());
-
-        let (files, dirs) = collect_folder_contents(&mut index, Some("src?")).await?;
-        assert_eq!(files, vec!["question.rs"]);
-        assert!(dirs.is_empty());
-
-        Ok(())
-    }
-
     #[tokio::test]
     async fn list_returns_all_entries() -> Result<()> {
         let mut index = index_from_entries(vec![
@@ -1948,58 +1725,6 @@ mod tests {
         let fi = &entries[0];
         assert!(!fi.range().is_empty());
         assert_eq!(fi.compression(), CompressionAlgorithm::Bzip2);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_file_mime_correct() -> Result<()> {
-        let mut index = index_from_entries(vec![
-            ("main.rs", b""),
-            ("README.md", b""),
-            ("style.css", b""),
-            ("data.json", b""),
-            ("index.html", b""),
-        ])
-        .await?;
-
-        let entries: Vec<FolderEntry> = index.folder_contents(None::<&Path>).try_collect().await?;
-
-        let mut mime_map: Vec<(&str, String)> = entries
-            .iter()
-            .filter_map(|e| match e {
-                FolderEntry::File(name, mime) => Some((name.as_str(), mime.to_string())),
-                FolderEntry::Dir(_) => None,
-            })
-            .collect();
-        mime_map.sort_by_key(|(name, _)| *name);
-
-        assert_eq!(
-            mime_map,
-            vec![
-                ("README.md", "text/markdown".to_string()),
-                ("data.json", "application/json".to_string()),
-                ("index.html", "text/html".to_string()),
-                ("main.rs", "text/rust".to_string()),
-                ("style.css", "text/css".to_string()),
-            ]
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn folder_contents_dirs_have_no_mime() -> Result<()> {
-        let mut index =
-            index_from_entries(vec![("src/main.rs", b""), ("docs/readme.md", b"")]).await?;
-
-        let entries: Vec<FolderEntry> = index.folder_contents(None::<&Path>).try_collect().await?;
-
-        for entry in &entries {
-            if let FolderEntry::Dir(_) = entry {
-                assert!(entry.mime().is_none());
-            }
-        }
 
         Ok(())
     }
