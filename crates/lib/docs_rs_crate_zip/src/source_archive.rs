@@ -1,4 +1,4 @@
-use crate::error::Error;
+use anyhow::{Result, bail};
 use async_compression::tokio::bufread::DeflateDecoder;
 use docs_rs_utils::APP_USER_AGENT;
 use futures_util::TryStreamExt as _;
@@ -42,7 +42,7 @@ pub struct SourceArchive {
 }
 
 impl SourceArchive {
-    pub async fn load(name: impl AsRef<str>, version: impl AsRef<str>) -> Result<Self, Error> {
+    pub async fn load(name: impl AsRef<str>, version: impl AsRef<str>) -> Result<Option<Self>> {
         Self::load_from("https://static.crates.io/", name, version).await
     }
 
@@ -50,17 +50,15 @@ impl SourceArchive {
         base_url: impl IntoUrl,
         name: impl AsRef<str>,
         version: impl AsRef<str>,
-    ) -> Result<Self, Error> {
-        let mut base_url = base_url.into_url().map_err(|_| Error::UrlParse)?;
+    ) -> Result<Option<Self>> {
+        let mut base_url = base_url.into_url()?;
         base_url.set_path("crates/");
 
-        let index_url = base_url
-            .join(&format!(
-                "{0}/{0}-{1}.zip.json",
-                name.as_ref(),
-                version.as_ref()
-            ))
-            .map_err(|_| Error::UrlParse)?;
+        let index_url = base_url.join(&format!(
+            "{0}/{0}-{1}.zip.json",
+            name.as_ref(),
+            version.as_ref()
+        ))?;
 
         let headers = vec![(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT))]
             .into_iter()
@@ -72,17 +70,15 @@ impl SourceArchive {
 
         let response = client.get(index_url.clone()).send().await?;
         if is_not_found_error(&response.status()) {
-            return Err(Error::ManifestNotFound(index_url));
+            return Ok(None);
         }
         let response = response.error_for_status()?;
 
-        Ok(Self {
+        Ok(Some(Self {
             manifest: response.json().await?,
-            zip_url: base_url
-                .join(&format!("{0}/{0}-{1}.zip", name.as_ref(), version.as_ref()))
-                .map_err(|_| Error::UrlParse)?,
+            zip_url: base_url.join(&format!("{0}/{0}-{1}.zip", name.as_ref(), version.as_ref()))?,
             client,
-        })
+        }))
     }
 
     pub fn entries(&self) -> impl Iterator<Item = &FileEntry> {
@@ -94,7 +90,7 @@ impl SourceArchive {
         self.manifest.files.iter().find(|e| e.path == path)
     }
 
-    pub async fn fetch<W>(&self, entry: &FileEntry, writer: &mut W) -> Result<(), Error>
+    pub async fn fetch<W>(&self, entry: &FileEntry, writer: &mut W) -> Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -106,16 +102,8 @@ impl SourceArchive {
             .get(self.zip_url.clone())
             .header(RANGE, format!("bytes={range_start}-{range_end}",))
             .send()
-            .await?;
-
-        if is_not_found_error(&response.status()) {
-            return Err(Error::ArchiveNotFound(
-                self.zip_url.clone(),
-                range_start,
-                range_end,
-            ));
-        }
-        let response = response.error_for_status()?;
+            .await?
+            .error_for_status()?;
 
         let stream = response.bytes_stream().map_err(std::io::Error::other);
         let mut reader = StreamReader::new(stream);
@@ -128,7 +116,7 @@ impl SourceArchive {
             "store" => {
                 io::copy(&mut reader, writer).await?;
             }
-            compression => return Err(Error::UnsupportedZipCompression(compression.into())),
+            compression => bail!("unsupported zip compression: {}", compression),
         }
 
         writer.flush().await?;
@@ -136,7 +124,7 @@ impl SourceArchive {
         Ok(())
     }
 
-    pub async fn fetch_bytes(&self, entry: &FileEntry) -> Result<Vec<u8>, Error> {
+    pub async fn fetch_bytes(&self, entry: &FileEntry) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
         self.fetch(entry, &mut buf).await?;
         Ok(buf)

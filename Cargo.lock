@@ -2112,6 +2112,7 @@ dependencies = [
 name = "docs_rs_crate_zip"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-compression",
  "docs_rs_utils",
  "futures-util",

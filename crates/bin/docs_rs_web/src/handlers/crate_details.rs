@@ -17,7 +17,7 @@ use askama::Template;
 use axum::response::{IntoResponse, Response as AxumResponse};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
-use docs_rs_crate_zip::{Error as CratesIoZipError, SourceArchive};
+use docs_rs_crate_zip::SourceArchive;
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
@@ -289,19 +289,17 @@ impl CrateDetails {
     }
 
     async fn fetch_readme(&self) -> anyhow::Result<Option<String>> {
-        let source_archive = match SourceArchive::load(&self.name, self.version.to_string()).await {
-            Ok(source_archive) => source_archive,
-            Err(err) if matches!(err, CratesIoZipError::ManifestNotFound(_)) => return Ok(None),
-            Err(err) => return Err(err.into()),
+        let Some(source_archive) =
+            SourceArchive::load(&self.name, self.version.to_string()).await?
+        else {
+            return Ok(None);
         };
 
         let Some(cargo_toml) = source_archive.by_name("Cargo.toml") else {
             return Ok(None);
         };
 
-        let manifest = source_archive.fetch_bytes(&cargo_toml).await?;
-
-        let manifest = String::from_utf8(manifest)
+        let manifest = String::from_utf8(source_archive.fetch_bytes(cargo_toml).await?)
             .context("parsing Cargo.toml")?
             .parse::<toml::Table>()
             .context("parsing Cargo.toml")?;
@@ -311,18 +309,15 @@ impl CrateDetails {
             Some(toml::Value::String(path)) => vec![path.as_ref()],
             _ => vec!["README.md", "README.txt", "README"],
         };
+
         for path in &paths {
             let Some(readme) = source_archive.by_name(path) else {
                 continue;
             };
 
-            match source_archive.fetch_bytes(&readme).await {
-                Ok(content) => return Ok(Some(String::from_utf8_lossy(&content).to_string())),
-                Err(err) if matches!(err, CratesIoZipError::ArchiveNotFound(_, _, _)) => {
-                    return Ok(None);
-                }
-                Err(err) => return Err(err.into()),
-            }
+            return Ok(Some(
+                String::from_utf8_lossy(&source_archive.fetch_bytes(readme).await?).to_string(),
+            ));
         }
         Ok(None)
     }
