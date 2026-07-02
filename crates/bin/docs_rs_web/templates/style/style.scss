@@ -389,13 +389,6 @@ div.recent-releases-container {
         }
     }
 
-    .description:hover {
-        @media #{$media-sm} {
-            overflow: visible;
-            white-space: normal;
-        }
-    }
-
     .date,
     .duration,
     .memory {
