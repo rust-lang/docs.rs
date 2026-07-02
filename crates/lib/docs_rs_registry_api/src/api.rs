@@ -8,7 +8,7 @@ use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, retry_async};
 use reqwest::{
     StatusCode,
-    header::{ACCEPT, HeaderValue, USER_AGENT},
+    header::{ACCEPT, HeaderMap, HeaderValue, USER_AGENT},
 };
 use serde::{Deserialize, de::DeserializeOwned};
 use tracing::instrument;
@@ -26,18 +26,15 @@ impl RegistryApi {
     pub fn from_config(config: &Config) -> Result<Self> {
         Self::new(
             config.registry_api_host.clone(),
-            config.static_host.clone(),
+            config.registry_static_host.clone(),
             config.crates_io_api_call_retries,
         )
     }
 
     pub fn new(api_base: Url, static_base: Url, max_retries: u32) -> Result<Self> {
-        let headers = vec![
-            (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
-            (ACCEPT, HeaderValue::from_static("application/json")),
-        ]
-        .into_iter()
-        .collect();
+        let mut headers = HeaderMap::with_capacity(2);
+        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
@@ -234,7 +231,7 @@ impl RegistryApi {
     ///
     /// The returned object can be used to inspect the file-list, and
     /// fetch single files from the archive via range request.
-    pub async fn open_source_archive(
+    pub async fn source_archive(
         &self,
         name: &KrateName,
         version: &Version,

@@ -7,6 +7,8 @@ use tokio::sync::Mutex;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 /// create a manifest & zip file the same way (roughly, for our tests) as crates.io does.
+///
+/// Source: the `crates_io_crate_zip` subcrate in the crates.io codebase.
 pub fn create_test_source_archive<I, N, B>(files: I) -> Result<(Manifest, Vec<u8>)>
 where
     I: IntoIterator<Item = (N, B)>,

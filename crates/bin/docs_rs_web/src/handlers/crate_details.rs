@@ -293,10 +293,7 @@ impl CrateDetails {
     }
 
     async fn fetch_readme(&self, registry_api: &RegistryApi) -> anyhow::Result<Option<String>> {
-        let source_archive = match registry_api
-            .open_source_archive(&self.name, &self.version)
-            .await
-        {
+        let source_archive = match registry_api.source_archive(&self.name, &self.version).await {
             Ok(archive) => archive,
             Err(docs_rs_registry_api::Error::MissingReleases) => return Ok(None),
             Err(err) => return Err(err.into()),

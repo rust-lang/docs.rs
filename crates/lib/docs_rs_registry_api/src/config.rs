@@ -9,7 +9,7 @@ pub struct Config {
     pub registry_api_host: Url,
 
     #[builder(default =  "https://static.crates.io".parse().unwrap())]
-    pub static_host: Url,
+    pub registry_static_host: Url,
 
     // amount of retries for external API calls, mostly crates.io
     #[builder(default = 3)]
@@ -21,7 +21,7 @@ impl AppConfig for Config {
         Ok(Self::builder()
             .maybe_crates_io_api_call_retries(maybe_env("DOCSRS_CRATESIO_API_CALL_RETRIES")?)
             .maybe_registry_api_host(maybe_env("DOCSRS_REGISTRY_API_HOST")?)
-            .maybe_static_host(maybe_env("DOCSRS_STATIC_HOST")?)
+            .maybe_registry_static_host(maybe_env("DOCSRS_REGISTRY_STATIC_HOST")?)
             .build())
     }
 }
