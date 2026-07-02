@@ -12,6 +12,7 @@ testing = [
     "docs_rs_fastly/testing",
     "docs_rs_logging/testing",
     "docs_rs_storage/testing",
+    "docs_rs_registry_api/testing",
 ]
 
 [dependencies]
