@@ -25,6 +25,7 @@ docs_rs_uri = { path = "../docs_rs_uri" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 opentelemetry = { workspace = true }
+regex = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

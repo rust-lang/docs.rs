@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use docs_rs_types::KrateName;
 use sqlx::Acquire as _;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// update the crate-count on each repository.
 ///
@@ -65,42 +65,37 @@ pub async fn rewrite_repository_stats(conn: &mut sqlx::PgConnection) -> Result<(
     Ok(())
 }
 
-/// get the crate-count for the related workspace for a crate.
-pub async fn get_crate_counts(
+/// get all crate names where the workspace crate count is greater than the given value
+pub async fn get_crate_names_from_big_workspaces(
     conn: &mut sqlx::PgConnection,
-    names: impl Iterator<Item = &KrateName>,
-) -> Result<HashMap<KrateName, i32>> {
-    let names: Vec<_> = names.map(|k: &KrateName| k.to_string()).collect();
-
+    min_workspace_size: u16,
+) -> Result<HashSet<KrateName>> {
     Ok(sqlx::query!(
         r#"
         SELECT
-            c.name as "name: KrateName",
-            repo.crate_count
+            c.name as "name: KrateName"
 
         FROM
             crates AS c
             INNER JOIN releases AS r ON c.latest_version_id = r.id
             INNER JOIN repositories AS repo ON r.repository_id = repo.id
 
-        WHERE c.name = ANY($1)
+        WHERE
+            repo.crate_count >= $1
         "#,
-        &names[..],
+        min_workspace_size as i32,
     )
     .fetch_all(&mut *conn)
     .await?
     .into_iter()
-    .map(|row| (row.name, row.crate_count))
+    .map(|row| row.name)
     .collect())
 }
 
-/// get the override-priorities for the given crate names
-pub async fn get_overriden_build_priorities(
+/// get all crate names where the build priority is overridden on a workspace level
+pub async fn get_crate_names_for_repository_build_priorities(
     conn: &mut sqlx::PgConnection,
-    names: impl Iterator<Item = &KrateName>,
 ) -> Result<HashMap<KrateName, i32>> {
-    let names: Vec<_> = names.map(|k: &KrateName| k.to_string()).collect();
-
     Ok(sqlx::query!(
         r#"
         SELECT
@@ -113,10 +108,8 @@ pub async fn get_overriden_build_priorities(
             INNER JOIN repositories AS repo ON r.repository_id = repo.id
 
         WHERE
-            c.name = ANY($1) AND
             repo.override_build_priority IS NOT NULL
         "#,
-        &names[..],
     )
     .fetch_all(&mut *conn)
     .await?
@@ -326,22 +319,19 @@ mod tests {
         let env = test_env().await?;
         let mut conn = env.db.async_conn().await?;
 
-        let repo_id = FakeGithubStats {
-            repo: "owner/repo".into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
+        let repo_id = FakeGithubStats::builder()
+            .repo("owner/repo")
+            .create(&mut conn)
+            .await?;
 
         for name in &[FOO, BAR] {
-            env.fake_release().await.name(name).create().await?;
+            env.fake_release()
+                .await
+                .name(name)
+                .github_stats_id(repo_id)
+                .create()
+                .await?;
         }
-
-        sqlx::query!("UPDATE releases SET repository_id = $1", repo_id)
-            .execute(&mut *conn)
-            .await?;
 
         // the stats should be 0, because neither the full rewrite or the single-repo update was
         // called
@@ -358,9 +348,11 @@ mod tests {
             vec![("owner/repo".into(), 2)]
         );
 
-        env.fake_release().await.name(&BAZ).create().await?;
-        sqlx::query!("UPDATE releases SET repository_id = $1", repo_id)
-            .execute(&mut *conn)
+        env.fake_release()
+            .await
+            .name(&BAZ)
+            .github_stats_id(repo_id)
+            .create()
             .await?;
 
         // after adding a release, the count is still 2,
@@ -386,37 +378,24 @@ mod tests {
         let env = test_env().await?;
         let mut conn = env.db.async_conn().await?;
 
-        let prioritized_repo_id = FakeGithubStats {
-            repo: REPO.into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
-
-        let default_repo_id = FakeGithubStats {
-            repo: REPO2.into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
-
-        env.fake_release().await.name(&FOO).create().await?;
-        env.fake_release().await.name(&BAR).create().await?;
-
-        sqlx::query!("UPDATE releases SET repository_id = $1 WHERE crate_id = (SELECT id FROM crates WHERE name = $2)", prioritized_repo_id, FOO as _)
-            .execute(&mut *conn)
+        env.fake_release()
+            .await
+            .name(&FOO)
+            .github_stats(REPO, 0, 0, 0)
+            .create()
             .await?;
-        sqlx::query!("UPDATE releases SET repository_id = $1 WHERE crate_id = (SELECT id FROM crates WHERE name = $2)", default_repo_id, BAR as _)
-            .execute(&mut *conn)
+
+        env.fake_release()
+            .await
+            .name(&BAR)
+            .github_stats(REPO2, 0, 0, 0)
+            .create()
             .await?;
+
         set_repository_build_priority(&mut conn, REPO, -5).await?;
 
         assert_eq!(
-            get_overriden_build_priorities(&mut conn, [FOO, BAR, BAZ].iter()).await?,
+            get_crate_names_for_repository_build_priorities(&mut conn).await?,
             HashMap::from_iter([(FOO, -5)])
         );
 
@@ -428,14 +407,10 @@ mod tests {
         let env = test_env().await?;
         let mut conn = env.db.async_conn().await?;
 
-        FakeGithubStats {
-            repo: REPO.into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
+        FakeGithubStats::builder()
+            .repo(REPO)
+            .create(&mut conn)
+            .await?;
 
         assert_eq!(get_repository_build_priority(&mut conn, REPO).await?, None);
 
@@ -500,23 +475,15 @@ mod tests {
         let env = test_env().await?;
         let mut conn = env.db.async_conn().await?;
 
-        FakeGithubStats {
-            repo: REPO.into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
+        FakeGithubStats::builder()
+            .repo(REPO)
+            .create(&mut conn)
+            .await?;
 
-        FakeGithubStats {
-            repo: REPO2.into(),
-            stars: 0,
-            forks: 0,
-            issues: 0,
-        }
-        .create(&mut conn)
-        .await?;
+        FakeGithubStats::builder()
+            .repo(REPO2)
+            .create(&mut conn)
+            .await?;
 
         set_repository_build_priority(&mut conn, REPO, -5).await?;
 

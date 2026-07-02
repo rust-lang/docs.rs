@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result};
 use crates_index_diff::Change;
-use docs_rs_build_queue::{PRIORITY_MANUAL_FROM_CRATES_IO, priority::get_crate_priority};
+use docs_rs_build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details::update_latest_version_id,
@@ -117,8 +117,8 @@ pub(crate) async fn get_new_crates(
 
     let crates_added = process_changes(context, &changes, config).await;
 
-    if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
-        error!(?err, "error deprioritizing workspaces");
+    if let Err(err) = context.build_queue()?.refresh_default_priorities().await {
+        error!(?err, "error refreshing queued release priorities");
     }
 
     // set the reference in the database
@@ -186,10 +186,11 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
 }
 
 async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
-    let mut conn = context.pool()?.get_async().await?;
-    let priority = get_crate_priority(&mut conn, &release.name).await?;
-    context
-        .build_queue()?
+    let build_queue = context.build_queue()?;
+
+    let priority = build_queue.find_priority(&release.name).await?;
+
+    build_queue
         .add_crate(&release.name, &release.version, priority)
         .await
         .with_context(|| {
