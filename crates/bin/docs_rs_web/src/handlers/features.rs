@@ -476,7 +476,7 @@ mod tests {
             );
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/foo/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/foo/latest/source/\""));
+            assert!(body.contains("<a href=\"https://crates.io/crates/foo/0.2.0/code/\""));
             assert!(body.contains("<a href=\"/crate/foo/latest\""));
             Ok(())
         });
