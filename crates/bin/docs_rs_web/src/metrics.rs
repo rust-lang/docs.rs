@@ -137,7 +137,6 @@ mod tests {
             ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
             ("/-/static/keyboard.js", "static resource"),
-            ("/-/static/source.js", "static resource"),
             ("/-/static/opensearch.xml", "static resource"),
             ("/releases", "/releases"),
             ("/releases/feed", "/releases/feed"),
@@ -156,8 +155,8 @@ mod tests {
             ),
             ("/-/static/style.css", "static resource"),
             ("/-/static/vendored.css", "static resource"),
-            ("/rustdoc/rcc/0.0.0/rcc/index.html", "rustdoc page"),
-            ("/rustdoc/gcc/0.0.0/gcc/index.html", "rustdoc page"),
+            ("/rcc/0.0.0/rcc/index.html", "rustdoc page"),
+            ("/gcc/0.0.0/gcc/index.html", "rustdoc page"),
         ];
 
         async_wrapper(|env| async move {
@@ -165,7 +164,15 @@ mod tests {
                 .await
                 .name("rcc")
                 .version("0.0.0")
+                .rustdoc_file("rcc/index.html")
                 .repo("https://github.com/jyn514/rcc")
+                .create()
+                .await?;
+            env.fake_release()
+                .await
+                .name("gcc")
+                .version("0.0.0")
+                .rustdoc_file("gcc/index.html")
                 .create()
                 .await?;
             env.fake_release()
@@ -185,8 +192,8 @@ mod tests {
             let frontend = env.web_app().await;
 
             for (route, _) in ROUTES.iter() {
-                frontend.get(route).await?;
-                frontend.get(route).await?;
+                frontend.assert_success(route).await?;
+                frontend.assert_success(route).await?;
             }
 
             let mut expected = HashMap::new();
@@ -231,7 +238,7 @@ mod tests {
                         ("/releases/recent/{page}", 2),
                         ("/sitemap.xml", 2),
                         ("rustdoc page", 4),
-                        ("static resource", 16),
+                        ("static resource", 14),
                     ]
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))
@@ -274,7 +281,7 @@ mod tests {
                         ("/releases/recent/{page}", 2),
                         ("/sitemap.xml", 2),
                         ("rustdoc page", 4),
-                        ("static resource", 16),
+                        ("static resource", 14),
                     ]
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))

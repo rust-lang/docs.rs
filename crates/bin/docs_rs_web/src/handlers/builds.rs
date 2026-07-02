@@ -670,7 +670,7 @@ mod tests {
             let body = resp.text().await?;
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/features\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest/builds\""));
-            assert!(body.contains("<a href=\"/crate/aquarelle/latest/source/\""));
+            assert!(body.contains("<a href=\"https://crates.io/crates/aquarelle/2.0.0/code/\""));
             assert!(body.contains("<a href=\"/crate/aquarelle/latest\""));
 
             env.web_app()
