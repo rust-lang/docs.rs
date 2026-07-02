@@ -366,14 +366,12 @@ mod tests {
         )
         .await?;
 
-        let rows = sqlx::query_scalar!(
-            "SELECT id
-             FROM releases",
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0], rid_1.0);
+        assert_eq!(
+            sqlx::query_scalar!("SELECT id FROM releases")
+                .fetch_all(&mut *conn)
+                .await?,
+            vec![rid_1.0]
+        );
 
         Ok(())
     }
