@@ -13,3 +13,4 @@ target
 .rustwide-docker
 archive_cache
 .workspace
+node_modules

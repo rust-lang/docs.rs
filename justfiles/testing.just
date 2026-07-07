@@ -155,7 +155,8 @@ run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
   just cli-build-crate zbus 5.15.0
   just cli-build-add-essential-files
 
-  just _cli gui_tests 
+  npm install 
+  node gui-tests/tester.js
 
 _build-test-binaries:
   #!/usr/bin/env bash
