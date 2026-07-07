@@ -279,22 +279,6 @@ services:
             - metrics
             - full
 
-    gui_tests:
-        platform: "linux/amd64"
-        build:
-            context: .
-            dockerfile: ./dockerfiles/Dockerfile-gui-tests
-            <<: *docker-cache
-        network_mode: "host"
-        extra_hosts:
-            - "host.docker.internal:host-gateway"
-        volumes:
-            - "${PWD}:/build/out"
-        profiles:
-            # gui_tests should not be run as background daemon.
-            # Run via `just run-gui-tests`.
-            - manual
-
 volumes:
     postgres-data: {}
     minio-data: {}
