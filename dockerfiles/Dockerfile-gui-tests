@@ -68,14 +68,13 @@ WORKDIR /build
 RUN mkdir out
 
 COPY ../package.json /build/package.json
-COPY ../package-lock.json /build/package-lock.json
 
 # For now, we need to use `--unsafe-perm=true` to go around an issue when npm tries
 # to create a new folder. For reference:
 # https://github.com/puppeteer/puppeteer/issues/375
 #
 # We also specify the version in case we need to update it to go around cache limitations.
-RUN npm ci --unsafe-perm=true --loglevel verbose
+RUN npm install --unsafe-perm=true --loglevel verbose --force
 
 # Used in gui-tests/tester.js
 ENV NODE_MODULE_PATH="/build/node_modules"
