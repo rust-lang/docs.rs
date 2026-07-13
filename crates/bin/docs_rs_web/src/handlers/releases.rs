@@ -1849,6 +1849,12 @@ mod tests {
                 let a = li.as_node().select_first("a").expect("missing link");
                 assert!(a.text_contents().contains(expected.0));
                 assert!(a.text_contents().contains(&expected.1.to_string()));
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(
+                        format!("https://crates.io/crates/{}/{}", expected.0, expected.1).as_str()
+                    )
+                );
 
                 if let Some(priority) = expected.2 {
                     assert!(
@@ -2001,6 +2007,17 @@ mod tests {
 
             assert_eq!(build_queue_list.len(), 1);
             assert_eq!(rebuild_queue_list.len(), 2);
+            for li in build_queue_list.iter().chain(&rebuild_queue_list) {
+                let a = li.as_node().select_first("a").expect("missing link");
+                let text = a.text_contents();
+                let mut parts = text.split_whitespace();
+                let name = parts.next().expect("missing crate name");
+                let version = parts.next().expect("missing crate version");
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(format!("https://crates.io/crates/{name}/{version}").as_str())
+                );
+            }
             assert!(
                 rebuild_queue_list
                     .iter()
