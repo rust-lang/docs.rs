@@ -43,7 +43,7 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 /// the timeout expires, it becomes visible again for redelivery.
 ///
 /// Should be longer than the longest time our server takes to handle a message.
-const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(60);
+const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Result type for `handle_message_body`, so we can unit-test it without needing
 /// fake SQS.
