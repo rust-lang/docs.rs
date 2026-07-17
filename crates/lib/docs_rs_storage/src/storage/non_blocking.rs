@@ -373,7 +373,7 @@ impl AsyncStorage {
             .await?;
 
         let alg = CompressionAlgorithm::default();
-        let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
+        let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", archive_path);
         let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let compressed_index_path = compressed_index_temp_path.to_path_buf();
         {

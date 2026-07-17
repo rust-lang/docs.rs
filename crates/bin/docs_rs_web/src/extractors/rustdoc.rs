@@ -629,7 +629,7 @@ impl RustdocParams {
         };
         EscapedURI::from_path(format!(
             "/crate/{}/{}/source/{}",
-            &self.name, &self.req_version, &inner_path
+            self.name, self.req_version, inner_path
         ))
     }
 
@@ -638,7 +638,7 @@ impl RustdocParams {
             "/crate/{}/{}/target-redirect/{}",
             self.name,
             self.req_version,
-            &self.path_for_rustdoc_url(),
+            self.path_for_rustdoc_url(),
         ))
     }
 

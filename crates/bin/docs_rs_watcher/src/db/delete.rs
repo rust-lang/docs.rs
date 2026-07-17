@@ -47,7 +47,7 @@ pub async fn delete_crate(
                 .with_context(|| {
                     format!(
                         "error when trying to remove local index: {:?}",
-                        &local_index_folder
+                        local_index_folder
                     )
                 })?;
         }
