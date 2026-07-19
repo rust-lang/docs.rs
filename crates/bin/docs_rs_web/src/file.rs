@@ -5,7 +5,7 @@ use anyhow::Result;
 use axum::{
     body::Body,
     extract::Extension,
-    http::StatusCode,
+    http::{StatusCode, header::CONTENT_LENGTH},
     response::{IntoResponse, Response as AxumResponse},
 };
 use axum_extra::{
@@ -107,10 +107,12 @@ impl StreamingFile {
             )
                 .into_response()
         } else {
+            let content_length = self.0.content_length;
+
             // Convert the AsyncBufRead into a Stream of Bytes
             let stream = ReaderStream::new(self.0.content);
 
-            (
+            let mut response = (
                 StatusCode::OK,
                 TypedHeader(ContentType::from(self.0.mime)),
                 TypedHeader(last_modified),
@@ -118,7 +120,11 @@ impl StreamingFile {
                 Extension(cache_policy),
                 Body::from_stream(stream),
             )
-                .into_response()
+                .into_response();
+            response
+                .headers_mut()
+                .insert(CONTENT_LENGTH, content_length.into());
+            response
         }
     }
 }
@@ -132,7 +138,7 @@ mod tests {
     use docs_rs_headers::compute_etag;
     use docs_rs_storage::StorageKind;
     use docs_rs_types::CompressionAlgorithm;
-    use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
+    use http::header::{CACHE_CONTROL, CONTENT_LENGTH, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
 
     const CONTENT: &[u8] = b"Hello, world!";
@@ -177,6 +183,14 @@ mod tests {
             let resp = stream.into_response(None, STATIC_ASSET_CACHE_POLICY);
             assert!(resp.status().is_success());
             assert!(resp.headers().get(CACHE_CONTROL).is_none());
+            assert_eq!(
+                resp.headers()
+                    .get(CONTENT_LENGTH)
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                CONTENT.len().to_string()
+            );
             let cache = resp
                 .extensions()
                 .get::<CachePolicy>()
