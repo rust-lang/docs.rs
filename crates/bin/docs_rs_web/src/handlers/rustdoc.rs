@@ -1104,12 +1104,25 @@ mod test {
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;
+    use http::header::CONTENT_LENGTH;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
     use std::{collections::BTreeMap, str::FromStr as _};
     use test_case::test_case;
     use tracing::info;
+
+    fn has_content_len(headers: &HeaderMap) -> bool {
+        let content_length: usize = headers
+            .get(CONTENT_LENGTH)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        content_length > 0
+    }
 
     async fn try_latest_version_redirect(
         krate: &str,
@@ -3229,6 +3242,7 @@ mod test {
             resp.headers().get(CONTENT_DISPOSITION).unwrap(),
             "attachment; filename=\"rustdoc-dummy-0.2.0.zip\""
         );
+        assert!(has_content_len(resp.headers()));
         web.assert_conditional_get(path, &resp).await?;
 
         check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
@@ -3627,6 +3641,9 @@ mod test {
                 expected_compression.file_extension()
             )
         );
+
+        assert!(has_content_len(resp.headers()));
+
         web.assert_conditional_get(&path, &resp).await?;
 
         {

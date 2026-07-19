@@ -461,10 +461,7 @@ impl StorageBackendMethods for S3Backend {
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated,
             etag,
-            content_length: res
-                .content_length
-                .and_then(|length| length.try_into().ok())
-                .unwrap_or(0),
+            content_length: res.content_length.and_then(|length| length.try_into().ok()),
             content: Box::new(res.body.into_async_read()),
             compression,
         })
