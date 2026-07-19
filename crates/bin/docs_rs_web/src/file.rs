@@ -5,12 +5,12 @@ use anyhow::Result;
 use axum::{
     body::Body,
     extract::Extension,
-    http::{StatusCode, header::CONTENT_LENGTH},
+    http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
 use axum_extra::{
     TypedHeader,
-    headers::{ContentType, LastModified},
+    headers::{ContentLength, ContentType, LastModified},
 };
 use docs_rs_headers::IfNoneMatch;
 use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
@@ -107,24 +107,19 @@ impl StreamingFile {
             )
                 .into_response()
         } else {
-            let content_length = self.0.content_length;
-
             // Convert the AsyncBufRead into a Stream of Bytes
             let stream = ReaderStream::new(self.0.content);
 
-            let mut response = (
+            (
                 StatusCode::OK,
                 TypedHeader(ContentType::from(self.0.mime)),
+                TypedHeader(ContentLength(self.0.content_length as u64)),
                 TypedHeader(last_modified),
                 self.0.etag.map(TypedHeader),
                 Extension(cache_policy),
                 Body::from_stream(stream),
             )
-                .into_response();
-            response
-                .headers_mut()
-                .insert(CONTENT_LENGTH, content_length.into());
-            response
+                .into_response()
         }
     }
 }
