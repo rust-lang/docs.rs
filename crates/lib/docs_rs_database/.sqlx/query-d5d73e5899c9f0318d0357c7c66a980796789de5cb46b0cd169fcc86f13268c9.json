@@ -12,7 +12,7 @@
         "Bool",
         "Bool",
         "Bool",
-        "Varchar",
+        "Text",
         "Varchar",
         "Varchar",
         "Varchar",

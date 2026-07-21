@@ -149,20 +149,6 @@
       },
       {
         "ordinal": 12,
-<<<<<<< HEAD:crates/bin/cratesfyi/.sqlx/query-f87e7df705520c5c435e5a4a1d52a0dbe29543ad0661801a3ba449257d5c1daa.json
-=======
-        "name": "archive_storage",
-        "type_info": "Bool",
-        "origin": {
-          "Table": {
-            "table": "releases",
-            "name": "archive_storage"
-          }
-        }
-      },
-      {
-        "ordinal": 13,
->>>>>>> main:crates/bin/docs_rs_web/.sqlx/query-cf5426dc0b94b07b8aea1fde144bbbb3caa1e6ebfb5d9348f5d27a134b82a55c.json
         "name": "repository_url",
         "type_info": "Varchar",
         "origin": {

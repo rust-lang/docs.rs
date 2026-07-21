@@ -565,7 +565,7 @@ mod test {
 
         // virtual latest build id, used for local caching of the index files
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(42));
-        let cache_root = storage.config.local_archive_cache_path.clone();
+        let cache_root = storage.config.archive_index_cache.path.clone();
 
         let cache_filename = |archive_name: &str| {
             cache_root.join(format!(
@@ -644,11 +644,15 @@ mod test {
         // validate if the positions are really different in the archvies,
         // for the same filename.
         let pos_in_test1_zip = storage
-            .find_in_archive_index("test1.zip", LATEST_BUILD_ID, "important.txt")
+            .find_archive_index("test1.zip", LATEST_BUILD_ID)
+            .await?
+            .find("important.txt")
             .await?
             .unwrap();
         let pos_in_test2_zip = storage
-            .find_in_archive_index("test2.zip", LATEST_BUILD_ID, "important.txt")
+            .find_archive_index("test2.zip", LATEST_BUILD_ID)
+            .await?
+            .find("important.txt")
             .await?
             .unwrap();
 

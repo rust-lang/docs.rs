@@ -1478,7 +1478,6 @@ mod test {
             false,
             iter::empty(),
             None,
-            true,
             24,
         )
         .await?;
