@@ -212,16 +212,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn file_roundtrip_axum() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let storage = env.storage()?;
 
         let now = Utc::now();
 
-        env.fake_release().await.create().await?;
+        storage
+            .store_one("something.html", b"something".as_slice())
+            .await?;
 
-        let mut file = File::from_path(
-            env.storage()?,
-            "rustdoc/fake-package/1.0.0/fake-package/index.html",
-        )
-        .await?;
+        let mut file = File::from_path(env.storage()?, "something.html").await?;
 
         file.0.date_updated = now;
 
@@ -261,22 +260,30 @@ mod tests {
                 .await?,
         );
 
-        env.fake_release()
-            .await
-            .name("dummy")
-            .version("0.1.0")
-            .rustdoc_file_with("small.html", &[b'A'; MAX_HTML_SIZE / 2] as &[u8])
-            .rustdoc_file_with("exact.html", &[b'A'; MAX_HTML_SIZE] as &[u8])
-            .rustdoc_file_with("big.html", &[b'A'; MAX_HTML_SIZE * 2] as &[u8])
-            .rustdoc_file_with("small.js", &[b'A'; MAX_SIZE / 2] as &[u8])
-            .rustdoc_file_with("exact.js", &[b'A'; MAX_SIZE] as &[u8])
-            .rustdoc_file_with("big.js", &[b'A'; MAX_SIZE * 2] as &[u8])
-            .create()
+        let storage = env.storage()?;
+
+        storage
+            .store_one("small.html", [b'A'; MAX_HTML_SIZE / 2].as_slice())
+            .await?;
+        storage
+            .store_one("exact.html", [b'A'; MAX_HTML_SIZE].as_slice())
+            .await?;
+        storage
+            .store_one("big.html", [b'A'; MAX_HTML_SIZE * 2].as_slice())
+            .await?;
+        storage
+            .store_one("small.js", [b'A'; MAX_SIZE / 2].as_slice())
+            .await?;
+        storage
+            .store_one("exact.js", [b'A'; MAX_SIZE].as_slice())
+            .await?;
+        storage
+            .store_one("big.js", [b'A'; MAX_SIZE * 2].as_slice())
             .await?;
 
         let file = |path| {
             let env = env.clone();
-            async move { File::from_path(env.storage()?, &format!("rustdoc/dummy/0.1.0/{path}")).await }
+            async move { File::from_path(env.storage()?, path).await }
         };
         let assert_len = |len, path| async move {
             assert_eq!(len, file(path).await.unwrap().0.content.len());

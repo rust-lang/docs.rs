@@ -3040,23 +3040,6 @@ mod test {
         });
     }
 
-    #[test]
-    fn download_old_storage_version_404() {
-        async_wrapper(|env| async move {
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .create()
-                .await?;
-
-            let web = env.web_app().await;
-            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
-
-            Ok(())
-        });
-    }
-
     #[tokio::test(flavor = "multi_thread")]
     async fn download_semver() -> Result<()> {
         let env = TestEnvironment::new().await?;

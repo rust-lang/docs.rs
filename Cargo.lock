@@ -1980,7 +1980,6 @@ dependencies = [
  "futures-util",
  "pretty_assertions",
  "sqlx",
- "test-case",
  "tokio",
  "tracing",
 ]
@@ -2473,7 +2472,6 @@ dependencies = [
  "pretty_assertions",
  "rayon",
  "sqlx",
- "test-case",
  "tokio",
  "tracing",
 ]
