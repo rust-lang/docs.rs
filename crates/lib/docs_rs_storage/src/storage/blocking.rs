@@ -58,28 +58,25 @@ impl Storage {
         )
     }
 
-<<<<<<< HEAD
-=======
-    pub fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get(path, max_size))
-    }
+    //     pub fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+    //         self.runtime.block_on(self.inner.get(path, max_size))
+    //     }
 
-    pub fn get_from_archive(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        max_size: usize,
-    ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get_from_archive(
-            archive_path,
-            latest_build_id,
-            path,
-            max_size,
-        ))
-    }
+    //     pub fn get_from_archive(
+    //         &self,
+    //         archive_path: &str,
+    //         latest_build_id: Option<BuildId>,
+    //         path: &str,
+    //         max_size: usize,
+    //     ) -> Result<Blob> {
+    //         self.runtime.block_on(self.inner.get_from_archive(
+    //             archive_path,
+    //             latest_build_id,
+    //             path,
+    //             max_size,
+    //         ))
+    //     }
 
->>>>>>> main
     pub fn store_all_in_archive(
         &self,
         archive_path: &str,

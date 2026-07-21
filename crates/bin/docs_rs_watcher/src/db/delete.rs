@@ -285,7 +285,6 @@ mod tests {
         CompressionAlgorithm, ReleaseId, SimpleBuildError,
         testing::{BAR, FOO, KRATE, V1, V2},
     };
-    use test_case::test_case;
     use tokio::time::{Duration, timeout};
 
     async fn crate_exists(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<bool> {
@@ -510,17 +509,17 @@ mod tests {
         let rustdoc_archive = rustdoc_archive_path(&KRATE, &V1);
         assert!(!storage.exists(&rustdoc_archive).await?);
 
-            // local and remote index are gone too
-            let archive_index = format!("{rustdoc_archive}.index");
-            assert!(!storage.exists(&archive_index).await?);
-            assert!(
-                !storage
-                    .config()
-                    .archive_index_cache
-                    .path
-                    .join(&archive_index)
-                    .exists()
-            );
+        // local and remote index are gone too
+        let archive_index = format!("{rustdoc_archive}.index");
+        assert!(!storage.exists(&archive_index).await?);
+        assert!(
+            !storage
+                .config()
+                .archive_index_cache
+                .path
+                .join(&archive_index)
+                .exists()
+        );
         assert!(!json_exists(storage, &V1,).await?);
 
         assert!(release_exists(&mut conn, v2).await?);

@@ -18,7 +18,7 @@ use docs_rs_database::{
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
-use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
+use docs_rs_types::{CrateId, KrateName, Version};
 use docs_rs_uri::EscapedURI;
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;

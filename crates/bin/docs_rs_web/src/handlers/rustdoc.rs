@@ -1629,7 +1629,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0-pre.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1637,7 +1636,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()
@@ -3623,7 +3621,6 @@ mod test {
             .await
             .name(KRATE)
             .version(V2)
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .create()
             .await?;
