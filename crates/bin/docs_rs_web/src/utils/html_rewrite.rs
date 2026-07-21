@@ -107,14 +107,16 @@ where
                             Ok(())
                         };
 
-                        let settings = Settings {
-                            element_content_handlers: vec![
+                        let settings = Settings::new()
+                            .append_element_content_handler(
                                 // Append `style.css` stylesheet after all head elements.
                                 element!("head", |head: &mut Element| {
                                     head.append(&head_html, ContentType::Html);
                                     Ok(())
                                 }),
-                                element!("body", body_handler),
+                            )
+                            .append_element_content_handler(element!("body", body_handler))
+                            .append_element_content_handler(
                                 // Append `vendored.css` before `rustdoc.css`, so that the duplicate copy of
                                 // `normalize.css` will be overridden by the later version.
                                 //
@@ -134,13 +136,11 @@ where
                                         Ok(())
                                     }
                                 ),
-                            ],
-                            memory_settings: MemorySettings {
-                                max_allowed_memory_usage,
-                                ..MemorySettings::default()
-                            },
-                            ..Settings::default()
-                        };
+                            )
+                            .with_memory_settings(
+                                MemorySettings::new()
+                                    .with_max_allowed_memory_usage(max_allowed_memory_usage),
+                            );
 
                         let mut rewriter = HtmlRewriter::new(settings, move |chunk: &[u8]| {
                             // send the result back to the main rewriter when its coming in.

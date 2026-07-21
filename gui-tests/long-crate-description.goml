@@ -1,0 +1,18 @@
+// Checks that a crate description with a very long sequence of characters doesn't result in a horizontal scroll bar
+
+go-to: |DOC_PATH| + "/releases/search?query=sysinfo"
+
+store-value: (description_selector, "div.recent-releases-container .description")
+
+set-text: (|description_selector|, "SOME/VERYVERY/LONG/SEQUENCE/OF/TEXT/SEPARATED/BY/SLASHES\nAnotherveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylongWord")
+
+// Set width to size smaller than media-sm as that's when we don't truncate the text
+store-value: (screen_width, 567)
+set-window-size: (|screen_width|, 800)
+
+store-property: (|description_selector|, {"scrollWidth": description_width})
+
+// Check that the description width isn't wider than the screen.
+// It should be smaller due to padding, but if it overflows it'll be wider than the screen anyway.
+assert-false: |description_width| > |screen_width|
+

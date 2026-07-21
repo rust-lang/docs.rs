@@ -18,7 +18,7 @@ jobs:
   sqlx:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: taiki-e/install-action@v2
         with:
@@ -30,7 +30,7 @@ jobs:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: run sqlx migration up & down
         run: |
@@ -45,7 +45,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: taiki-e/install-action@v2
         with:
@@ -57,7 +57,7 @@ jobs:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: run tests
         run: just run-tests run-builder-tests
@@ -69,7 +69,7 @@ jobs:
   GUI_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -88,7 +88,7 @@ jobs:
           swap-storage: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - uses: taiki-e/install-action@v2
         with:
@@ -106,11 +106,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,fd-find,cargo-machete,cargo-udeps,cargo-sort
+          tool: just,fd-find,cargo-machete,cargo-udeps,cargo-sort@2.1.3
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -125,9 +125,11 @@ jobs:
     name: js linters
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.8.3
 
       - uses: taiki-e/install-action@v2
         with:
@@ -139,7 +141,7 @@ jobs:
     name: gh actions linters
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # We check that all github actions workflows have valid syntax
       - name: Validate YAML file

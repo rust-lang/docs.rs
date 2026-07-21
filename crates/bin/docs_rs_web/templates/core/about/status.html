@@ -1,0 +1,28 @@
+{% extends "about-base.html" %}
+
+{%- block title -%} Docs.rs status {%- endblock title -%}
+
+{%- block body -%}
+    <h1>Docs.rs status</h1>
+
+    <div class="about-page">
+        <div class="container pure-u-5-6 about">
+            {%- if abnormalities.is_empty() %}
+            <p>No abnormalities detected currently.</p>
+            {%- else %}
+                {%- for abnormality in abnormalities %}
+                    <h3>
+                        {{- crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
+                        {{ abnormality.text }}
+                    </h3>
+                    {%- if let Some(explanation) = &abnormality.explanation %}
+                        <p>{{ explanation|safe }}</p>
+                    {%- endif %}
+                    <p>
+                        <a href="{{ abnormality.url }}">More details here.</a>
+                    </p>
+                {%- endfor %}
+            {%- endif %}
+        </div>
+    </div>
+{%- endblock body %}

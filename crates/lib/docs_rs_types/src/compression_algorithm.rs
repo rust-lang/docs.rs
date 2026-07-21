@@ -21,6 +21,7 @@ pub enum CompressionAlgorithm {
     Zstd = 0,
     Bzip2 = 1,
     Gzip = 2,
+    Deflate = 3,
 }
 
 impl CompressionAlgorithm {
@@ -29,6 +30,7 @@ impl CompressionAlgorithm {
             CompressionAlgorithm::Zstd => "zst",
             CompressionAlgorithm::Bzip2 => "bz2",
             CompressionAlgorithm::Gzip => "gz",
+            CompressionAlgorithm::Deflate => "deflate",
         }
     }
 }
@@ -52,6 +54,7 @@ pub fn compression_from_file_extension(ext: &str) -> Option<CompressionAlgorithm
         "zst" => Some(CompressionAlgorithm::Zstd),
         "bz2" => Some(CompressionAlgorithm::Bzip2),
         "gz" => Some(CompressionAlgorithm::Gzip),
+        "deflate" => Some(CompressionAlgorithm::Deflate),
         _ => None,
     }
 }
@@ -64,6 +67,7 @@ mod tests {
     #[test_case(CompressionAlgorithm::Zstd, "Zstd")]
     #[test_case(CompressionAlgorithm::Bzip2, "Bzip2")]
     #[test_case(CompressionAlgorithm::Gzip, "Gzip")]
+    #[test_case(CompressionAlgorithm::Deflate, "Deflate")]
     fn test_enum_display(alg: CompressionAlgorithm, expected: &str) {
         assert_eq!(alg.to_string(), expected);
     }
@@ -71,6 +75,7 @@ mod tests {
     #[test_case(CompressionAlgorithm::Zstd, "zst")]
     #[test_case(CompressionAlgorithm::Bzip2, "bz2")]
     #[test_case(CompressionAlgorithm::Gzip, "gz")]
+    #[test_case(CompressionAlgorithm::Deflate, "deflate")]
     fn test_file_extensions(alg: CompressionAlgorithm, expected: &str) {
         assert_eq!(alg.file_extension(), expected);
         assert_eq!(compression_from_file_extension(expected), Some(alg));

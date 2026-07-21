@@ -29,6 +29,12 @@
               }
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "features"
+          }
         }
       }
     ],

@@ -5,13 +5,14 @@ use crate::{
         DbConnection,
         rustdoc::{PageKind, RustdocParams},
     },
+    handlers::builds::{self, Build},
     impl_axum_webpage,
     match_release::{MatchedRelease, match_version},
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     utils::{get_correct_docsrs_style_file, licenses},
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
     extract::Extension,
@@ -19,7 +20,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
-use docs_rs_database::crate_details::{Release, latest_release, parse_doc_targets};
+use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
@@ -45,6 +46,7 @@ pub(crate) struct CrateDetails {
     build_status: BuildStatus,
     pub latest_build_id: Option<BuildId>,
     last_successful_build: Option<Version>,
+    pub latest_build: Option<Build>,
     pub rustdoc_status: Option<bool>,
     pub repository_url: Option<String>,
     pub homepage_url: Option<String>,
@@ -216,6 +218,14 @@ impl CrateDetails {
             .map(Into::into)
             .collect();
 
+        let builds = builds::get_builds(conn, &krate.name, version).await?;
+        let latest_build = builds
+            .into_iter()
+            .filter(|build| {
+                build.build_status == BuildStatus::Success && build.build_time.is_some()
+            })
+            .max_by_key(|build| build.build_time);
+
         let mut crate_details = CrateDetails {
             name: krate.name,
             version: version.clone(),
@@ -228,6 +238,7 @@ impl CrateDetails {
             build_status: krate.build_status,
             latest_build_id: krate.latest_build_id,
             last_successful_build: None,
+            latest_build,
             rustdoc_status: krate.rustdoc_status,
             repository_url: krate.repository_url,
             homepage_url: krate.homepage_url,
@@ -328,9 +339,9 @@ impl CrateDetails {
     }
 
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
-    /// yanked/prereleased if that is all that exist).
-    pub fn latest_release(&self) -> Result<&Release> {
-        latest_release(&self.releases).ok_or_else(|| anyhow!("crate without releases"))
+    /// prereleased if that is all that exist). Returns `None` if every release is yanked.
+    pub fn latest_release(&self) -> Option<&Release> {
+        docs_rs_database::crate_details::latest_release(&self.releases)
     }
 }
 
@@ -459,13 +470,17 @@ pub(crate) async fn crate_details_handler(
 
     let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
+    let build_statistics =
+        BuildStatistics::fetch_for_release(&mut conn, details.crate_id, details.release_id).await?;
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     match details.fetch_readme(&storage).await {
         Ok(readme) => details.readme = readme.or(details.readme),
         Err(e) => warn!(?e, "error fetching readme"),
     }
-
-    let build_statistics =
-        BuildStatistics::fetch_for_release(&mut conn, details.crate_id, details.release_id).await?;
 
     let CrateDetails {
         version,
@@ -646,10 +661,13 @@ pub(crate) async fn get_all_platforms_inner(
         .into_response());
     }
 
-    let latest_release = latest_release(&matched_release.all_releases)
-        .expect("we couldn't end up here without releases");
+    let latest_release =
+        docs_rs_database::crate_details::latest_release(&matched_release.all_releases);
 
-    let current_target = if latest_release.build_status.is_success() {
+    let current_target = if latest_release
+        .map(|r| r.build_status.is_success())
+        .unwrap_or(false)
+    {
         params
             .doc_target_or_default()
             .unwrap_or_default()
@@ -693,8 +711,8 @@ mod tests {
     use docs_rs_database::{crate_details::releases_for_crate, releases::update_build_status};
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
-    use docs_rs_types::KrateName;
     use docs_rs_types::testing::{FOO, V1};
+    use docs_rs_types::{KrateName, SimpleBuildError};
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -1161,192 +1179,6 @@ mod tests {
     }
 
     #[test]
-    fn test_latest_version() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", *version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.3")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_ignores_prerelease() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3-pre.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3-pre.1"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.2")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_ignores_yanked() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.2")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_only_yanked() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.3")
-                .yanked(true)
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .yanked(true)
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2", "0.0.3"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.3")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn test_latest_version_in_progress() {
-        async_wrapper(|env| async move {
-            let db = env.pool()?;
-
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.1")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("foo")
-                .version("0.0.2")
-                .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
-                ])
-                .create()
-                .await?;
-
-            let mut conn = db.get_async().await?;
-            for &version in &["0.0.1", "0.0.2"] {
-                let details = crate_details(&mut conn, "foo", version, None).await;
-                assert_eq!(
-                    details.latest_release().unwrap().version,
-                    Version::parse("0.0.1")?
-                );
-            }
-
-            Ok(())
-        })
-    }
-
-    #[test]
     fn releases_dropdowns_show_binary_warning() {
         async_wrapper(|env| async move {
             env.fake_release()
@@ -1397,11 +1229,18 @@ mod tests {
                 .create()
                 .await?;
 
-            let response = env.web_app().await.get("/crate/foo/latest").await?;
+            let response = env
+                .web_app()
+                .await
+                .assert_success("/crate/foo/0.1.0")
+                .await?;
 
             let page = kuchikiki::parse_html().one(response.text().await?);
+            // multiple `a.pure-menu-link` elements share this href (the topbar's
+            // `crate-name` link and the navigation "Crate" tab); the version dropdown's
+            // entry is the only one rendered with `rel="nofollow"` by the macro.
             let link = page
-                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0']")
+                .select_first("a.pure-menu-link[href='/crate/foo/0.1.0'][rel='nofollow']")
                 .unwrap();
 
             assert_eq!(
@@ -1730,7 +1569,13 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error_features() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let text_content = env
                 .web_app()
@@ -1754,7 +1599,13 @@ mod tests {
     fn test_minimal_failed_release_doesnt_error() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let text_content = env
                 .web_app()
@@ -1790,8 +1641,6 @@ mod tests {
                 })
                 .collect();
 
-            dbg!(&platform_links);
-
             assert_eq!(platform_links.len(), 2);
 
             for (_, url, rel) in &platform_links {
@@ -1814,7 +1663,7 @@ mod tests {
             url: &str,
             should_contain_redirect: bool,
         ) {
-            let response = env.web_app().await.get(dbg!(url)).await.unwrap();
+            let response = env.web_app().await.get(url).await.unwrap();
             let status = response.status();
             assert!(
                 status.is_success(),
@@ -1824,11 +1673,7 @@ mod tests {
                 response.redirect_target().unwrap_or_default(),
             );
             let text = response.text().await.unwrap();
-            let list1 = dbg!(check_links(
-                text.clone(),
-                false,
-                dbg!(should_contain_redirect)
-            ));
+            let list1 = check_links(text.clone(), false, should_contain_redirect);
 
             // Same test with AJAX endpoint.
             let platform_menu_url = kuchikiki::parse_html()
@@ -1840,12 +1685,7 @@ mod tests {
                 .get("data-url")
                 .expect("data-url")
                 .to_string();
-            let response = env
-                .web_app()
-                .await
-                .get(&dbg!(platform_menu_url))
-                .await
-                .unwrap();
+            let response = env.web_app().await.get(&platform_menu_url).await.unwrap();
             assert!(
                 response.status().is_success(),
                 "{}",
@@ -1855,11 +1695,11 @@ mod tests {
                 CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
                 env.config(),
             );
-            let list2 = dbg!(check_links(
+            let list2 = check_links(
                 response.text().await.unwrap(),
                 true,
                 should_contain_redirect,
-            ));
+            );
             assert_eq!(list1, list2);
         }
 
@@ -2212,7 +2052,7 @@ path = "src/lib.rs"
                 .create()
                 .await?;
 
-            let resp = env.web_app().await.get("/crate/dummy%3E").await?;
+            let resp = env.web_app().await.get("/crate/dummy%7B").await?;
             assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
             Ok(())

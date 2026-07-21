@@ -107,6 +107,7 @@ mod tests {
             let file_path = file?.path();
             if file_path.extension() != Some(OsStr::new("html"))
                 || file_path.file_stem() == Some(OsStr::new("index"))
+                || file_path.file_stem() == Some(OsStr::new("status"))
             {
                 continue;
             }

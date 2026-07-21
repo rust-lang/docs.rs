@@ -1,5 +1,9 @@
-use crate::{Config, metrics::BuilderMetrics, utils::copy::copy_dir_all};
+use crate::{
+    Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics,
+    utils::copy::copy_dir_all,
+};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
+use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
@@ -7,8 +11,9 @@ use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
     releases::{
-        add_doc_coverage, finish_build, finish_release, initialize_build, initialize_crate,
-        initialize_release, update_build_with_error, update_crate_data_in_database,
+        add_build_logs, add_doc_coverage, finish_build, finish_release, initialize_build,
+        initialize_crate, initialize_release, update_build_with_error,
+        update_crate_data_in_database,
     },
     service_config::{ConfigName, get_config, set_config},
 };
@@ -23,16 +28,18 @@ use docs_rs_storage::{
     rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
     doc_coverage::{self, DocCoverage},
 };
 use docs_rs_utils::{
     Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version,
+    spawn_blocking,
 };
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
+use futures_util::future::try_join_all;
 use regex::Regex;
 use rustwide::{
-    AlternativeRegistry, Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
+    Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, SandboxBuilder, SandboxImage},
     logging::{self, LogStorage},
     toolchain::ToolchainError,
@@ -41,7 +48,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufReader,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock},
     time::Instant,
 };
@@ -96,8 +103,8 @@ fn load_metadata_from_rustwide(
     source_dir: &Path,
 ) -> Result<CargoMetadata> {
     let res = Command::new(workspace, toolchain.cargo())
-        .args(&["metadata", "--format-version", "1"])
-        .cd(source_dir)
+        .args(["metadata", "--format-version", "1"])
+        .current_directory(source_dir)
         .log_output(false)
         .run_capture()?;
     let [metadata] = res.stdout_lines() else {
@@ -110,7 +117,6 @@ fn load_metadata_from_rustwide(
 pub enum PackageKind<'a> {
     Local(&'a Path),
     CratesIo,
-    Registry(&'a str),
 }
 
 pub struct RustwideBuilder {
@@ -164,12 +170,20 @@ impl RustwideBuilder {
 
     #[instrument(skip(self))]
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
-        SandboxBuilder::new()
-            .cpu_limit(self.config.build_cpu_limit.map(|limit| limit as f32))
+        let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking())
+            .enable_networking(limits.networking());
+
+        if let Some(cores) = &self.config.build_cpu_cores {
+            builder.cpuset_cpus(Some(cores.0.clone()))
+        } else if let Some(limit) = &self.config.build_cpu_limit {
+            builder.cpu_limit(Some(*limit as f32))
+        } else {
+            builder
+        }
     }
 
+    #[instrument(skip_all)]
     pub fn purge_caches(&self) -> Result<()> {
         self.workspace.purge_all_caches()?;
         Ok(())
@@ -371,7 +385,7 @@ impl RustwideBuilder {
     fn detect_rustc_version(&self) -> Result<String> {
         info!("detecting rustc's version...");
         let res = Command::new(&self.workspace, self.toolchain.rustc())
-            .args(&["--version"])
+            .arg("--version")
             .log_output(false)
             .run_capture()?;
         let mut iter = res.stdout_lines().iter();
@@ -439,7 +453,7 @@ impl RustwideBuilder {
                     true,
                     false,
                 )?;
-                if !res.result.successful {
+                if !res.successful() {
                     bail!("failed to build dummy crate for {}", rustc_version);
                 }
 
@@ -529,7 +543,8 @@ impl RustwideBuilder {
                 // to sentry.
                 let mut conn = self.db.get_async().await?;
 
-                update_build_with_error(&mut conn, build_id, Some(&format!("{err:?}"))).await?;
+                update_build_with_error(&mut conn, build_id, Some(&RustwideBuildError::Other(err)))
+                    .await?;
 
                 Ok(BuildPackageSummary {
                     successful: false,
@@ -611,9 +626,6 @@ impl RustwideBuilder {
             let krate = match kind {
                 PackageKind::Local(path) => Crate::local(path),
                 PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version),
-                PackageKind::Registry(registry) => {
-                    Crate::registry(AlternativeRegistry::new(registry), name.as_str(), &version)
-                }
             };
             krate.fetch(&self.workspace)?;
             krate
@@ -672,28 +684,28 @@ impl RustwideBuilder {
 
                 // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
                 let cargo_lock = build.host_source_dir().join("Cargo.lock");
-                if !res.result.successful && cargo_lock.exists() {
+                if !res.successful() && cargo_lock.exists() {
                     info!("removing lockfile and reattempting build");
                     std::fs::remove_file(cargo_lock)?;
                     {
                         let _span = info_span!("cargo_generate_lockfile").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["generate-lockfile"])
+                            .current_directory(build.host_source_dir())
+                            .arg("generate-lockfile")
                             .run_capture()?;
                     }
                     {
                         let _span = info_span!("cargo fetch --locked").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
-                            .cd(build.host_source_dir())
-                            .args(&["fetch", "--locked"])
+                            .current_directory(build.host_source_dir())
+                            .args(["fetch", "--locked"])
                             .run_capture()?;
                     }
                     res =
                         self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
-                if res.result.successful
+                if res.successful()
                     && let Some(name) = res.cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
                         has_docs = host_target
@@ -731,8 +743,10 @@ impl RustwideBuilder {
                             &metadata,
                             collect_metrics,
                         )?;
-                        target_build_logs.insert(target, target_res.build_log);
+                        let successful = target_res.successful();
+                        target_build_logs.insert(target, (target_res.build_log, successful));
                     }
+
                     let (file_list, new_alg) =
                         self.runtime.block_on(
                         self.storage.store_all_in_archive(
@@ -747,6 +761,8 @@ impl RustwideBuilder {
                     None
                 };
 
+                let build_stats = build.statistics();
+
                 let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
                 self.runtime.block_on(finish_build(
@@ -754,26 +770,35 @@ impl RustwideBuilder {
                     build_id,
                     &res.result.rustc_version,
                     &res.result.docsrs_version,
-                    if res.result.successful {
+                    if res.successful() {
                         BuildStatus::Success
                     } else {
                         BuildStatus::Failure
                     },
                     documentation_size,
-                    None,
+                    build_stats.memory_peak_bytes(),
+                    res.result.build_error.as_ref()
                 ))?;
 
+                let successful = res.successful();
+
                 {
+                    let mut build_logs = Vec::new();
+
                     let _span = info_span!("store_build_logs").entered();
                     let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
+                    let successful = res.successful();
                     self.blocking_storage.store_one(build_log_path, res.build_log)?;
-                    for (target, log) in target_build_logs {
+                    build_logs.push((format!("{default_target}.txt"), successful));
+                    for (target, (log, successful)) in target_build_logs {
                         let build_log_path = format!("build-logs/{build_id}/{target}.txt");
                         self.blocking_storage.store_one(build_log_path, log)?;
+                        build_logs.push((format!("{target}.txt"), successful));
                     }
+                    self.runtime.block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
                 }
 
-                if res.result.successful {
+                if successful {
                     self.builder_metrics.successful_builds.add(1, &[]);
                 } else if res.cargo_metadata.root().is_library() {
                     self.builder_metrics.failed_builds.add(1, &[]);
@@ -786,7 +811,7 @@ impl RustwideBuilder {
                         .runtime
                         .block_on(self.registry_api.get_release_data(name, version))
                         {
-                        Ok(data) => Some(data),
+                        Ok(data) => data,
                         Err(err) => {
                             error!(%name, %version, ?err, "could not fetch releases-data");
                             None
@@ -814,7 +839,7 @@ impl RustwideBuilder {
                     release_id.0,
                 ).fetch_optional(&mut *async_conn))?;
 
-                if !res.result.successful && current_release_build_status == Some(BuildStatus::Success) {
+                if !successful && current_release_build_status == Some(BuildStatus::Success) {
                     info!("build was unsuccessful, but the release was already successfully built in the past. Skipping release record update.");
                     return Ok(false);
                 }
@@ -864,7 +889,7 @@ impl RustwideBuilder {
                     }
                 }
 
-                if res.result.successful {
+                if successful {
                     // delete eventually existing files from pre-archive storage.
                     // we're doing this in the end so eventual problems in the build
                     // won't lead to non-existing docs.
@@ -881,7 +906,7 @@ impl RustwideBuilder {
                     drop(async_conn);
                 });
 
-                Ok(res.result.successful)
+                Ok(successful)
             })?;
 
         {
@@ -889,7 +914,7 @@ impl RustwideBuilder {
             krate.purge_from_cache(&self.workspace)?;
             local_storage.close()?;
         }
-        Ok(successful)
+        Ok(successful.into_inner())
     }
 
     #[instrument(skip(self, build))]
@@ -919,7 +944,7 @@ impl RustwideBuilder {
             false,
             collect_metrics,
         )?;
-        if target_res.result.successful {
+        if target_res.successful() {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
@@ -946,7 +971,7 @@ impl RustwideBuilder {
         version: &Version,
         target: &str,
         is_default_target: bool,
-        build: &Build,
+        build: &Build<'_>,
         metadata: &Metadata,
         limits: &Limits,
     ) -> Result<()> {
@@ -955,11 +980,10 @@ impl RustwideBuilder {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(limits.max_log_size());
 
-        let successful = logging::capture(&storage, || {
+        let result = logging::capture(&storage, || {
             let _span = info_span!("cargo_build_json", target = %target).entered();
             self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)
-                .and_then(|command| command.run().map_err(Error::from))
-                .is_ok()
+                .and_then(|command| command.run().map_err(Into::into))
         });
 
         {
@@ -970,11 +994,11 @@ impl RustwideBuilder {
                 .context("storing build log on S3")?;
         }
 
-        if !successful {
+        if result.is_err() {
             // this is a normal build error and will be visible in the uploaded build logs.
             // We don't need the Err variant here.
             return Ok(());
-        }
+        };
 
         let json_dir = if metadata.proc_macro {
             assert!(
@@ -1016,25 +1040,61 @@ impl RustwideBuilder {
                 .context("couldn't parse rustdoc json to find format version")?
         };
 
-        for alg in RUSTDOC_JSON_COMPRESSION_ALGORITHMS {
-            let compressed_json: Vec<u8> = {
-                let _span =
-                    info_span!("compress_json", file_size = json_filename.metadata()?.len(), algorithm=%alg)
-                        .entered();
+        self.runtime.block_on(try_join_all(
+            RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(move |alg| {
+                let json_filename = json_filename.clone();
+                self.upload_json_output(name, version, target, format_version, *alg, json_filename)
+            }),
+        ))?;
 
-                compress(BufReader::new(File::open(&json_filename)?), *alg)?
-            };
+        Ok(())
+    }
 
-            for format_version in [format_version, RustdocJsonFormatVersion::Latest] {
-                let path = rustdoc_json_path(name, version, target, format_version, Some(*alg));
-                let _span =
-                    info_span!("store_json", %format_version, algorithm=%alg, target_path=%path)
-                        .entered();
+    #[instrument(skip(self))]
+    async fn upload_json_output(
+        &self,
+        name: &KrateName,
+        version: &Version,
+        target: &str,
+        format_version: RustdocJsonFormatVersion,
+        alg: CompressionAlgorithm,
+        json_filename: PathBuf,
+    ) -> Result<()> {
+        let json_file_size = json_filename.metadata()?.len();
+        let compressed_json = spawn_blocking(move || {
+            let compress_span = info_span!(
+                "compress_json",
+                file_size = json_file_size,
+                algorithm = %alg
+            );
+            let _span = compress_span.enter();
 
-                self.blocking_storage
-                    .store_one_uncompressed(&path, compressed_json.clone())?;
-            }
-        }
+            let compressed = compress(BufReader::new(File::open(&json_filename)?), alg)?;
+            Ok(Bytes::from(compressed))
+        })
+        .await?;
+
+        try_join_all(
+            [
+                rustdoc_json_path(name, version, target, format_version, Some(alg)),
+                rustdoc_json_path(
+                    name,
+                    version,
+                    target,
+                    RustdocJsonFormatVersion::Latest,
+                    Some(alg),
+                ),
+            ]
+            .map(|path| {
+                let compressed_json = compressed_json.clone();
+                async move {
+                    self.storage
+                        .store_one_uncompressed(&path, compressed_json)
+                        .await
+                }
+            }),
+        )
+        .await?;
 
         Ok(())
     }
@@ -1043,7 +1103,7 @@ impl RustwideBuilder {
     fn get_coverage(
         &self,
         target: &str,
-        build: &Build,
+        build: &Build<'_>,
         metadata: &Metadata,
         limits: &Limits,
     ) -> Result<Option<DocCoverage>> {
@@ -1090,7 +1150,7 @@ impl RustwideBuilder {
         version: &Version,
         target: &str,
         is_default_target: bool,
-        build: &Build,
+        build: &Build<'_>,
         limits: &Limits,
         metadata: &Metadata,
         create_essential_files: bool,
@@ -1104,9 +1164,9 @@ impl RustwideBuilder {
 
         let mut rustdoc_flags = vec![
             if create_essential_files {
-                "--emit=toolchain-shared-resources"
+                "--emit=html-static-files"
             } else {
-                "--emit=invocation-specific"
+                "--emit=html-non-static-files"
             }
             .to_string(),
         ];
@@ -1124,8 +1184,10 @@ impl RustwideBuilder {
         let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
             Ok(cov) => cov,
             Err(err) => {
-                info!("error when trying to get coverage: {}", err);
-                info!("continuing anyways.");
+                info!(
+                    ?err,
+                    "error when trying to get coverage, continuing anyways.",
+                );
                 None
             }
         };
@@ -1150,7 +1212,7 @@ impl RustwideBuilder {
             );
         }
 
-        let successful = {
+        let result = {
             let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
             logging::capture(&storage, || {
                 self.prepare_command(
@@ -1161,8 +1223,7 @@ impl RustwideBuilder {
                     rustdoc_flags,
                     collect_metrics,
                 )
-                .and_then(|command| command.run().map_err(Error::from))
-                .is_ok()
+                .and_then(|command| command.run().map_err(Into::into))
             })
         };
 
@@ -1183,7 +1244,7 @@ impl RustwideBuilder {
         // For proc-macros, cargo will put the output in `target/doc`.
         // Move it to the target-specific directory for consistency with other builds.
         // NOTE: don't rename this if the build failed, because `target/doc` won't exist.
-        if successful && metadata.proc_macro {
+        if result.is_ok() && metadata.proc_macro {
             assert!(
                 is_default_target && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
@@ -1201,7 +1262,7 @@ impl RustwideBuilder {
             result: BuildResult {
                 rustc_version: self.rustc_version()?,
                 docsrs_version: format!("docsrs {}", docs_rs_utils::BUILD_VERSION),
-                successful,
+                build_error: result.err(),
             },
             doc_coverage,
             cargo_metadata,
@@ -1212,13 +1273,13 @@ impl RustwideBuilder {
 
     fn prepare_command<'ws, 'pl>(
         &self,
-        build: &'ws Build,
+        build: &Build<'ws>,
         target: &str,
         metadata: &Metadata,
         limits: &Limits,
         mut rustdoc_flags_extras: Vec<String>,
         collect_metrics: bool,
-    ) -> Result<Command<'ws, 'pl>> {
+    ) -> Result<Command<'ws, 'pl>, RustwideBuildError> {
         // Add docs.rs specific arguments
         let mut cargo_args = vec![
             "--offline".into(),
@@ -1239,8 +1300,8 @@ impl RustwideBuilder {
             // docs.rs, but once it's stable we can remove this flag.
             "-Zrustdoc-scrape-examples".into(),
         ];
-        if let Some(cpu_limit) = self.config.build_cpu_limit {
-            cargo_args.push(format!("-j{cpu_limit}"));
+        if let Some(cargo_job_limit) = self.config.cargo_job_limit() {
+            cargo_args.push(format!("-j{cargo_job_limit}"));
         }
         // Cargo has a series of frightening bugs around cross-compiling proc-macros:
         // - Passing `--target` causes RUSTDOCFLAGS to fail to be passed 🤦
@@ -1291,7 +1352,7 @@ impl RustwideBuilder {
             let flag = "-Zmetrics-dir=/opt/rustwide/target/metrics";
 
             // this is how we can reach it from outside the container.
-            fs::create_dir_all(build.host_target_dir().join("metrics/"))?;
+            fs::create_dir_all(build.host_target_dir().join("metrics/")).map_err(Error::from)?;
 
             let rustdocflags = toml::Value::try_from(vec![flag])
                 .expect("serializing a string should never fail")
@@ -1341,23 +1402,39 @@ struct FullBuildResult {
     build_log: String,
 }
 
+impl FullBuildResult {
+    pub(crate) fn successful(&self) -> bool {
+        self.result.successful()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct BuildResult {
     pub(crate) rustc_version: String,
     pub(crate) docsrs_version: String,
-    pub(crate) successful: bool,
+    pub(crate) build_error: Option<RustwideBuildError>,
+}
+
+impl BuildResult {
+    pub(crate) fn successful(&self) -> bool {
+        self.build_error.is_none()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
+    use crate::{
+        config::BuildCores,
+        testing::{TestEnvironment, TestEnvironmentExt as _},
+    };
     use docs_rs_config::AppConfig as _;
     use docs_rs_utils::block_on_async_with_conn;
     // use crate::test::{AxumRouterTestExt, TestEnvironment};
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
-        BuildStatus, CompressionAlgorithm, Feature, ReleaseId, Version, testing::V0_1,
+        BuildStatus, CompressionAlgorithm, Feature, ReleaseId, SimpleBuildError, Version,
+        testing::V0_1,
     };
     use pretty_assertions::assert_eq;
     use std::{collections::BTreeMap, io, iter, path::PathBuf};
@@ -1450,7 +1527,17 @@ mod tests {
                         b.build_status::TEXT as build_status,
                         b.docsrs_version,
                         b.rustc_version,
-                        b.documentation_size
+                        b.documentation_size,
+                        b.memory_peak,
+                        (
+                            SELECT array_agg(row(bl.log_filename, bl.success))
+                            FROM (
+                                SELECT log_filename, success
+                                FROM builds_logs
+                                WHERE builds_logs.build_id = b.id
+                                ORDER BY id
+                            ) bl
+                        ) AS "logs: Vec<(String, bool)>"
                     FROM
                         crates as c
                         INNER JOIN releases AS r ON c.id = r.crate_id
@@ -1475,6 +1562,19 @@ mod tests {
         assert_eq!(row.build_status.unwrap(), "success");
         assert!(row.source_size > 0);
         assert!(row.documentation_size.unwrap() > 0);
+        assert!(row.memory_peak.unwrap() > 10 * 1024 * 1024); // 10 MiB, in my test it was > 100 MiB
+        let mut logs = row.logs.unwrap();
+        logs.sort();
+        let mut expected = vec![
+            ("x86_64-unknown-linux-gnu.txt".to_owned(), true),
+            ("i686-pc-windows-msvc.txt".to_owned(), true),
+            ("aarch64-unknown-linux-gnu.txt".to_owned(), true),
+            ("x86_64-pc-windows-msvc.txt".to_owned(), true),
+            ("aarch64-apple-darwin.txt".to_owned(), true),
+        ];
+        expected.sort();
+
+        assert_eq!(logs, expected);
 
         let mut targets: Vec<String> = row
             .doc_targets
@@ -1566,7 +1666,6 @@ mod tests {
                         .collect();
                     json_files.retain(|f| f.ends_with(&format!(".json.{ext}")));
                     json_files.sort();
-                    dbg!(&json_files);
                     assert!(json_files[0].starts_with(&format!("empty-library_1.0.0_{target}_")));
                     assert!(json_files[0].ends_with(&format!(".json.{ext}")));
                     assert_eq!(
@@ -1716,6 +1815,7 @@ mod tests {
                 BuildStatus::Success,
                 None,
                 None,
+                None::<&SimpleBuildError>,
             )
             .await?;
             finish_release(
@@ -1750,7 +1850,7 @@ mod tests {
                 &ReleaseData::default(),
                 true,
                 false,
-                iter::once(CompressionAlgorithm::Bzip2),
+                iter::once(CompressionAlgorithm::Deflate),
                 None,
                 42,
             )
@@ -1995,6 +2095,7 @@ mod tests {
                    rustc_version,
                    docsrs_version,
                    build_status as "build_status: BuildStatus",
+                   error_kind,
                    errors
                    FROM
                    crates as c
@@ -2012,6 +2113,7 @@ mod tests {
         assert!(row.rustc_version.is_none());
         assert!(row.docsrs_version.is_none());
         assert_eq!(row.build_status, BuildStatus::Failure);
+        assert_eq!(row.error_kind, Some("Other".into()));
         assert!(row.errors.unwrap().contains("missing Cargo.toml"));
 
         Ok(())
@@ -2226,6 +2328,42 @@ mod tests {
         assert_contains(&targets, "x86_64-apple-darwin");
         // Part of the default targets.
         assert_contains(&targets, "aarch64-apple-darwin");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_with_cpu_limit() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.build_cpu_limit = Some(2);
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .successful
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_build_with_cpu_cores() -> Result<()> {
+        let mut config = Config::test_config()?;
+        config.build_cpu_cores = Some(BuildCores(1..=2));
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .successful
+        );
 
         Ok(())
     }

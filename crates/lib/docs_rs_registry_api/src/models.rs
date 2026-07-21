@@ -8,6 +8,7 @@ pub struct CrateData {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct ReleaseData {
     pub release_time: DateTime<Utc>,
     pub yanked: bool,

@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            builds.id as \"id: BuildId\",\n            builds.rustc_version,\n            builds.docsrs_version,\n            CASE\n                WHEN builds.build_status = 'success'::build_status THEN\n                    CASE\n                        WHEN COALESCE(\n                            (SELECT bool_and(builds_logs.success)\n                             FROM builds_logs\n                             WHERE builds_logs.build_id = builds.id),\n                            TRUE\n                        ) = TRUE THEN 'success'::build_status\n                        ELSE 'partial_failure'::build_status\n                    END\n                ELSE builds.build_status\n            END as \"build_status!: BuildStatus\",\n            COALESCE(builds.build_finished, builds.build_started) as build_time,\n            CASE\n                WHEN builds.build_started IS NULL\n                    -- for old builds, `build_started` is empty.\n                    THEN NULL\n                ELSE\n                    CASE\n                        -- for in-progress builds we show the duration until now\n                        WHEN builds.build_status = 'in_progress' THEN (CURRENT_TIMESTAMP - builds.build_started)\n                        -- there are broken builds where the status is `error`, and `build_finished` is NULL\n                        WHEN builds.build_finished IS NULL THEN NULL\n                        -- for finished builds we can show the full duration\n                        ELSE (builds.build_finished - builds.build_started)\n                    END\n            END AS \"build_duration?: Duration\",\n            builds.memory_peak,\n            builds.errors\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n            crates.name = $1 AND\n            releases.version = $2\n         ORDER BY builds.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: BuildId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "rustc_version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "docsrs_version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure",
+                "partial_failure"
+              ]
+            }
+          }
+        },
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "build_time",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "build_duration?: Duration",
+        "type_info": "Interval",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "memory_peak",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "memory_peak"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "errors",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "errors"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      null,
+      null,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "4ace444e76b6d04dcbece120521d2a215ba8bba98a7dbea0e0944712e6741734"
+}

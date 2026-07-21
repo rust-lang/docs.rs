@@ -21,33 +21,40 @@
     <div class="container">
         <div class="recent-releases-container">
             {%- if !builds.is_empty() -%}
-                <div class="release">
-                    <strong>Builds</strong>
-                </div>
-
+                <h4>Builds</h4>
                 <ul>
                     {%- for build in builds -%}
                         <li>
-                            {%- if build.build_status != "in_progress" -%}
-                                <a href="{{ params.build_details_url(*build.id, None) }}" class="release"> {#- -#}
+                            {%- if build.build_status != BuildStatus::InProgress %}
+                                {%- decl icon %}
+                                {%- decl title %}
+                                {%- match build.build_status %}
+                                    {%- when BuildStatus::Success -%}
+                                        {%- let icon = crate::icons::IconCheck.render_solid(false, false, "") %}
+                                        {%- let title = "All builds succeeded" %}
+                                    {%- when BuildStatus::PartialFailure -%}
+                                        {%- let icon = crate::icons::IconTriangleExclamation.render_solid(false, false, "") %}
+                                        {%- let title = "Some builds failed" %}
+                                    {%- when BuildStatus::Failure -%}
+                                        {%- let icon = crate::icons::IconXmark.render_solid(false, false, "") %}
+                                        {%- let title = "All builds failed" %}
+                                    {%- when BuildStatus::InProgress -%}
+                                        {%- let icon = String::new()|safe %}
+                                        {%- let title = "" %}
+                                {%- endmatch -%}
+                                <a href="{{ params.build_details_url(*build.id, None) }}" class="release" title="{{ title }}"> {#- -#}
                                     <div class="pure-g"> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-1-24 build">
-                                            {%- if build.build_status == "success" -%}
-                                                {{ crate::icons::IconCheck.render_solid(false, false, "") }}
-                                            {%- elif build.build_status == "failure" -%}
-                                                {{ crate::icons::IconTriangleExclamation.render_solid(false, false, "") }}
-                                            {%- else -%}
-                                                {{ crate::icons::IconX.render_solid(false, false, "") }}
-                                            {%- endif -%}
+                                            {{- icon -}}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-9-24">
+                                        <div class="pure-u-1 pure-u-sm-7-24">
                                             {%- if let Some(rustc_version) = build.rustc_version -%}
                                                 {{ rustc_version }}
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-8-24">
+                                        <div class="pure-u-1 pure-u-sm-6-24">
                                             {%- if let Some(docsrs_version) = build.docsrs_version -%}
                                                 {{ docsrs_version }}
                                             {%- else -%}
@@ -61,9 +68,17 @@
                                                 &mdash;
                                             {%- endif -%}
                                         </div>
-                                        <div class="pure-u-1 pure-u-sm-3-24 duration">
+                                        <div class="pure-u-1 pure-u-sm-4-24 duration">
                                             {%- if let Some(build_duration) = build.build_duration -%}
                                                 took {{ build_duration|format_duration }}
+                                            {%- else -%}
+                                                &mdash;
+                                            {%- endif -%}
+                                        </div>
+                                        <div class="pure-u-1 pure-u-sm-3-24 memory" title="Peak memory usage">
+                                            {%- if let Some(memory_peak) = build.memory_peak -%}
+                                                {{ crate::icons::IconMemory.render_solid(false, false, "") }}
+                                                {{ memory_peak|filesizeformat }}
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}
@@ -76,21 +91,24 @@
                                         <div class="pure-u-1 pure-u-sm-1-24 build">
                                             {{- crate::icons::IconGear.render_solid(false, true, "") -}}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-9-24 build"> {#- -#}
+                                        <div class="pure-u-1 pure-u-sm-7-24 build"> {#- -#}
                                             <a href="/releases/queue" class="normal">in progress</a> {#- -#}
                                         </div>
-                                        <div class="pure-u-1 pure-u-sm-8-24">
+                                        <div class="pure-u-1 pure-u-sm-6-24">
                                             &mdash;
                                         </div> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-3-24 date">
                                             &mdash;
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-3-24 duration">
+                                        <div class="pure-u-1 pure-u-sm-4-24 duration">
                                             {%- if let Some(build_duration) = build.build_duration -%}
                                                 since {{ build_duration|format_duration }}
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}
+                                        </div>
+                                        <div class="pure-u-1 pure-u-sm-3-24 memory" title="Peak memory usage">
+                                            &mdash;
                                         </div>
                                     </div>
                                 </div>

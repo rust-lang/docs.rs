@@ -32,3 +32,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
+
+[lints]
+workspace = true

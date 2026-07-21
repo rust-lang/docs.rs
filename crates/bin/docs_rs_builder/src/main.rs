@@ -10,8 +10,10 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::runtime;
 
 fn main() -> Result<()> {
-    docs_rs_builder::logging::init();
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let logging_config = docs_rs_logging::Config::from_environment()?;
+    docs_rs_builder::logging::init(&logging_config);
+    let _guard =
+        docs_rs_logging::init_with_config(&logging_config).context("error initializing logging")?;
 
     if let Err(err) = CommandLine::parse().handle_args() {
         eprintln!("error running builder: {:?}", err);

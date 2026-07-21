@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE repositories SET override_build_priority = NULL WHERE name = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fa8f0319c0e27736bc02d53d743c44fd503c3cd4599ba36042053a9cd05aa033"
+}

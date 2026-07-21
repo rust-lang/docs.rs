@@ -1,6 +1,9 @@
 {
   "name": "deps",
   "dependencies": {
-    "browser-ui-test": "^0.23.1"
+    "browser-ui-test": "^0.24.0"
+  },
+  "overrides": {
+    "puppeteer": "25.3.0"
   }
 }

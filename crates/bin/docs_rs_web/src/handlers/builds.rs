@@ -28,11 +28,12 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Build {
     id: BuildId,
-    rustc_version: Option<String>,
+    pub rustc_version: Option<String>,
     docsrs_version: Option<String>,
-    build_status: BuildStatus,
-    build_time: Option<DateTime<Utc>>,
+    pub build_status: BuildStatus,
+    pub build_time: Option<DateTime<Utc>>,
     build_duration: Option<Duration>,
+    memory_peak: Option<i64>,
     errors: Option<String>,
 }
 
@@ -171,19 +172,14 @@ pub(crate) async fn build_trigger_rebuild_handler(
         .map_err(JsonAxumNope)?;
 
     build_queue
-        .add_crate(
-            &name,
-            &version,
-            PRIORITY_MANUAL_FROM_CRATES_IO,
-            None, /* because crates.io is the only service that calls this endpoint */
-        )
+        .add_crate(&name, &version, PRIORITY_MANUAL_FROM_CRATES_IO)
         .await
         .map_err(|e| JsonAxumNope(e.into()))?;
 
     Ok((StatusCode::CREATED, Json(serde_json::json!({}))))
 }
 
-async fn get_builds(
+pub(super) async fn get_builds(
     conn: &mut sqlx::PgConnection,
     name: &KrateName,
     version: &Version,
@@ -194,7 +190,19 @@ async fn get_builds(
             builds.id as "id: BuildId",
             builds.rustc_version,
             builds.docsrs_version,
-            builds.build_status as "build_status: BuildStatus",
+            CASE
+                WHEN builds.build_status = 'success'::build_status THEN
+                    CASE
+                        WHEN COALESCE(
+                            (SELECT bool_and(builds_logs.success)
+                             FROM builds_logs
+                             WHERE builds_logs.build_id = builds.id),
+                            TRUE
+                        ) = TRUE THEN 'success'::build_status
+                        ELSE 'partial_failure'::build_status
+                    END
+                ELSE builds.build_status
+            END as "build_status!: BuildStatus",
             COALESCE(builds.build_finished, builds.build_started) as build_time,
             CASE
                 WHEN builds.build_started IS NULL
@@ -210,6 +218,7 @@ async fn get_builds(
                         ELSE (builds.build_finished - builds.build_started)
                     END
             END AS "build_duration?: Duration",
+            builds.memory_peak,
             builds.errors
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
@@ -227,6 +236,7 @@ async fn get_builds(
 
 #[cfg(test)]
 mod tests {
+    use super::get_builds;
     use crate::{
         Config,
         cache::CachePolicy,
@@ -240,18 +250,25 @@ mod tests {
     use docs_rs_build_limits::Overrides;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus,
-        testing::{FOO, V1, V2},
+        BuildStatus, SimpleBuildError,
+        testing::{FOO, V0_1, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
+    use test_case::{test_case, test_matrix};
     use tower::ServiceExt;
 
     #[test]
     fn build_list_empty_build() {
         async_wrapper(|env| async move {
             let mut conn = env.async_conn().await?;
-            fake_release_that_failed_before_build(&mut conn, "foo", "0.1.0", "some errors").await?;
+            fake_release_that_failed_before_build(
+                &mut conn,
+                "foo",
+                "0.1.0",
+                SimpleBuildError("some errors".into()),
+            )
+            .await?;
 
             let response = env
                 .web_app()
@@ -269,7 +286,9 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
+            // Should have 4 mdashes: rustc_version, docsrs_version, build_time, build_duration
+            // (peak_memory_bytes shows "100 MB" from the dummy value)
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 4);
 
             Ok(())
         });
@@ -317,6 +336,49 @@ mod tests {
             assert!(rows[1].contains("docs.rs 2.0.0"));
             assert!(rows[2].contains("rustc (blabla 2019-01-01)"));
             assert!(rows[2].contains("docs.rs 1.0.0"));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn build_list_shows_memory() {
+        async_wrapper(|env| async move {
+            // Use a specific memory value: 256 MiB = 256 * 1024 * 1024 = 268435456 bytes
+            // filesizeformat uses decimal (1000-based), so this will display as ~268.43 MB
+            let test_memory_bytes: u64 = 256 * 1024 * 1024;
+
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![
+                    FakeBuild::default()
+                        .rustc_version("rustc (blabla 2019-01-01)")
+                        .docsrs_version("docs.rs 1.0.0")
+                        .memory_peak(test_memory_bytes),
+                ])
+                .create()
+                .await?;
+
+            let response = env.web_app().await.get("/crate/foo/0.1.0/builds").await?;
+            let page = kuchikiki::parse_html().one(response.text().await?);
+
+            // Check that memory column exists with tooltip
+            let memory_cells: Vec<_> = page
+                .select("div.memory[title='Peak memory usage']")
+                .unwrap()
+                .collect();
+            assert_eq!(memory_cells.len(), 1, "Should have one memory cell");
+
+            // Check that the specific memory value is displayed
+            // 256 MiB (268435456 bytes) is formatted as "268.43 MB" by filesizeformat
+            let memory_text = memory_cells[0].text_contents().trim().to_string();
+            assert!(
+                memory_text.contains("268") && memory_text.contains("MB"),
+                "Memory column should contain '268.xx MB' (from 256 MiB input), got: '{}'",
+                memory_text
+            );
 
             Ok(())
         });
@@ -544,14 +606,14 @@ mod tests {
             };
             Overrides::save(&mut conn, &FOO, limits).await?;
 
-            let page = kuchikiki::parse_html().one(dbg!(
+            let page = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
                     .assert_success(&format!("/crate/foo/{V1}/builds"))
                     .await?
                     .text()
-                    .await?
-            ));
+                    .await?,
+            );
 
             let header = page.select(".about h4").unwrap().next().unwrap();
             assert_eq!(header.text_contents(), "foo's sandbox limits");
@@ -664,5 +726,139 @@ mod tests {
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_case(BuildStatus::Success)]
+    #[test_case(BuildStatus::Failure)]
+    #[test_case(BuildStatus::InProgress)]
+    async fn get_builds_legacy_logs_just_passes_build_status(
+        build_status: BuildStatus,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(build_status)
+                    .legacy_build_logs(true),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            build_status,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[test_matrix(
+        [BuildStatus::InProgress, BuildStatus::Failure],
+        [true, false]
+    )]
+    async fn get_builds_new_logs_just_passes_build_status_if_not_success(
+        build_status: BuildStatus,
+        build_log_success: bool,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(build_status)
+                    .s3_build_log("some log", build_log_success),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            build_status,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_builds_new_logs_all_logs_ok_means_success() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(BuildStatus::Success)
+                    .s3_build_log("some log", true)
+                    .build_log_for_other_target("other-target", "other log", true),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            BuildStatus::Success,
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_builds_new_logs_partial_success() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(FOO)
+            .version(V0_1)
+            .builds(vec![
+                FakeBuild::default()
+                    .build_status(BuildStatus::Success)
+                    .s3_build_log("some log", true)
+                    .build_log_for_other_target("other-target", "other log", false),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+
+        assert_eq!(
+            get_builds(&mut conn, &FOO, &V0_1)
+                .await?
+                .into_iter()
+                .map(|b| b.build_status)
+                .next()
+                .unwrap(),
+            BuildStatus::PartialFailure
+        );
+
+        Ok(())
     }
 }

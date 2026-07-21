@@ -2,52 +2,61 @@
 use crate::backends::memory::MemoryBackend;
 use crate::{
     Config,
-    archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION},
+    archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION, Index},
     backends::{StorageBackend, StorageBackendMethods, s3::S3Backend},
-    blob::{Blob, BlobUpload, StreamingBlob},
+    blob::{Blob, StreamUpload, StreamUploadSource, StreamingBlob},
     compression::{compress, compress_async},
     errors::PathNotFoundError,
     file::FileEntry,
     metrics::StorageMetrics,
     types::{FileRange, StorageKind},
     utils::{
-        file_list::get_file_list,
+        file_list::{get_file_list, walk_dir_recursive},
         storage_path::{rustdoc_archive_path, source_archive_path},
     },
 };
-use anyhow::Result;
-use dashmap::DashMap;
+use anyhow::{Context as _, Result};
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
-use futures_util::stream::BoxStream;
+use futures_util::{TryStreamExt as _, future, stream::BoxStream};
 use std::{
-    fmt, fs, io,
-    path::{Path, PathBuf},
+    fmt,
+    io::{Cursor, Write as _},
+    path::Path,
+    pin::Pin,
     sync::Arc,
 };
-use tokio::sync::Mutex;
-use tracing::{debug, info_span, instrument, trace, warn};
+use tokio::{fs, io, io::AsyncWriteExt as _};
+use tokio_util::bytes::Bytes;
+use tracing::{info_span, instrument, trace, warn};
+
+/// buffer size when writing zip files.
+pub(crate) const ZIP_BUFFER_SIZE: usize = 1024 * 1024;
 
 pub struct AsyncStorage {
     backend: StorageBackend,
     config: Arc<Config>,
-    /// Locks to synchronize write-access to the locally cached archive index files.
-    locks: DashMap<PathBuf, Arc<Mutex<()>>>,
+    archive_index_cache: archive_index::Cache,
 }
 
 impl AsyncStorage {
     pub async fn new(config: Arc<Config>, otel_meter_provider: &AnyMeterProvider) -> Result<Self> {
-        let otel_metrics = StorageMetrics::new(otel_meter_provider);
+        let metrics = StorageMetrics::new(otel_meter_provider);
 
         Ok(Self {
+            archive_index_cache: archive_index::Cache::new(
+                config.archive_index_cache.clone(),
+                otel_meter_provider,
+            )
+            .await
+            .context("initialize archive index cache")?,
             backend: match config.storage_backend {
                 #[cfg(any(test, feature = "testing"))]
-                StorageKind::Memory => StorageBackend::Memory(MemoryBackend::new(otel_metrics)),
-                StorageKind::S3 => StorageBackend::S3(S3Backend::new(&config, otel_metrics).await?),
+                StorageKind::Memory => StorageBackend::Memory(MemoryBackend::new(metrics)),
+                StorageKind::S3 => StorageBackend::S3(S3Backend::new(&config, metrics).await?),
             },
-            locks: DashMap::with_capacity(config.local_archive_cache_expected_count),
             config,
         })
     }
@@ -56,7 +65,17 @@ impl AsyncStorage {
         &self.config
     }
 
-    #[instrument]
+    pub async fn find_archive_index(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+    ) -> Result<Index> {
+        self.archive_index_cache
+            .find_index(archive_path, latest_build_id, self)
+            .await
+    }
+
+    #[instrument(skip(self))]
     pub async fn exists(&self, path: &str) -> Result<bool> {
         self.backend.exists(path).await
     }
@@ -68,7 +87,7 @@ impl AsyncStorage {
     ///   index cache. Without it we wouldn't know that we have
     ///   to invalidate the locally cached file after a rebuild.
     /// * `path` - the wanted path inside the documentation.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn stream_rustdoc_file(
         &self,
         name: &KrateName,
@@ -81,6 +100,7 @@ impl AsyncStorage {
             .await
     }
 
+    #[instrument(skip(self))]
     pub async fn fetch_source_file(
         &self,
         name: &KrateName,
@@ -94,7 +114,7 @@ impl AsyncStorage {
             .await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn stream_source_file(
         &self,
         name: &KrateName,
@@ -107,7 +127,7 @@ impl AsyncStorage {
             .await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn rustdoc_file_exists(
         &self,
         name: &KrateName,
@@ -119,40 +139,26 @@ impl AsyncStorage {
             .await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn exists_in_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         path: &str,
     ) -> Result<bool> {
-        for attempt in 0..2 {
-            match self
-                .find_in_archive_index(archive_path, latest_build_id, path)
-                .await
-            {
-                Ok(file_info) => return Ok(file_info.is_some()),
-                Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => {
-                    return Ok(false);
-                }
-                Err(err) if attempt == 0 => {
-                    warn!(
-                        ?err,
-                        "error fetching range from archive, purging local index cache and retrying once"
-                    );
-                    self.purge_archive_index_cache(archive_path, latest_build_id)
-                        .await?;
-
-                    continue;
-                }
-                Err(err) => return Err(err),
-            }
+        match self
+            .archive_index_cache
+            .find(archive_path, latest_build_id, path, self)
+            .await
+        {
+            Ok(file_info) => Ok(file_info.is_some()),
+            Err(err) if err.downcast_ref::<PathNotFoundError>().is_some() => Ok(false),
+            Err(err) => Err(err),
         }
-        unreachable!("exists_in_archive retry loop exited unexpectedly");
     }
 
     /// get, decompress and materialize an object from store
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
         self.get_stream(path).await?.materialize(max_size).await
     }
@@ -161,19 +167,33 @@ impl AsyncStorage {
     ///
     /// We don't decompress ourselves, S3 only decompresses with a correct
     /// `Content-Encoding` header set, which we don't.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn get_raw_stream(&self, path: &str) -> Result<StreamingBlob> {
         self.backend.get_stream(path, None).await
     }
 
     /// get a decompressing stream to an object in storage.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn get_stream(&self, path: &str) -> Result<StreamingBlob> {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
+    // #[cfg(test)]
+    // pub(crate) async fn get_range(
+    //     &self,
+    //     path: &str,
+    //     max_size: usize,
+    //     range: FileRange,
+    //     compression: Option<CompressionAlgorithm>,
+    // ) -> Result<Blob> {
+    //     self.get_range_stream(path, range, compression)
+    //         .await?
+    //         .materialize(max_size)
+    //         .await
+    // }
+
     /// get a decompressing stream to a range inside an object in storage
-    #[instrument]
+    #[instrument(skip(self))]
     pub(crate) async fn get_range_stream(
         &self,
         path: &str,
@@ -186,39 +206,6 @@ impl AsyncStorage {
         // here.
         raw_stream.compression = compression;
         Ok(raw_stream.decompress().await?)
-    }
-
-    fn local_index_cache_lock(&self, local_index_path: impl AsRef<Path>) -> Arc<Mutex<()>> {
-        let local_index_path = local_index_path.as_ref().to_path_buf();
-
-        self.locks
-            .entry(local_index_path)
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .downgrade()
-            .clone()
-    }
-
-    async fn purge_archive_index_cache(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-    ) -> Result<()> {
-        // we know that config.local_archive_cache_path is an absolute path, not relative.
-        // So it will be usable as key in the DashMap.
-        let local_index_path = self.config.local_archive_cache_path.join(format!(
-            "{archive_path}.{}.{ARCHIVE_INDEX_FILE_EXTENSION}",
-            latest_build_id.map(|id| id.0).unwrap_or(0)
-        ));
-
-        let rwlock = self.local_index_cache_lock(&local_index_path);
-
-        let _write_guard = rwlock.lock().await;
-
-        if tokio::fs::try_exists(&local_index_path).await? {
-            tokio::fs::remove_file(&local_index_path).await?;
-        }
-
-        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -331,7 +318,8 @@ impl AsyncStorage {
     ) -> Result<StreamingBlob> {
         for attempt in 0..2 {
             let info = self
-                .find_in_archive_index(archive_path, latest_build_id, path)
+                .archive_index_cache
+                .find(archive_path, latest_build_id, path, self)
                 .await?
                 .ok_or(PathNotFoundError)?;
 
@@ -371,7 +359,8 @@ impl AsyncStorage {
                         ?err,
                         "error fetching range from archive, purging local index cache and retrying once"
                     );
-                    self.purge_archive_index_cache(archive_path, latest_build_id)
+                    self.archive_index_cache
+                        .purge(archive_path, latest_build_id)
                         .await?;
 
                     continue;
@@ -390,10 +379,18 @@ impl AsyncStorage {
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
         let root_dir = root_dir.as_ref();
-        let (mut zip_content,    file_paths) =
+
+        // Keep the TempPath guards alive until after both uploads complete; dropping them earlier
+        // would delete the files while S3 is still reading from them.
+        let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let zip_path = zip_temp_path.to_path_buf();
+
+        let file_paths =
             spawn_blocking({
+                use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
+                let zip_path = zip_path.clone();
 
                 move || {
                     let mut file_paths = Vec::new();
@@ -409,14 +406,18 @@ impl AsyncStorage {
                     // also has to be added as supported algorithm for storage compression, together
                     // with a mapping in `storage::archive_index::Index::new_from_zip`.
 
-                    let zip_content = {
+
+                    {
                         let _span =
                             info_span!("create_zip_archive", %archive_path, root_dir=%root_dir.display()).entered();
 
                         let options = zip::write::SimpleFileOptions::default()
-                            .compression_method(zip::CompressionMethod::Bzip2);
+                            .compression_method(zip::CompressionMethod::Deflated)
+                            .compression_level(Some(6));
 
-                        let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+                        // rustdoc archives can become a couple of GiB big, so we better use a tempfile.
+                        let zip_file = fs::File::create(&zip_path)?;
+                        let mut zip = zip::ZipWriter::new(io::BufWriter::with_capacity(ZIP_BUFFER_SIZE, zip_file));
                         for file_path in get_file_list(&root_dir) {
                             let file_path = file_path?;
 
@@ -426,57 +427,60 @@ impl AsyncStorage {
                             file_paths.push(FileEntry{path: file_path, size: file.metadata()?.len()});
                         }
 
-                        zip.finish()?.into_inner()
-                    };
+                        let mut zip_file = zip.finish()?.into_inner()?;
+                        zip_file.flush()?;
+                    }
 
-                    Ok((
-                        zip_content,
-                        file_paths
-                    ))
+                    Ok(file_paths)
                 }
             })
             .await?;
 
         let alg = CompressionAlgorithm::default();
-        let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", &archive_path);
-        let compressed_index_content = {
+        let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", archive_path);
+        let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let compressed_index_path = compressed_index_temp_path.to_path_buf();
+        {
             let _span = info_span!("create_archive_index", %remote_index_path).entered();
 
-            tokio::fs::create_dir_all(&self.config.temp_dir).await?;
-            let local_index_path =
-                tempfile::NamedTempFile::new_in(&self.config.temp_dir)?.into_temp_path();
+            let local_index_path = tempfile::NamedTempFile::new()?.into_temp_path();
 
-            archive_index::create(&mut io::Cursor::new(&mut zip_content), &local_index_path)
-                .await?;
-
-            let mut buf: Vec<u8> = Vec::new();
-            compress_async(
-                &mut tokio::io::BufReader::new(tokio::fs::File::open(&local_index_path).await?),
-                &mut buf,
-                alg,
+            archive_index::create(
+                io::BufReader::new(fs::File::open(&zip_path).await?),
+                &local_index_path,
             )
             .await?;
-            buf
-        };
 
-        self.backend
-            .store_batch(vec![
-                BlobUpload {
-                    path: archive_path.to_string(),
-                    mime: mimes::APPLICATION_ZIP.clone(),
-                    content: zip_content,
-                    compression: None,
-                },
-                BlobUpload {
-                    path: remote_index_path,
-                    mime: mime::APPLICATION_OCTET_STREAM,
-                    content: compressed_index_content,
-                    compression: Some(alg),
-                },
-            ])
-            .await?;
+            // compressed index can become up to a couple 100 MiB big, so rather use a tempfile.
+            let mut compressed_index_file = fs::File::create(&compressed_index_path).await?;
+            {
+                let mut compressed_index_writer = io::BufWriter::new(&mut compressed_index_file);
+                compress_async(
+                    &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
+                    &mut compressed_index_writer,
+                    alg,
+                )
+                .await?;
+                compressed_index_writer.flush().await?;
+            }
+        }
 
-        Ok((file_paths, CompressionAlgorithm::Bzip2))
+        tokio::try_join!(
+            self.backend.upload_stream(StreamUpload {
+                path: archive_path.to_string(),
+                mime: mimes::APPLICATION_ZIP.clone(),
+                source: StreamUploadSource::File(zip_path),
+                compression: None,
+            }),
+            self.backend.upload_stream(StreamUpload {
+                path: remote_index_path,
+                mime: mime::APPLICATION_OCTET_STREAM,
+                source: StreamUploadSource::File(compressed_index_path),
+                compression: Some(alg),
+            })
+        )?;
+
+        Ok((file_paths, CompressionAlgorithm::Deflate))
     }
 
     /// Store all files in `root_dir` into the backend under `prefix`.
@@ -486,57 +490,64 @@ impl AsyncStorage {
         prefix: impl AsRef<Path> + fmt::Debug,
         root_dir: impl AsRef<Path> + fmt::Debug,
     ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
-        let prefix = prefix.as_ref();
+        let prefix = prefix.as_ref().to_path_buf();
         let root_dir = root_dir.as_ref();
         let alg = CompressionAlgorithm::default();
 
-        let (blobs, file_paths_and_mimes) = spawn_blocking({
-            let prefix = prefix.to_owned();
-            let root_dir = root_dir.to_owned();
-            move || {
-                let mut file_paths = Vec::new();
-                let mut blobs: Vec<BlobUpload> = Vec::new();
-                for file_path in get_file_list(&root_dir) {
-                    let file_path = file_path?;
-
+        let file_paths_and_mimes: Vec<_> = walk_dir_recursive(&root_dir)
+            .err_into::<anyhow::Error>()
+            .map_ok(|item| {
+                let prefix = prefix.clone();
+                async move {
                     // Some files have insufficient permissions
                     // (like .lock file created by cargo in documentation directory).
                     // Skip these files.
-                    let Ok(file) = fs::File::open(root_dir.join(&file_path)) else {
-                        continue;
+                    let Ok(file) = fs::File::open(&item).await else {
+                        return Ok(None);
                     };
 
-                    let file_size = file.metadata()?.len();
+                    let content = {
+                        let mut buf: Vec<u8> = Vec::new();
+                        compress_async(io::BufReader::new(file), &mut buf, alg).await?;
+                        buf
+                    };
 
-                    let content = compress(file, alg)?;
-                    let bucket_path = prefix.join(&file_path).to_string_lossy().to_string();
+                    let bucket_path = prefix.join(&item.relative).to_string_lossy().to_string();
+
+                    let file_size = item.metadata.len();
 
                     let file_info = FileEntry {
-                        path: file_path,
+                        path: item.relative.clone(),
                         size: file_size,
                     };
-                    let mime = file_info.mime();
-                    file_paths.push(file_info);
+                    let mime = file_info.mime().clone();
 
-                    blobs.push(BlobUpload {
-                        path: bucket_path,
-                        mime,
-                        content,
-                        compression: Some(alg),
-                    });
+                    self.backend
+                        .upload_stream(StreamUpload {
+                            path: bucket_path,
+                            mime,
+                            source: StreamUploadSource::Bytes(content.into()),
+                            compression: Some(alg),
+                        })
+                        .await?;
+
+                    Ok(Some(file_info))
                 }
-                Ok((blobs, file_paths))
-            }
-        })
-        .await?;
+            })
+            .try_buffer_unordered(self.config.network_parallelism)
+            .try_filter_map(|item| future::ready(Ok(item)))
+            .try_collect()
+            .await?;
 
-        self.backend.store_batch(blobs).await?;
         Ok((file_paths_and_mimes, alg))
     }
 
     #[cfg(test)]
-    pub async fn store_blobs(&self, blobs: Vec<BlobUpload>) -> Result<()> {
-        self.backend.store_batch(blobs).await
+    pub async fn store_blobs(&self, blobs: Vec<crate::BlobUpload>) -> Result<()> {
+        for blob in blobs {
+            self.backend.upload_stream(blob.into()).await?;
+        }
+        Ok(())
     }
 
     // Store file into the backend at the given path, uncompressed.
@@ -544,20 +555,20 @@ impl AsyncStorage {
     #[instrument(skip(self, content))]
     pub async fn store_one_uncompressed(
         &self,
-        path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        path: impl Into<String> + fmt::Debug,
+        content: impl Into<Bytes>,
     ) -> Result<()> {
         let path = path.into();
         let content = content.into();
         let mime = detect_mime(&path).to_owned();
 
         self.backend
-            .store_batch(vec![BlobUpload {
+            .upload_stream(StreamUpload {
                 path,
                 mime,
-                content,
+                source: StreamUploadSource::Bytes(content),
                 compression: None,
-            }])
+            })
             .await?;
 
         Ok(())
@@ -568,27 +579,27 @@ impl AsyncStorage {
     #[instrument(skip(self, content))]
     pub async fn store_one(
         &self,
-        path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        path: impl Into<String> + fmt::Debug,
+        content: impl Into<Bytes>,
     ) -> Result<CompressionAlgorithm> {
         let path = path.into();
-        let content = content.into();
         let alg = CompressionAlgorithm::default();
-        let content = compress(&*content, alg)?;
+        let content = compress(Cursor::new(content.into().as_ref()), alg)?;
         let mime = detect_mime(&path).to_owned();
 
         self.backend
-            .store_batch(vec![BlobUpload {
+            .upload_stream(StreamUpload {
                 path,
                 mime,
-                content,
+                source: StreamUploadSource::Bytes(content.into()),
                 compression: Some(alg),
-            }])
+            })
             .await?;
 
         Ok(alg)
     }
 
+    #[instrument(skip(self))]
     pub async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String>> {
         self.backend.list_prefix(prefix).await
     }
@@ -610,7 +621,16 @@ impl AsyncStorage {
     }
 }
 
-impl std::fmt::Debug for AsyncStorage {
+impl archive_index::Downloader for AsyncStorage {
+    fn fetch_archive_index<'a>(
+        &'a self,
+        remote_index_path: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<StreamingBlob>> + Send + 'a>> {
+        Box::pin(self.get_stream(remote_index_path))
+    }
+}
+
+impl fmt::Debug for AsyncStorage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.backend {
             #[cfg(any(test, feature = "testing"))]
@@ -763,10 +783,10 @@ mod test {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
+    use crate::blob::BlobUpload;
     use crate::{PathNotFoundError, errors::SizeLimitReached};
     use docs_rs_headers::compute_etag;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use futures_util::TryStreamExt as _;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
@@ -793,7 +813,7 @@ mod backend_tests {
             path: path.into(),
             mime: mime::TEXT_PLAIN,
             compression: None,
-            content: b"test content\n".to_vec(),
+            content: "test content\n".into(),
         };
 
         storage.store_blobs(vec![blob.clone()]).await?;
@@ -824,7 +844,7 @@ mod backend_tests {
             path: "foo/bar.txt".into(),
             mime: mime::TEXT_PLAIN,
             compression: None,
-            content: b"test content\n".to_vec(),
+            content: "test content\n".into(),
         };
 
         let full_etag = compute_etag(&blob.content);
@@ -877,7 +897,7 @@ mod backend_tests {
                         path: filename.into(),
                         mime: mime::TEXT_PLAIN,
                         compression: None,
-                        content: b"test content\n".to_vec(),
+                        content: "test content\n".into(),
                     })
                     .collect(),
             )
@@ -926,13 +946,13 @@ mod backend_tests {
         let small_blob = BlobUpload {
             path: "small-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: vec![0; MAX_SIZE],
+            content: [0; MAX_SIZE].as_ref().into(),
             compression: None,
         };
         let big_blob = BlobUpload {
             path: "big-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: vec![0; MAX_SIZE * 2],
+            content: [0; MAX_SIZE * 2].as_ref().into(),
             compression: None,
         };
 
@@ -972,7 +992,7 @@ mod backend_tests {
                 path: path.into(),
                 mime: mime::TEXT_PLAIN,
                 compression: None,
-                content: b"Hello world!\n".to_vec(),
+                content: "Hello world!\n".into(),
             })
             .collect::<Vec<_>>();
 
@@ -1019,14 +1039,15 @@ mod backend_tests {
         for &file in &files {
             let path = dir.path().join(file);
             if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).await?;
             }
-            fs::write(path, "data")?;
+            fs::write(path, "data").await?;
         }
 
         let local_index_location = storage
             .config
-            .local_archive_cache_path
+            .archive_index_cache
+            .path
             .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
         let (stored_files, compression_alg) = storage
@@ -1039,7 +1060,7 @@ mod backend_tests {
                 .await?
         );
 
-        assert_eq!(compression_alg, CompressionAlgorithm::Bzip2);
+        assert_eq!(compression_alg, CompressionAlgorithm::Deflate);
         assert_eq!(stored_files.len(), files.len());
         for name in &files {
             assert!(get_file_info(&stored_files, name).is_some());
@@ -1055,7 +1076,7 @@ mod backend_tests {
 
         // delete the existing index to test the download of it
         if local_index_location.exists() {
-            fs::remove_file(&local_index_location)?;
+            fs::remove_file(&local_index_location).await?;
         }
 
         // the first exists-query will download and store the index
@@ -1109,9 +1130,9 @@ mod backend_tests {
         for &file in &files {
             let path = dir.path().join(file);
             if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent).await?;
             }
-            fs::write(path, "data")?;
+            fs::write(path, "data").await?;
         }
 
         let (stored_files, algs) = storage.store_all(Path::new("prefix"), dir.path()).await?;
@@ -1154,14 +1175,11 @@ mod backend_tests {
 
     async fn test_batched_uploads(storage: &AsyncStorage) -> Result<()> {
         let uploads: Vec<_> = (0..=100)
-            .map(|i| {
-                let content = format!("const IDX: usize = {i};").as_bytes().to_vec();
-                BlobUpload {
-                    mime: mimes::TEXT_RUST.clone(),
-                    content,
-                    path: format!("{i}.rs"),
-                    compression: None,
-                }
+            .map(|i| BlobUpload {
+                mime: mimes::TEXT_RUST.clone(),
+                content: format!("const IDX: usize = {i};").into(),
+                path: format!("{i}.rs"),
+                compression: None,
             })
             .collect();
 
@@ -1171,6 +1189,41 @@ mod backend_tests {
             let stored = storage.get(&blob.path, usize::MAX).await?;
             assert_eq!(&stored.content, &blob.content);
         }
+
+        Ok(())
+    }
+
+    async fn test_s3_large_file_upload_uses_multipart(storage: &AsyncStorage) -> Result<()> {
+        if matches!(storage.config.storage_backend, StorageKind::Memory) {
+            return Ok(());
+        }
+
+        const MULTIPART_UPLOAD_SIZE: usize = 100 * 1024 * 1024 + 10;
+        const REMOTE_PATH: &str = "multipart-upload-test.bin";
+
+        let dir = tempfile::Builder::new()
+            .prefix("docs.rs-multipart-upload-test")
+            .tempdir()?;
+        let local_path = dir.path().join("large.bin");
+        let content = (0..MULTIPART_UPLOAD_SIZE)
+            .map(|i| (i % 251) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&local_path, &content).await?;
+
+        storage
+            .backend
+            .upload_stream(StreamUpload {
+                path: REMOTE_PATH.into(),
+                mime: mime::APPLICATION_OCTET_STREAM,
+                source: StreamUploadSource::File(local_path),
+                compression: None,
+            })
+            .await?;
+
+        assert!(storage.exists(REMOTE_PATH).await?);
+        let stored = storage.get(REMOTE_PATH, usize::MAX).await?;
+        assert_eq!(stored.content, content);
+        storage.delete_prefix(REMOTE_PATH).await?;
 
         Ok(())
     }
@@ -1222,7 +1275,7 @@ mod backend_tests {
                     .iter()
                     .map(|path| BlobUpload {
                         path: (*path).to_string(),
-                        content: b"foo\n".to_vec(),
+                        content: "foo\n".into(),
                         compression: None,
                         mime: mime::TEXT_PLAIN,
                     })
@@ -1313,6 +1366,7 @@ mod backend_tests {
             test_delete_prefix_without_matches,
             test_delete_percent,
             test_exists_without_remote_archive,
+            test_s3_large_file_upload_uses_multipart,
         }
 
         tests_with_metrics {

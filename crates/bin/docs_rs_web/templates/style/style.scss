@@ -276,7 +276,12 @@ div.recent-releases-container {
         padding: 0;
     }
 
-    ol.queue-list li, ol.rebuild-queue-list li {
+    h4 {
+        margin-left: 14px;
+        margin-right: 14px;
+    }
+
+    .queue-list li, .rebuild-queue-list li {
         list-style-type: decimal;
         margin-left: 20px;
 
@@ -365,17 +370,22 @@ div.recent-releases-container {
         span.fa-times {
             color: var(--color-struct);
         }
+        span.fa-xmark {
+            color: red;
+        }
     }
 
     .description {
         font-family: $font-family-serif;
         font-weight: normal;
+        overflow-wrap: break-word;
 
         @media #{$media-sm} {
             font-size: 1em;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            overflow-wrap: normal;
         }
     }
 
@@ -387,11 +397,19 @@ div.recent-releases-container {
     }
 
     .date,
-    .duration {
+    .duration,
+    .memory {
         font-weight: normal;
 
         @media #{$media-sm} {
             text-align: right;
+        }
+    }
+
+    .memory {
+        @media #{$media-sm} {
+            padding-left: 1em;
+            white-space: nowrap;
         }
     }
 
@@ -413,6 +431,48 @@ div.recent-releases-container {
       background-color: var(--color-warn-background);
       padding: .2em .8em .2em .5em;
       border-radius: 1em;
+    }
+
+    table {
+        margin: 1.5em 1em;
+        --table-border: 1px solid var(--color-border);
+        border-radius: 4px;
+
+        border-spacing: 0;
+        border-collapse: separate;
+        border: var(--table-border);
+        overflow: hidden;
+
+        a {
+            color: var(--color-url);
+        }
+    }
+
+    th, td {
+        padding: 4px 1em;
+        font-weight: 300;
+        text-align: center;
+    }
+
+    th {
+        border-bottom: var(--table-border);
+    }
+
+    /* All this code is to have rounded borders on the table */
+    table th:not(:last-child),
+    table td:not(:last-child) {
+        border-right: var(--table-border);
+    }
+
+    table thead>tr:not(:last-child)>th,
+    table thead>tr:not(:last-child)>td,
+    table tbody>tr:not(:last-child)>th,
+    table tbody>tr:not(:last-child)>td,
+    table tr:not(:last-child)>td,
+    table tr:not(:last-child)>th,
+    table thead:not(:last-child),
+    table tbody:not(:last-child) {
+        border-bottom: var(--table-border);
     }
 }
 

@@ -18,33 +18,60 @@ centered
 
 {%- block body -%}
     <div class="container">
-        <div class="recent-releases-container">
-            <div class="release pure-g">
-                <div class="pure-u-1-2">
-                    <strong>currently being built</strong>
-                </div>
-            </div>
 
-            <div class = "pure-g">
-                <div class="pure-u-1-2">
-                    {%- if !in_progress_builds.is_empty() %}
-                        <ol class="queue-list">
-                            {% for release in in_progress_builds -%}
-                                {%- set release_params = RustdocParams::new(release.0).with_req_version(release.1) -%}
-                                <li>
-                                    <a href="{{ release_params.builds_url() }}">
-                                        {{ release.0 }} {{ release.1 }}
-                                    </a>
-                                </li>
-                            {%- endfor %}
-                        </ol>
-                    {%- else %}
-                        <div class="about">
-                            <p><strong>There is nothing currently being built</strong></p>
-                        </div>
-                    {%- endif %}
-                </div>
+        {%- if show_length_warning %}
+            <div class="warning">
+                <b>The docs.rs build queue is too long.</b> <br/>
+                Building your crate might take longer, up to a couple of days.<br/>
+                The team is notified.
             </div>
+        {%- endif %}
+
+        <div class="recent-releases-container">
+            <div class="release">
+                <strong>Currently being built</strong>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>release</th>
+                        <th>running for</th>
+                        <th>average duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {%- if !in_progress_builds.is_empty() %}
+                    {% for release in in_progress_builds -%}
+                        {%- set release_params = RustdocParams::new(release.name).with_req_version(release.version) -%}
+                        <tr>
+                            <td>
+                                <a href="{{ release_params.builds_url() }}">
+                                    {{ release.name }} {{ release.version }}
+                                </a>
+                            </td>
+                            <td>
+                                {%- if let Some(elapsed) = release.elapsed -%}
+                                    {{ elapsed|format_duration }}
+                                {%- else -%}
+                                    &mdash;
+                                {%- endif -%}
+                            </td>
+                            <td>
+                                {%- if let Some(average_duration) = release.average_duration -%}
+                                    {{ average_duration|format_duration }}
+                                {%- else -%}
+                                    &mdash;
+                                {%- endif -%}
+                            </td>
+                        </tr>
+                    {%- endfor %}
+                {%- else %}
+                    <tr>
+                        <td colspan=3><strong>There is nothing currently being built</strong></td>
+                    </tr>
+                {%- endif %}
+                </tbody>
+            </table>
 
             <div class="release">
                 <strong>Build Queue</strong>
@@ -54,7 +81,7 @@ centered
                 {%- if !queue.is_empty() -%}
                     {% for crate_item in queue -%}
                         <li>
-                            <a href="https://crates.io/crates/{{ crate_item.name }}">
+                            <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
                                 {{- crate_item.name }} {{ crate_item.version -}}
                             </a>
 
@@ -89,7 +116,7 @@ centered
                     {%- if !rebuild_queue.is_empty() -%}
                         {% for crate_item in rebuild_queue -%}
                             <li>
-                                <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
                                     {{- crate_item.name }} {{ crate_item.version -}}
                                 </a>
                             </li>

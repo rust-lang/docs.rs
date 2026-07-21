@@ -6,6 +6,7 @@ use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_utils::{Handle, retry};
+use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::{error, info_span};
 
@@ -25,7 +26,22 @@ fn process_next_crate(
             let instant = Instant::now();
             let res = f(to_process);
             let elapsed = instant.elapsed().as_secs_f64();
-            builder_metrics.build_time.record(elapsed, &[]);
+            builder_metrics.build_time.record(
+                elapsed,
+                &[KeyValue::new(
+                    "result",
+                    match &res {
+                        Ok(summary) => {
+                            if summary.successful {
+                                "success"
+                            } else {
+                                "failed"
+                            }
+                        }
+                        Err(_) => "error",
+                    },
+                )],
+            );
             res
         };
 
@@ -66,12 +82,6 @@ pub(crate) fn build_next_queue_package(
 
         processed = true;
 
-        let kind = krate
-            .registry
-            .as_ref()
-            .map(|r| PackageKind::Registry(r.as_str()))
-            .unwrap_or(PackageKind::CratesIo);
-
         if let Err(err) = retry(|| builder.reinitialize_workspace_if_interval_passed(), 3) {
             error!(?err, "Reinitialize workspace failed after retries");
             queue.lock()?;
@@ -84,7 +94,12 @@ pub(crate) fn build_next_queue_package(
             return Err(err);
         }
 
-        builder.build_package(&krate.name, &krate.version, kind, krate.attempt == 0)
+        builder.build_package(
+            &krate.name,
+            &krate.version,
+            PackageKind::CratesIo,
+            krate.attempt == 0,
+        )
     })?;
 
     Ok(processed)
@@ -108,7 +123,7 @@ mod tests {
 
         const WILL_FAIL: KrateName = KrateName::from_static("will_fail");
 
-        queue.add_crate(&WILL_FAIL, &V1, 0, None)?;
+        queue.add_crate(&WILL_FAIL, &V1, 0)?;
 
         process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_FAIL, krate.name);
@@ -130,7 +145,7 @@ mod tests {
         let builder_metrics = BuilderMetrics::new(env.meter_provider());
 
         const WILL_SUCCEED: KrateName = KrateName::from_static("will_succeed");
-        queue.add_crate(&WILL_SUCCEED, &V1, -1, None)?;
+        queue.add_crate(&WILL_SUCCEED, &V1, -1)?;
 
         process_next_crate(&env, &builder_metrics, |krate| {
             assert_eq!(WILL_SUCCEED, krate.name);

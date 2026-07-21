@@ -17,6 +17,9 @@ pub struct Config {
     // automatic rebuild configuration
     pub max_queued_rebuilds: Option<u16>,
 
+    /// Maximum time to wait for queue row locks when deleting crates/releases.
+    pub delete_lock_timeout: Duration,
+
     pub repository: docs_rs_repository_stats::Config,
 }
 
@@ -32,6 +35,10 @@ impl AppConfig for Config {
             )?),
             registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
             max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
+            delete_lock_timeout: Duration::from_secs(env::<u64>(
+                "DOCSRS_DELETE_LOCK_TIMEOUT_SECONDS",
+                20 * 60,
+            )?),
             repository: docs_rs_repository_stats::Config::from_environment()?,
         })
     }

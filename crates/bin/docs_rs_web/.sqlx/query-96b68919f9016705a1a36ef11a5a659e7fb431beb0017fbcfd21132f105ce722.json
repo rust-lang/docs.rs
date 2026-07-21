@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "relname",
-        "type_info": "Name"
+        "type_info": "Name",
+        "origin": {
+          "Table": {
+            "table": "pg_class",
+            "name": "relname"
+          }
+        }
       }
     ],
     "parameters": {

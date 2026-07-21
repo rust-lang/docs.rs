@@ -1,12 +1,18 @@
+mod config;
+pub mod log_format;
 #[cfg(feature = "testing")]
 pub mod testing;
 
+pub use config::Config;
+pub use log_format::LogFormat;
+
+use docs_rs_config::AppConfig as _;
 use sentry::{
     TransactionContext, integrations::panic as sentry_panic,
     integrations::tracing as sentry_tracing,
 };
-use std::{env, str::FromStr as _, sync::Arc};
-use tracing_subscriber::{EnvFilter, filter::Directive, prelude::*};
+use std::sync::Arc;
+use tracing_subscriber::prelude::*;
 
 /// defines the transaction name to be used for our rustwide builder.
 ///
@@ -22,25 +28,21 @@ pub struct Guard {
     sentry_guard: Option<sentry::ClientInitGuard>,
 }
 
-pub fn init() -> anyhow::Result<Guard> {
-    let log_formatter = {
-        let log_format = env::var("DOCSRS_LOG_FORMAT").unwrap_or_default();
+pub fn init_from_environment() -> anyhow::Result<Guard> {
+    init_with_config(&Config::from_environment()?)
+}
 
-        if log_format == "json" {
-            tracing_subscriber::fmt::layer().json().boxed()
-        } else {
-            tracing_subscriber::fmt::layer().boxed()
-        }
+pub fn init_with_config(config: &Config) -> anyhow::Result<Guard> {
+    let log_formatter = match config.format {
+        LogFormat::Json => tracing_subscriber::fmt::layer().json().boxed(),
+        LogFormat::Pretty => tracing_subscriber::fmt::layer().boxed(),
     };
 
-    let tracing_registry = tracing_subscriber::registry().with(log_formatter).with(
-        EnvFilter::builder()
-            .with_default_directive(Directive::from_str("info")?)
-            .with_env_var("DOCSRS_LOG")
-            .from_env_lossy(),
-    );
+    let tracing_registry = tracing_subscriber::registry()
+        .with(log_formatter)
+        .with(config.filter.clone());
 
-    let sentry_guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
+    let sentry_guard = if let Some(sentry_config) = &config.sentry {
         tracing::subscriber::set_global_default(tracing_registry.with(
             sentry_tracing::layer().event_filter(|md| {
                 if md.fields().field("reported_to_sentry").is_some() {
@@ -51,11 +53,7 @@ pub fn init() -> anyhow::Result<Guard> {
             }),
         ))?;
 
-        let traces_sample_rate = env::var("SENTRY_TRACES_SAMPLE_RATE")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0.0);
-
+        let sample_rate = sentry_config.traces_sample_rate;
         let traces_sampler = move |ctx: &TransactionContext| -> f32 {
             if let Some(sampled) = ctx.sampled() {
                 // if the transaction was already marked as "to be sampled" by
@@ -67,12 +65,12 @@ pub fn init() -> anyhow::Result<Guard> {
                 // record all transactions for builds
                 1.
             } else {
-                traces_sample_rate
+                sample_rate
             }
         };
 
         Some(sentry::init((
-            sentry_dsn,
+            sentry_config.dsn.clone(),
             sentry::ClientOptions {
                 release: Some(docs_rs_utils::BUILD_VERSION.into()),
                 attach_stacktrace: true,

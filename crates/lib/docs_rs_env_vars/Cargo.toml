@@ -7,3 +7,6 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true

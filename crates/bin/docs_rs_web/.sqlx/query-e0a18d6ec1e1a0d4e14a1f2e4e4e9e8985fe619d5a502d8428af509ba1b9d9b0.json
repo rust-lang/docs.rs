@@ -29,12 +29,24 @@
               }
             }
           }
+        },
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "features"
+          }
         }
       },
       {
         "ordinal": 1,
         "name": "dependencies",
-        "type_info": "Json"
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "dependencies"
+          }
+        }
       }
     ],
     "parameters": {

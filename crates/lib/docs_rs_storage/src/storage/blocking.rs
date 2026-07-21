@@ -3,6 +3,7 @@ use anyhow::Result;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
 use tokio::runtime;
+use tokio_util::bytes::Bytes;
 
 /// Sync wrapper around `AsyncStorage` for parts of the codebase that are not async.
 pub struct Storage {
@@ -57,6 +58,28 @@ impl Storage {
         )
     }
 
+<<<<<<< HEAD
+=======
+    pub fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+        self.runtime.block_on(self.inner.get(path, max_size))
+    }
+
+    pub fn get_from_archive(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+        path: &str,
+        max_size: usize,
+    ) -> Result<Blob> {
+        self.runtime.block_on(self.inner.get_from_archive(
+            archive_path,
+            latest_build_id,
+            path,
+            max_size,
+        ))
+    }
+
+>>>>>>> main
     pub fn store_all_in_archive(
         &self,
         archive_path: &str,
@@ -85,7 +108,7 @@ impl Storage {
     pub fn store_one_uncompressed(
         &self,
         path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<()> {
         self.runtime
             .block_on(self.inner.store_one_uncompressed(path, content))
@@ -96,7 +119,7 @@ impl Storage {
     pub fn store_one(
         &self,
         path: impl Into<String> + std::fmt::Debug,
-        content: impl Into<Vec<u8>>,
+        content: impl Into<Bytes>,
     ) -> Result<CompressionAlgorithm> {
         self.runtime.block_on(self.inner.store_one(path, content))
     }

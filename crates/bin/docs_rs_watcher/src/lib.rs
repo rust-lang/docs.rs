@@ -36,7 +36,7 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index).await {
+            match get_new_crates(context, &index, config).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
                     error!(?e, "Failed to get new crates");

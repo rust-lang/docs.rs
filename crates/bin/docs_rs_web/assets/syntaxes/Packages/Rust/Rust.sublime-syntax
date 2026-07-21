@@ -136,6 +136,9 @@ contexts:
     - match: \b(crate|extern|use|where)\b
       scope: keyword.other.rust
 
+    - match: \bunion(?=\s+[[:alpha:]_][[:alnum:]_]*\s*)\b
+      scope: keyword.other.rust
+
     - match: \b(break|else|for|if|loop|match|while|continue)\b
       scope: keyword.control.rust
 

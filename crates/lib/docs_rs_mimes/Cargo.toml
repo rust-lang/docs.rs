@@ -11,3 +11,6 @@ mime_guess = "2"
 
 [dev-dependencies]
 test-case = { workspace = true }
+
+[lints]
+workspace = true

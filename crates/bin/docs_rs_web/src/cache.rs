@@ -73,6 +73,16 @@ static SHORT: ResponseCacheHeaders = ResponseCacheHeaders {
     is_caching_something: true,
 };
 
+/// Cache for a little longer time in the browser & in the CDN.
+/// Helps protecting against traffic spikes.
+static LONGER: ResponseCacheHeaders = ResponseCacheHeaders {
+    cache_control: Some(HeaderValue::from_static("public, max-age=600")),
+    surrogate_control: None,
+    surrogate_keys: None,
+    needs_cdn_invalidation: false,
+    is_caching_something: true,
+};
+
 /// don't cache, don't even store. Never. Ever.
 static NO_STORE_MUST_REVALIDATE: ResponseCacheHeaders = ResponseCacheHeaders {
     cache_control: Some(HeaderValue::from_static(
@@ -133,6 +143,11 @@ pub enum CachePolicy {
     /// Can be used when the content can be a _little_ outdated,
     /// while protecting against spikes in traffic.
     ShortInCdnAndBrowser,
+    /// cache for a little longer short time in the browser & CDN.
+    /// right now: 10 minutes
+    /// Can be used when the content can be a _little_ outdated,
+    /// while protecting against spikes in traffic.
+    LongerInCdnAndBrowser,
     /// cache forever in browser & CDN.
     /// Valid when you have hashed / versioned filenames and every rebuild would
     /// change the filename.
@@ -160,6 +175,7 @@ impl CachePolicy {
             CachePolicy::NoCaching => NO_CACHING.clone(),
             CachePolicy::NoStoreMustRevalidate => NO_STORE_MUST_REVALIDATE.clone(),
             CachePolicy::ShortInCdnAndBrowser => SHORT.clone(),
+            CachePolicy::LongerInCdnAndBrowser => LONGER.clone(),
             CachePolicy::ForeverInCdnAndBrowser => FOREVER_IN_CDN_AND_BROWSER.clone(),
             CachePolicy::ForeverInCdn(surrogate_keys) => {
                 if config.cache_invalidatable_responses {
@@ -168,7 +184,7 @@ impl CachePolicy {
                     cache_headers
                         .surrogate_keys
                         .get_or_insert_with(SurrogateKeys::new)
-                        .try_extend(surrogate_keys.into_iter())?;
+                        .try_extend(surrogate_keys)?;
 
                     cache_headers
                 } else {
@@ -325,6 +341,7 @@ mod tests {
             NoCaching,
             NoStoreMustRevalidate,
             ShortInCdnAndBrowser,
+            LongerInCdnAndBrowser,
             ForeverInCdnAndBrowser,
             ForeverInCdn(key.clone().into()),
             ForeverInCdnAndStaleInBrowser(key.clone().into()),

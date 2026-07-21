@@ -13,9 +13,16 @@
               "Enum": [
                 "in_progress",
                 "success",
-                "failure"
+                "failure",
+                "partial_failure"
               ]
             }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "release_build_status",
+            "name": "build_status"
           }
         }
       }

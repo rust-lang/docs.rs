@@ -13,19 +13,20 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{ConfigName, set_config},
+    service_config::{Abnormality, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
-use docs_rs_types::{CrateId, KrateName, Version};
+use docs_rs_types::{CrateId, KrateName, ReleaseId, Version};
+use docs_rs_uri::EscapedURI;
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
 use std::iter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
     if let Err(err) = CommandLine::parse().handle_args().await {
         eprintln!("error running admin CLI: {:?}", err);
@@ -36,7 +37,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Parser)]
+#[derive(Debug, Clone, PartialEq, Parser)]
 #[command(
     about = env!("CARGO_PKG_DESCRIPTION"),
     version = docs_rs_utils::BUILD_VERSION,
@@ -120,6 +121,12 @@ enum QueueSubcommand {
         subcommand: PrioritySubcommand,
     },
 
+    /// Interactions with repository-specific build priorities
+    RepositoryPriority {
+        #[command(subcommand)]
+        subcommand: RepositoryPrioritySubcommand,
+    },
+
     /// Queue rebuilds for broken nightly versions of rustdoc, either for a single date (start) or a range (start inclusive, end exclusive)
     RebuildBrokenNightly {
         /// Start date of nightly builds to rebuild (inclusive)
@@ -141,11 +148,13 @@ impl QueueSubcommand {
                 build_priority,
             } => {
                 ctx.build_queue()?
-                    .add_crate(&crate_name, &crate_version, build_priority, None)
+                    .add_crate(&crate_name, &crate_version, build_priority)
                     .await?
             }
 
             Self::DefaultPriority { subcommand } => subcommand.handle_args(ctx).await?,
+
+            Self::RepositoryPriority { subcommand } => subcommand.handle_args(ctx).await?,
 
             Self::RebuildBrokenNightly {
                 start_nightly_date,
@@ -162,6 +171,70 @@ impl QueueSubcommand {
                 println!(
                     "Queued {queued_rebuilds_amount} rebuilds for broken nightly versions of rustdoc"
                 );
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+enum RepositoryPrioritySubcommand {
+    /// Get build priority override for a repository
+    Get {
+        #[arg(name = "REPOSITORY")]
+        repository_name: String,
+    },
+
+    /// List build priority overrides for all repositories
+    List,
+
+    /// Set build priority override for a repository
+    Set {
+        #[arg(name = "REPOSITORY")]
+        repository_name: String,
+        #[arg(allow_negative_numbers = true)]
+        priority: i32,
+    },
+
+    /// Remove build priority override for a repository
+    Remove {
+        #[arg(name = "REPOSITORY")]
+        repository_name: String,
+    },
+}
+
+impl RepositoryPrioritySubcommand {
+    async fn handle_args(self, ctx: Context) -> Result<()> {
+        let mut conn = ctx.pool()?.get_async().await?;
+        match self {
+            Self::Get { repository_name } => {
+                let priority =
+                    workspaces::get_repository_build_priority(&mut conn, &repository_name).await?;
+
+                match priority {
+                    Some(priority) => println!("{repository_name} : {priority}"),
+                    None => println!("No priority override found for {repository_name}"),
+                }
+            }
+
+            Self::List => {
+                for (name, prio) in workspaces::list_repository_build_priorities(&mut conn).await? {
+                    println!("{:>20} : {:>3}", name, prio);
+                }
+            }
+
+            Self::Set {
+                repository_name,
+                priority,
+            } => {
+                workspaces::set_repository_build_priority(&mut conn, &repository_name, priority)
+                    .await?;
+
+                println!("Set repository '{repository_name}' to priority {priority}");
+            }
+
+            Self::Remove { repository_name } => {
+                workspaces::remove_repository_build_priority(&mut conn, &repository_name).await?;
             }
         }
         Ok(())
@@ -277,13 +350,19 @@ impl BuildSubcommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+#[derive(Debug, Clone, PartialEq, Subcommand)]
 enum DatabaseSubcommand {
     /// Run database migration
     Migrate {
         /// The database version to migrate to
         #[arg(name = "VERSION")]
         version: Option<i64>,
+    },
+
+    /// Manage the abnormality shown in the site header
+    Abnormality {
+        #[command(subcommand)]
+        command: AbnormalitySubcommand,
     },
 
     /// temporary command to update the `crates.latest_version_id` field
@@ -322,6 +401,8 @@ impl DatabaseSubcommand {
                 docs_rs_database::migrate(&mut conn, version).await
             }
             .context("Failed to run database migrations")?,
+
+            Self::Abnormality { command } => command.handle_args(ctx).await?,
 
             Self::UpdateLatestVersionId => {
                 let pool = ctx.pool()?;
@@ -371,12 +452,70 @@ impl DatabaseSubcommand {
                     &registry_data,
                 )
                 .await?;
+
+                if let Some(cdn) = ctx.cdn() {
+                    cdn.queue_crate_invalidation(&name).await?
+                }
             }
 
             Self::Blacklist { command } => command.handle_args(ctx).await?,
 
             Self::Limits { command } => command.handle_args(ctx).await?,
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Subcommand)]
+enum AbnormalitySubcommand {
+    /// Set the abnormality shown in the site header
+    Set {
+        #[arg(long)]
+        url: EscapedURI,
+        #[arg(long)]
+        text: String,
+        /// explanation to be shown on the status page, can be HTML
+        #[arg(long)]
+        explanation: Option<String>,
+    },
+
+    /// Remove the abnormality shown in the site header
+    Remove,
+}
+
+impl AbnormalitySubcommand {
+    async fn handle_args(self, ctx: Context) -> Result<()> {
+        let mut conn = ctx
+            .pool()?
+            .get_async()
+            .await
+            .context("failed to get a database connection")?;
+
+        match self {
+            Self::Set {
+                url,
+                text,
+                explanation,
+            } => {
+                set_config(
+                    &mut conn,
+                    ConfigName::Abnormality,
+                    Abnormality {
+                        url,
+                        text,
+                        explanation,
+                    },
+                )
+                .await
+                .context("failed to set abnormality in database")?;
+            }
+            Self::Remove => {
+                remove_config(&mut conn, ConfigName::Abnormality)
+                    .await
+                    .context("failed to remove abnormality from database")?;
+            }
+        }
+
         Ok(())
     }
 }

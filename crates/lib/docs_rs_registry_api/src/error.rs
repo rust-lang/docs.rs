@@ -61,7 +61,6 @@ mod tests {
         let status = StatusCode::INTERNAL_SERVER_ERROR;
 
         assert!(Error::CrateIoApiError(status, ApiErrors::default()).status() == Some(status));
-
         assert!(Error::CrateIoError(status, "".into()).status() == Some(status));
     }
 

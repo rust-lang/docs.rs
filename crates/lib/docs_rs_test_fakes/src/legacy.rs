@@ -4,7 +4,9 @@ use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
     Pool,
-    releases::{initialize_build, initialize_crate, initialize_release, update_build_status},
+    releases::{
+        add_build_logs, initialize_build, initialize_crate, initialize_release, update_build_status,
+    },
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
@@ -13,8 +15,8 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId, Version,
-    VersionReq,
+    BuildError, BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId,
+    SimpleBuildError, Version, VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -26,13 +28,14 @@ use tracing::debug;
 /// Create a fake release in the database that failed before the build.
 /// This is a temporary small factory function only until we refactored the
 /// `FakeRelease` and `FakeBuild` factories to be more flexible.
-pub async fn fake_release_that_failed_before_build<K, V>(
+pub async fn fake_release_that_failed_before_build<K, V, E>(
     conn: &mut sqlx::PgConnection,
     name: K,
     version: V,
-    errors: &str,
+    build_error: E,
 ) -> Result<(ReleaseId, BuildId)>
 where
+    E: BuildError,
     K: TryInto<KrateName>,
     K::Error: std::error::Error + Send + Sync + 'static,
     V: TryInto<Version>,
@@ -48,10 +51,12 @@ where
         "UPDATE builds
          SET
              build_status = 'failure',
-             errors = $2
+             errors = $2,
+             error_kind = $3
          WHERE id = $1",
         build_id.0,
-        errors,
+        build_error.to_string(),
+        build_error.kind(),
     )
     .execute(&mut *conn)
     .await?;
@@ -85,12 +90,16 @@ pub struct FakeRelease<'a> {
 }
 
 pub struct FakeBuild {
-    s3_build_log: Option<String>,
-    other_build_logs: HashMap<String, String>,
+    s3_build_log: Option<(String, bool)>,
+    other_build_logs: HashMap<String, (String, bool)>,
     db_build_log: Option<String>,
     rustc_version: String,
     docsrs_version: String,
     build_status: BuildStatus,
+    memory_peak: Option<u64>,
+    /// new build logs: we have a record in the `builds_logs` table for each log, including a status
+    /// old build logs: people have to run `s3 ls` with prefix to know which build logs exist
+    legacy_build_logs: bool,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -606,9 +615,9 @@ impl FakeBuild {
         }
     }
 
-    pub fn s3_build_log(self, build_log: impl Into<String>) -> Self {
+    pub fn s3_build_log(self, build_log: impl Into<String>, successful: bool) -> Self {
         Self {
-            s3_build_log: Some(build_log.into()),
+            s3_build_log: Some((build_log.into(), successful)),
             ..self
         }
     }
@@ -617,9 +626,10 @@ impl FakeBuild {
         mut self,
         target: impl Into<String>,
         build_log: impl Into<String>,
+        successful: bool,
     ) -> Self {
         self.other_build_logs
-            .insert(target.into(), build_log.into());
+            .insert(target.into(), (build_log.into(), successful));
         self
     }
 
@@ -652,6 +662,20 @@ impl FakeBuild {
         }
     }
 
+    pub fn memory_peak(self, memory_peak: u64) -> Self {
+        Self {
+            memory_peak: Some(memory_peak),
+            ..self
+        }
+    }
+
+    pub fn legacy_build_logs(self, legacy_build_logs: bool) -> Self {
+        Self {
+            legacy_build_logs,
+            ..self
+        }
+    }
+
     async fn create(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -668,7 +692,8 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(42),
-            None,
+            self.memory_peak,
+            None::<&SimpleBuildError>,
         )
         .await?;
 
@@ -684,17 +709,30 @@ impl FakeBuild {
 
         let prefix = format!("build-logs/{build_id}/");
 
-        if let Some(s3_build_log) = self.s3_build_log.as_deref() {
-            let path = format!("{prefix}{default_target}.txt");
-            storage.store_one(path, s3_build_log).await?;
+        let mut log_filenames = Vec::new();
+
+        if let Some((s3_build_log, successful)) = &self.s3_build_log {
+            log_filenames.push((format!("{default_target}.txt"), *successful));
+            storage
+                .store_one(
+                    format!("{prefix}{default_target}.txt"),
+                    s3_build_log.clone(),
+                )
+                .await?;
         }
 
-        for (target, log) in &self.other_build_logs {
+        for (target, (log, successful)) in &self.other_build_logs {
             if target == default_target {
                 bail!("build log for default target has to be set via `s3_build_log`");
             }
-            let path = format!("{prefix}{target}.txt");
-            storage.store_one(path, log.as_str()).await?;
+            log_filenames.push((format!("{target}.txt"), *successful));
+            storage
+                .store_one(format!("{prefix}{target}.txt"), log.clone())
+                .await?;
+        }
+
+        if !self.legacy_build_logs && !log_filenames.is_empty() {
+            add_build_logs(&mut *conn, build_id, log_filenames).await?;
         }
 
         Ok(())
@@ -705,12 +743,14 @@ impl Default for FakeBuild {
     /// create a default fake _finished_ build
     fn default() -> Self {
         Self {
-            s3_build_log: Some("It works!".into()),
+            s3_build_log: Some(("It works!".into(), true)),
             db_build_log: None,
             other_build_logs: HashMap::new(),
             rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
             docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
             build_status: BuildStatus::Success,
+            memory_peak: Some(23),
+            legacy_build_logs: false,
         }
     }
 }

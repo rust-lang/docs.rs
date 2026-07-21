@@ -29,3 +29,6 @@ docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
 docs_rs_storage = { path = "../docs_rs_storage" }
 docs_rs_test_fakes = { path = "../docs_rs_test_fakes", optional = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true

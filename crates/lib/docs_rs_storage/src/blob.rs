@@ -1,18 +1,50 @@
 use crate::{compression::wrap_reader_for_decompression, utils::sized_buffer::SizedBuffer};
 use anyhow::Result;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
 use docs_rs_types::CompressionAlgorithm;
 use mime::Mime;
-use std::io;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+use std::{fmt, io::Cursor, path::PathBuf};
+use tokio::io::{self, AsyncBufRead, AsyncBufReadExt};
+
+pub enum StreamUploadSource {
+    Bytes(Bytes),
+    File(PathBuf),
+}
+
+/// Represents a stream blob to be uploaded to storage.
+///
+/// NOTE: Right now we only support uploads where the size is known in advance.
+/// This is how the AWS S3 SDK is mostly built.
+///
+/// We can add support for streams with unknown size, but this would mean
+/// using an intermediate fixed-size buffer and multipart uploads for these cases, which
+/// has other downsides.
+pub struct StreamUpload {
+    pub path: String,
+    pub mime: Mime,
+    pub source: StreamUploadSource,
+    pub compression: Option<CompressionAlgorithm>,
+}
+
+impl From<BlobUpload> for StreamUpload {
+    fn from(value: BlobUpload) -> Self {
+        Self {
+            path: value.path,
+            mime: value.mime,
+            source: StreamUploadSource::Bytes(value.content),
+            compression: value.compression,
+        }
+    }
+}
 
 /// represents a blob to be uploaded to storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlobUpload {
     pub path: String,
     pub mime: Mime,
-    pub content: Vec<u8>,
+    pub content: Bytes,
     pub compression: Option<CompressionAlgorithm>,
 }
 
@@ -21,7 +53,7 @@ impl From<Blob> for BlobUpload {
         Self {
             path: value.path,
             mime: value.mime,
-            content: value.content,
+            content: value.content.into(),
             compression: value.compression,
         }
     }
@@ -44,7 +76,7 @@ impl From<BlobUpload> for Blob {
             mime: value.mime,
             date_updated: Utc::now(),
             etag: compute_etag(&value.content).into(),
-            content: value.content,
+            content: value.content.into(),
             compression: value.compression,
         }
     }
@@ -60,7 +92,7 @@ pub struct StreamingBlob {
     pub content: Box<dyn AsyncBufRead + Unpin + Send>,
 }
 
-impl std::fmt::Debug for StreamingBlob {
+impl fmt::Debug for StreamingBlob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamingBlob")
             .field("path", &self.path)
@@ -110,7 +142,7 @@ impl StreamingBlob {
         let mut content = SizedBuffer::new(max_size);
         content.reserve(self.content_length);
 
-        tokio::io::copy(&mut self.content, &mut content).await?;
+        io::copy(&mut self.content, &mut content).await?;
 
         Ok(Blob {
             path: self.path,
@@ -132,7 +164,7 @@ impl From<Blob> for StreamingBlob {
             etag: value.etag,
             compression: value.compression,
             content_length: value.content.len(),
-            content: Box::new(io::Cursor::new(value.content)),
+            content: Box::new(Cursor::new(value.content)),
         }
     }
 }
@@ -157,7 +189,7 @@ mod test {
             compression: alg,
             etag: Some(compute_etag(&content)),
             content_length: content.len(),
-            content: Box::new(io::Cursor::new(content)),
+            content: Box::new(Cursor::new(content)),
         }
     }
 
@@ -226,7 +258,7 @@ mod test {
         let mut compressed_content = Vec::new();
         let alg = CompressionAlgorithm::Zstd;
         compress_async(
-            &mut io::Cursor::new(CONTENT.to_vec()),
+            &mut Cursor::new(CONTENT.to_vec()),
             &mut compressed_content,
             alg,
         )

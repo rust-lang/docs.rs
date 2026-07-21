@@ -5,4 +5,9 @@
             <loc>https://docs.rs/-/sitemap/{{ which }}/sitemap.xml</loc>
         </sitemap>
     {%- endfor %}
+    {% for which in recent_sitemaps -%}
+        <sitemap>
+            <loc>https://docs.rs/-/sitemap/recent/{{ which }}/sitemap.xml</loc>
+        </sitemap>
+    {%- endfor %}
 </sitemapindex>

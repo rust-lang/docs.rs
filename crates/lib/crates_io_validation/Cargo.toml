@@ -7,3 +7,6 @@ edition = "2024"
 [dependencies]
 thiserror = "=2.0.18"
 unicode-xid = "=0.2.6"
+
+[lints]
+workspace = true

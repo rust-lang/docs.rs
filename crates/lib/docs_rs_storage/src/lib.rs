@@ -16,12 +16,12 @@ pub use blob::{Blob, BlobUpload, StreamingBlob};
 pub use compression::{compress, compress_async, decompress};
 pub use config::Config;
 pub use errors::{PathNotFoundError, SizeLimitReached};
-pub use file::FileEntry;
-pub use file::file_list_to_json;
+pub use file::{FileEntry, FolderEntry, file_list_to_json};
 pub use storage::blocking::Storage;
 pub use storage::non_blocking::AsyncStorage;
 pub use types::StorageKind;
 pub use utils::{
+    crc32::crc32_for_path,
     file_list::get_file_list,
     storage_path::{rustdoc_archive_path, rustdoc_json_path, source_archive_path},
 };

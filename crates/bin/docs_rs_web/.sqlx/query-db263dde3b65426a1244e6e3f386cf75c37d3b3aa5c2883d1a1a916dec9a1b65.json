@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE builds\n           SET\n               build_status = 'failure',\n               errors = $1,\n               build_finished = NOW()\n           WHERE\n               rid = $2\n               AND build_status = 'in_progress'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "db263dde3b65426a1244e6e3f386cf75c37d3b3aa5c2883d1a1a916dec9a1b65"
+}

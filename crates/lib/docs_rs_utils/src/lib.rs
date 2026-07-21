@@ -7,6 +7,8 @@ pub use runtime_ext::Handle;
 
 use anyhow::{Context as _, Result};
 use std::fmt;
+use std::pin::Pin;
+use std::task::{Context, Poll, ready};
 use std::{panic, thread, time::Duration};
 use tokio::runtime;
 use tracing::{Span, error, warn};
@@ -66,23 +68,53 @@ pub const RUSTDOC_STATIC_PATH: &str = "/-/rustdoc.static/";
 /// })
 /// .await?
 /// ```
-pub async fn spawn_blocking<F, R>(f: F) -> Result<R>
+pub fn spawn_blocking<F, R>(f: F) -> SpawnBlockingHandle<R>
 where
     F: FnOnce() -> Result<R> + Send + 'static,
     R: Send + 'static,
 {
     let span = Span::current();
 
-    let result = tokio::task::spawn_blocking(move || {
+    let inner = tokio::task::spawn_blocking(move || {
         let _guard = span.enter();
         f()
-    })
-    .await;
+    });
 
-    match result {
-        Ok(result) => result,
-        Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
-        Err(err) => Err(err.into()),
+    SpawnBlockingHandle { inner }
+}
+
+pub struct SpawnBlockingHandle<R> {
+    inner: tokio::task::JoinHandle<Result<R>>,
+}
+
+impl<R> SpawnBlockingHandle<R> {
+    pub fn abort(&self) {
+        self.inner.abort();
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.inner.is_finished()
+    }
+
+    pub fn id(&self) -> tokio::task::Id {
+        self.inner.id()
+    }
+
+    pub fn into_inner(self) -> tokio::task::JoinHandle<Result<R>> {
+        self.inner
+    }
+}
+
+impl<R> Future for SpawnBlockingHandle<R> {
+    type Output = Result<R>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let result = ready!(Pin::new(&mut self.inner).poll(cx));
+        match result {
+            Ok(result) => Poll::Ready(result),
+            Err(err) if err.is_panic() => panic::resume_unwind(err.into_panic()),
+            Err(err) => Poll::Ready(Err(err.into())),
+        }
     }
 }
 
@@ -107,6 +139,11 @@ pub fn retry<T>(mut f: impl FnMut() -> Result<T>, max_attempts: u32) -> Result<T
     unreachable!()
 }
 
+pub fn retry_backoff(failed_attempt: u32) -> Duration {
+    let sleep_for = 2u32.pow(failed_attempt.max(1));
+    Duration::from_secs(sleep_for as u64)
+}
+
 pub async fn retry_async<T, E, Fut, F: FnMut() -> Fut>(mut f: F, max_attempts: u32) -> Result<T, E>
 where
     Fut: Future<Output = Result<T, E>>,
@@ -119,12 +156,14 @@ where
                 if attempt > max_attempts {
                     return Err(err);
                 } else {
-                    let sleep_for = 2u32.pow(attempt);
+                    let backoff = retry_backoff(attempt);
                     warn!(
                         "got error on attempt {}, will try again after {}s:\n{:?}",
-                        attempt, sleep_for, err
+                        attempt,
+                        backoff.as_secs(),
+                        err
                     );
-                    tokio::time::sleep(Duration::from_secs(sleep_for as u64)).await;
+                    tokio::time::sleep(backoff).await;
                 }
             }
         }
@@ -196,7 +235,7 @@ where
             // at which point we don't need the result anymore.
             let _ = send.send(f());
         })
-        .with_context(|| format!("couldn't spawn worker thread for {}", &name))?;
+        .with_context(|| format!("couldn't spawn worker thread for {}", name))?;
 
     recv.await.context("sender was dropped")?
 }

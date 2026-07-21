@@ -23,6 +23,7 @@ sqlx-prepare *args: _ensure_db_and_s3_are_running
       -- --all-targets --all-features
 
   for subcrate in crates/lib/* crates/bin/*; do
+    echo "Preparing SQLx metadata for ${subcrate}..."
     # NOTE: potential optimization: only run this command when `sqlx` 
     # is in the dependencies of the subcrate.
     (cd "${subcrate}" && cargo sqlx prepare \
@@ -95,12 +96,15 @@ lint: format lint-dependencies-machete
 
 [group('testing')]
 sort-cargo-toml *args:
-  # for now manually, `cargo sort --workspace` is broken right now for docs.rs
-  # https://github.com/DevinR528/cargo-sort/pull/121
-  cargo sort {{ args }} \
-    ./Cargo.toml \
-    ./crates/bin/* \
-    ./crates/lib/*
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3")}} != 'true' ]; then 
+    echo "cargo-sort to old, must be >=2.1.3"
+    exit 1;
+  fi
+
+  cargo sort --workspace {{ args }} 
 
 
 [group('testing')]
@@ -148,6 +152,7 @@ run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
   just cli-build-crate sysinfo 0.23.4
   just cli-build-crate sysinfo 0.23.5
   just cli-build-crate libtest 0.0.1
+  just cli-build-crate zbus 5.15.0
   just cli-build-add-essential-files
 
   just _cli gui_tests 

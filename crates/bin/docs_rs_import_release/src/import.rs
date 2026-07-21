@@ -4,7 +4,7 @@ use crate::{
     rustdoc::{download_static_files, find_static_paths, find_successful_build_targets},
     rustdoc_status::fetch_rustdoc_status,
 };
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_database::releases::{
     finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
@@ -18,7 +18,9 @@ use docs_rs_rustdoc_json::{
 };
 use docs_rs_storage::{AsyncStorage, file_list_to_json, rustdoc_archive_path, source_archive_path};
 use docs_rs_storage::{compress, decompress, rustdoc_json_path};
-use docs_rs_types::{BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, Version};
+use docs_rs_types::{
+    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, SimpleBuildError, Version,
+};
 use docs_rs_utils::{BUILD_VERSION, spawn_blocking};
 use docsrs_metadata::Metadata;
 use std::collections::HashSet;
@@ -72,7 +74,12 @@ pub(crate) async fn import_test_release(
     .await;
 
     if let Err(err) = &result {
-        update_build_with_error(&mut *conn, build_id, Some(&format!("{err:?}"))).await?;
+        update_build_with_error(
+            &mut *conn,
+            build_id,
+            Some(&SimpleBuildError(format!("{err:?}"))),
+        )
+        .await?;
     }
 
     result
@@ -117,7 +124,10 @@ async fn import_test_release_inner(
         (files_list, source_size)
     };
 
-    let registry_data = registry_api.get_release_data(name, version).await?;
+    let registry_data = registry_api
+        .get_release_data(name, version)
+        .await?
+        .ok_or_else(|| anyhow!("release not found in registry"))?;
 
     let rustdoc_dir = {
         info!("download & extract rustdoc archive...");
@@ -241,6 +251,7 @@ async fn import_test_release_inner(
         BuildStatus::Success,
         Some(documentation_size),
         None,
+        None::<&SimpleBuildError>,
     )
     .await?;
 

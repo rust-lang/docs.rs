@@ -10,7 +10,8 @@ build = "build.rs"
 [package.metadata.cargo-machete]
 ignored = [
     # used in build script output
-    "slug", # used in askama templates, can be moved to web binary
+    # used in askama templates, can be moved to web binary
+    "slug",
 ]
 
 [dependencies]
@@ -23,8 +24,8 @@ base64 = { workspace = true }
 bon = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-comrak = { version = "0.50.0", default-features = false }
-constant_time_eq = "0.4.2"
+comrak = { version = "0.54.0", default-features = false }
+constant_time_eq = "0.5.0"
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
@@ -46,9 +47,9 @@ font-awesome-as-a-crate = { path = "../../lib/font-awesome-as-a-crate" }
 futures-util = { workspace = true }
 getrandom = "0.4.0"
 http = { workspace = true }
-lol_html = "2.0.0"
+lol_html = "3.0.0"
 mime = { workspace = true }
-num_cpus = "1.15.0"
+num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 postcard = { workspace = true }
 rayon-core = "1.13.0"
@@ -59,22 +60,22 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slug = { workspace = true }
 sqlx = { workspace = true }
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "html", "dump-load", "regex-onig"] }
+syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
 toml = { workspace = true }
 tower = "0.5.1"
-tower-http = { version = "0.6.0", features = ["fs", "trace", "timeout", "catch-panic"] }
+tower-http = { version = "0.7.0", features = ["catch-panic", "fs", "timeout", "trace"] }
 tracing = { workspace = true }
-tracing-futures = { version = "0.2.5", features = ["std-future", "futures-03"] }
+tracing-futures = { version = "0.2.5", features = ["futures-03", "std-future"] }
 url = { workspace = true }
 
 [build-dependencies]
 anyhow = { version = "1.0.42", features = ["backtrace"] }
 grass = { version = "0.13.1", default-features = false }
 md5 = "0.8.0"
-syntect = { version = "5.0.0", default-features = false, features = ["parsing", "dump-create", "yaml-load", "regex-onig"] }
+syntect = { version = "5.0.0", default-features = false, features = ["dump-create", "parsing", "regex-onig", "yaml-load"] }
 walkdir = { workspace = true }
 
 [dev-dependencies]
@@ -94,3 +95,6 @@ pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }
+
+[lints]
+workspace = true

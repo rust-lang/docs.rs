@@ -21,7 +21,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
 use docs_rs_registry_api::{self as registry_api, RegistryApi};
-use docs_rs_types::{KrateName, ReqVersion, Version};
+use docs_rs_types::{Duration, KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
 use futures_util::stream::TryStreamExt;
 use http::StatusCode;
@@ -115,7 +115,7 @@ pub(crate) async fn get_releases(
         }
     );
 
-    Ok(sqlx::query(query.as_str())
+    Ok(sqlx::query(sqlx::AssertSqlSafe(query))
         .bind(limit)
         .bind(offset)
         .bind(filter_failed)
@@ -731,11 +731,20 @@ struct BuildQueuePage {
     description: &'static str,
     queue: Vec<QueuedCrate>,
     rebuild_queue: Vec<QueuedCrate>,
-    in_progress_builds: Vec<(KrateName, Version)>,
+    in_progress_builds: Vec<InProgressBuild>,
     expand_rebuild_queue: bool,
+    show_length_warning: bool,
 }
 
 impl_axum_webpage! { BuildQueuePage }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InProgressBuild {
+    name: KrateName,
+    version: Version,
+    elapsed: Option<Duration>,
+    average_duration: Option<Duration>,
+}
 
 #[derive(Deserialize)]
 pub(crate) struct BuildQueueParams {
@@ -747,22 +756,35 @@ pub(crate) async fn build_queue_handler(
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
-    let in_progress_builds: Vec<(KrateName, Version)> = sqlx::query!(
+    let in_progress_builds: Vec<_> = sqlx::query_as!(
+        InProgressBuild,
         r#"SELECT
             crates.name as "name: KrateName",
-            releases.version as "version: Version"
+            releases.version as "version: Version",
+            CASE
+                WHEN builds.build_started IS NULL THEN NULL
+                ELSE (CURRENT_TIMESTAMP - builds.build_started)
+            END AS "elapsed: Duration",
+            (
+                SELECT AVG(prev_builds.build_finished - prev_builds.build_started)
+                FROM crates AS prev_crates
+                INNER JOIN releases AS prev_releases ON prev_crates.id = prev_releases.crate_id
+                INNER JOIN builds AS prev_builds ON prev_releases.id = prev_builds.rid
+                WHERE
+                    prev_crates.id = releases.crate_id
+                    AND prev_builds.id <> builds.id
+                    AND prev_builds.build_status = 'success'
+                    AND prev_builds.build_started IS NOT NULL
+            ) AS "average_duration: Duration"
          FROM builds
          INNER JOIN releases ON releases.id = builds.rid
          INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
             builds.build_status = 'in_progress'
-         ORDER BY builds.id ASC"#
+         ORDER BY builds.id ASC"#,
     )
     .fetch_all(&mut *conn)
-    .await?
-    .into_iter()
-    .map(|rec| (rec.name, rec.version))
-    .collect();
+    .await?;
 
     let mut rebuild_queue = Vec::new();
     let mut queue = build_queue
@@ -770,12 +792,14 @@ pub(crate) async fn build_queue_handler(
         .await?
         .into_iter()
         .filter(|krate| {
-            !in_progress_builds.iter().any(|(name, version)| {
+            !in_progress_builds.iter().any(|in_progress| {
                 // use `.any` instead of `.contains` to avoid cloning name& version for the match
-                *name == krate.name && *version == krate.version
+                in_progress.name == krate.name && in_progress.version == krate.version
             })
         })
         .collect::<Vec<_>>();
+
+    let show_length_warning = build_queue.build_queue_is_too_long(queue.iter());
 
     queue.retain_mut(|krate| {
         if krate.priority >= PRIORITY_CONTINUOUS {
@@ -796,6 +820,7 @@ pub(crate) async fn build_queue_handler(
         rebuild_queue,
         in_progress_builds,
         expand_rebuild_queue: params.expand.is_some(),
+        show_length_warning,
     })
 }
 
@@ -814,7 +839,7 @@ mod tests {
     use docs_rs_registry_api::{CrateOwner, OwnerKind};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus,
+        BuildStatus, SimpleBuildError,
         testing::{BAR, BAZ, FOO, V0_1, V1, V2, V3},
     };
     use kuchikiki::traits::TendrilSink;
@@ -822,6 +847,7 @@ mod tests {
     use reqwest::StatusCode;
     use serde_json::json;
     use std::collections::HashSet;
+    use std::str::FromStr;
     use test_case::test_case;
 
     #[test]
@@ -841,6 +867,7 @@ mod tests {
                 BuildStatus::Success,
                 None,
                 None,
+                None::<&SimpleBuildError>,
             )
             .await?;
 
@@ -1434,7 +1461,7 @@ mod tests {
             &mut conn,
             "failed_hard",
             "0.1.0",
-            "some random error",
+            SimpleBuildError("some random error".into()),
         )
         .await?;
 
@@ -1468,16 +1495,17 @@ mod tests {
 
         let links = get_release_links("/releases/search?query=some_random_crate", &web).await?;
 
-        // `some_other_crate` won't be shown since we don't have it yet
-        assert_eq!(links.len(), 4);
+        // `some_other_crate` won't be shown since we don't have it yet.
+        // `yet_another_crate` only has a yanked release, so it has no canonical "latest"
+        // and renders as "Documentation not available on docs.rs" (no anchor).
+        assert_eq!(links.len(), 3);
         // * `max_version` from the crates.io search result will be ignored since we
         //   might not have it yet, or the doc-build might be in progress.
         // * ranking/order from crates.io result is preserved
         // * version used is the highest semver following our own "latest version" logic
         assert_eq!(links[0], "/some_random_crate/latest/some_random_crate/");
         assert_eq!(links[1], "/and_another_one/latest/and_another_one/");
-        assert_eq!(links[2], "/yet_another_crate/0.1.0/yet_another_crate/");
-        assert_eq!(links[3], "/crate/failed_hard/0.1.0");
+        assert_eq!(links[2], "/crate/failed_hard/0.1.0");
         Ok(())
     }
 
@@ -1798,11 +1826,12 @@ mod tests {
                     .expect("missing heading")
                     .any(|el| el.text_contents().contains("active CDN deployments"))
             );
+            assert_eq!(empty.select(".warning").unwrap().count(), 0);
 
             let queue = env.build_queue()?;
-            queue.add_crate(&FOO, &V1, 0, None).await?;
-            queue.add_crate(&BAR, &V2, -10, None).await?;
-            queue.add_crate(&BAZ, &V3, 10, None).await?;
+            queue.add_crate(&FOO, &V1, 0).await?;
+            queue.add_crate(&BAR, &V2, -10).await?;
+            queue.add_crate(&BAZ, &V3, 10).await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
             let items = full
@@ -1820,6 +1849,12 @@ mod tests {
                 let a = li.as_node().select_first("a").expect("missing link");
                 assert!(a.text_contents().contains(expected.0));
                 assert!(a.text_contents().contains(&expected.1.to_string()));
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(
+                        format!("https://crates.io/crates/{}/{}", expected.0, expected.1).as_str()
+                    )
+                );
 
                 if let Some(priority) = expected.2 {
                     assert!(
@@ -1833,6 +1868,30 @@ mod tests {
         });
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_releases_queue_shows_length_warning_when_threshold_is_exceeded() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let queue = env.build_queue()?;
+
+        for idx in 0..1001 {
+            let name = KrateName::from_str(&format!("queued-crate-{idx}"))?;
+            queue.add_crate(&name, &V1, 0).await?;
+        }
+
+        let page = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
+        let warning = page
+            .select(".warning")
+            .expect("missing warning container")
+            .next()
+            .expect("missing queue warning");
+
+        assert!(warning.text_contents().contains("build queue is too long"));
+        assert!(warning.text_contents().contains("The team is notified"));
+
+        Ok(())
+    }
+
     #[test]
     fn test_releases_queue_in_progress() {
         async_wrapper(|env| async move {
@@ -1840,8 +1899,8 @@ mod tests {
 
             // we have two queued releases, where the build for one is already in progress
             let queue = env.build_queue()?;
-            queue.add_crate(&FOO, &V1, 0, None).await?;
-            queue.add_crate(&BAR, &V2, 0, None).await?;
+            queue.add_crate(&FOO, &V1, 0).await?;
+            queue.add_crate(&BAR, &V2, 0).await?;
 
             env.fake_release()
                 .await
@@ -1858,27 +1917,27 @@ mod tests {
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
 
-            let lists = full
-                .select(".queue-list")
-                .expect("missing queues")
-                .collect::<Vec<_>>();
-            assert_eq!(lists.len(), 2);
-
-            let in_progress_items: Vec<_> = lists[0]
-                .as_node()
-                .select("li > a")
-                .expect("missing in progress list items")
+            let in_progress_items: Vec<_> = full
+                .select("table tbody tr td:first-child > a")
+                .expect("missing in progress build rows")
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(in_progress_items, vec![format!("foo {V1}")]);
 
-            let queued_items: Vec<_> = lists[1]
-                .as_node()
-                .select("li > a")
+            let queued_items: Vec<_> = full
+                .select(".queue-list > li > a")
                 .expect("missing queued list items")
                 .map(|node| node.text_contents().trim().to_string())
                 .collect();
             assert_eq!(queued_items, vec![format!("bar {V2}")]);
+
+            let runtime_columns: Vec<_> = full
+                .select("table tbody tr td:nth-child(2), table tbody tr td:nth-child(3)")
+                .expect("missing duration columns")
+                .map(|node| node.text_contents().trim().to_string())
+                .collect();
+            assert_eq!(runtime_columns.len(), 2);
+            assert!(runtime_columns.into_iter().all(|value| !value.is_empty()));
 
             Ok(())
         });
@@ -1915,15 +1974,9 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
             let queue = env.build_queue()?;
-            queue
-                .add_crate(&FOO, &V1, PRIORITY_CONTINUOUS, None)
-                .await?;
-            queue
-                .add_crate(&BAR, &V2, PRIORITY_CONTINUOUS + 1, None)
-                .await?;
-            queue
-                .add_crate(&BAZ, &V3, PRIORITY_CONTINUOUS - 1, None)
-                .await?;
+            queue.add_crate(&FOO, &V1, PRIORITY_CONTINUOUS).await?;
+            queue.add_crate(&BAR, &V2, PRIORITY_CONTINUOUS + 1).await?;
+            queue.add_crate(&BAZ, &V3, PRIORITY_CONTINUOUS - 1).await?;
 
             let full = kuchikiki::parse_html().one(web.get("/releases/queue").await?.text().await?);
             let items = full
@@ -1954,6 +2007,17 @@ mod tests {
 
             assert_eq!(build_queue_list.len(), 1);
             assert_eq!(rebuild_queue_list.len(), 2);
+            for li in build_queue_list.iter().chain(&rebuild_queue_list) {
+                let a = li.as_node().select_first("a").expect("missing link");
+                let text = a.text_contents();
+                let mut parts = text.split_whitespace();
+                let name = parts.next().expect("missing crate name");
+                let version = parts.next().expect("missing crate version");
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(format!("https://crates.io/crates/{name}/{version}").as_str())
+                );
+            }
             assert!(
                 rebuild_queue_list
                     .iter()

@@ -10,6 +10,7 @@ impl StorageMetrics {
     pub(crate) fn new(meter_provider: &AnyMeterProvider) -> Self {
         let meter = meter_provider.meter("storage");
         const PREFIX: &str = "docsrs.storage";
+
         Self {
             uploaded_files: meter
                 .u64_counter(format!("{PREFIX}.uploaded_files"))

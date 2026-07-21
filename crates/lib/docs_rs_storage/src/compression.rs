@@ -1,7 +1,7 @@
 use anyhow::Error;
 use bzip2::read::{BzDecoder, BzEncoder};
 use docs_rs_types::CompressionAlgorithm;
-use flate2::read::{GzDecoder, GzEncoder};
+use flate2::read::{DeflateDecoder, DeflateEncoder, GzDecoder, GzEncoder};
 use std::io::{self, Read};
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite};
 
@@ -18,6 +18,12 @@ pub fn compress(content: impl Read, algorithm: CompressionAlgorithm) -> Result<V
         }
         CompressionAlgorithm::Gzip => {
             let mut compressor = GzEncoder::new(content, flate2::Compression::default());
+            let mut data = vec![];
+            compressor.read_to_end(&mut data)?;
+            Ok(data)
+        }
+        CompressionAlgorithm::Deflate => {
+            let mut compressor = DeflateEncoder::new(content, flate2::Compression::default());
             let mut data = vec![];
             compressor.read_to_end(&mut data)?;
             Ok(data)
@@ -54,6 +60,11 @@ where
             io::copy(&mut reader, &mut enc).await?;
             enc.shutdown().await?;
         }
+        CompressionAlgorithm::Deflate => {
+            let mut enc = write::DeflateEncoder::new(writer);
+            io::copy(&mut reader, &mut enc).await?;
+            enc.shutdown().await?;
+        }
     }
 
     Ok(())
@@ -78,6 +89,9 @@ pub fn wrap_reader_for_decompression<'a>(
         CompressionAlgorithm::Gzip => {
             Box::new(io::BufReader::new(bufread::GzipDecoder::new(input)))
         }
+        CompressionAlgorithm::Deflate => {
+            Box::new(io::BufReader::new(bufread::DeflateDecoder::new(input)))
+        }
     }
 }
 
@@ -96,6 +110,9 @@ pub fn decompress(
         }
         CompressionAlgorithm::Gzip => {
             io::copy(&mut GzDecoder::new(content), &mut buffer)?;
+        }
+        CompressionAlgorithm::Deflate => {
+            io::copy(&mut DeflateDecoder::new(content), &mut buffer)?;
         }
     }
 
@@ -167,6 +184,7 @@ mod tests {
     #[test_case(CompressionAlgorithm::Zstd)]
     #[test_case(CompressionAlgorithm::Bzip2)]
     #[test_case(CompressionAlgorithm::Gzip)]
+    #[test_case(CompressionAlgorithm::Deflate)]
     async fn test_async_compression(alg: CompressionAlgorithm) -> Result<()> {
         const CONTENT: &[u8] = b"Hello, world! Hello, world! Hello, world! Hello, world!";
 

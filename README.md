@@ -1,7 +1,7 @@
 # Docs.rs
 
 [![Build Status](https://github.com/rust-lang/docs.rs/workflows/CI/badge.svg)](https://github.com/rust-lang/docs.rs/actions?workflow=CI)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/master/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/main/LICENSE)
 
 Docs.rs (formerly cratesfyi) is an open source project to host documentation
 of crates for the Rust Programming Language.
@@ -14,7 +14,7 @@ This readme is for developing docs.rs. See [the about page](https://docs.rs/abou
 
 ## How the documentation is generated
 
-docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/master/src/librustdoc) to generate the documentation for every crate release on crates.io.
+docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/main/src/librustdoc) to generate the documentation for every crate release on crates.io.
 You can read the [the rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/what-is-rustdoc.html) for more details.
 
 ## Changing the build environment
@@ -103,7 +103,7 @@ just run-gui-tests
 ```
 
 They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
-can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/master/goml-script.md).
+can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/main/goml-script.md).
 
 Alternatively, you can start the web server and run the test manually:
 
@@ -116,6 +116,11 @@ For this to work, you need to install the `browser-ui-test` package:
 ```
 npm install browser-ui-test
 ```
+
+### Additional internal docs
+
+- [Build workspaces](./docs/build-workspaces.md)
+- [Archive storage and indexes](./docs/archive-storage-and-indexes.md)
 
 ### Pure docker-compose
 
@@ -309,6 +314,27 @@ If you want to revert to a precise migration, you can run:
 
 ```sh
 cargo run --bin docs_rs_admin -- database migrate <migration number>
+```
+
+#### `queue` subcommand
+
+```sh
+# Queue a specific crate release for building.
+# The optional `--priority` defaults to 5. Lower numbers run first.
+cargo run --bin docs_rs_admin -- queue add <CRATE_NAME> <CRATE_VERSION>
+cargo run --bin docs_rs_admin -- queue add <CRATE_NAME> <CRATE_VERSION> --priority -10
+
+# Inspect or manage default priorities for crates matching a Postgres pattern.
+cargo run --bin docs_rs_admin -- queue default-priority list
+cargo run --bin docs_rs_admin -- queue default-priority get <CRATE_NAME>
+cargo run --bin docs_rs_admin -- queue default-priority set 'tokio-%' -5
+cargo run --bin docs_rs_admin -- queue default-priority remove 'tokio-%'
+
+# Inspect or manage repository-specific build priority overrides using repositories.name.
+cargo run --bin docs_rs_admin -- queue repository-priority list
+cargo run --bin docs_rs_admin -- queue repository-priority get <owner/repo>
+cargo run --bin docs_rs_admin -- queue repository-priority set <owner/repo> -10
+cargo run --bin docs_rs_admin -- queue repository-priority remove <owner/repo>
 ```
 
 

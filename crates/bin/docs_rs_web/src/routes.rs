@@ -2,7 +2,8 @@ use crate::{
     cache::CachePolicy,
     error::AxumNope,
     handlers::{
-        about, build_details, builds, crate_details, features, releases, rustdoc, sitemap, source,
+        about, build_details, build_status, builds, crate_details, features, releases, rustdoc,
+        sitemap, source,
         statics::{build_static_router, static_root_dir},
         status,
     },
@@ -136,9 +137,14 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         )
         .route_with_tsr("/sitemap.xml", get_internal(sitemap::sitemapindex_handler))
         .route_with_tsr(
+            "/-/sitemap/recent/{date}/sitemap.xml",
+            get_internal(sitemap::recent_sitemap_handler),
+        )
+        .route_with_tsr(
             "/-/sitemap/{letter}/sitemap.xml",
             get_internal(sitemap::sitemap_handler),
         )
+        .route_with_tsr("/-/status/", get_internal(status::status_handler))
         .route_with_tsr("/about/builds", get_internal(about::about_builds_handler))
         .route_with_tsr("/about", get_internal(about::about_handler))
         .route_with_tsr("/about/{subpage}", get_internal(about::about_handler))
@@ -212,7 +218,7 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         )
         .route(
             "/crate/{name}/{version}/status.json",
-            get_internal(status::status_handler),
+            get_internal(build_status::status_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/builds/{id}",
@@ -249,6 +255,10 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         .route(
             "/crate/{name}/{version}/menus/releases/{*path}",
             get_internal(crate_details::get_all_releases),
+        )
+        .route(
+            "/-/partial/abnormalities/",
+            get_internal(status::abnormalities),
         )
         .route(
             "/-/rustdoc.static/{*path}",

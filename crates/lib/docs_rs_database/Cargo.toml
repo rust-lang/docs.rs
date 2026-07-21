@@ -6,11 +6,7 @@ edition.workspace = true
 build = "build.rs"
 
 [features]
-testing = [
-    "dep:rand",
-    "docs_rs_config/testing",
-    "docs_rs_opentelemetry/testing",
-]
+testing = ["dep:rand", "docs_rs_config/testing", "docs_rs_opentelemetry/testing"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -21,6 +17,7 @@ docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_uri = { path = "../docs_rs_uri" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 hex = "0.4.3"
@@ -44,3 +41,6 @@ docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 rand = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
+
+[lints]
+workspace = true

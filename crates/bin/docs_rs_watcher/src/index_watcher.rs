@@ -1,4 +1,5 @@
 use crate::{
+    Config,
     db::{delete_crate, delete_version},
     index::Index,
 };
@@ -89,7 +90,11 @@ async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
 /// Updates registry index repository and adds new crates into build queue.
 ///
 /// Returns the number of crates added
-pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<usize> {
+pub(crate) async fn get_new_crates(
+    context: &Context,
+    index: &Index,
+    config: &Config,
+) -> Result<usize> {
     let mut conn = context.pool()?.get_async().await?;
 
     let last_seen_reference = last_seen_reference(&mut conn).await?;
@@ -110,7 +115,7 @@ pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<u
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &changes, index.repository_url()).await;
+    let crates_added = process_changes(context, &changes, config).await;
 
     if let Err(err) = context.build_queue()?.deprioritize_workspaces().await {
         error!(?err, "error deprioritizing workspaces");
@@ -124,15 +129,11 @@ pub(crate) async fn get_new_crates(context: &Context, index: &Index) -> Result<u
     Ok(crates_added)
 }
 
-async fn process_changes(
-    context: &Context,
-    changes: &Vec<Change>,
-    registry: Option<&str>,
-) -> usize {
+async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Config) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
-        match process_change(context, change, registry).await {
+        match process_change(context, change, config).await {
             Ok(added) => {
                 if added {
                     crates_added += 1;
@@ -147,11 +148,7 @@ async fn process_changes(
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
-async fn process_change(
-    context: &Context,
-    change: &Change,
-    registry: Option<&str>,
-) -> Result<bool> {
+async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
     let crate_version: CrateVersion = change
         .versions()
         .first()
@@ -160,9 +157,9 @@ async fn process_change(
         .try_into()?;
 
     match change {
-        Change::Added(_release) => process_version_added(context, &crate_version, registry).await?,
+        Change::Added(_release) => process_version_added(context, &crate_version).await?,
         Change::AddedAndYanked(_release) => {
-            process_version_added(context, &crate_version, registry).await?;
+            process_version_added(context, &crate_version).await?;
             process_version_yank_status(context, &crate_version).await?;
         }
         Change::Unyanked(_release) | Change::Yanked(_release) => {
@@ -170,10 +167,10 @@ async fn process_change(
         }
         Change::CrateDeleted { name, .. } => {
             let name: KrateName = name.parse()?;
-            process_crate_deleted(context, &name).await?
+            process_crate_deleted(context, config, &name).await?
         }
         Change::VersionDeleted(_release) => {
-            process_version_deleted(context, &crate_version).await?
+            process_version_deleted(context, config, &crate_version).await?
         }
     };
     Ok(change.added().is_some())
@@ -188,16 +185,12 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
     Ok(())
 }
 
-async fn process_version_added(
-    context: &Context,
-    release: &CrateVersion,
-    registry: Option<&str>,
-) -> Result<()> {
+async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
     let priority = get_crate_priority(&mut conn, &release.name).await?;
     context
         .build_queue()?
-        .add_crate(&release.name, &release.version, priority, registry)
+        .add_crate(&release.name, &release.version, priority)
         .await
         .with_context(|| {
             format!(
@@ -223,12 +216,17 @@ async fn process_version_added(
     Ok(())
 }
 
-async fn process_version_deleted(context: &Context, release: &CrateVersion) -> Result<()> {
+async fn process_version_deleted(
+    context: &Context,
+    config: &Config,
+    release: &CrateVersion,
+) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
 
     delete_version(
         &mut conn,
         context.storage()?,
+        config,
         &release.name,
         &release.version,
     )
@@ -252,10 +250,14 @@ async fn process_version_deleted(context: &Context, release: &CrateVersion) -> R
     Ok(())
 }
 
-async fn process_crate_deleted(context: &Context, krate: &KrateName) -> Result<()> {
+async fn process_crate_deleted(
+    context: &Context,
+    config: &Config,
+    krate: &KrateName,
+) -> Result<()> {
     let mut conn = context.pool()?.get_async().await?;
 
-    delete_crate(&mut conn, context.storage()?, krate)
+    delete_crate(&mut conn, context.storage()?, config, krate)
         .await
         .with_context(|| format!("failed to delete crate {krate}"))?;
     info!(
@@ -329,6 +331,7 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_build_queue::PRIORITY_DEFAULT;
     use docs_rs_types::testing::{KRATE, V1, V2};
+
     use pretty_assertions::assert_eq;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -342,7 +345,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate, None).await?;
+        process_version_added(&env, &krate).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -353,7 +356,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate, None).await?;
+        process_version_added(&env, &krate).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -431,7 +434,7 @@ mod tests {
             .create()
             .await?;
 
-        process_crate_deleted(&env, &KRATE).await?;
+        process_crate_deleted(&env, env.config(), &KRATE).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -469,7 +472,7 @@ mod tests {
             version: V2,
             ..Default::default()
         };
-        process_version_deleted(&env, &krate).await?;
+        process_version_deleted(&env, env.config(), &krate).await?;
 
         let row = sqlx::query!(
             "SELECT id
@@ -526,7 +529,7 @@ mod tests {
                 // Should error out, but the error should be handled gracefully
                 Change::VersionDeleted(non_existing_version.into()),
             ],
-            None,
+            env.config(),
         )
         .await;
 

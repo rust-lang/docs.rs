@@ -81,7 +81,7 @@ mod tests {
     async fn test_load() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        env.build_queue()?.add_crate(&QUEUED, &V1, 0, None).await?;
+        env.build_queue()?.add_crate(&QUEUED, &V1, 0).await?;
         env.fake_release()
             .await
             .name("krate")

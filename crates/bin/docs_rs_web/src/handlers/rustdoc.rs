@@ -18,8 +18,7 @@ use crate::{
         TemplateData,
         templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
-    utils,
-    utils::licenses,
+    utils::{self, licenses},
 };
 use anyhow::{Context as _, anyhow};
 use askama::Template;
@@ -33,7 +32,9 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::Dependency;
+use docs_rs_database::Pool;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
@@ -186,13 +187,13 @@ pub(crate) struct RustdocRedirectorParams {
 /// Handler called for `/:crate` and `/:crate/:version` URLs. Automatically redirects to the docs
 /// or crate details page based on whether the given crate version was successfully built.
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip(storage, conn))]
+#[instrument(skip(storage, pool))]
 pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
     original_uri: Uri,
     matched_path: MatchedPath,
     Extension(storage): Extension<Arc<AsyncStorage>>,
-    mut conn: DbConnection,
+    Extension(pool): Extension<Pool>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
@@ -224,9 +225,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         trace!(%url, ?cache_policy, path_in_crate, "redirect to doc");
         Ok(axum_cached_redirect(url, cache_policy)?)
     }
-
-    dbg!(&params);
-    dbg!(&original_uri);
 
     // edge case 1:
     // global static assets for older builds are served from the root, which ends up
@@ -294,6 +292,9 @@ pub(crate) async fn rustdoc_redirector_handler(
     .map_err(AxumNope::BadRequest)?
     .with_page_kind(PageKind::Rustdoc);
 
+    // NOTE: we try to shorten the time we hold the database connection from the pool.
+    let mut conn = pool.get_async().await?;
+
     // it doesn't matter if the version that was given was exact or not, since we're redirecting
     // anyway
     let matched_release = match_version(&mut conn, &crate_name, &params.req_version().clone())
@@ -318,6 +319,10 @@ pub(crate) async fn rustdoc_redirector_handler(
         // this URL is actually from a crate-internal path, serve it there instead
         return async {
             let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+
+            // NOTE: we want to give back the db connection to the pool
+            // before we do the long S3 requests.
+            drop(conn);
 
             match storage
                 .stream_rustdoc_file(
@@ -358,8 +363,6 @@ pub(crate) async fn rustdoc_redirector_handler(
         .await;
     }
 
-    dbg!(&params);
-
     if matched_release.rustdoc_status() {
         Ok(redirect_to_doc(
             &original_uri,
@@ -394,6 +397,8 @@ pub struct LimitedCrateDetails {
     dependencies: Vec<Dependency>,
     total_items: Option<i32>,
     documented_items: Option<i32>,
+    latest_build_time: Option<DateTime<Utc>>,
+    latest_build_rustc_version: Option<String>,
 }
 
 impl From<CrateDetails> for LimitedCrateDetails {
@@ -407,8 +412,15 @@ impl From<CrateDetails> for LimitedCrateDetails {
             dependencies,
             total_items,
             documented_items,
+            latest_build,
             ..
         } = value;
+
+        let (latest_build_time, latest_build_rustc_version) = if let Some(b) = latest_build {
+            (b.build_time, b.rustc_version)
+        } else {
+            (None, None)
+        };
 
         Self {
             total_items,
@@ -419,6 +431,8 @@ impl From<CrateDetails> for LimitedCrateDetails {
             repository_url,
             owners,
             dependencies,
+            latest_build_time,
+            latest_build_rustc_version,
         }
     }
 }
@@ -601,6 +615,10 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     trace!(
         ?params,
         doc_targets=?krate.metadata.doc_targets,
@@ -720,10 +738,12 @@ pub(crate) async fn rustdoc_html_server_handler(
         );
     }
 
-    let latest_release = krate.latest_release()?;
+    let latest_release = krate.latest_release();
 
     // Get the latest version of the crate
-    let latest_version = latest_release.version.clone();
+    let latest_version = latest_release
+        .map(|release| release.version.clone())
+        .unwrap_or_else(|| krate.version.clone());
     let is_latest_version = latest_version == krate.version;
     let is_prerelease = !(krate.version.pre.is_empty());
 
@@ -734,7 +754,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .rustdoc_url()
         .append_raw_query(original_query.as_deref());
 
-    let latest_path = if latest_release.build_status.is_success() {
+    let latest_path = if latest_release.is_some_and(|release| release.build_status.is_success()) {
         params
             .clone()
             .with_req_version(&ReqVersion::Latest)
@@ -786,9 +806,13 @@ pub(crate) async fn target_redirect_handler(
         .await?
         .into_canonical_req_version_or_else(|_, _| AxumNope::VersionNotFound)?;
     let params = params.apply_matched_release(&matched_release);
+    trace!(?params, "parsed params");
 
     let crate_details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
-    trace!(?params, "parsed params");
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
 
     let storage_path = params.storage_path();
     trace!(storage_path, "checking if path exists in other version");
@@ -894,6 +918,10 @@ pub(crate) async fn json_download_handler(
 
     let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     let wanted_format_version = if let Some(request_format_version) = json_params.format_version {
         // axum doesn't support extension suffixes in the route yet, not as parameter, and not
         // statically, when combined with a parameter (like `.../{format_version}.gz`).
@@ -914,7 +942,8 @@ pub(crate) async fn json_download_handler(
 
         stripped_format_version
             .parse::<RustdocJsonFormatVersion>()
-            .context("can't parse format version")?
+            .context("can't parse format version")
+            .map_err(AxumNope::BadRequest)?
     } else {
         RustdocJsonFormatVersion::Latest
     };
@@ -1002,6 +1031,11 @@ pub(crate) async fn download_handler(
                 CachePolicy::ForeverInCdn(confirmed_name.into()),
             )
         })?;
+
+    // NOTE: we want to give back the db connection to the pool
+    // before we do the long S3 requests.
+    drop(conn);
+
     params = params.apply_matched_release(&matched_release);
 
     let version = &matched_release.release.version;
@@ -1050,7 +1084,10 @@ mod test {
         RUSTDOC_JSON_COMPRESSION_ALGORITHMS, read_format_version_from_rustdoc_json,
     };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
-    use docs_rs_types::Version;
+    use docs_rs_types::{
+        Version,
+        testing::{KRATE, V2},
+    };
     use docs_rs_uri::encode_url_path;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
@@ -1104,7 +1141,7 @@ mod test {
     ) -> Result<String, anyhow::Error> {
         try_latest_version_redirect(krate, path, web, config)
             .await?
-            .with_context(|| anyhow::anyhow!("no redirect found for {}", path))
+            .with_context(|| anyhow!("no redirect found for {}", path))
     }
 
     #[test]
@@ -1572,6 +1609,49 @@ mod test {
     }
 
     #[test]
+    fn no_latest_stable_button_when_latest_stable_is_yanked() {
+        async fn has_latest_redirect_button(
+            path: &str,
+            web: &axum::Router,
+        ) -> Result<bool, anyhow::Error> {
+            web.assert_success(path).await?;
+            let data = web.get(path).await?.text().await?;
+            Ok(kuchikiki::parse_html()
+                .one(data)
+                .select("form > ul > li > a.warn")
+                .expect("invalid selector")
+                .next()
+                .is_some())
+        }
+
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0-pre.1")
+                .archive_storage(archive_storage)
+                .rustdoc_file("dummy/index.html")
+                .create()
+                .await?;
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.2.0")
+                .archive_storage(archive_storage)
+                .rustdoc_file("dummy/index.html")
+                .yanked(true)
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            assert!(!has_latest_redirect_button("/dummy/latest/dummy/", &web).await?);
+            assert!(!has_latest_redirect_button("/dummy/0.2.0-pre.1/dummy/", &web).await?);
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn yanked_release_shows_warning_in_nav() {
         async fn has_yanked_warning(path: &str, web: &axum::Router) -> Result<bool, anyhow::Error> {
             web.assert_success(path).await?;
@@ -1832,7 +1912,7 @@ mod test {
         ) -> Result<(), anyhow::Error> {
             let mut links: BTreeMap<_, _> = links.iter().copied().collect();
 
-            for (platform, link, rel) in dbg!(get_platform_links(path, web).await?) {
+            for (platform, link, rel) in get_platform_links(path, web).await? {
                 assert_eq!(rel, "nofollow");
                 web.assert_redirect(&link, links.remove(platform.as_str()).unwrap())
                     .await?;
@@ -2551,12 +2631,12 @@ mod test {
             assert_eq!(
                 latest_version_redirect(
                     "tungstenite",
-                    "/tungstenite/0.10.0/tungstenite/?search=String+-%3E+Message",
+                    "/tungstenite/0.10.0/tungstenite/?search=String+-%7B+Message",
                     &env.web_app().await,
                     env.config()
                 )
                 .await?,
-                "/crate/tungstenite/latest/target-redirect/tungstenite/?search=String+-%3E+Message",
+                "/crate/tungstenite/latest/target-redirect/tungstenite/?search=String+-%7B+Message",
             );
             Ok(())
         });
@@ -2826,15 +2906,15 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(dbg!(
+            let dom = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
                     .get("/testing/0.1.0/testing/")
                     .await?
                     .error_for_status()?
                     .text()
-                    .await?
-            ));
+                    .await?,
+            );
             assert!(
                 dom.select(
                     r#"a[href="/optional-dep/^1.2.3/"] > i[class="dependencies normal"] + i"#
@@ -3112,7 +3192,7 @@ mod test {
         storage
             .store_one(
                 format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}"),
-                b"static content",
+                "static content",
             )
             .await?;
 
@@ -3155,8 +3235,8 @@ mod test {
             const ROOT_ASSET: &str = "normalize-20200403-1.44.0-nightly-74bd074ee.css";
 
             let storage = env.storage()?;
-            storage.store_one(ROOT_ASSET, *b"content").await?;
-            storage.store_one(path, *b"more_content").await?;
+            storage.store_one(ROOT_ASSET, "content").await?;
+            storage.store_one(path, "more_content").await?;
 
             let web = env.web_app().await;
 
@@ -3285,8 +3365,8 @@ mod test {
         let web = env.web_app().await;
 
         web.assert_redirect_cached_unchecked(
-            "/minidumper/latest/%3c%2f%73%63%72%69%70%74%3e%3c%74%65%73%74%65%3e",
-            "/minidumper/latest/%3C/script%3E%3Cteste%3E",
+            "/minidumper/latest/%7d%2f%73%63%72%69%70%74%7b%7d%74%65%73%74%65%7b",
+            "/minidumper/latest/%7D/script%7B%7Dteste%7B",
             CachePolicy::ForeverInCdn(KrateName::from_str("minidumper").unwrap().into()),
             env.config(),
         )
@@ -3532,6 +3612,34 @@ mod test {
             &format!("attachment; filename=\"{NAME}_{VERSION}_{TARGET}_latest.json\""),
         );
         web.assert_conditional_get(&path, &resp).await?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn json_download_bad_request() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V2)
+            .archive_storage(true)
+            .default_target("x86_64-unknown-linux-gnu")
+            .create()
+            .await?;
+
+        let web = env.web_app().await;
+
+        let response = web
+            .get(&format!("/crate/{KRATE}/{V2}/json/963570%40"))
+            .await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            response
+                .text()
+                .await?
+                .contains("can&#39;t parse format version")
+        );
         Ok(())
     }
 

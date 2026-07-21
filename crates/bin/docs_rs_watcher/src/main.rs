@@ -4,13 +4,14 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_watcher::{Config, Index, index_watcher};
+use futures_util::FutureExt as _;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _guard = docs_rs_logging::init().context("error initializing logging")?;
+    let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
-    if let Err(err) = CommandLine::parse().handle_args().await {
+    if let Err(err) = CommandLine::parse().handle_args().boxed().await {
         eprintln!("error running watcher: {:?}", err);
         drop(_guard);
         std::process::exit(1);
@@ -192,7 +193,7 @@ impl DatabaseSubcommand {
                 .await?;
             }
 
-            Self::Delete { command } => command.handle_args(ctx).await?,
+            Self::Delete { command } => command.handle_args(config, ctx).await?,
 
             Self::Synchronize { dry_run } => {
                 docs_rs_watcher::consistency::run_check(&config, &ctx, dry_run).await?;
@@ -223,17 +224,18 @@ enum DeleteSubcommand {
 }
 
 impl DeleteSubcommand {
-    async fn handle_args(self, ctx: Context) -> Result<()> {
+    async fn handle_args(self, config: Arc<Config>, ctx: Context) -> Result<()> {
         let mut conn = ctx.pool()?.get_async().await?;
         let storage = ctx.storage()?;
 
         match self {
             Self::Version { name, version } => {
-                docs_rs_watcher::delete_version(&mut conn, storage, &name, &version).await?;
+                docs_rs_watcher::delete_version(&mut conn, storage, &config, &name, &version)
+                    .await?;
             }
 
             Self::Crate { name } => {
-                docs_rs_watcher::delete_crate(&mut conn, storage, &name).await?;
+                docs_rs_watcher::delete_crate(&mut conn, storage, &config, &name).await?;
             }
         }
 

@@ -10,3 +10,5 @@ testing = []
 [dependencies]
 anyhow = { workspace = true }
 
+[lints]
+workspace = true

@@ -1,7 +1,7 @@
 use crate::{Config, errors::PoolError, metrics::PoolMetrics};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{future::BoxFuture, stream::BoxStream};
-use sqlx::{Executor, postgres::PgPoolOptions};
+use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -48,32 +48,38 @@ impl Pool {
         let max_lifetime = Duration::from_secs(30 * 60);
         let idle_timeout = Duration::from_secs(10 * 60);
 
-        let async_pool = PgPoolOptions::new()
+        let mut options = PgPoolOptions::new()
             .max_connections(config.max_pool_size)
             .min_connections(config.min_pool_idle)
             .max_lifetime(max_lifetime)
             .acquire_timeout(acquire_timeout)
-            .idle_timeout(idle_timeout)
-            .after_connect({
+            .idle_timeout(idle_timeout);
+
+        if cfg!(test) {
+            options = options.test_before_acquire(false);
+        }
+
+        if schema != DEFAULT_SCHEMA {
+            options = options.after_connect({
                 let schema = schema.to_owned();
                 move |conn, _meta| {
                     Box::pin({
                         let schema = schema.clone();
 
                         async move {
-                            if schema != DEFAULT_SCHEMA {
-                                conn.execute(
-                                    format!("SET search_path TO {schema}, {DEFAULT_SCHEMA};")
-                                        .as_str(),
-                                )
-                                .await?;
-                            }
+                            conn.execute(AssertSqlSafe(format!(
+                                "SET search_path TO {schema}, {DEFAULT_SCHEMA};"
+                            )))
+                            .await?;
 
                             Ok(())
                         }
                     })
                 }
-            })
+            });
+        }
+
+        let async_pool = options
             .connect_lazy(&config.database_url)
             .map_err(PoolError::AsyncPoolCreationFailed)?;
 
@@ -99,10 +105,10 @@ impl Pool {
 }
 
 /// This impl allows us to use our own pool as an executor for SQLx queries.
-impl sqlx::Executor<'_> for &'_ Pool
+impl<'c> sqlx::Executor<'c> for &'c Pool
 where
-    for<'c> &'c mut <sqlx::Postgres as sqlx::Database>::Connection:
-        sqlx::Executor<'c, Database = sqlx::Postgres>,
+    for<'conn> &'conn mut <sqlx::Postgres as sqlx::Database>::Connection:
+        sqlx::Executor<'conn, Database = sqlx::Postgres>,
 {
     type Database = sqlx::Postgres;
 
@@ -120,6 +126,7 @@ where
         >,
     >
     where
+        'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_many(query)
@@ -130,23 +137,30 @@ where
         query: E,
     ) -> BoxFuture<'e, Result<Option<<sqlx::Postgres as sqlx::Database>::Row>, sqlx::Error>>
     where
+        'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         self.async_pool.fetch_optional(query)
     }
 
-    fn prepare_with<'e, 'q: 'e>(
+    fn prepare_with<'e>(
         self,
-        sql: &'q str,
+        sql: SqlStr,
         parameters: &'e [<Self::Database as sqlx::Database>::TypeInfo],
-    ) -> BoxFuture<'e, Result<<Self::Database as sqlx::Database>::Statement<'q>, sqlx::Error>> {
+    ) -> BoxFuture<'e, Result<<Self::Database as sqlx::Database>::Statement, sqlx::Error>>
+    where
+        'c: 'e,
+    {
         self.async_pool.prepare_with(sql, parameters)
     }
 
-    fn describe<'e, 'q: 'e>(
+    fn describe<'e>(
         self,
-        sql: &'q str,
-    ) -> BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>> {
+        sql: SqlStr,
+    ) -> BoxFuture<'e, Result<sqlx::Describe<Self::Database>, sqlx::Error>>
+    where
+        'c: 'e,
+    {
         self.async_pool.describe(sql)
     }
 }

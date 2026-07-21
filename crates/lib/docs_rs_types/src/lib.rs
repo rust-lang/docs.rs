@@ -1,3 +1,4 @@
+mod build_error;
 mod build_status;
 mod compression_algorithm;
 pub(crate) mod convert;
@@ -11,6 +12,7 @@ mod req_version;
 pub mod testing;
 mod version;
 
+pub use build_error::{BuildError, SimpleBuildError};
 pub use build_status::BuildStatus;
 pub use compression_algorithm::{CompressionAlgorithm, compression_from_file_extension};
 pub use doc_coverage::{DocCoverage, RawFileCoverage};

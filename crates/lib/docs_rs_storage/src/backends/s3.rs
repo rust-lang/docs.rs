@@ -1,28 +1,46 @@
 use crate::{
     Config,
     backends::StorageBackendMethods,
-    blob::{BlobUpload, StreamingBlob},
+    blob::{StreamUpload, StreamUploadSource, StreamingBlob},
+    crc32_for_path,
     errors::PathNotFoundError,
     metrics::StorageMetrics,
     types::FileRange,
+    utils::crc32::crc32_for_path_range,
 };
-use anyhow::{Context as _, Error};
+use anyhow::{Context as _, Error, bail};
 use async_stream::try_stream;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     Client,
     config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
-    types::{Delete, ObjectIdentifier},
+    primitives::{ByteStream, Length},
+    types::{ChecksumAlgorithm, CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier},
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
+use base64::{Engine as _, engine::general_purpose::STANDARD as b64};
 use chrono::Utc;
 use docs_rs_headers::{ETag, compute_etag};
-use futures_util::{
-    future::TryFutureExt,
-    stream::{BoxStream, FuturesUnordered, StreamExt},
-};
+use docs_rs_types::CompressionAlgorithm;
+use docs_rs_utils::{retry_backoff, spawn_blocking};
+use futures_util::stream::{self, BoxStream, StreamExt, TryStreamExt};
+use mime::Mime;
+use std::path::Path;
+use tokio::{fs, time};
 use tracing::{error, warn};
+
+// S3 error codes that indicate a transient failure for an individual object
+// inside a batch `DeleteObjects` response. The HTTP request itself succeeds
+// (200), so the SDK's retry layer never sees these — we have to retry them
+// ourselves. See:
+// https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+static RETRYABLE_DELETE_OBJECT_ERROR_CODES: [&str; 4] = [
+    "InternalError",
+    "RequestTimeout",
+    "ServiceUnavailable",
+    "SlowDown",
+];
 
 // error codes to check for when trying to determine if an error is
 // a "NOT FOUND" error.
@@ -40,6 +58,13 @@ static NOT_FOUND_ERROR_CODES: [&str; 5] = [
     // from testing long keys with minio
     "XMinioInvalidObjectName",
 ];
+
+const S3_UPLOAD_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
+// AWS recommends multipart uploads for > 100 MiB.
+// normal uploads only work up to 5 GiB.
+const S3_MULTIPART_UPLOAD_THRESHOLD: u64 = 100 * 1024 * 1024; // 100 MiB
+const S3_MULTIPART_PART_SIZE: u64 = S3_MULTIPART_UPLOAD_THRESHOLD; // 100 MiB
+const S3_DELETE_OBJECTS_LIMIT: usize = 1000;
 
 trait S3ResultExt<T> {
     fn convert_errors(self) -> anyhow::Result<T>;
@@ -75,6 +100,8 @@ pub(crate) struct S3Backend {
     client: Client,
     bucket: String,
     otel_metrics: StorageMetrics,
+    network_parallelism: usize,
+    max_retries: u32,
     #[cfg(any(test, feature = "testing"))]
     temporary: bool,
 }
@@ -108,6 +135,8 @@ impl S3Backend {
             client,
             otel_metrics,
             bucket: config.s3_bucket.clone(),
+            network_parallelism: config.network_parallelism,
+            max_retries: config.aws_sdk_max_retries,
             #[cfg(any(test, feature = "testing"))]
             temporary: config.s3_bucket_is_temporary,
         })
@@ -128,6 +157,217 @@ impl S3Backend {
             .await?;
 
         Ok(())
+    }
+
+    /// upload a stream to S3, in a single `put_object` API call.
+    ///
+    /// Works only for files up to 5 GiB.
+    async fn upload_stream_single(
+        &self,
+        path: &str,
+        mime: &Mime,
+        source: &StreamUploadSource,
+        compression: Option<CompressionAlgorithm>,
+        content_length: u64,
+        checksum_crc32: Option<&str>,
+    ) -> Result<(), Error> {
+        let body = match source {
+            StreamUploadSource::Bytes(bytes) => ByteStream::from(bytes.clone()),
+            StreamUploadSource::File(path) => {
+                // NOTE:
+                // reading the upload-data from a local path is
+                // "retryable" in the AWS SDK sense.
+                // ".file" (file pointer) is not retryable.
+                ByteStream::read_from()
+                    .path(path)
+                    .buffer_size(S3_UPLOAD_BUFFER_SIZE)
+                    .length(Length::Exact(content_length))
+                    .build()
+                    .await?
+            }
+        };
+
+        let mut request = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .body(body)
+            .content_length(content_length as i64)
+            .content_type(mime.to_string())
+            .set_content_encoding(compression.map(|alg| alg.to_string()));
+
+        // NOTE: when you try to stream-upload a local file, the AWS SDK by default
+        // uses a "middleware" to calculate the checksum for the content, to compare it after
+        // uploading.
+        // This piece is broken right now, but only when using S3 directly. On minio, all is
+        // fine.
+        // I don't want to disable checksums so we're sure the files are uploaded correctly.
+        // So the only alternative (outside of trying to fix the SDK) is to calculate the
+        // checksum ourselves. This is a little annoying because this means we have to read the
+        // whole file before upload. But since I don't want to load all files into memory before
+        // upload, this is the only option.
+        if let Some(checksum_crc32) = checksum_crc32 {
+            request = request
+                .checksum_algorithm(ChecksumAlgorithm::Crc32)
+                .checksum_crc32(checksum_crc32);
+        }
+
+        request.send().await?;
+
+        self.otel_metrics.uploaded_files.add(1, &[]);
+
+        Ok(())
+    }
+
+    /// upload a stream to S3, as multipart upload.
+    ///
+    /// Better for bigger files because we can split the file into parts,
+    /// and then upload & retry them separately.
+    ///
+    /// Not so good for small files, because we have more API calls.
+    async fn upload_file_multipart(
+        &self,
+        path: &str,
+        mime: &Mime,
+        local_path: &Path,
+        compression: Option<CompressionAlgorithm>,
+        content_length: u64,
+    ) -> Result<(), Error> {
+        let upload_id = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(path)
+            .content_type(mime.to_string())
+            .checksum_algorithm(ChecksumAlgorithm::Crc32)
+            .set_content_encoding(compression.map(|alg| alg.to_string()))
+            .send()
+            .await?
+            .upload_id
+            .context("S3 did not return an upload ID")?;
+
+        let result = async {
+            let parts = self
+                .upload_file_multipart_parts(path, local_path, &upload_id, content_length)
+                .await?;
+
+            let completed_upload = CompletedMultipartUpload::builder()
+                .set_parts(Some(parts))
+                .build();
+
+            self.client
+                .complete_multipart_upload()
+                .bucket(&self.bucket)
+                .key(path)
+                .upload_id(&upload_id)
+                .multipart_upload(completed_upload)
+                .send()
+                .await?;
+
+            Ok::<_, Error>(())
+        }
+        .await;
+
+        match result {
+            Ok(()) => {
+                self.otel_metrics.uploaded_files.add(1, &[]);
+                Ok(())
+            }
+            Err(err) => {
+                if let Err(abort_err) = self
+                    .client
+                    .abort_multipart_upload()
+                    .bucket(&self.bucket)
+                    .key(path)
+                    .upload_id(&upload_id)
+                    .send()
+                    .await
+                {
+                    error!(
+                        ?abort_err,
+                        %path,
+                        upload_id,
+                        "failed to abort multipart upload after upload error"
+                    );
+                }
+
+                Err(err)
+            }
+        }
+    }
+
+    async fn upload_file_multipart_parts(
+        &self,
+        path: &str,
+        local_path: &Path,
+        upload_id: &str,
+        content_length: u64,
+    ) -> Result<Vec<CompletedPart>, Error> {
+        let part_count = content_length.div_ceil(S3_MULTIPART_PART_SIZE);
+        let mut parts = stream::iter(0..part_count)
+            .map(|part_index| {
+                self.upload_file_multipart_part(
+                    path,
+                    local_path,
+                    upload_id,
+                    part_index,
+                    content_length,
+                )
+            })
+            .buffer_unordered(self.network_parallelism)
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        parts.sort_by_key(|part| part.part_number.unwrap_or_default());
+
+        Ok(parts)
+    }
+
+    async fn upload_file_multipart_part(
+        &self,
+        path: &str,
+        local_path: &Path,
+        upload_id: &str,
+        part_index: u64,
+        content_length: u64,
+    ) -> Result<CompletedPart, Error> {
+        let offset = part_index * S3_MULTIPART_PART_SIZE;
+        let part_length = (content_length - offset).min(S3_MULTIPART_PART_SIZE);
+        let part_number = (part_index + 1) as i32;
+        let checksum_crc32 = spawn_blocking({
+            let local_path = local_path.to_path_buf();
+            move || Ok(b64.encode(crc32_for_path_range(local_path, offset, part_length)?))
+        })
+        .await?;
+
+        let body = ByteStream::read_from()
+            .path(local_path)
+            .buffer_size(S3_UPLOAD_BUFFER_SIZE)
+            .offset(offset)
+            .length(Length::Exact(part_length))
+            .build()
+            .await?;
+
+        let output = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(path)
+            .upload_id(upload_id)
+            .part_number(part_number)
+            .body(body)
+            .content_length(part_length as i64)
+            .checksum_algorithm(ChecksumAlgorithm::Crc32)
+            .checksum_crc32(&checksum_crc32)
+            .send()
+            .await?;
+
+        Ok(CompletedPart::builder()
+            .part_number(part_number)
+            .set_e_tag(output.e_tag)
+            .checksum_crc32(&checksum_crc32)
+            .build())
     }
 }
 
@@ -230,45 +470,57 @@ impl StorageBackendMethods for S3Backend {
         })
     }
 
-    async fn store_batch(&self, mut batch: Vec<BlobUpload>) -> Result<(), Error> {
-        // Attempt to upload the batch 3 times
-        for _ in 0..3 {
-            let mut futures = FuturesUnordered::new();
-            for blob in batch.drain(..) {
-                futures.push(
-                    self.client
-                        .put_object()
-                        .bucket(&self.bucket)
-                        .key(&blob.path)
-                        .body(blob.content.clone().into())
-                        .content_type(blob.mime.to_string())
-                        .set_content_encoding(blob.compression.map(|alg| alg.to_string()))
-                        .send()
-                        .map_ok(|_| {
-                            self.otel_metrics.uploaded_files.add(1, &[]);
-                        })
-                        .map_err(|err| {
-                            warn!(?err, "Failed to upload blob to S3");
-                            // Reintroduce failed blobs for a retry
-                            blob
-                        }),
-                );
-            }
+    async fn upload_stream(&self, upload: StreamUpload) -> Result<(), Error> {
+        let StreamUpload {
+            path,
+            mime,
+            source,
+            compression,
+        } = upload;
 
-            while let Some(result) = futures.next().await {
-                // Push each failed blob back into the batch
-                if let Err(blob) = result {
-                    batch.push(blob);
+        match &source {
+            StreamUploadSource::Bytes(bytes) => {
+                self.upload_stream_single(
+                    &path,
+                    &mime,
+                    &source,
+                    compression,
+                    bytes.len() as u64,
+                    None,
+                )
+                .await
+            }
+            StreamUploadSource::File(local_path) => {
+                let content_length = fs::metadata(local_path).await?.len();
+
+                if content_length > S3_MULTIPART_UPLOAD_THRESHOLD {
+                    self.upload_file_multipart(
+                        &path,
+                        &mime,
+                        local_path,
+                        compression,
+                        content_length,
+                    )
+                    .await
+                } else {
+                    let local_path = local_path.clone();
+                    let checksum_crc32 =
+                        spawn_blocking(move || Ok(b64.encode(crc32_for_path(local_path)?)))
+                            .await?
+                            .to_string();
+
+                    self.upload_stream_single(
+                        &path,
+                        &mime,
+                        &source,
+                        compression,
+                        content_length,
+                        Some(&checksum_crc32),
+                    )
+                    .await
                 }
             }
-
-            // If we uploaded everything in the batch, we're done
-            if batch.is_empty() {
-                return Ok(());
-            }
         }
-
-        panic!("failed to upload 3 times, exiting");
     }
 
     async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String, Error>> {
@@ -302,37 +554,125 @@ impl StorageBackendMethods for S3Backend {
 
     async fn delete_prefix(&self, prefix: &str) -> Result<(), Error> {
         let stream = self.list_prefix(prefix).await;
-        let mut chunks = stream.chunks(900); // 1000 is the limit for the delete_objects API
+        stream
+            .chunks(S3_DELETE_OBJECTS_LIMIT)
+            .map(|batch| batch.into_iter().collect::<Result<Vec<_>, Error>>())
+            .try_for_each(|batch| self.delete_batch_with_retry(batch))
+            .await
+    }
+}
 
-        while let Some(batch) = chunks.next().await {
-            let batch: Vec<_> = batch.into_iter().collect::<anyhow::Result<_>>()?;
-
-            let to_delete = Delete::builder()
-                .set_objects(Some(
-                    batch
-                        .into_iter()
-                        .filter_map(|k| ObjectIdentifier::builder().key(k).build().ok())
-                        .collect(),
-                ))
-                .build()
-                .context("could not build delete request")?;
-
-            let resp = self
+impl S3Backend {
+    async fn delete_batch_with_retry(&self, keys: Vec<String>) -> Result<(), Error> {
+        let mut remaining = keys;
+        for attempt in 1.. {
+            let resp = match self
                 .client
                 .delete_objects()
                 .bucket(&self.bucket)
-                .delete(to_delete)
+                .delete(Self::delete_request(&remaining)?)
                 .send()
-                .await?;
-
-            if let Some(errs) = resp.errors {
-                for err in &errs {
-                    error!("error deleting file from s3: {:?}", err);
+                .await
+            {
+                Ok(resp) => resp,
+                Err(err)
+                    if attempt <= self.max_retries && Self::is_retryable_delete_error(&err) =>
+                {
+                    let backoff = retry_backoff(attempt);
+                    warn!(
+                        attempt,
+                        ?backoff,
+                        ?err,
+                        "retrying s3 delete_objects request after transient error",
+                    );
+                    time::sleep(backoff).await;
+                    continue;
                 }
+                Err(err) => return Err(err.into()),
+            };
 
-                anyhow::bail!("deleting from s3 failed");
+            let Some(errs) = resp.errors.filter(|e| !e.is_empty()) else {
+                return Ok(());
+            };
+
+            if attempt > self.max_retries {
+                bail!(
+                    "errors deleting from s3 failed after {} retries: {:?}",
+                    self.max_retries,
+                    errs
+                );
             }
+
+            let mut retry_keys = Vec::with_capacity(errs.len());
+            for aws_sdk_s3::types::Error {
+                key, code, message, ..
+            } in errs
+            {
+                let retryable = code
+                    .as_deref()
+                    .is_some_and(|c| RETRYABLE_DELETE_OBJECT_ERROR_CODES.contains(&c));
+                match (retryable, key) {
+                    (true, Some(key)) => retry_keys.push(key),
+                    (_, key) => {
+                        // `delete_prefix` is not best-effort: once any key has a
+                        // non-retryable delete error, the prefix delete failed.
+                        bail!(
+                            "error deleting file {:?} from s3: code={:?}, message={:?}",
+                            key,
+                            code,
+                            message
+                        );
+                    }
+                }
+            }
+
+            let backoff = retry_backoff(attempt);
+            warn!(
+                attempt,
+                retry_count = retry_keys.len(),
+                ?backoff,
+                "retrying s3 delete_objects for transient errors",
+            );
+            time::sleep(backoff).await;
+            remaining = retry_keys;
         }
-        Ok(())
+
+        unreachable!("unbounded retry loop should return or fail internally")
+    }
+
+    fn is_retryable_delete_error<E>(err: &SdkError<E>) -> bool
+    where
+        E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
+    {
+        if let Some(err_code) = err.code()
+            && RETRYABLE_DELETE_OBJECT_ERROR_CODES.contains(&err_code)
+        {
+            return true;
+        }
+
+        if let SdkError::ServiceError(err) = err
+            && err.raw().status().is_server_error()
+        {
+            return true;
+        }
+
+        false
+    }
+
+    fn delete_request(keys: &[String]) -> Result<Delete, Error> {
+        let objects: Vec<_> = keys
+            .iter()
+            .map(|key| {
+                ObjectIdentifier::builder()
+                    .key(key.clone())
+                    .build()
+                    .expect("can never fail, the keys come from list_prefix")
+            })
+            .collect();
+
+        Delete::builder()
+            .set_objects(Some(objects))
+            .build()
+            .context("could not build delete request")
     }
 }
