@@ -587,7 +587,7 @@ mod test {
                 .tempdir()?;
             for &file in filenames.iter() {
                 let path = dir.path().join(file);
-                fs::write(path, file).await?;
+                fs::write(path, &archive_name).await?;
             }
             storage
                 .store_all_in_archive(archive_name, dir.path())
@@ -596,22 +596,29 @@ mod test {
             Ok(())
         }
 
+        const ARCHIVE_1: &str = "test_short.zip";
+        const ARCHIVE_2: &str = "test_long_name.zip";
+        assert!(ARCHIVE_1.len() != ARCHIVE_2.len());
+        const ARCHIVES: [&str; 2] = [ARCHIVE_1, ARCHIVE_2];
+
         // create two archives with indexes that contain the same filename
+        // The content of the files in each archive need to differ even with the same name,
+        // so we can assert the different ranges below.
         create_archive(
             &storage,
-            "test1.zip",
+            ARCHIVE_1,
             &["file1.txt", "file2.txt", "important.txt"],
         )
         .await?;
 
         create_archive(
             &storage,
-            "test2.zip",
+            ARCHIVE_2,
             &["important.txt", "another_file_1.txt", "another_file_2.txt"],
         )
         .await?;
 
-        for archive_name in &["test1.zip", "test2.zip"] {
+        for archive_name in ARCHIVES {
             assert!(storage.exists(archive_name).await?);
 
             assert!(
@@ -637,20 +644,20 @@ mod test {
                     .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt")
                     .await?
                     .content,
-                b"important.txt"
+                archive_name.as_bytes()
             );
         }
 
         // validate if the positions are really different in the archvies,
         // for the same filename.
         let pos_in_test1_zip = storage
-            .find_archive_index("test1.zip", LATEST_BUILD_ID)
+            .find_archive_index(ARCHIVE_1, LATEST_BUILD_ID)
             .await?
             .find("important.txt")
             .await?
             .unwrap();
         let pos_in_test2_zip = storage
-            .find_archive_index("test2.zip", LATEST_BUILD_ID)
+            .find_archive_index(ARCHIVE_2, LATEST_BUILD_ID)
             .await?
             .find("important.txt")
             .await?
@@ -661,8 +668,8 @@ mod test {
         // now I'm swapping the local index files.
         // This should simulate hat I have an outdated byte-range for a file
 
-        let local_index_file_1 = cache_filename("test1.zip");
-        let local_index_file_2 = cache_filename("test2.zip");
+        let local_index_file_1 = cache_filename(ARCHIVE_1);
+        let local_index_file_2 = cache_filename(ARCHIVE_2);
 
         {
             let temp_path = cache_root.join("temp_index_swap.tmp");
@@ -675,13 +682,13 @@ mod test {
         // should be removed, refetched, and all should be fine.
         // Without our fallback / delete mechanism, this would fail.
 
-        for archive_name in &["test1.zip", "test2.zip"] {
+        for archive_name in ARCHIVES {
             assert_eq!(
                 storage
                     .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt")
                     .await?
                     .content,
-                b"important.txt"
+                archive_name.as_bytes(),
             );
         }
 
