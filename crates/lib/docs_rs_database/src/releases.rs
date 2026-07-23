@@ -337,8 +337,8 @@ pub async fn initialize_release(
     version: &Version,
 ) -> Result<ReleaseId> {
     let release_id = sqlx::query_scalar!(
-        r#"INSERT INTO releases (crate_id, version)
-         VALUES ($1, $2)
+        r#"INSERT INTO releases (crate_id, version, archive_storage)
+         VALUES ($1, $2, TRUE)
          ON CONFLICT (crate_id, version) DO UPDATE
          SET -- this `SET` is needed so the id is always returned.
             version = EXCLUDED.version
