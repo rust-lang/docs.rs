@@ -576,9 +576,6 @@ mod test {
             ))
         };
 
-        const IMPORTANT_NAME: &str = "important.txt";
-        const IMPORTANT_CONTENT: &[u8] = b"important.txt";
-
         /// dummy archives, files will contain their name as content
         async fn create_archive(
             storage: &AsyncStorage,
@@ -590,12 +587,7 @@ mod test {
                 .tempdir()?;
             for &file in filenames.iter() {
                 let path = dir.path().join(file);
-                let content = if file == IMPORTANT_NAME {
-                    IMPORTANT_CONTENT
-                } else {
-                    archive_name.as_bytes()
-                };
-                fs::write(path, content).await?;
+                fs::write(path, &archive_name).await?;
             }
             storage
                 .store_all_in_archive(archive_name, dir.path())
@@ -615,14 +607,14 @@ mod test {
         create_archive(
             &storage,
             ARCHIVE_1,
-            &["file1.txt", "file2.txt", IMPORTANT_NAME],
+            &["file1.txt", "file2.txt", "important.txt"],
         )
         .await?;
 
         create_archive(
             &storage,
             ARCHIVE_2,
-            &[IMPORTANT_NAME, "another_file_1.txt", "another_file_2.txt"],
+            &["important.txt", "another_file_1.txt", "another_file_2.txt"],
         )
         .await?;
 
@@ -641,7 +633,7 @@ mod test {
             // this will then create the cache
             assert!(
                 storage
-                    .exists_in_archive(archive_name, LATEST_BUILD_ID, IMPORTANT_NAME)
+                    .exists_in_archive(archive_name, LATEST_BUILD_ID, "important.txt")
                     .await?
             );
             assert!(fs::try_exists(&local_index_file).await?);
@@ -649,7 +641,7 @@ mod test {
             // fetching the content out of the archive also works
             assert_eq!(
                 storage
-                    .get_from_archive(archive_name, LATEST_BUILD_ID, IMPORTANT_NAME)
+                    .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt")
                     .await?
                     .content,
                 archive_name.as_bytes()
@@ -661,13 +653,13 @@ mod test {
         let pos_in_test1_zip = storage
             .find_archive_index(ARCHIVE_1, LATEST_BUILD_ID)
             .await?
-            .find(IMPORTANT_NAME)
+            .find("important.txt")
             .await?
             .unwrap();
         let pos_in_test2_zip = storage
             .find_archive_index(ARCHIVE_2, LATEST_BUILD_ID)
             .await?
-            .find(IMPORTANT_NAME)
+            .find("important.txt")
             .await?
             .unwrap();
 
@@ -693,7 +685,7 @@ mod test {
         for archive_name in ARCHIVES {
             assert_eq!(
                 storage
-                    .get_from_archive(archive_name, LATEST_BUILD_ID, IMPORTANT_NAME)
+                    .get_from_archive(archive_name, LATEST_BUILD_ID, "important.txt")
                     .await?
                     .content,
                 archive_name.as_bytes(),
