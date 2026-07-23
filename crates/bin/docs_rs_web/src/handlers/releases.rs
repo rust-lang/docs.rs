@@ -827,6 +827,7 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::page::web_page::AddCspNonce;
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
@@ -2041,6 +2042,34 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn home_page_description_title_escapes_quotes() {
+        let description = r#"A "quoted" crate description"#;
+        let mut page = HomePage {
+            recent_releases: vec![Release {
+                name: FOO,
+                version: V1,
+                description: Some(description.into()),
+                target_name: None,
+                rustdoc_status: true,
+                build_time: None,
+                stars: 0,
+                has_unyanked_releases: Some(true),
+            }],
+        };
+
+        let html =
+            kuchikiki::parse_html().one(page.render_with_csp_nonce("test-nonce".into()).unwrap());
+        let description_element = html
+            .select_first(".recent-releases-container .description")
+            .expect("missing release description");
+
+        assert_eq!(
+            description_element.attributes.borrow().get("title"),
+            Some(description),
+        );
     }
 
     #[test]
