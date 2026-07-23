@@ -268,11 +268,12 @@ impl IntoResponse for JsonAxumNope {
     fn into_response(self) -> AxumResponse {
         match self.0 {
             AxumNope::NoResults => {
-                // user did a search with no search terms; invalid,
-                // return 404
+                // User searched without providing search terms.
                 StatusCode::NOT_FOUND.into_response()
             }
-            AxumNope::Redirect(target, cache_policy) => redirect_with_policy(target, cache_policy),
+            AxumNope::Redirect(target, cache_policy) => {
+                redirect_with_policy(target, cache_policy)
+            }
             _ => {
                 let recovery = self.0.recovery_links();
                 let ErrorInfo {
@@ -280,24 +281,27 @@ impl IntoResponse for JsonAxumNope {
                     message,
                     status,
                 } = self.0.into_error_info();
-                let links: Vec<_> = recovery
-                    .iter()
-                    .map(|link| {
-                        serde_json::json!({
-                            "label": link.label,
-                            "href": link.href,
+
+                let mut body = serde_json::json!({
+                    "title": title,
+                    "message": message,
+                });
+
+                if !recovery.is_empty() {
+                    let links: Vec<_> = recovery
+                        .iter()
+                        .map(|link| {
+                            serde_json::json!({
+                                "label": link.label,
+                                "href": link.href,
+                            })
                         })
-                    })
-                    .collect();
-                (
-                    status,
-                    Json(serde_json::json!({
-                        "title": title,
-                        "message": message,
-                        "links": links,
-                    })),
-                )
-                    .into_response()
+                        .collect();
+
+                    body["links"] = serde_json::json!(links);
+                }
+
+                (status, Json(body)).into_response()
             }
         }
     }
