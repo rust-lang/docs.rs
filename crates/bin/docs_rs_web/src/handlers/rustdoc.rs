@@ -725,7 +725,18 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )
             }
 
-            return Err(AxumNope::ResourceNotFound);
+            // The crate and version exist and have docs, but this specific
+            // page within them does not (e.g. a module removed/renamed in a
+            // newer release reached via `/latest/`). Return a 404 that
+            // acknowledges the version and offers recovery links instead of a
+            // bare "resource not found" (issue #2568).
+            return Err(AxumNope::ResourceNotFoundInVersion {
+                name: params.name().to_string(),
+                version: krate.version.to_string(),
+                is_latest_url: params.req_version().is_latest(),
+                version_root_url: params.clone().with_inner_path("").rustdoc_url(),
+                crate_details_url: params.crate_details_url(),
+            });
         }
     };
 
