@@ -7,6 +7,15 @@
         </div>
     </div>
     <div class="description">{{ message }}</div>
+    {%- if !recovery.is_empty() -%}
+    <div class="description">
+        <ul id="recovery-links">
+            {%- for link in recovery -%}
+            <li><a href="{{ link.href }}">{{ link.label }}</a></li>
+            {%- endfor -%}
+        </ul>
+    </div>
+    {%- endif -%}
 {%- endblock header -%}
 
 {%- block topbar -%}
