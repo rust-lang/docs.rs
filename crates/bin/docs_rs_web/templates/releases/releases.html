@@ -48,7 +48,7 @@ centered
                                     </div>
 
                                     <div class="pure-u-1 pure-u-sm-14-24 pure-u-md-16-24 description"
-                                        title="{{ release.description }}">
+                                        title="{{ release.description|escape }}">
                                         {{- release.description -}}
                                     </div>
 
@@ -84,7 +84,7 @@ centered
                                     </div> {#- -#}
 
                                     <div class="pure-u-1 pure-u-sm-14-24 pure-u-md-16-24 description"
-                                        title="{{ release.description.as_deref().unwrap_or_default() }}">
+                                        title="{{ release.description.as_deref().unwrap_or_default()|escape }}">
                                         {{- release.description.as_deref().unwrap_or_default() -}}
                                     </div>
 
