@@ -178,20 +178,6 @@ impl AsyncStorage {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
-    // #[cfg(test)]
-    // pub(crate) async fn get_range(
-    //     &self,
-    //     path: &str,
-    //     max_size: usize,
-    //     range: FileRange,
-    //     compression: Option<CompressionAlgorithm>,
-    // ) -> Result<Blob> {
-    //     self.get_range_stream(path, range, compression)
-    //         .await?
-    //         .materialize(max_size)
-    //         .await
-    // }
-
     /// get a decompressing stream to a range inside an object in storage
     #[instrument(skip(self))]
     pub(crate) async fn get_range_stream(
