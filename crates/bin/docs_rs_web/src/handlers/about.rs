@@ -82,7 +82,7 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
                 title: "The requested page does not exist",
                 message: msg.into(),
                 status: StatusCode::NOT_FOUND,
-                recovery: Vec::new()
+                recovery: Vec::new(),
             };
             page.into_response()
         }
