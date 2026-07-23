@@ -271,9 +271,7 @@ impl IntoResponse for JsonAxumNope {
                 // User searched without providing search terms.
                 StatusCode::NOT_FOUND.into_response()
             }
-            AxumNope::Redirect(target, cache_policy) => {
-                redirect_with_policy(target, cache_policy)
-            }
+            AxumNope::Redirect(target, cache_policy) => redirect_with_policy(target, cache_policy),
             _ => {
                 let recovery = self.0.recovery_links();
                 let ErrorInfo {
