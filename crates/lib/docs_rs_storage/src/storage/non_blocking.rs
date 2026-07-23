@@ -579,8 +579,7 @@ mod test {
         const IMPORTANT_NAME: &str = "important.txt";
         const IMPORTANT_CONTENT: &[u8] = b"important.txt";
 
-        /// dummy archives, files will contain their name as content,
-        /// or a static content for `important.txt`.
+        /// dummy archives, files will contain their name as content
         async fn create_archive(
             storage: &AsyncStorage,
             archive_name: &str,
@@ -653,7 +652,7 @@ mod test {
                     .get_from_archive(archive_name, LATEST_BUILD_ID, IMPORTANT_NAME)
                     .await?
                     .content,
-                IMPORTANT_CONTENT,
+                archive_name.as_bytes()
             );
         }
 
@@ -697,7 +696,7 @@ mod test {
                     .get_from_archive(archive_name, LATEST_BUILD_ID, IMPORTANT_NAME)
                     .await?
                     .content,
-                IMPORTANT_CONTENT,
+                archive_name.as_bytes(),
             );
         }
 
