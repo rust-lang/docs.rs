@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use docs_rs_config::AppConfig as _;
@@ -82,7 +84,7 @@ impl CommandLine {
                 // which should only run once, and all the time.
                 docs_rs_watcher::start_background_service_metric_collector(&ctx).await?;
 
-                docs_rs_watcher::watch_registry(&config, &ctx).await?;
+                docs_rs_watcher::watch(&config, &ctx).await;
             }
             Self::Queue { subcommand } => subcommand.handle_args(config, ctx).await?,
             Self::Database { subcommand } => subcommand.handle_args(config, ctx).await?,

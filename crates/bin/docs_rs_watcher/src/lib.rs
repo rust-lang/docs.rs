@@ -3,8 +3,10 @@ pub mod consistency;
 mod db;
 mod index;
 pub mod index_watcher;
+mod metrics;
 mod rebuilds;
 mod service_metrics;
+mod subscriber;
 #[cfg(test)]
 mod testing;
 
@@ -13,13 +15,53 @@ pub use db::{delete_crate, delete_version};
 pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
-use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
-use anyhow::Result;
+use crate::{
+    index_watcher::get_new_crates, metrics::WatcherMetrics, service_metrics::OtelServiceMetrics,
+};
+use anyhow::{Error, Result};
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
 use std::{sync::Arc, time::Duration};
 use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
+
+/// main index-watcher / subscriber loop.
+/// mostly wraps either the git index watcher loop, or the sqs subscriber loop.
+/// Only here so unexpected errors lead to a sentry report & restart instead of
+/// the daemon / watcher just stopping.
+pub async fn watch(config: &Config, context: &Context) {
+    let metrics = WatcherMetrics::new(context.meter_provider());
+
+    loop {
+        if config.sqs_active {
+            if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
+            {
+                error!(?err, "unexpected error watching SQS, will retry");
+                time::sleep(Duration::from_secs(10)).await;
+            }
+        } else {
+            // intermediate mode:
+            // - still fetch from git for events
+            // - listen so SQS, and log the events so we can test SQS connection, and compare events
+            //
+            // We don't retry on unespected SQS errors yet.
+
+            if let (Err(err), _) = tokio::join!(crate::watch_registry(config, context), async {
+                // unexpected SQS errors are caught here, and we don't retry.
+                if let Err(err) =
+                    crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
+                {
+                    error!(?err, "error setting up SQS test subscriber");
+                }
+                Ok::<_, Error>(())
+            }) {
+                // unexpected index watcher errors lead to a report & retry.
+                error!(?err, "unexpected error watching registry, will retry");
+                time::sleep(Duration::from_secs(10)).await;
+            }
+        }
+    }
+}
 
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added

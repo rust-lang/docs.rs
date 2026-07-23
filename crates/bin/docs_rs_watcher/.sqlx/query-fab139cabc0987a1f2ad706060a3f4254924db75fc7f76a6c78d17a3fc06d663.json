@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM releases WHERE id = $1 RETURNING is_library",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_library",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "is_library"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "fab139cabc0987a1f2ad706060a3f4254924db75fc7f76a6c78d17a3fc06d663"
+}

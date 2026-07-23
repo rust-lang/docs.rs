@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM builds_logs bl\n         USING builds b\n         WHERE bl.build_id = b.id AND b.rid = $1;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "66b0ba6978880b79ce7a179bbe986e6c7eed78a2d4f01f316772949f5d688f42"
+}
