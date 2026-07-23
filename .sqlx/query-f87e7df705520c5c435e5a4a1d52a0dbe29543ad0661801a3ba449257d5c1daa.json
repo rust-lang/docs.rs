@@ -1,0 +1,449 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                crates.id AS \"crate_id: CrateId\",\n                releases.id AS \"release_id: ReleaseId\",\n                crates.name as \"name: KrateName\",\n                releases.version,\n                releases.description,\n                releases.dependencies,\n                releases.readme,\n                releases.description_long,\n                releases.release_time,\n                release_build_status.build_status as \"build_status!: BuildStatus\",\n                -- this is the latest build ID that generated content\n                -- it's used to invalidate some blob storage related caches.\n                builds.id as \"latest_build_id?: BuildId\",\n                releases.rustdoc_status,\n                releases.repository_url,\n                releases.homepage_url,\n                releases.keywords,\n                releases.have_examples,\n                releases.target_name,\n                repositories.host as \"repo_host?\",\n                repositories.stars as \"repo_stars?\",\n                repositories.forks as \"repo_forks?\",\n                repositories.issues as \"repo_issues?\",\n                repositories.name as \"repo_name?\",\n                releases.is_library,\n                releases.yanked,\n                releases.doc_targets,\n                releases.license,\n                releases.documentation_url,\n                releases.default_target,\n                releases.source_size as \"source_size?\",\n                builds.documentation_size as \"documentation_size?\",\n                -- we're using the rustc version here to set the correct CSS file\n                -- in the metadata.\n                -- So we're only interested in successful builds here.\n                builds.rustc_version as \"rustc_version?\",\n                doc_coverage.total_items,\n                doc_coverage.documented_items,\n                doc_coverage.total_items_needing_examples,\n                doc_coverage.items_with_examples\n            FROM releases\n            INNER JOIN release_build_status ON releases.id = release_build_status.rid\n            INNER JOIN crates ON releases.crate_id = crates.id\n            LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id\n            LEFT JOIN repositories ON releases.repository_id = repositories.id\n            LEFT JOIN LATERAL (\n                 SELECT rustc_version, documentation_size, id\n                 FROM builds\n                 WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = 'success'\n                 ORDER BY builds.build_finished\n                 DESC LIMIT 1\n             ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_id: CrateId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "release_id: ReleaseId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name: KrateName",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "dependencies",
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "dependencies"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "readme",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "readme"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "description_long",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "description_long"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "release_time",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "release_time"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "build_status!: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure",
+                "partial_failure"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "release_build_status",
+            "name": "build_status"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "latest_build_id?: BuildId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "rustdoc_status",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "rustdoc_status"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "repository_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "repository_url"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "homepage_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "homepage_url"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "keywords",
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "keywords"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "have_examples",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "have_examples"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "target_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "target_name"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "repo_host?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "host"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "repo_stars?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "stars"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "repo_forks?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "forks"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "repo_issues?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "issues"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "repo_name?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "is_library",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "is_library"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "yanked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "yanked"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "doc_targets",
+        "type_info": "Json",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "doc_targets"
+          }
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "license",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "license"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "documentation_url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "documentation_url"
+          }
+        }
+      },
+      {
+        "ordinal": 27,
+        "name": "default_target",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "default_target"
+          }
+        }
+      },
+      {
+        "ordinal": 28,
+        "name": "source_size?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "source_size"
+          }
+        }
+      },
+      {
+        "ordinal": 29,
+        "name": "documentation_size?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "documentation_size"
+          }
+        }
+      },
+      {
+        "ordinal": 30,
+        "name": "rustc_version?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
+      },
+      {
+        "ordinal": 31,
+        "name": "total_items",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "total_items"
+          }
+        }
+      },
+      {
+        "ordinal": 32,
+        "name": "documented_items",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "documented_items"
+          }
+        }
+      },
+      {
+        "ordinal": 33,
+        "name": "total_items_needing_examples",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "total_items_needing_examples"
+          }
+        }
+      },
+      {
+        "ordinal": 34,
+        "name": "items_with_examples",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "items_with_examples"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "f87e7df705520c5c435e5a4a1d52a0dbe29543ad0661801a3ba449257d5c1daa"
+}

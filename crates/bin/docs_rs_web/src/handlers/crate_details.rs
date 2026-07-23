@@ -48,7 +48,6 @@ pub(crate) struct CrateDetails {
     last_successful_build: Option<Version>,
     pub latest_build: Option<Build>,
     pub rustdoc_status: Option<bool>,
-    pub archive_storage: bool,
     pub repository_url: Option<String>,
     pub homepage_url: Option<String>,
     keywords: Option<Value>,
@@ -121,7 +120,6 @@ impl CrateDetails {
                 -- it's used to invalidate some blob storage related caches.
                 builds.id as "latest_build_id?: BuildId",
                 releases.rustdoc_status,
-                releases.archive_storage,
                 releases.repository_url,
                 releases.homepage_url,
                 releases.keywords,
@@ -242,7 +240,6 @@ impl CrateDetails {
             last_successful_build: None,
             latest_build,
             rustdoc_status: krate.rustdoc_status,
-            archive_storage: krate.archive_storage,
             repository_url: krate.repository_url,
             homepage_url: krate.homepage_url,
             keywords: krate.keywords,
@@ -299,7 +296,6 @@ impl CrateDetails {
                 &self.version,
                 self.latest_build_id,
                 "Cargo.toml",
-                self.archive_storage,
             )
             .await
         {
@@ -323,13 +319,7 @@ impl CrateDetails {
         };
         for path in &paths {
             match storage
-                .fetch_source_file(
-                    &self.name,
-                    &self.version,
-                    self.latest_build_id,
-                    path,
-                    self.archive_storage,
-                )
+                .fetch_source_file(&self.name, &self.version, self.latest_build_id, path)
                 .await
             {
                 Ok(readme) => {

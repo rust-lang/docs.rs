@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases\n           SET release_time = $2,\n               dependencies = $3,\n               target_name = $4,\n               yanked = $5,\n               rustdoc_status = $6,\n               test_status = $7,\n               license = $8,\n               repository_url = $9,\n               homepage_url = $10,\n               description = $11,\n               description_long = $12,\n               readme = $13,\n               keywords = $14,\n               have_examples = $15,\n               downloads = $16,\n               files = $17,\n               doc_targets = $18,\n               is_library = $19,\n               documentation_url = $20,\n               default_target = $21,\n               features = $22,\n               repository_id = $23,\n               source_size = $24\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Json",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Json",
+        "Bool",
+        "Int4",
+        "Json",
+        "Json",
+        "Bool",
+        "Varchar",
+        "Varchar",
+        {
+          "Custom": {
+            "name": "feature[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "feature",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "subfeatures",
+                        "TextArray"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5d73e5899c9f0318d0357c7c66a980796789de5cb46b0cd169fcc86f13268c9"
+}

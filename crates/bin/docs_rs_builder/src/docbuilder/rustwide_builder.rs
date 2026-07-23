@@ -859,7 +859,6 @@ impl RustwideBuilder {
                     has_examples,
                     algs,
                     repository,
-                    true,
                     source_size,
                 ))?;
 
@@ -1522,7 +1521,6 @@ mod tests {
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
-                        r.archive_storage,
                         r.source_size as "source_size!",
                         cov.total_items,
                         b.id as build_id,
@@ -1559,7 +1557,6 @@ mod tests {
         assert_eq!(row.rustdoc_status, Some(true));
         assert_eq!(row.default_target, Some(default_target.into()));
         assert!(row.total_items.is_some());
-        assert!(row.archive_storage);
         assert!(!row.docsrs_version.unwrap().is_empty());
         assert!(!row.rustc_version.unwrap().is_empty());
         assert_eq!(row.build_status.unwrap(), "success");
@@ -1855,7 +1852,6 @@ mod tests {
                 false,
                 iter::once(CompressionAlgorithm::Deflate),
                 None,
-                true,
                 42,
             )
             .await?;
@@ -2068,7 +2064,7 @@ mod tests {
         );
         assert!(
             storage
-                .fetch_source_file(&crate_, &version, None, "src/main.rs", true)
+                .fetch_source_file(&crate_, &version, None, "src/main.rs")
                 .is_ok()
         );
 

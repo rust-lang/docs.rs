@@ -84,11 +84,9 @@ impl AsyncStorage {
     /// * `name` - the crate name
     /// * `version` - the crate version
     /// * `latest_build_id` - the id of the most recent build. used purely to invalidate the local archive
-    ///   index cache, when `archive_storage` is `true.` Without it we wouldn't know that we have
+    ///   index cache. Without it we wouldn't know that we have
     ///   to invalidate the locally cached file after a rebuild.
     /// * `path` - the wanted path inside the documentation.
-    /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
-    ///    where we can fetch the requested path from inside the ZIP file.
     #[instrument(skip(self))]
     pub async fn stream_rustdoc_file(
         &self,
@@ -96,17 +94,10 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<StreamingBlob> {
         trace!("fetch rustdoc file");
-        Ok(if archive_storage {
-            self.stream_from_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.get_stream(&remote_path).await?
-        })
+        self.stream_from_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -116,9 +107,8 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<Blob> {
-        self.stream_source_file(name, version, latest_build_id, path, archive_storage)
+        self.stream_source_file(name, version, latest_build_id, path)
             .await?
             .materialize(self.config.max_file_size_for(path))
             .await
@@ -131,16 +121,10 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<StreamingBlob> {
         trace!("fetch source file");
-        Ok(if archive_storage {
-            self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            let remote_path = format!("sources/{name}/{version}/{path}");
-            self.get_stream(&remote_path).await?
-        })
+        self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -150,16 +134,9 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<bool> {
-        Ok(if archive_storage {
-            self.exists_in_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.exists(&remote_path).await?
-        })
+        self.exists_in_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -201,20 +178,6 @@ impl AsyncStorage {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
-    #[cfg(test)]
-    pub(crate) async fn get_range(
-        &self,
-        path: &str,
-        max_size: usize,
-        range: FileRange,
-        compression: Option<CompressionAlgorithm>,
-    ) -> Result<Blob> {
-        self.get_range_stream(path, range, compression)
-            .await?
-            .materialize(max_size)
-            .await
-    }
-
     /// get a decompressing stream to a range inside an object in storage
     #[instrument(skip(self))]
     pub(crate) async fn get_range_stream(
@@ -231,17 +194,16 @@ impl AsyncStorage {
         Ok(raw_stream.decompress().await?)
     }
 
-    #[instrument(skip(self))]
-    pub async fn get_from_archive(
+    #[cfg(test)]
+    async fn get_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         path: &str,
-        max_size: usize,
     ) -> Result<Blob> {
         self.stream_from_archive(archive_path, latest_build_id, path)
             .await?
-            .materialize(max_size)
+            .materialize(self.config.max_file_size_for(path))
             .await
     }
 
@@ -658,7 +620,9 @@ mod backend_tests {
 
         for range in [0..=4, 5..=12] {
             let partial_blob = storage
-                .get_range("foo/bar.txt", usize::MAX, range.clone(), None)
+                .get_range_stream("foo/bar.txt", range.clone(), None)
+                .await?
+                .materialize(usize::MAX)
                 .await?;
             let range = (*range.start() as usize)..=(*range.end() as usize);
             assert_eq!(blob.content[range], partial_blob.content);
@@ -676,7 +640,7 @@ mod backend_tests {
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
                 storage
-                    .get_range(path, usize::MAX, 0..=4, None)
+                    .get_range_stream(path, 0..=4, None)
                     .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
@@ -897,14 +861,14 @@ mod backend_tests {
         );
 
         let file = storage
-            .get_from_archive("folder/test.zip", None, "Cargo.toml", usize::MAX)
+            .get_from_archive("folder/test.zip", None, "Cargo.toml")
             .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
         let file = storage
-            .get_from_archive("folder/test.zip", None, "src/main.rs", usize::MAX)
+            .get_from_archive("folder/test.zip", None, "src/main.rs")
             .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");

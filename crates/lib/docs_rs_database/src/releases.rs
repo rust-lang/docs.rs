@@ -40,7 +40,6 @@ pub async fn finish_release(
     has_examples: bool,
     compression_algorithms: impl IntoIterator<Item = CompressionAlgorithm>,
     repository_id: Option<i32>,
-    archive_storage: bool,
     source_size: u64,
 ) -> Result<()> {
     let source_dir = source_dir.as_ref();
@@ -80,8 +79,7 @@ pub async fn finish_release(
                default_target = $21,
                features = $22,
                repository_id = $23,
-               archive_storage = $24,
-               source_size = $25
+               source_size = $24
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
@@ -106,7 +104,6 @@ pub async fn finish_release(
         default_target,
         features as Vec<Feature>,
         repository_id,
-        archive_storage,
         source_size as i64,
     )
     .execute(&mut *conn)
@@ -707,7 +704,6 @@ mod test {
             false,
             iter::empty(),
             None,
-            true,
             24,
         )
         .await?;
@@ -1482,7 +1478,6 @@ mod test {
             false,
             iter::empty(),
             None,
-            true,
             24,
         )
         .await?;

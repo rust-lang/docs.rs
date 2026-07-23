@@ -239,7 +239,6 @@ async fn import_test_release_inner(
         false, // FIXME: real has_examples?
         algs,
         repository_id,
-        true,
         source_size,
     )
     .await?;

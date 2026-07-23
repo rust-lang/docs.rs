@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            (\n                SELECT id\n                FROM builds\n                WHERE\n                    builds.rid = releases.id AND\n                    builds.build_status = 'success'\n                ORDER BY build_finished DESC\n                LIMIT 1\n            ) AS \"latest_build_id?: BuildId\"\n         FROM releases\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n             name = $1 AND\n             version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "latest_build_id?: BuildId",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "85776ea9649e7860e9dd023f16d820b35015af1ce7e67d66280e905c86e4aa96"
+}
