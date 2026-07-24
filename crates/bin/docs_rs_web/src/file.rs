@@ -113,7 +113,8 @@ impl StreamingFile {
             (
                 StatusCode::OK,
                 TypedHeader(ContentType::from(self.0.mime)),
-                TypedHeader(ContentLength(self.0.content_length as u64)),
+                (self.0.compression.is_none())
+                    .then(|| TypedHeader(ContentLength(self.0.content_length as u64))),
                 TypedHeader(last_modified),
                 self.0.etag.map(TypedHeader),
                 Extension(cache_policy),
