@@ -10,7 +10,7 @@ use axum::{
 };
 use axum_extra::{
     TypedHeader,
-    headers::{ContentType, LastModified},
+    headers::{ContentLength, ContentType, LastModified},
 };
 use docs_rs_headers::IfNoneMatch;
 use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
@@ -113,6 +113,8 @@ impl StreamingFile {
             (
                 StatusCode::OK,
                 TypedHeader(ContentType::from(self.0.mime)),
+                (self.0.compression.is_none())
+                    .then(|| TypedHeader(ContentLength(self.0.content_length as u64))),
                 TypedHeader(last_modified),
                 self.0.etag.map(TypedHeader),
                 Extension(cache_policy),
@@ -132,7 +134,7 @@ mod tests {
     use docs_rs_headers::compute_etag;
     use docs_rs_storage::StorageKind;
     use docs_rs_types::CompressionAlgorithm;
-    use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
+    use http::header::{CACHE_CONTROL, CONTENT_LENGTH, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
 
     const CONTENT: &[u8] = b"Hello, world!";
@@ -177,6 +179,14 @@ mod tests {
             let resp = stream.into_response(None, STATIC_ASSET_CACHE_POLICY);
             assert!(resp.status().is_success());
             assert!(resp.headers().get(CACHE_CONTROL).is_none());
+            assert_eq!(
+                resp.headers()
+                    .get(CONTENT_LENGTH)
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                CONTENT.len().to_string()
+            );
             let cache = resp
                 .extensions()
                 .get::<CachePolicy>()
