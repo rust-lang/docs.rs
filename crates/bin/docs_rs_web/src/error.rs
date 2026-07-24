@@ -112,16 +112,16 @@ impl AxumNope {
                 // new release reached via `/latest/`). Acknowledge the version
                 // and offer recovery links instead of a bare 404 (issue #2568).
                 // The recovery links themselves are built in `recovery_links`.
-                let version_label = if is_latest_url {
-                    format!("the latest version ({version})")
+                let existing = if is_latest_url {
+                    format!("The latest version of `{name}` ({version})")
                 } else {
-                    format!("version {version}")
+                    format!("Version {version} of `{name}`")
                 };
                 ErrorInfo {
-                    title: "The requested resource does not exist",
+                    title: "This page does not exist",
                     message: format!(
-                        "`{name}` {version_label} exists, but this page within it does not. \
-                         It may have been moved or removed in this release."
+                        "{existing} exists, but this page inside it could not be found. \
+                         It may have been moved or removed."
                     )
                     .into(),
                     status: StatusCode::NOT_FOUND,
@@ -519,7 +519,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .text_contents(),
-                "The requested resource does not exist",
+                "This page does not exist",
             );
 
             // Two recovery links, preserving the `/latest/` alias.

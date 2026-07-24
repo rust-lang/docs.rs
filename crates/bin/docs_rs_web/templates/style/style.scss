@@ -884,6 +884,17 @@ div.search-page-search-form {
     display: inline-block;
 }
 
+#recovery-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 0 14px 14px;
+
+    .pure-button {
+        text-decoration: none;
+    }
+}
+
 #clipboard {
     cursor: pointer;
 }
