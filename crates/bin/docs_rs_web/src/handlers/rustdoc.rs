@@ -1093,9 +1093,9 @@ mod test {
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
-    use reqwest::StatusCode;
     use std::{collections::BTreeMap, str::FromStr as _};
     use test_case::test_case;
     use tracing::info;

@@ -16,7 +16,7 @@ pub enum Error {
     #[error("missing metadata in crates.io response")]
     MissingMetadata,
     #[error("HTTP error: {0}\n{1}")]
-    HttpError(reqwest::Error, String),
+    HttpError(reqwest_middleware::Error, String),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -32,8 +32,8 @@ impl Error {
     }
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
+impl From<reqwest_middleware::Error> for Error {
+    fn from(err: reqwest_middleware::Error) -> Self {
         Self::HttpError(err, String::new())
     }
 }

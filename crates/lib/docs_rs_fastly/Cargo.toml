@@ -20,6 +20,8 @@ http = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 url = { workspace = true }

@@ -10,6 +10,8 @@ use http::{
 };
 use itertools::Itertools as _;
 use opentelemetry::KeyValue;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use tracing::{error, instrument};
 use url::Url;
 
@@ -23,7 +25,7 @@ const MAX_SURROGATE_KEYS_IN_BATCH_PURGE: usize = 256;
 
 #[derive(Debug)]
 pub struct RealCdn {
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
     api_host: Url,
     service_sid: String,
     metrics: CdnMetrics,
@@ -46,9 +48,15 @@ impl RealCdn {
         headers.insert(FASTLY_KEY, HeaderValue::from_str(api_token)?);
 
         Ok(Self {
-            client: reqwest::Client::builder()
-                .default_headers(headers)
-                .build()?,
+            client: ClientBuilder::new(
+                reqwest::Client::builder()
+                    .default_headers(headers)
+                    .build()?,
+            )
+            .with(RetryTransientMiddleware::new_with_policy(
+                ExponentialBackoff::builder().build_with_max_retries(3),
+            ))
+            .build(),
             service_sid: service_sid.clone(),
             api_host: config.api_host.clone(),
             metrics: CdnMetrics::new(meter_provider),

@@ -277,8 +277,8 @@ mod tests {
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
     };
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
-    use reqwest::StatusCode;
     use std::str::FromStr as _;
 
     #[test]
