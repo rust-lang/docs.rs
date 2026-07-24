@@ -16,7 +16,7 @@ pub enum Error {
     #[error("missing metadata in crates.io response")]
     MissingMetadata,
     #[error("HTTP error: {0}\n{1}")]
-    HttpError(reqwest::Error, String),
+    HttpError(reqwest_middleware::Error, String),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -32,8 +32,8 @@ impl Error {
     }
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
+impl From<reqwest_middleware::Error> for Error {
+    fn from(err: reqwest_middleware::Error) -> Self {
         Self::HttpError(err, String::new())
     }
 }
@@ -43,6 +43,7 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use reqwest::StatusCode;
+    use std::result::Result;
 
     #[test]
     fn test_error_without_status() {
@@ -65,7 +66,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_error_reqwest_error_status() -> Result<()> {
+    async fn test_error_reqwest_error_status() -> Result<(), reqwest::Error> {
         let status = StatusCode::INTERNAL_SERVER_ERROR;
 
         let mut srv = mockito::Server::new_async().await;
