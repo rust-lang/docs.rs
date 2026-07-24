@@ -372,7 +372,7 @@ mod tests {
         async_wrapper,
     };
     use anyhow::Result;
-    use reqwest::StatusCode;
+    use http::StatusCode;
     use test_case::test_case;
 
     // These are "well-known" resources that will be requested from the root, but support

@@ -377,9 +377,9 @@ mod tests {
     use docs_rs_storage::StorageKind;
     use docs_rs_types::KrateName;
     use docs_rs_uri::encode_url_path;
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use mime::APPLICATION_PDF;
-    use reqwest::StatusCode;
     use std::str::FromStr as _;
     use test_case::test_case;
 

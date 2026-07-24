@@ -5,11 +5,13 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
-use docs_rs_utils::{APP_USER_AGENT, retry_async};
+use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
     StatusCode,
     header::{ACCEPT, HeaderValue, USER_AGENT},
 };
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
 use tracing::instrument;
 use url::Url;
@@ -17,8 +19,7 @@ use url::Url;
 #[derive(Debug)]
 pub struct RegistryApi {
     api_base: Url,
-    max_retries: u32,
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
 }
 
 impl RegistryApi {
@@ -30,22 +31,25 @@ impl RegistryApi {
     }
 
     pub fn new(api_base: Url, max_retries: u32) -> Result<Self> {
-        let headers = vec![
+        let headers = [
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
             (ACCEPT, HeaderValue::from_static("application/json")),
         ]
         .into_iter()
         .collect();
 
-        let client = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()?;
+        let client = ClientBuilder::new(
+            reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .map_err(reqwest_middleware::Error::Reqwest)?,
+        )
+        .with(RetryTransientMiddleware::new_with_policy(
+            ExponentialBackoff::builder().build_with_max_retries(max_retries),
+        ))
+        .build();
 
-        Ok(Self {
-            api_base,
-            client,
-            max_retries,
-        })
+        Ok(Self { api_base, client })
     }
 
     /// Make a request to crates.io, parse the response as JSON.
@@ -65,31 +69,14 @@ impl RegistryApi {
     where
         T: DeserializeOwned,
     {
-        let response = retry_async(
-            || async {
-                // Make the request.
-                // This would error on connection errors etc.
-                let response = self.client.get(url.clone()).send().await?;
-
-                if response.status().is_server_error() {
-                    // this just to let reqwest generate us its "standard" error
-                    let err = response.error_for_status_ref().unwrap_err();
-                    let text = response.text().await.unwrap_or_default();
-                    // we only want to retry on 5xx errors.
-                    // for client errors we assume that trying again is not worth it.
-                    Err(Error::HttpError(err, text))
-                } else {
-                    Ok::<_, Error>(response)
-                }
-            },
-            self.max_retries,
-        )
-        .await?;
-
+        let response = self.client.get(url.clone()).send().await?;
         let status = response.status();
 
         if status.is_success() {
-            Ok(response.json().await?)
+            Ok(response
+                .json()
+                .await
+                .map_err(reqwest_middleware::Error::Reqwest)?)
         } else {
             let text = response.text().await.unwrap_or_default();
 

@@ -843,9 +843,9 @@ mod tests {
         BuildStatus, SimpleBuildError,
         testing::{BAR, BAZ, FOO, V0_1, V1, V2, V3},
     };
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
     use mockito::Matcher;
-    use reqwest::StatusCode;
     use serde_json::json;
     use std::collections::HashSet;
     use std::str::FromStr;

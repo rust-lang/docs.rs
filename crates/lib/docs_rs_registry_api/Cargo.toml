@@ -14,6 +14,8 @@ docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }

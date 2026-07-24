@@ -55,7 +55,7 @@ mod tests {
         testing::{AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper},
     };
     use docs_rs_types::ReqVersion;
-    use reqwest::StatusCode;
+    use http::StatusCode;
     use test_case::test_case;
 
     #[test_case("latest")]

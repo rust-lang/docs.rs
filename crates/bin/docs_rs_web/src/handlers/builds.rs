@@ -253,8 +253,8 @@ mod tests {
         BuildStatus, SimpleBuildError,
         testing::{FOO, V0_1, V1, V2},
     };
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
-    use reqwest::StatusCode;
     use test_case::{test_case, test_matrix};
     use tower::ServiceExt;
 
