@@ -704,6 +704,12 @@ div.docsrs-package-container {
     border-bottom: 1px solid var(--color-border);
     margin-bottom: 20px;
 
+    // On the error page the body text below is centered against the full page
+    // width, so the title bar has to be centered too or the two disagree.
+    &.error-header .container {
+        margin: 0 auto;
+    }
+
     .container {
         display: flex;
         align-items: center;
@@ -887,8 +893,9 @@ div.search-page-search-form {
 #recovery-links {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
-    padding: 0 14px 14px;
+    padding: 10px 14px 14px;
 
     .pure-button {
         text-decoration: none;
