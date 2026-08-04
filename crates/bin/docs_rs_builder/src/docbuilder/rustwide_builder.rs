@@ -1,5 +1,10 @@
 use crate::{
-    Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics,
+    Config,
+    docbuilder::{
+        build_error::RustwideBuildError,
+        rustwide_ext::{RustwideBuildExt as _, find_single_file_in_doc_output_dir},
+    },
+    metrics::BuilderMetrics,
     utils::copy::copy_dir_all,
 };
 use anyhow::{Context as _, Error, Result, anyhow, bail};
@@ -24,8 +29,8 @@ use docs_rs_rustdoc_json::{
     read_format_version_from_rustdoc_json,
 };
 use docs_rs_storage::{
-    AsyncStorage, Storage, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    AsyncStorage, Storage, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
+    source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
@@ -46,8 +51,9 @@ use rustwide::{
 };
 use std::{
     collections::{HashMap, HashSet},
+    fmt,
     fs::{self, File},
-    io::BufReader,
+    io::{BufRead as _, BufReader},
     path::{Path, PathBuf},
     sync::{Arc, LazyLock},
     time::Instant,
@@ -459,11 +465,10 @@ impl RustwideBuilder {
 
                 info!("copying essential files for {}", rustc_version);
                 assert!(!metadata.proc_macro);
-                let source = build.host_target_dir().join(HOST_TARGET).join("doc");
                 let dest = tempfile::Builder::new()
                     .prefix("essential-files")
                     .tempdir()?;
-                copy_dir_all(source, &dest)?;
+                copy_dir_all(res.doc_output_dir, &dest)?;
 
                 // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
                 // put in their own directory, "static.files". To make sure those files are
@@ -675,7 +680,6 @@ impl RustwideBuilder {
                 }
 
 
-                let mut has_docs = false;
                 let mut successful_targets = Vec::new();
 
                 // Perform an initial build
@@ -705,24 +709,13 @@ impl RustwideBuilder {
                         self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
-                if res.successful()
-                    && let Some(name) = res.cargo_metadata.root().library_name() {
-                        let host_target = build.host_target_dir();
-                        has_docs = host_target
-                            .join(default_target)
-                            .join("doc")
-                            .join(name)
-                            .is_dir();
-                    }
+                let has_docs = res.has_docs();
 
                 let mut target_build_logs = HashMap::new();
                 let documentation_size = if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
+                    res.copy_docs(
                         local_storage.path(),
-                        default_target,
-                        true,
                     )?;
 
                     successful_targets.push(res.target.clone());
@@ -949,9 +942,9 @@ impl RustwideBuilder {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
-            if build.host_target_dir().join(target).join("doc").is_dir() {
+            if target_res.doc_output_dir.is_dir() {
                 debug!("adding documentation for target {} to the database", target,);
-                self.copy_docs(&build.host_target_dir(), local_storage, target, false)?;
+                target_res.copy_docs(local_storage)?;
                 successful_targets.push(target.to_string());
             }
         }
@@ -1001,39 +994,15 @@ impl RustwideBuilder {
             return Ok(());
         };
 
-        let json_dir = if metadata.proc_macro {
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+        if metadata.proc_macro {
             assert!(
                 is_default_target && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
             );
-            build.host_target_dir().join("doc")
-        } else {
-            build.host_target_dir().join(target).join("doc")
-        };
+        }
 
-        let json_filename = fs::read_dir(&json_dir)?
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if path.is_file() && path.extension()? == "json" {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .next()
-            .ok_or_else(|| {
-                anyhow!(
-                    "no JSON file found in target/doc after successful rustdoc json build.\n\
-                     search directory: {}\n\
-                     files: {:?}",
-                    json_dir.to_string_lossy(),
-                    get_file_list(&json_dir)
-                        .filter_map(Result::ok)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect::<Vec<_>>(),
-                )
-            })?;
+        let json_filename = find_single_file_in_doc_output_dir(&doc_output_dir, "json")?;
 
         let format_version = {
             let _span = info_span!("read_format_version").entered();
@@ -1123,6 +1092,9 @@ impl RustwideBuilder {
 
         self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
             .process_lines(&mut |line, _| {
+                // NOTE: legacy for old nightlies.
+                // can be removed when the new nightly is used in prod, and coverage
+                // works.
                 if line.starts_with('{') && line.ends_with('}') {
                     match doc_coverage::parse_line(line) {
                         Ok(file_coverages) => coverage.extend(file_coverages),
@@ -1132,6 +1104,23 @@ impl RustwideBuilder {
             })
             .log_output(true)
             .run()?;
+
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+        match find_single_file_in_doc_output_dir(&doc_output_dir, "json") {
+            Ok(coverage_json_file) => {
+                let reader = BufReader::new(File::open(&coverage_json_file)?);
+                for line in reader.lines() {
+                    let line = line?;
+                    match doc_coverage::parse_line(&line) {
+                        Ok(file_coverages) => coverage.extend(file_coverages),
+                        Err(err) => warn!(?err, line, "failed to parse coverage line"),
+                    }
+                }
+            }
+            Err(err) => {
+                warn!(?err, "can't find coverage output file");
+            }
+        }
 
         Ok(
             if coverage.total_items == 0 && coverage.documented_items == 0 {
@@ -1242,21 +1231,13 @@ impl RustwideBuilder {
             fs::remove_dir_all(&metric_output)?;
         }
 
-        // For proc-macros, cargo will put the output in `target/doc`.
-        // Move it to the target-specific directory for consistency with other builds.
-        // NOTE: don't rename this if the build failed, because `target/doc` won't exist.
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+
         if result.is_ok() && metadata.proc_macro {
             assert!(
                 is_default_target && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
             );
-            // mv target/doc target/$target/doc
-            let target_dir = build.host_target_dir();
-            let old_dir = target_dir.join("doc");
-            let new_dir = target_dir.join(target).join("doc");
-            debug!("rename {} to {}", old_dir.display(), new_dir.display());
-            std::fs::create_dir(target_dir.join(target))?;
-            std::fs::rename(old_dir, new_dir)?;
         }
 
         Ok(FullBuildResult {
@@ -1269,6 +1250,8 @@ impl RustwideBuilder {
             cargo_metadata,
             build_log: storage.to_string(),
             target: target.to_string(),
+            is_default_target,
+            doc_output_dir,
         })
     }
 
@@ -1365,30 +1348,6 @@ impl RustwideBuilder {
         Ok(command.args(&cargo_args))
     }
 
-    #[instrument(skip(self))]
-    fn copy_docs(
-        &self,
-        target_dir: &Path,
-        local_storage: &Path,
-        target: &str,
-        is_default_target: bool,
-    ) -> Result<()> {
-        let source = target_dir.join(target).join("doc");
-
-        let mut dest = local_storage.to_path_buf();
-        // only add target name to destination directory when we are copying a non-default target.
-        // this is allowing us to host documents in the root of the crate documentation directory.
-        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
-        // default target: x86_64-pc-windows-msvc. But since it will be built under
-        // target/x86_64-pc-windows-msvc we still need target in this function.
-        if !is_default_target {
-            dest = dest.join(target);
-        }
-
-        info!("copy {} to {}", source.display(), dest.display());
-        copy_dir_all(source, dest).map_err(Into::into)
-    }
-
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats.load_repository(metadata))
@@ -1398,14 +1357,48 @@ impl RustwideBuilder {
 struct FullBuildResult {
     result: BuildResult,
     target: String,
+    is_default_target: bool,
     cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
+    /// the directory where cargo/rustdoc put the docs.
+    doc_output_dir: PathBuf,
 }
 
 impl FullBuildResult {
     pub(crate) fn successful(&self) -> bool {
         self.result.successful()
+    }
+
+    pub(crate) fn has_docs(&self) -> bool {
+        if self.successful()
+            && let Some(name) = self.cargo_metadata.root().library_name()
+        {
+            self.doc_output_dir.join(name).is_dir()
+        } else {
+            false
+        }
+    }
+
+    #[instrument(skip(self))]
+    fn copy_docs<P>(&self, dest: P) -> Result<()>
+    where
+        P: Into<PathBuf> + fmt::Debug,
+    {
+        let source = &self.doc_output_dir;
+        let mut dest = dest.into();
+
+        // only add target name to destination directory when we are copying a non-default target.
+        // this is allowing us to host documents in the root of the crate documentation directory.
+        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
+        // default target: x86_64-pc-windows-msvc. But since it will be built under
+        // target/x86_64-pc-windows-msvc we still need target in this function.
+        if !self.is_default_target {
+            dest = dest.join(&self.target);
+        }
+
+        info!("copy {} to {}", source.display(), dest.display());
+        copy_dir_all(source, dest).map_err(Into::into)
     }
 }
 
