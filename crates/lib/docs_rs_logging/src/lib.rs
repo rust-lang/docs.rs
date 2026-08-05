@@ -11,7 +11,6 @@ use sentry::{
     TransactionContext, integrations::panic as sentry_panic,
     integrations::tracing as sentry_tracing,
 };
-use std::sync::Arc;
 use tracing_subscriber::prelude::*;
 
 /// defines the transaction name to be used for our rustwide builder.
@@ -71,13 +70,11 @@ pub fn init_with_config(config: &Config) -> anyhow::Result<Guard> {
 
         Some(sentry::init((
             sentry_config.dsn.clone(),
-            sentry::ClientOptions {
-                release: Some(docs_rs_utils::BUILD_VERSION.into()),
-                attach_stacktrace: true,
-                traces_sampler: Some(Arc::new(traces_sampler)),
-                ..Default::default()
-            }
-            .add_integration(sentry_panic::PanicIntegration::default()),
+            sentry::ClientOptions::new()
+                .release(docs_rs_utils::BUILD_VERSION)
+                .attach_stacktrace(true)
+                .traces_sampler(traces_sampler)
+                .add_integration(sentry_panic::PanicIntegration::default()),
         )))
     } else {
         tracing::subscriber::set_global_default(tracing_registry)?;
