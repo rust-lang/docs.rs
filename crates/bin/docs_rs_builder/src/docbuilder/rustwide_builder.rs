@@ -1165,9 +1165,9 @@ impl RustwideBuilder {
 
         let mut rustdoc_flags = vec![
             if create_essential_files {
-                "--emit=toolchain-shared-resources"
+                "--emit=html-static-files"
             } else {
-                "--emit=invocation-specific"
+                "--emit=html-non-static-files"
             }
             .to_string(),
         ];

@@ -827,6 +827,7 @@ pub(crate) async fn build_queue_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::page::web_page::AddCspNonce;
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
@@ -1849,6 +1850,12 @@ mod tests {
                 let a = li.as_node().select_first("a").expect("missing link");
                 assert!(a.text_contents().contains(expected.0));
                 assert!(a.text_contents().contains(&expected.1.to_string()));
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(
+                        format!("https://crates.io/crates/{}/{}", expected.0, expected.1).as_str()
+                    )
+                );
 
                 if let Some(priority) = expected.2 {
                     assert!(
@@ -2001,6 +2008,17 @@ mod tests {
 
             assert_eq!(build_queue_list.len(), 1);
             assert_eq!(rebuild_queue_list.len(), 2);
+            for li in build_queue_list.iter().chain(&rebuild_queue_list) {
+                let a = li.as_node().select_first("a").expect("missing link");
+                let text = a.text_contents();
+                let mut parts = text.split_whitespace();
+                let name = parts.next().expect("missing crate name");
+                let version = parts.next().expect("missing crate version");
+                assert_eq!(
+                    a.attributes.borrow().get("href"),
+                    Some(format!("https://crates.io/crates/{name}/{version}").as_str())
+                );
+            }
             assert!(
                 rebuild_queue_list
                     .iter()
@@ -2024,6 +2042,34 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn home_page_description_title_escapes_quotes() {
+        let description = r#"A "quoted" crate description"#;
+        let mut page = HomePage {
+            recent_releases: vec![Release {
+                name: FOO,
+                version: V1,
+                description: Some(description.into()),
+                target_name: None,
+                rustdoc_status: true,
+                build_time: None,
+                stars: 0,
+                has_unyanked_releases: Some(true),
+            }],
+        };
+
+        let html =
+            kuchikiki::parse_html().one(page.render_with_csp_nonce("test-nonce".into()).unwrap());
+        let description_element = html
+            .select_first(".recent-releases-container .description")
+            .expect("missing release description");
+
+        assert_eq!(
+            description_element.attributes.borrow().get("title"),
+            Some(description),
+        );
     }
 
     #[test]

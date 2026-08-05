@@ -235,7 +235,7 @@ where
             // at which point we don't need the result anymore.
             let _ = send.send(f());
         })
-        .with_context(|| format!("couldn't spawn worker thread for {}", &name))?;
+        .with_context(|| format!("couldn't spawn worker thread for {}", name))?;
 
     recv.await.context("sender was dropped")?
 }

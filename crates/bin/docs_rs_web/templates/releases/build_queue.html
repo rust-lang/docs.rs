@@ -81,7 +81,7 @@ centered
                 {%- if !queue.is_empty() -%}
                     {% for crate_item in queue -%}
                         <li>
-                            <a href="https://crates.io/crates/{{ crate_item.name }}">
+                            <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
                                 {{- crate_item.name }} {{ crate_item.version -}}
                             </a>
 
@@ -116,7 +116,7 @@ centered
                     {%- if !rebuild_queue.is_empty() -%}
                         {% for crate_item in rebuild_queue -%}
                             <li>
-                                <a href="https://crates.io/crates/{{ crate_item.name }}">
+                                <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
                                     {{- crate_item.name }} {{ crate_item.version -}}
                                 </a>
                             </li>
