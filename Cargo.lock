@@ -2190,8 +2190,6 @@ dependencies = [
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]

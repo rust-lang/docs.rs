@@ -33,11 +33,6 @@ pub async fn watch(config: &Config, context: &Context) {
     let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
-        if context.shutdown_token().is_cancelled() {
-            info!("watcher shut down");
-            return;
-        }
-
         if config
             .crates_io_events
             .as_ref()
@@ -46,16 +41,8 @@ pub async fn watch(config: &Config, context: &Context) {
         {
             if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
             {
-                if context.shutdown_token().is_cancelled() {
-                    return;
-                }
                 error!(?err, "unexpected error watching SQS, will retry");
                 time::sleep(Duration::from_secs(10)).await;
-
-                tokio::select! {
-                    _ = context.shutdown_token().cancelled() => return,
-                    _ = time::sleep(Duration::from_secs(10)) => {}
-                }
             }
         } else {
             // intermediate mode:
@@ -90,10 +77,6 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
     let queue = context.build_queue()?;
 
     loop {
-        if context.shutdown_token().is_cancelled() {
-            return Ok(());
-        }
-
         if queue.is_locked().await? {
             debug!("Queue is locked, skipping checking new crates");
         } else {
@@ -112,10 +95,7 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
                 last_gc = Instant::now();
             }
         }
-        tokio::select! {
-            _ = context.shutdown_token().cancelled() => return Ok(()),
-            _ = time::sleep(config.delay_between_registry_fetches) => {}
-        }
+        time::sleep(config.delay_between_registry_fetches).await;
     }
 }
 

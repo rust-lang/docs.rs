@@ -68,8 +68,6 @@ impl CommandLine {
             .with_repository_stats()?
             .build()?;
 
-        ctx.setup_graceful_shutdown().await;
-
         match self {
             Self::Start {
                 repository_stats_updater,

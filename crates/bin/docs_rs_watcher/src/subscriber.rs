@@ -16,7 +16,7 @@ use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
 use std::time::{Duration, Instant};
 use tokio::time;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 /// wait-time (long polling):
 ///
@@ -86,34 +86,26 @@ pub(crate) async fn run_sqs_subscriber(
         }
 
         debug!("receiving messages...");
-        let messages = tokio::select! {
-            _ = context.shutdown_token().cancelled() => {
-                info!("SQS subscriber shut down before polling");
-                return Ok(());
-            }
-            result = client
-                .receive_message()
-                .queue_url(&queue_url)
-                .max_number_of_messages(10)
-                .wait_time_seconds(WAIT_TIME.as_secs() as i32)
-                .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
-                .send() =>
-            {
-                match result {
-                    Ok(response) => response.messages().to_vec(),
-                    Err(err) => {
-                        metrics.sqs_poll_errors_total.add(1, &[]);
-                        error!(?err, queue_url, "error receiving messages from SQS");
-
-                        tokio::select! {
-                            _ = context.shutdown_token().cancelled() => return Ok(()),
-                            _ = time::sleep(WAIT_TIME) => continue,
-                        }
-                    }
-                }
+        let messages = match client
+            .receive_message()
+            .queue_url(&queue_url)
+            .max_number_of_messages(10)
+            .wait_time_seconds(WAIT_TIME.as_secs() as i32)
+            .visibility_timeout(VISIBILITY_TIMEOUT.as_secs() as i32)
+            .send()
+            .await
+        {
+            Ok(response) => response.messages().to_vec(),
+            Err(err) => {
+                metrics.sqs_poll_errors_total.add(1, &[]);
+                error!(
+                    ?err,
+                    queue_url, "error receiving messages from sqs, retrying"
+                );
+                time::sleep(WAIT_TIME).await;
+                continue;
             }
         };
-
         metrics
             .sqs_messages_received_total
             .add(messages.len() as u64, &[]);
@@ -158,11 +150,6 @@ pub(crate) async fn run_sqs_subscriber(
             }
         }
 
-        if context.shutdown_token().is_cancelled() {
-            info!("finished in-flight SQS batch; subscriber shut down");
-            return Ok(());
-        }
-
         if last_priority_recheck.elapsed() >= DELAY_BETWEEN_PRIORITY_RECHECK {
             if let Err(err) = queue.deprioritize_workspaces().await {
                 error!(?err, "error deprioritizing workspaces");
@@ -171,13 +158,7 @@ pub(crate) async fn run_sqs_subscriber(
             last_priority_recheck = Instant::now();
         }
 
-        tokio::select! {
-            _ = context.shutdown_token().cancelled() => {
-                info!("SQS subscriber shut down");
-                return Ok(());
-            }
-            _ = time::sleep(SLEEP_BETWEEN_REQUESTS) => {}
-        }
+        time::sleep(SLEEP_BETWEEN_REQUESTS).await;
     }
 }
 
