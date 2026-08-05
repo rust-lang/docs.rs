@@ -59,8 +59,8 @@ pub(crate) async fn run_sqs_subscriber(
     context: &Context,
     metrics: &WatcherMetrics,
 ) -> Result<()> {
-    let (Some(region), Some(queue_url)) = (&config.sqs_region, &config.sqs_queue_url) else {
-        warn!("missing sqs region or url, disabling crates.io SQS subscriber");
+    let Some(sqs_config) = &config.crates_io_events else {
+        warn!("missing sqs config, disabling crates.io SQS subscriber");
         return Ok(());
     };
     let mut last_priority_recheck = Instant::now();
@@ -69,14 +69,14 @@ pub(crate) async fn run_sqs_subscriber(
     debug!("creating SQS client...");
     let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
     let mut client_config = aws_sdk_sqs::config::Builder::from(&shared_config)
-        .retry_config(RetryConfig::standard().with_max_attempts(config.aws_sdk_max_retries))
-        .region(Region::new(region.to_string()));
-    if let Some(endpoint_url) = &config.sqs_endpoint_url {
+        .retry_config(RetryConfig::standard().with_max_attempts(sqs_config.max_retries))
+        .region(Region::new(sqs_config.region.to_string()));
+    if let Some(endpoint_url) = &sqs_config.endpoint_url {
         client_config = client_config.endpoint_url(endpoint_url.to_string());
     }
     let client = Client::from_conf(client_config.build());
 
-    let queue_url = queue_url.to_string();
+    let queue_url = sqs_config.queue_url.to_string();
 
     loop {
         if queue.is_locked().await? {
@@ -173,12 +173,7 @@ async fn handle_message_body(
     };
     let start = Instant::now();
 
-    match retry_async(
-        || async move { process_sqs_event(context, config, metrics, body).await },
-        3,
-    )
-    .await
-    {
+    match process_sqs_event(context, config, metrics, body).await {
         Ok(_) => {
             metrics
                 .sqs_message_processing_time
@@ -216,10 +211,21 @@ async fn process_sqs_event(
         .sqs_event_lag
         .record((Utc::now() - event.occurred_at).as_seconds_f64(), &[]);
 
-    if config.sqs_active {
-        process_change(context, &event.change, config)
-            .await
-            .context("error processing change")?;
+    if config
+        .crates_io_events
+        .as_ref()
+        .map(|config| config.active)
+        .unwrap_or(false)
+    {
+        retry_async(
+            || {
+                let change = event.change.clone();
+                async move { process_change(context, &change, config).await }
+            },
+            3,
+        )
+        .await
+        .context("error processing change")?;
         metrics.record_change_applied(&event.change);
     }
 
@@ -379,7 +385,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_sqs_event_dispatches_added_event() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.sqs_active = true;
+        if let Some(sqs_config) = &mut config.crates_io_events {
+            sqs_config.active = false;
+        }
         let env = TestEnvironment::builder().config(config).build().await?;
         let metrics = WatcherMetrics::new(&env.context().meter_provider);
 
@@ -410,7 +418,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_sqs_event_respects_sqs_active() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.sqs_active = false;
+        if let Some(sqs_config) = &mut config.crates_io_events {
+            sqs_config.active = false;
+        }
         let env = TestEnvironment::builder().config(config).build().await?;
         let metrics = WatcherMetrics::new(&env.context().meter_provider);
 

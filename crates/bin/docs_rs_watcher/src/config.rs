@@ -8,7 +8,7 @@ use url::Url;
 pub struct SqsConfig {
     pub queue_url: Url,
     pub region: String,
-    pub endpoint_url: Url,
+    pub endpoint_url: Option<Url>,
     pub max_retries: u32,
     /// temporary, to switch between the sources for the index (git index vs SQS)
     pub active: bool,
@@ -16,11 +16,10 @@ pub struct SqsConfig {
 
 impl AppConfig for SqsConfig {
     fn from_environment() -> Result<Self> {
-        let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
         Ok(Self {
-            queue_url: mandatory_env("DOCSRS_SQS_QUEUE_URL")?,
-            region: mandatory_env("DOCSRS_SQS_REGION")?,
-            endpoint_url: mandatory_env("DOCSRS_SQS_ENDPOINT_URL")?,
+            queue_url: require_env("DOCSRS_SQS_QUEUE_URL")?,
+            region: require_env("DOCSRS_SQS_REGION")?,
+            endpoint_url: maybe_env("DOCSRS_SQS_ENDPOINT_URL")?,
             active: env("DOCSRS_SQS_ACTIVE", false)?,
             max_retries: env("DOCSRS_MAX_RETRIES", 6u32)?,
         })
@@ -55,7 +54,7 @@ impl AppConfig for Config {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
 
-            crates_io_events: Arc::new(SqsConfig::from_environment()?),
+            crates_io_events: SqsConfig::from_environment().ok(),
 
             delay_between_registry_fetches: Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
@@ -74,7 +73,9 @@ impl AppConfig for Config {
     #[cfg(test)]
     fn test_config() -> Result<Self> {
         let mut config = Self::from_environment()?;
-        config.crates_io_events = None;
+        if let Some(sqs_config) = &mut config.crates_io_events {
+            sqs_config.active = false;
+        }
         Ok(config)
     }
 }

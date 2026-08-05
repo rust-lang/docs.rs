@@ -142,7 +142,12 @@ async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Conf
     for change in changes {
         debug!(?change, "received change from git index");
 
-        if config.sqs_active {
+        if config
+            .crates_io_events
+            .as_ref()
+            .map(|config| config.active)
+            .unwrap_or(false)
+        {
             // just to be safe.
             // Generally we don't even start the git-index-watcher when
             // SQS is active.
