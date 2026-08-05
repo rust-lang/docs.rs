@@ -4,6 +4,9 @@ use docs_rs_env_vars::{env, maybe_env, require_env};
 use std::{path::PathBuf, time::Duration};
 use url::Url;
 
+const SQS_QUEUE_URL: &str = "DOCSRS_SQS_QUEUE_URL";
+const SQS_QUEUE_REGION: &str = "DOCSRS_SQS_QUEUE_REGION";
+
 #[derive(Debug)]
 pub struct SqsConfig {
     pub queue_url: Url,
@@ -14,14 +17,26 @@ pub struct SqsConfig {
     pub active: bool,
 }
 
+impl SqsConfig {
+    pub(crate) fn if_configured() -> Result<Option<Self>> {
+        if maybe_env::<String>(SQS_QUEUE_URL)?.is_some()
+            && maybe_env::<String>(SQS_QUEUE_REGION)?.is_some()
+        {
+            SqsConfig::from_environment().map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 impl AppConfig for SqsConfig {
     fn from_environment() -> Result<Self> {
         Ok(Self {
-            queue_url: require_env("DOCSRS_SQS_QUEUE_URL")?,
-            region: require_env("DOCSRS_SQS_REGION")?,
+            queue_url: require_env(SQS_QUEUE_URL)?,
+            region: require_env(SQS_QUEUE_REGION)?,
             endpoint_url: maybe_env("DOCSRS_SQS_ENDPOINT_URL")?,
             active: env("DOCSRS_SQS_ACTIVE", false)?,
-            max_retries: env("DOCSRS_MAX_RETRIES", 6u32)?,
+            max_retries: env("DOCSRS_SQS_MAX_RETRIES", 6u32)?,
         })
     }
 }
@@ -54,7 +69,7 @@ impl AppConfig for Config {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
 
-            crates_io_events: SqsConfig::from_environment().ok(),
+            crates_io_events: SqsConfig::if_configured()?,
 
             delay_between_registry_fetches: Duration::from_secs(env::<u64>(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
