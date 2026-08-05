@@ -10,6 +10,31 @@ use docs_rs_repository_stats::RepositoryStatsUpdater;
 use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime;
+use tokio_util::sync::CancellationToken;
+use tracing::info;
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
+
+    info!("signal received, starting graceful shutdown");
+}
 
 #[derive(bon::Builder)]
 #[builder(
@@ -47,6 +72,23 @@ pub struct Context {
 
     #[builder(setters(vis = "", name = repository_stats_internal))]
     pub repository_stats: Option<Arc<RepositoryStatsUpdater>>,
+
+    #[builder(default)]
+    pub shutdown_token: CancellationToken,
+}
+
+impl Context {
+    pub fn shutdown_token(&self) -> &CancellationToken {
+        &self.shutdown_token
+    }
+
+    pub async fn setup_graceful_shutdown(&self) {
+        let signal_shutdown = self.shutdown_token.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            signal_shutdown.cancel();
+        });
+    }
 }
 
 use context_builder::{
