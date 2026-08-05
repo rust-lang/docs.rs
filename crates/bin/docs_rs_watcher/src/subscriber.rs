@@ -211,12 +211,7 @@ async fn process_sqs_event(
         .sqs_event_lag
         .record((Utc::now() - event.occurred_at).as_seconds_f64(), &[]);
 
-    if config
-        .crates_io_events
-        .as_ref()
-        .map(|config| config.active)
-        .unwrap_or(false)
-    {
+    if config.crates_io_events_active() {
         retry_async(
             || {
                 let change = event.change.clone();
@@ -226,8 +221,9 @@ async fn process_sqs_event(
         )
         .await
         .context("error processing change")?;
-        metrics.record_change_applied(&event.change);
     }
+
+    metrics.record_change_applied(&event.change);
 
     Ok(())
 }

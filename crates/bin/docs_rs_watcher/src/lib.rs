@@ -33,12 +33,7 @@ pub async fn watch(config: &Config, context: &Context) {
     let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
-        if config
-            .crates_io_events
-            .as_ref()
-            .map(|config| config.active)
-            .unwrap_or(false)
-        {
+        if config.crates_io_events_active() {
             if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
             {
                 error!(?err, "unexpected error watching SQS, will retry");

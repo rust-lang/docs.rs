@@ -62,6 +62,15 @@ pub struct Config {
     pub repository: docs_rs_repository_stats::Config,
 }
 
+impl Config {
+    pub fn crates_io_events_active(&self) -> bool {
+        self.crates_io_events
+            .as_ref()
+            .map(|config| config.active)
+            .unwrap_or(false)
+    }
+}
+
 impl AppConfig for Config {
     fn from_environment() -> Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
