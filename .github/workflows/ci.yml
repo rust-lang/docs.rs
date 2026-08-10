@@ -129,7 +129,7 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.9.4
+          deno-version: 2.9.5
 
       - uses: taiki-e/install-action@v2
         with:
