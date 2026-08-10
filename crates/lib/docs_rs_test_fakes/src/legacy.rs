@@ -8,7 +8,9 @@ use docs_rs_database::{
         add_build_logs, initialize_build, initialize_crate, initialize_release, update_build_status,
     },
 };
-use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
+use docs_rs_registry_api::{
+    CrateData, CrateOwner, ReleaseData, testing::static_test_env::TestStaticCratesIo,
+};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
     AsyncStorage, FileEntry, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
@@ -70,6 +72,7 @@ where
 pub struct FakeRelease<'a> {
     pool: Pool,
     storage: Arc<AsyncStorage>,
+    static_crates_io: Option<Arc<TestStaticCratesIo>>,
     package: MetadataPackage,
     builds: Option<Vec<FakeBuild>>,
     /// name, content
@@ -107,10 +110,15 @@ const DEFAULT_CONTENT: &[u8] =
     b"<html><head></head><body>default content for test/fakes</body></html>";
 
 impl<'a> FakeRelease<'a> {
-    pub fn new(pool: Pool, storage: Arc<AsyncStorage>) -> Self {
+    pub fn new(
+        pool: Pool,
+        storage: Arc<AsyncStorage>,
+        static_crates_io: Option<Arc<TestStaticCratesIo>>,
+    ) -> Self {
         FakeRelease {
             pool,
             storage,
+            static_crates_io,
             package: MetadataPackage {
                 id: "fake-package-id".into(),
                 name: "fake-package".into(),
@@ -454,6 +462,8 @@ impl<'a> FakeRelease<'a> {
         let source_tmp = create_temp_dir();
         store_files_into(&self.source_files, source_tmp.path())?;
 
+        let mut additional_source_files: Vec<(String, Vec<u8>)> = Vec::new();
+
         if !self.no_cargo_toml
             && !self
                 .source_files
@@ -469,6 +479,23 @@ impl<'a> FakeRelease<'a> {
             "#
             );
             store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
+            additional_source_files.push(("Cargo.toml".into(), content.as_bytes().to_vec()));
+        }
+
+        let krate_name: KrateName = package.name.parse()?;
+
+        if let Some(static_crates_io) = self.static_crates_io {
+            let (manifest, zip) =
+                docs_rs_registry_api::testing::static_test_env::create_test_source_archive(
+                    self.source_files.iter().cloned().chain(
+                        additional_source_files
+                            .iter()
+                            .map(|(n, c)| (n.as_str(), c.as_slice())),
+                    ),
+                )?;
+            static_crates_io
+                .add(&krate_name, &package.version, manifest, zip)
+                .await?;
         }
 
         let (source_meta, algs) = upload_files(
@@ -535,8 +562,6 @@ impl<'a> FakeRelease<'a> {
         if !self.doc_targets.iter().any(|t| t == default_target) {
             self.doc_targets.insert(0, default_target.to_owned());
         }
-
-        let krate_name: KrateName = package.name.parse()?;
 
         for target in &self.doc_targets {
             let dummy_rustdoc_json_content = serde_json::to_vec(&serde_json::json!({

@@ -15,15 +15,14 @@ use crate::{
 use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
-    extract::Extension,
+    Extension,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
-use docs_rs_registry_api::OwnerKind;
-use docs_rs_storage::{AsyncStorage, PathNotFoundError};
+use docs_rs_registry_api::{OwnerKind, RegistryApi};
 use docs_rs_types::{
     BuildId, BuildStatus, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
 };
@@ -292,26 +291,18 @@ impl CrateDetails {
         Ok(Some(crate_details))
     }
 
-    async fn fetch_readme(&self, storage: &AsyncStorage) -> anyhow::Result<Option<String>> {
-        let manifest = match storage
-            .fetch_source_file(
-                &self.name,
-                &self.version,
-                self.latest_build_id,
-                "Cargo.toml",
-                self.archive_storage,
-            )
-            .await
-        {
-            Ok(manifest) => manifest,
-            Err(err) if err.is::<PathNotFoundError>() => {
-                return Ok(None);
-            }
-            Err(err) => {
-                return Err(err);
-            }
+    async fn fetch_readme(&self, registry_api: &RegistryApi) -> anyhow::Result<Option<String>> {
+        let source_archive = match registry_api.source_archive(&self.name, &self.version).await {
+            Ok(archive) => archive,
+            Err(docs_rs_registry_api::Error::MissingReleases) => return Ok(None),
+            Err(err) => return Err(err.into()),
         };
-        let manifest = String::from_utf8(manifest.content)
+
+        let Some(cargo_toml) = source_archive.by_name("Cargo.toml") else {
+            return Ok(None);
+        };
+
+        let manifest = String::from_utf8(source_archive.fetch_bytes(cargo_toml).await?)
             .context("parsing Cargo.toml")?
             .parse::<toml::Table>()
             .context("parsing Cargo.toml")?;
@@ -321,29 +312,15 @@ impl CrateDetails {
             Some(toml::Value::String(path)) => vec![path.as_ref()],
             _ => vec!["README.md", "README.txt", "README"],
         };
+
         for path in &paths {
-            match storage
-                .fetch_source_file(
-                    &self.name,
-                    &self.version,
-                    self.latest_build_id,
-                    path,
-                    self.archive_storage,
-                )
-                .await
-            {
-                Ok(readme) => {
-                    let readme = String::from_utf8(readme.content)
-                        .with_context(|| format!("parsing {path} content"))?;
-                    return Ok(Some(readme));
-                }
-                Err(err) if err.is::<PathNotFoundError>() => {
-                    continue;
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            }
+            let Some(readme) = source_archive.by_name(path) else {
+                continue;
+            };
+
+            return Ok(Some(
+                String::from_utf8_lossy(&source_archive.fetch_bytes(readme).await?).to_string(),
+            ));
         }
         Ok(None)
     }
@@ -450,10 +427,10 @@ impl_axum_webpage! {
     cpu_intensive_rendering = true,
 }
 
-#[tracing::instrument(skip(conn, storage))]
+#[tracing::instrument(skip(conn))]
 pub(crate) async fn crate_details_handler(
     params: RustdocParams,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    Extension(registry_api): Extension<Arc<RegistryApi>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
@@ -487,7 +464,7 @@ pub(crate) async fn crate_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    match details.fetch_readme(&storage).await {
+    match details.fetch_readme(&registry_api).await {
         Ok(readme) => details.readme = readme.or(details.readme),
         Err(e) => warn!(?e, "error fetching readme"),
     }
@@ -1925,88 +1902,90 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn readme() {
-        async_wrapper(|env| async move {
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .readme_only_database("database readme")
-                .create()
-                .await?;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn readme() -> Result<()> {
+        let env = TestEnvironment::builder()
+            .registry_api_config(docs_rs_registry_api::Config::builder().build())
+            .build()
+            .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .readme_only_database("database readme")
-                .source_file("README.md", b"storage readme")
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.1.0")
+            .readme_only_database("database readme")
+            .create()
+            .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.3.0")
-                .source_file("README.md", b"storage readme")
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .readme_only_database("database readme")
+            .source_file("README.md", b"storage readme")
+            .create()
+            .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.4.0")
-                .readme_only_database("database readme")
-                .source_file("MEREAD", b"storage meread")
-                .source_file("Cargo.toml", br#"package.readme = "MEREAD""#)
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.3.0")
+            .source_file("README.md", b"storage readme")
+            .create()
+            .await?;
 
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.5.0")
-                .readme_only_database("database readme")
-                .source_file("README.md", b"storage readme")
-                .no_cargo_toml()
-                .create()
-                .await?;
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.4.0")
+            .readme_only_database("database readme")
+            .source_file("MEREAD", b"storage meread")
+            .source_file("Cargo.toml", br#"package.readme = "MEREAD""#)
+            .create()
+            .await?;
 
-            let check_readme = |path: String, content: String| {
-                let env = env.clone();
-                async move {
-                    let resp = env.web_app().await.get(&path).await.unwrap();
-                    let body = resp.text().await.unwrap();
-                    assert!(body.contains(&content));
-                }
-            };
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.5.0")
+            .readme_only_database("database readme")
+            .source_file("README.md", b"storage readme")
+            .no_cargo_toml()
+            .create()
+            .await?;
 
-            check_readme("/crate/dummy/0.1.0".into(), "database readme".into()).await;
-            check_readme("/crate/dummy/0.2.0".into(), "storage readme".into()).await;
-            check_readme("/crate/dummy/0.3.0".into(), "storage readme".into()).await;
-            check_readme("/crate/dummy/0.4.0".into(), "storage meread".into()).await;
+        async fn check_readme(env: &TestEnvironment, path: &str, content: &str) {
+            let resp = env.web_app().await.assert_success(path).await.unwrap();
+            let body = resp.text().await.unwrap();
+            assert!(body.contains(content));
+        }
 
-            let mut conn = env.async_conn().await?;
-            let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
-            assert!(matches!(
-                details.fetch_readme(env.storage()?).await,
-                Ok(None)
-            ));
-            Ok(())
-        });
+        check_readme(&env, "/crate/dummy/0.1.0", "database readme").await;
+        check_readme(&env, "/crate/dummy/0.2.0", "storage readme").await;
+        check_readme(&env, "/crate/dummy/0.3.0", "storage readme").await;
+        check_readme(&env, "/crate/dummy/0.4.0", "storage meread").await;
+
+        let mut conn = env.async_conn().await?;
+        let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
+        let registry_api = env.registry_api()?;
+        assert!(matches!(details.fetch_readme(registry_api).await, Ok(None)));
+        Ok(())
     }
 
-    #[test]
-    fn no_readme() {
-        async_wrapper(|env| async move {
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .source_file(
-                    "Cargo.toml",
-                    br#"[package]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn no_readme() -> Result<()> {
+        let env = TestEnvironment::builder()
+            .registry_api_config(docs_rs_registry_api::Config::builder().build())
+            .build()
+            .await?;
+
+        env.fake_release()
+            .await
+            .name("dummy")
+            .version("0.2.0")
+            .source_file(
+                "Cargo.toml",
+                br#"[package]
 name = "dummy"
 version = "0.2.0"
 
@@ -2014,42 +1993,40 @@ version = "0.2.0"
 name = "dummy"
 path = "src/lib.rs"
 "#,
-                )
-                .source_file(
-                    "src/lib.rs",
-                    b"//! # Crate-level docs
+            )
+            .source_file(
+                "src/lib.rs",
+                b"//! # Crate-level docs
 //!
 //! ```
 //! let x = 21;
 //! ```
 ",
-                )
-                .target_source("src/lib.rs")
-                .create()
-                .await?;
+            )
+            .target_source("src/lib.rs")
+            .create()
+            .await?;
 
-            let web = env.web_app().await;
-            let response = web.get("/crate/dummy/0.2.0").await?;
-            assert!(response.status().is_success());
+        let web = env.web_app().await;
+        let response = web.assert_success("/crate/dummy/0.2.0").await?;
 
-            let dom = kuchikiki::parse_html().one(response.text().await?);
-            dom.select_first("#main").expect("not main crate docs");
-            // First we check that the crate-level docs have been rendered as expected.
-            assert_eq!(
-                dom.select_first("#main h1")
-                    .expect("no h1 found")
-                    .text_contents(),
-                "Crate-level docs"
-            );
-            // Then we check that by default, the language used for highlighting is rust.
-            assert_eq!(
-                dom.select_first("#main pre .syntax-source.syntax-rust")
-                    .expect("no rust code block found")
-                    .text_contents(),
-                "let x = 21;\n"
-            );
-            Ok(())
-        });
+        let dom = kuchikiki::parse_html().one(response.text().await?);
+        dom.select_first("#main").expect("not main crate docs");
+        // First we check that the crate-level docs have been rendered as expected.
+        assert_eq!(
+            dom.select_first("#main h1")
+                .expect("no h1 found")
+                .text_contents(),
+            "Crate-level docs"
+        );
+        // Then we check that by default, the language used for highlighting is rust.
+        assert_eq!(
+            dom.select_first("#main pre .syntax-source.syntax-rust")
+                .expect("no rust code block found")
+                .text_contents(),
+            "let x = 21;\n"
+        );
+        Ok(())
     }
 
     #[test]

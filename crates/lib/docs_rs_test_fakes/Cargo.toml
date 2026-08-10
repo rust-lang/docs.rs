@@ -11,7 +11,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata", features = ["testing"] }
 docs_rs_database = { path = "../docs_rs_database" }
-docs_rs_registry_api = { path = "../docs_rs_registry_api" }
+docs_rs_registry_api = { path = "../docs_rs_registry_api", features = ["testing"] }
 docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
 docs_rs_storage = { path = "../docs_rs_storage" }
 docs_rs_types = { path = "../docs_rs_types" }

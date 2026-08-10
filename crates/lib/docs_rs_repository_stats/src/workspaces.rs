@@ -218,7 +218,7 @@ mod tests {
 
     impl TestEnv {
         async fn fake_release(&self) -> FakeRelease<'_> {
-            FakeRelease::new(self.db.pool().clone(), self.storage.storage().clone())
+            FakeRelease::new(self.db.pool().clone(), self.storage.storage().clone(), None)
         }
     }
 
