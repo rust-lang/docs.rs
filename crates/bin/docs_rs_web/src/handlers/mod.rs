@@ -333,7 +333,6 @@ mod tests {
                 .await?;
             let web = env.web_app().await;
             assert!(clipboard_is_present_for_path("/crate/fake_crate/0.0.1", &web).await);
-            assert!(clipboard_is_present_for_path("/crate/fake_crate/0.0.1/source/", &web).await);
             assert!(clipboard_is_present_for_path("/fake_crate/0.0.1/fake_crate/", &web).await);
             Ok(())
         });
@@ -448,28 +447,6 @@ mod tests {
             assert_redirect("/bat/0.2.0/aarch64-unknown-linux-gnu/bat", "/crate/bat/0.2.0", web)?;
             assert_redirect("/bat/0.2.0/aarch64-unknown-linux-gnu/bat/", "/crate/bat/0.2.0/", web)?;
             */
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn can_view_source() {
-        async_wrapper(|env| async move {
-            env.fake_release()
-                .await
-                .name("regex")
-                .version("0.3.0")
-                .source_file("src/main.rs", br#"println!("definitely valid rust")"#)
-                .create()
-                .await?;
-
-            let web = env.web_app().await;
-            web.assert_success("/crate/regex/0.3.0/source/src/main.rs")
-                .await?;
-            web.assert_success("/crate/regex/0.3.0/source/").await?;
-            web.assert_success("/crate/regex/0.3.0/source/src").await?;
-            web.assert_success("/regex/0.3.0/src/regex/main.rs.html")
-                .await?;
             Ok(())
         })
     }
