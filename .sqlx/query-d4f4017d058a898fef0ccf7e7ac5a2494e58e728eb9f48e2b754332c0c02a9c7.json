@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    name as \"name: KrateName\",\n                    version as \"version: Version\",\n                    priority,\n                    attempt\n                 FROM queue\n                 WHERE\n                    last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $1)\n                 ORDER BY priority ASC, attempt ASC, id ASC\n                 LIMIT 1\n                 FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name: KrateName",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version: Version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "priority",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "priority"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "attempt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d4f4017d058a898fef0ccf7e7ac5a2494e58e728eb9f48e2b754332c0c02a9c7"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM builds_logs AS bl\n         USING builds AS b\n         JOIN releases AS r ON b.rid = r.id\n         WHERE bl.build_id = b.id AND r.crate_id = $1;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "074d3b1cc144fdceba8e3094c20b7c62552364513c0827f1b334d2945b49917a"
+}

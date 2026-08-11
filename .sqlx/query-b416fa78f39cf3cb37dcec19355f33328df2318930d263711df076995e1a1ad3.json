@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO builds_logs(build_id, log_filename, success)\n         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b416fa78f39cf3cb37dcec19355f33328df2318930d263711df076995e1a1ad3"
+}

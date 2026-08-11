@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM repositories WHERE host_id = $1 AND host = $2;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf83cc24df4c285fe67808f1e1a2b56f850014b975a7506597a4ae3c5c6851aa"
+}

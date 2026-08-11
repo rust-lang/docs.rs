@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE builds\n         SET\n             build_status = 'failure',\n             errors = $2,\n             error_kind = $3\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6a448c78dd3fc7c95f13567969dd79b9dd72f6b389dadca630745928612fa725"
+}
