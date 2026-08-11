@@ -2427,4 +2427,67 @@ mod tests {
 
         Ok(())
     }
+
+    #[test_case("ffizz-string", Version::new(0, 5, 0))]
+    #[test_case("ffizz-passby", Version::new(0, 5, 0))]
+    #[ignore]
+    fn test_with_examples_custom_scrape(crate_: &'static str, version: Version) -> Result<()> {
+        // some crates add `-Zrustdoc-scrape-examples` themselves in their `cargo-args`.
+        // In this case we just remove it.
+        let crate_: KrateName = crate_.parse().unwrap();
+
+        let mut config = Config::test_config()?;
+        config.include_default_targets = false;
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .successful
+        );
+
+        // check release record in the db
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT
+                        c.name,
+                        r.version,
+                        r.rustdoc_status,
+                        cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert_eq!(row.name, crate_.as_str());
+        assert_eq!(row.version, version.to_string());
+        assert!(row.total_items.unwrap() > 0);
+
+        let storage = env.blocking_storage()?;
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    row.name, row.version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with(&format!(
+                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
+                        row.name, row.version
+                    ))
+                })
+                .is_some()
+        );
+
+        Ok(())
+    }
 }
