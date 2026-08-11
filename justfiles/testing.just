@@ -13,25 +13,15 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
 [group('testing')]
 [group('sqlx')]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
-  #!/usr/bin/env bash
-  set -euo pipefail
+  # sqlx prepare needs `--workspace` twice: 
+  # https://github.com/transact-rs/sqlx/issues/3362
+  # once for the sqlx-cli, once for the inner `cargo check` command.
 
   cargo sqlx prepare \
       --database-url $DOCSRS_DATABASE_URL \
       --workspace \
       {{ args }} \
-      -- --all-targets --all-features
-
-  for subcrate in crates/lib/* crates/bin/*; do
-    echo "Preparing SQLx metadata for ${subcrate}..."
-    # NOTE: potential optimization: only run this command when `sqlx` 
-    # is in the dependencies of the subcrate.
-    (cd "${subcrate}" && cargo sqlx prepare \
-        --database-url $DOCSRS_DATABASE_URL \
-        {{ args }} \
-        -- --all-targets --all-features)
-  done
-
+      -- --workspace --all-targets --all-features
 
 [group('testing')]
 [group('sqlx')]
