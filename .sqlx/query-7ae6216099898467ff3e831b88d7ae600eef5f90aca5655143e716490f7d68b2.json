@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO repositories (\n                host,\n                host_id,\n                name,\n                description,\n                last_commit,\n                stars,\n                forks,\n                issues,\n                updated_at,\n                override_build_priority\n             )\n             VALUES (\n                'github.com',\n                $1,\n                $2,\n                'Fake description!',\n                NOW(),\n                $3,\n                $4,\n                $5,\n                NOW(),\n                $6\n             )\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "repositories",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7ae6216099898467ff3e831b88d7ae600eef5f90aca5655143e716490f7d68b2"
+}

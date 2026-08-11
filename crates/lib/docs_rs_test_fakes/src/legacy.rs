@@ -1,5 +1,5 @@
+use crate::FakeGithubStats;
 use anyhow::{Context as _, Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
@@ -86,6 +86,7 @@ pub struct FakeRelease<'a> {
     /// This stores the content, while `package.readme` stores the filename
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
+    github_stats_id: Option<i32>,
     doc_coverage: Option<DocCoverage>,
     no_cargo_toml: bool,
 }
@@ -155,6 +156,7 @@ impl<'a> FakeRelease<'a> {
             has_examples: false,
             readme: None,
             github_stats: None,
+            github_stats_id: None,
             doc_coverage: None,
             archive_storage: false,
             no_cargo_toml: false,
@@ -339,12 +341,19 @@ impl<'a> FakeRelease<'a> {
         forks: i32,
         issues: i32,
     ) -> Self {
-        self.github_stats = Some(FakeGithubStats {
-            repo: repo.into(),
-            stars,
-            forks,
-            issues,
-        });
+        self.github_stats = Some(
+            FakeGithubStats::builder()
+                .repo(repo)
+                .stars(stars)
+                .forks(forks)
+                .issues(issues)
+                .build(),
+        );
+        self
+    }
+
+    pub fn github_stats_id(mut self, id: i32) -> Self {
+        self.github_stats_id = Some(id);
         self
     }
 
@@ -519,9 +528,13 @@ impl<'a> FakeRelease<'a> {
 
         let mut async_conn = pool.get_async().await?;
 
-        let repository = match self.github_stats {
-            Some(stats) => Some(stats.create(&mut async_conn).await?),
-            None => None,
+        let repository = match (self.github_stats, self.github_stats_id) {
+            (Some(_), Some(_)) => {
+                bail!("can't have both given github stats and an external github stats id")
+            }
+            (Some(stats), None) => Some(stats.create(&mut async_conn).await?),
+            (None, Some(id)) => Some(id),
+            (None, None) => None,
         };
 
         let crate_tmp = create_temp_dir();
@@ -608,32 +621,6 @@ impl<'a> FakeRelease<'a> {
         }
 
         Ok(release_id)
-    }
-}
-
-pub struct FakeGithubStats {
-    pub repo: String,
-    pub stars: i32,
-    pub forks: i32,
-    pub issues: i32,
-}
-
-impl FakeGithubStats {
-    pub async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
-        let existing_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM repositories")
-            .fetch_one(&mut *conn)
-            .await?
-            .unwrap();
-        let host_id = b64.encode(format!("FAKE ID {existing_count}"));
-
-        let id = sqlx::query_scalar!(
-            "INSERT INTO repositories (host, host_id, name, description, last_commit, stars, forks, issues, updated_at)
-             VALUES ('github.com', $1, $2, 'Fake description!', NOW(), $3, $4, $5, NOW())
-             RETURNING id",
-            host_id, self.repo, self.stars, self.forks, self.issues,
-        ).fetch_one(&mut *conn).await?;
-
-        Ok(id)
     }
 }
 

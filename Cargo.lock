@@ -2048,6 +2048,7 @@ dependencies = [
  "futures-util",
  "opentelemetry",
  "pretty_assertions",
+ "regex",
  "sqlx",
  "test-case",
  "tokio",
@@ -2418,6 +2419,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
+ "bon",
  "chrono",
  "docs_rs_cargo_metadata",
  "docs_rs_database",

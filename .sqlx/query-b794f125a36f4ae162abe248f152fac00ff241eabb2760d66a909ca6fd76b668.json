@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE queue\n            SET priority = updates.priority\n            FROM UNNEST($1::text[], $2::int[]) AS updates(name, priority)\n            WHERE\n                queue.name = updates.name\n                AND queue.priority = $3\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b794f125a36f4ae162abe248f152fac00ff241eabb2760d66a909ca6fd76b668"
+}

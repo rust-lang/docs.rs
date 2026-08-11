@@ -2,6 +2,8 @@ mod config;
 mod metrics;
 pub mod priority;
 mod queue;
+#[cfg(test)]
+pub(crate) mod testing;
 mod types;
 
 pub use config::Config;
