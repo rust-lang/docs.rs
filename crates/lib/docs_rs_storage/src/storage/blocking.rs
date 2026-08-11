@@ -1,4 +1,6 @@
-use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage};
+use crate::{
+    blob::Blob, file::FileEntry, result::ArchiveStatistics, storage::non_blocking::AsyncStorage,
+};
 use anyhow::Result;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
@@ -62,7 +64,7 @@ impl Storage {
         &self,
         archive_path: &str,
         root_dir: &Path,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+    ) -> Result<ArchiveStatistics> {
         self.runtime
             .block_on(self.inner.store_all_in_archive(archive_path, root_dir))
     }
