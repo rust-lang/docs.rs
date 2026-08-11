@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO config (name, value)\n         VALUES ($1, $2)\n         ON CONFLICT (name) DO UPDATE SET value = $2;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Json"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a6887c2d436121cb2ba6a9c5069455b8f222d929672dc1ff810fa49c2940e2c"
+}

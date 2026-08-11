@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM sandbox_overrides WHERE crate_name = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "crate_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "crate_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "max_memory_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "max_memory_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "timeout_seconds",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "timeout_seconds"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "max_targets",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "sandbox_overrides",
+            "name": "max_targets"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a3920d6701d1a80f23562ee83682d82ff35a52eeaa93ed45a97adc5e559d3538"
+}
