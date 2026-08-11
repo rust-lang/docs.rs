@@ -16,7 +16,7 @@ use docs_rs_rustdoc_json::{
     RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion,
     read_format_version_from_rustdoc_json,
 };
-use docs_rs_storage::{AsyncStorage, file_list_to_json, rustdoc_archive_path, source_archive_path};
+use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use docs_rs_storage::{compress, decompress, rustdoc_json_path};
 use docs_rs_types::{
     BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, SimpleBuildError, Version,
@@ -113,15 +113,14 @@ async fn import_test_release_inner(
     .await?;
 
     let mut algs = HashSet::new();
-    let (source_files_list, source_size) = {
+    let source_stats = {
         info!("writing source files to storage...");
-        let (files_list, new_alg) = storage
+        let stats = storage
             .store_all_in_archive(&source_archive_path(name, version), &source_dir)
             .await?;
 
-        algs.insert(new_alg);
-        let source_size: u64 = files_list.iter().map(|info| info.size).sum();
-        (files_list, source_size)
+        algs.insert(stats.alg);
+        stats
     };
 
     let registry_data = registry_api
@@ -178,11 +177,10 @@ async fn import_test_release_inner(
     }
 
     info!("writing rustdoc files to storage...");
-    let (rustdoc_file_list, new_alg) = storage
+    let doc_stats = storage
         .store_all_in_archive(&rustdoc_archive_path(name, version), &rustdoc_dir)
         .await?;
-    let documentation_size: u64 = rustdoc_file_list.iter().map(|info| info.size).sum();
-    algs.insert(new_alg);
+    algs.insert(doc_stats.alg);
 
     info!("loading repository stats...");
     let repository_id = repository_stats
@@ -232,14 +230,13 @@ async fn import_test_release_inner(
         cargo_metadata.root(),
         &source_dir,
         default_target,
-        file_list_to_json(source_files_list),
         all_targets,
         &registry_data,
         true,
         false, // FIXME: real has_examples?
         algs,
         repository_id,
-        source_size,
+        source_stats.original_size,
     )
     .await?;
 
@@ -249,7 +246,7 @@ async fn import_test_release_inner(
         "rustc 1.95.0-nightly (873d4682c 2026-01-25)",
         BUILD_VERSION,
         BuildStatus::Success,
-        Some(documentation_size),
+        Some(doc_stats.original_size),
         None,
         None::<&SimpleBuildError>,
     )

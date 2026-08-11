@@ -1,0 +1,3 @@
+ALTER TABLE releases 
+ADD COLUMN archive_storage BOOL NOT NULL DEFAULT TRUE,
+ADD COLUMN files JSON ;

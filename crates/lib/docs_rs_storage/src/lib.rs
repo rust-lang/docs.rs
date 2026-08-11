@@ -6,6 +6,7 @@ mod config;
 pub(crate) mod errors;
 mod file;
 mod metrics;
+mod result;
 pub(crate) mod storage;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
@@ -16,7 +17,8 @@ pub use blob::{Blob, BlobUpload, StreamingBlob};
 pub use compression::{compress, compress_async, decompress};
 pub use config::Config;
 pub use errors::{PathNotFoundError, SizeLimitReached};
-pub use file::{FileEntry, FolderEntry, file_list_to_json};
+pub use file::{FileEntry, FolderEntry};
+pub use result::ArchiveStatistics;
 pub use storage::blocking::Storage;
 pub use storage::non_blocking::AsyncStorage;
 pub use types::StorageKind;

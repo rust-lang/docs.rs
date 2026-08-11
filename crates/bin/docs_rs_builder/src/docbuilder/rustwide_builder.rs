@@ -29,8 +29,7 @@ use docs_rs_rustdoc_json::{
     read_format_version_from_rustdoc_json,
 };
 use docs_rs_storage::{
-    AsyncStorage, Storage, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
-    source_archive_path,
+    AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
@@ -640,23 +639,22 @@ impl RustwideBuilder {
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let (source_files_list, source_size) = {
+        let source_stats = {
             let _span = info_span!("adding sources into database").entered();
             debug!("adding sources into database");
             let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
             krate.copy_source_to(&self.workspace, temp_dir.path())?;
 
-            let (files_list, new_alg) = self.runtime.block_on(
+            let stats = self.runtime.block_on(
                 self.storage
                     .store_all_in_archive(&source_archive_path(name, version), &temp_dir),
             )?;
 
             fs::remove_dir_all(temp_dir.path())?;
 
-            algs.insert(new_alg);
-            let source_size: u64 = files_list.iter().map(|info| info.size).sum();
-            (files_list, source_size)
+            algs.insert(stats.alg);
+            stats
         };
 
         let successful = build_dir
@@ -740,16 +738,15 @@ impl RustwideBuilder {
                         target_build_logs.insert(target, (target_res.build_log, successful));
                     }
 
-                    let (file_list, new_alg) =
+                    let doc_stats  =
                         self.runtime.block_on(
                         self.storage.store_all_in_archive(
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;
-                    let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
-                    self.builder_metrics.documentation_size.record(documentation_size, &[]);
-                    algs.insert(new_alg);
-                    Some(documentation_size)
+                    self.builder_metrics.documentation_size.record(doc_stats.original_size, &[]);
+                    algs.insert(doc_stats.alg);
+                    Some(doc_stats.original_size)
                 } else {
                     None
                 };
@@ -845,14 +842,13 @@ impl RustwideBuilder {
                     cargo_metadata,
                     &build.host_source_dir(),
                     &res.target,
-                    file_list_to_json(source_files_list),
                     successful_targets,
                     &release_data,
                     has_docs,
                     has_examples,
                     algs,
                     repository,
-                    source_size,
+                    source_stats.original_size,
                 ))?;
 
                 if let Some(repository_id) = repository {
@@ -1836,7 +1832,6 @@ mod tests {
                 },
                 Path::new("/unknown/"),
                 "x86_64-unknown-linux-gnu",
-                serde_json::Value::Array(vec![]),
                 vec![
                     "i686-pc-windows-msvc".into(),
                     "aarch64-unknown-linux-gnu".into(),
