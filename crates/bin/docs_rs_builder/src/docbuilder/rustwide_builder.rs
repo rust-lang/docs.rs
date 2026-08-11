@@ -1891,6 +1891,7 @@ mod tests {
     #[test_case("scsys-macros", Version::new(0, 2, 6))]
     #[test_case("scsys-derive", Version::new(0, 2, 6))]
     #[test_case("thiserror-impl", Version::new(1, 0, 26))]
+    #[test_case("contained-macros", Version::new(0, 2, 5))]
     #[ignore]
     fn test_proc_macro(crate_: &'static str, version: Version) -> Result<()> {
         let env = TestEnvironment::new()?;
@@ -1905,6 +1906,23 @@ mod tests {
                 .successful
         );
 
+        // check coverage
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert!(row.total_items.unwrap() > 0);
+
         let storage = env.blocking_storage()?;
 
         // doc archive exists
@@ -1914,6 +1932,23 @@ mod tests {
         // source archive exists
         let source_archive = source_archive_path(&crate_, &version);
         assert!(storage.exists(&source_archive)?);
+
+        // test if rustdoc json was created
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    crate_, version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with(&format!(
+                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
+                        crate_, version
+                    ))
+                })
+                .is_some()
+        );
 
         Ok(())
     }

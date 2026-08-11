@@ -300,10 +300,16 @@ impl Metadata {
                 .expect("serializing a string should never fail")
                 .to_string();
             cargo_args.push(format!("build.rustflags={rustflags}"));
-            cargo_args.push("-Zhost-config".into());
-            cargo_args.push("-Ztarget-applies-to-host".into());
-            cargo_args.push("--config".into());
-            cargo_args.push(format!("host.rustflags={rustflags}"));
+            if !self.proc_macro {
+                // Proc-macro crates are built only for the host and we deliberately omits
+                // --target for them, so Cargo already applies build.rustflags to their build.
+                // Enabling host config instead suppresses build.rustdocflags for that host build,
+                // dropping custom rustdoc flags and JSON output.
+                cargo_args.push("-Zhost-config".into());
+                cargo_args.push("-Ztarget-applies-to-host".into());
+                cargo_args.push("--config".into());
+                cargo_args.push(format!("host.rustflags={rustflags}"));
+            }
         }
 
         cargo_args.push("--config".into());
