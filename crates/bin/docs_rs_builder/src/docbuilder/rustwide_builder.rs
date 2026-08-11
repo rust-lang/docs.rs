@@ -1213,7 +1213,14 @@ impl RustwideBuilder {
                     rustdoc_flags,
                     collect_metrics,
                 )
-                .and_then(|command| command.run().map_err(Into::into))
+                .and_then(|command| {
+                    command
+                        // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
+                        // docs.rs, but once it's stable we can remove this flag.
+                        .arg("-Zrustdoc-scrape-examples")
+                        .run()
+                        .map_err(Into::into)
+                })
             })
         };
 
@@ -1280,9 +1287,6 @@ impl RustwideBuilder {
             format!(
                 r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
             ),
-            // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
-            // docs.rs, but once it's stable we can remove this flag.
-            "-Zrustdoc-scrape-examples".into(),
         ];
         if let Some(cargo_job_limit) = self.config.cargo_job_limit() {
             cargo_args.push(format!("-j{cargo_job_limit}"));
@@ -2360,6 +2364,65 @@ mod tests {
             builder
                 .build_local_package(Path::new("tests/crates/hello-world"))?
                 .successful
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_with_examples() -> Result<()> {
+        // there was a bug where coverage and rustdoc json was broken for
+        // libraries with examples.
+        // This test ensures that this works.
+
+        let mut config = Config::test_config()?;
+        config.include_default_targets = false;
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/with-examples"))?
+                .successful
+        );
+
+        // check release record in the db
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT
+                        c.name,
+                        r.version,
+                        r.rustdoc_status,
+                        cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert_eq!(row.name, "with-examples");
+        assert_eq!(row.version, "0.1.0");
+        assert!(row.total_items.unwrap() > 0);
+
+        let storage = env.blocking_storage()?;
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    row.name, row.version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with("with-examples_0.1.0_x86_64-unknown-linux-gnu_latest.json.zst")
+                })
+                .is_some()
         );
 
         Ok(())
