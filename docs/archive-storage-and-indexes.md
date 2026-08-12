@@ -71,8 +71,6 @@ When a request asks for a single file:
 
 ### Important details
 
-- `archive_storage` is a per-release flag. If disabled, docs.rs serves files
-  from legacy per-file objects instead of archive+index lookups.
 - The local cache key includes `latest_build_id` (effectively
   `...zip.<build_id>.index`) so rebuilt releases naturally use a fresh local
   cache entry.

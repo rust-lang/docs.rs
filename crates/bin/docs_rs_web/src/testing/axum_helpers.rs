@@ -4,6 +4,7 @@ use axum::body::Bytes;
 use axum::{body::Body, http::Request, response::Response as AxumResponse};
 use axum_extra::headers::{ETag, HeaderMapExt as _};
 use docs_rs_headers::{IfNoneMatch, SURROGATE_CONTROL, SurrogateKeys};
+use http::header::CONTENT_LENGTH;
 use http::{
     HeaderMap, HeaderName, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, CONTENT_TYPE},
@@ -166,7 +167,7 @@ impl AxumRouterTestExt for axum::Router {
         // it should be repeated on the 304 response.
         //
         // This logic assumes _all_ headers have to be repeated, except for a few known ones.
-        const NON_CACHE_HEADERS: &[&HeaderName] = &[&CONTENT_TYPE];
+        const NON_CACHE_HEADERS: &[&HeaderName] = &[&CONTENT_TYPE, &CONTENT_LENGTH];
 
         // store original headers, to assert that they are repeated on the 304 response.
         let original_headers: HashMap<HeaderName, HeaderValue> = uncached_response

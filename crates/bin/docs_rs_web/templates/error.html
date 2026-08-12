@@ -1,12 +1,19 @@
 {% extends "base.html" %}
 
 {%- block header -%}
-    <div class="docsrs-package-container">
+    <div class="docsrs-package-container error-header">
         <div class="container">
             <h1 id="crate-title">{{ title }}</h1>
         </div>
     </div>
     <div class="description">{{ message }}</div>
+    {%- if !recovery.is_empty() -%}
+    <div id="recovery-links">
+        {%- for link in recovery -%}
+        <a class="pure-button pure-button-normal" href="{{ link.href }}">{{ link.label }}</a>
+        {%- endfor -%}
+    </div>
+    {%- endif -%}
 {%- endblock header -%}
 
 {%- block topbar -%}

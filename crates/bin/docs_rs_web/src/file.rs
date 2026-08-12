@@ -10,7 +10,7 @@ use axum::{
 };
 use axum_extra::{
     TypedHeader,
-    headers::{ContentType, LastModified},
+    headers::{ContentLength, ContentType, LastModified},
 };
 use docs_rs_headers::IfNoneMatch;
 use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
@@ -81,7 +81,17 @@ impl StreamingFile {
         // Future optimization could be:
         // * only forbid fastly to store, and browsers still could.
         // * implement segmented caching for large files somehow.
-        if self.0.content_length > FASTLY_CACHE_MAX_OBJECT_SIZE
+        //
+        // With this logic this error is only raised when we return the raw stream to the user,
+        // so for zip-archives & rustdoc-json files, which are also the cases where we did hit these
+        // fastly limits.
+        // Streams we decompress (rustdoc content, assets) would lead to errors in fastly if the
+        // decompressed file is >100 MiB.
+        if self
+            .0
+            .content_length
+            .map(|cl| cl > FASTLY_CACHE_MAX_OBJECT_SIZE)
+            .unwrap_or(false)
             && !matches!(cache_policy, CachePolicy::NoStoreMustRevalidate)
         {
             warn!(
@@ -113,6 +123,9 @@ impl StreamingFile {
             (
                 StatusCode::OK,
                 TypedHeader(ContentType::from(self.0.mime)),
+                self.0
+                    .content_length
+                    .map(|cl| TypedHeader(ContentLength(cl as u64))),
                 TypedHeader(last_modified),
                 self.0.etag.map(TypedHeader),
                 Extension(cache_policy),
@@ -132,7 +145,7 @@ mod tests {
     use docs_rs_headers::compute_etag;
     use docs_rs_storage::StorageKind;
     use docs_rs_types::CompressionAlgorithm;
-    use http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
+    use http::header::{CACHE_CONTROL, CONTENT_LENGTH, ETAG, LAST_MODIFIED};
     use std::{io, rc::Rc};
 
     const CONTENT: &[u8] = b"Hello, world!";
@@ -148,7 +161,7 @@ mod tests {
             date_updated: Utc::now(),
             compression: alg,
             etag: Some(compute_etag(&content)),
-            content_length: content.len(),
+            content_length: Some(content.len()),
             content: Box::new(io::Cursor::new(content)),
         }
     }
@@ -156,7 +169,7 @@ mod tests {
     #[test]
     fn test_big_file_stream_drops_cache_policy() {
         let mut stream = streaming_blob(CONTENT, None);
-        stream.content_length = FASTLY_CACHE_MAX_OBJECT_SIZE + 1;
+        stream.content_length = Some(FASTLY_CACHE_MAX_OBJECT_SIZE + 1);
 
         let response =
             StreamingFile(stream).into_response(None, CachePolicy::ForeverInCdnAndBrowser);
@@ -177,6 +190,14 @@ mod tests {
             let resp = stream.into_response(None, STATIC_ASSET_CACHE_POLICY);
             assert!(resp.status().is_success());
             assert!(resp.headers().get(CACHE_CONTROL).is_none());
+            assert_eq!(
+                resp.headers()
+                    .get(CONTENT_LENGTH)
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                CONTENT.len().to_string()
+            );
             let cache = resp
                 .extensions()
                 .get::<CachePolicy>()
@@ -209,19 +230,38 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_stream_into_response_without_content_length() -> Result<()> {
+        let mut stream = streaming_blob(CONTENT, None);
+        stream.content_length = None;
+
+        let stream_file = StreamingFile(stream);
+        let resp = stream_file.into_response(None, STATIC_ASSET_CACHE_POLICY);
+        assert!(resp.status().is_success());
+        assert!(resp.headers().get(CACHE_CONTROL).is_none());
+        assert!(resp.headers().get(CONTENT_LENGTH).is_none());
+        let cache = resp
+            .extensions()
+            .get::<CachePolicy>()
+            .expect("missing cache response extension");
+        assert!(matches!(cache, CachePolicy::ForeverInCdnAndBrowser));
+        assert!(resp.headers().get(LAST_MODIFIED).is_some());
+
+        Ok(())
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn file_roundtrip_axum() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let storage = env.storage()?;
 
         let now = Utc::now();
 
-        env.fake_release().await.create().await?;
+        storage
+            .store_one("something.html", b"something".as_slice())
+            .await?;
 
-        let mut file = File::from_path(
-            env.storage()?,
-            "rustdoc/fake-package/1.0.0/fake-package/index.html",
-        )
-        .await?;
+        let mut file = File::from_path(env.storage()?, "something.html").await?;
 
         file.0.date_updated = now;
 
@@ -261,22 +301,30 @@ mod tests {
                 .await?,
         );
 
-        env.fake_release()
-            .await
-            .name("dummy")
-            .version("0.1.0")
-            .rustdoc_file_with("small.html", &[b'A'; MAX_HTML_SIZE / 2] as &[u8])
-            .rustdoc_file_with("exact.html", &[b'A'; MAX_HTML_SIZE] as &[u8])
-            .rustdoc_file_with("big.html", &[b'A'; MAX_HTML_SIZE * 2] as &[u8])
-            .rustdoc_file_with("small.js", &[b'A'; MAX_SIZE / 2] as &[u8])
-            .rustdoc_file_with("exact.js", &[b'A'; MAX_SIZE] as &[u8])
-            .rustdoc_file_with("big.js", &[b'A'; MAX_SIZE * 2] as &[u8])
-            .create()
+        let storage = env.storage()?;
+
+        storage
+            .store_one("small.html", [b'A'; MAX_HTML_SIZE / 2].as_slice())
+            .await?;
+        storage
+            .store_one("exact.html", [b'A'; MAX_HTML_SIZE].as_slice())
+            .await?;
+        storage
+            .store_one("big.html", [b'A'; MAX_HTML_SIZE * 2].as_slice())
+            .await?;
+        storage
+            .store_one("small.js", [b'A'; MAX_SIZE / 2].as_slice())
+            .await?;
+        storage
+            .store_one("exact.js", [b'A'; MAX_SIZE].as_slice())
+            .await?;
+        storage
+            .store_one("big.js", [b'A'; MAX_SIZE * 2].as_slice())
             .await?;
 
         let file = |path| {
             let env = env.clone();
-            async move { File::from_path(env.storage()?, &format!("rustdoc/dummy/0.1.0/{path}")).await }
+            async move { File::from_path(env.storage()?, path).await }
         };
         let assert_len = |len, path| async move {
             assert_eq!(len, file(path).await.unwrap().0.content.len());
