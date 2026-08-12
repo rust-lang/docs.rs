@@ -151,8 +151,8 @@ pub(crate) async fn run_sqs_subscriber(
         }
 
         if last_priority_recheck.elapsed() >= DELAY_BETWEEN_PRIORITY_RECHECK {
-            if let Err(err) = queue.deprioritize_workspaces().await {
-                error!(?err, "error deprioritizing workspaces");
+            if let Err(err) = queue.reevaluate_priorities().await {
+                error!(?err, "error reevaluating queued release priorities");
             }
 
             last_priority_recheck = Instant::now();

@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                rustc_version,\n                docsrs_version,\n                build_status as \"build_status: BuildStatus\",\n                documentation_size,\n                memory_peak,\n                errors,\n                error_kind,\n                rustc_nightly_date\n                FROM builds\n                WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rustc_version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "docsrs_version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "docsrs_version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "build_status: BuildStatus",
+        "type_info": {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure",
+                "partial_failure"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "build_status"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "documentation_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "documentation_size"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "memory_peak",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "memory_peak"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "errors",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "errors"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "error_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "error_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "rustc_nightly_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "rustc_nightly_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "9f268512c8fd05273bc1597e35c47aa4172844a87629e5f9e7acef0387308537"
+}

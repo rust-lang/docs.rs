@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f31665c91028ac845408991812b704acf7b879860b7e5c55a1df04202e0ec65"
+}

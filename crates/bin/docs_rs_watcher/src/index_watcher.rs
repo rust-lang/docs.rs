@@ -212,20 +212,12 @@ pub(crate) async fn process_version_yank_status(
     Ok(())
 }
 
-<<<<<<< HEAD
 pub(crate) async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
-    let mut conn = context.pool()?.get_async().await?;
-    let priority = get_crate_priority(&mut conn, &release.name).await?;
-    context
-        .build_queue()?
-=======
-async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let build_queue = context.build_queue()?;
 
     let priority = build_queue.find_priority(&release.name).await?;
 
     build_queue
->>>>>>> main
         .add_crate(&release.name, &release.version, priority)
         .await
         .with_context(|| {

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE repositories SET crate_count = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "12e1c2e2da2c6c9d5d766a8626bc14baaeeb32a0da30988d4e3c328b2d436c99"
+}

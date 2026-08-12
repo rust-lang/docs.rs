@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "ALTER SEQUENCE crates_id_seq RESTART WITH 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3a46fdff86a84ce2140ad14a5bdc951c1d43e600ef5bc25d23c1fe42f6136869"
+}
