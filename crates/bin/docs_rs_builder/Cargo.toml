@@ -32,7 +32,7 @@ log = "0.4"
 num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 regex = { workspace = true }
-rustwide = { version = "0.25.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
