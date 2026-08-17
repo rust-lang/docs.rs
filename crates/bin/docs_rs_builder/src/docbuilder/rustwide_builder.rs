@@ -177,7 +177,8 @@ impl RustwideBuilder {
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
         let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
+            .enable_networking(limits.networking())
+            .docker_runtime(self.config.docker_runtime);
 
         if let Some(cores) = &self.config.build_cpu_cores {
             builder.cpuset_cpus(Some(cores.0.clone()))
