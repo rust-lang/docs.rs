@@ -9,6 +9,7 @@ use crate::{
     errors::PathNotFoundError,
     file::FileEntry,
     metrics::StorageMetrics,
+    result::ArchiveStatistics,
     types::{FileRange, StorageKind},
     utils::{
         file_list::{get_file_list, walk_dir_recursive},
@@ -275,7 +276,7 @@ impl AsyncStorage {
         &self,
         archive_path: &str,
         root_dir: impl AsRef<Path> + fmt::Debug,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+    ) -> Result<ArchiveStatistics> {
         let root_dir = root_dir.as_ref();
 
         // Keep the TempPath guards alive until after both uploads complete; dropping them earlier
@@ -283,16 +284,15 @@ impl AsyncStorage {
         let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let zip_path = zip_temp_path.to_path_buf();
 
-        let file_paths =
-            spawn_blocking({
+        let stats = spawn_blocking({
                 use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
                 let zip_path = zip_path.clone();
 
-                move || {
-                    let mut file_paths = Vec::new();
+                let mut stats = ArchiveStatistics::new(CompressionAlgorithm::Deflate);
 
+                move || {
                     // We are only using the `zip` library to create the archives and the matching
                     // index-file. The ZIP format allows more compression formats, and these can even be mixed
                     // in a single archive.
@@ -322,20 +322,23 @@ impl AsyncStorage {
                             let mut file = fs::File::open(root_dir.join(&file_path))?;
                             zip.start_file(file_path.to_str().unwrap(), options)?;
                             io::copy(&mut file, &mut zip)?;
-                            file_paths.push(FileEntry{path: file_path, size: file.metadata()?.len()});
+
+                        stats.file_count +=1 ;
+                        stats.original_size +=  file.metadata()?.len();
                         }
 
                         let mut zip_file = zip.finish()?.into_inner()?;
                         zip_file.flush()?;
                     }
 
-                    Ok(file_paths)
+                    Ok(stats)
                 }
             })
             .await?;
 
-        let alg = CompressionAlgorithm::default();
         let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", archive_path);
+        let index_compression_alg = CompressionAlgorithm::default();
+
         let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let compressed_index_path = compressed_index_temp_path.to_path_buf();
         {
@@ -356,7 +359,7 @@ impl AsyncStorage {
                 compress_async(
                     &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
                     &mut compressed_index_writer,
-                    alg,
+                    index_compression_alg,
                 )
                 .await?;
                 compressed_index_writer.flush().await?;
@@ -374,11 +377,11 @@ impl AsyncStorage {
                 path: remote_index_path,
                 mime: mime::APPLICATION_OCTET_STREAM,
                 source: StreamUploadSource::File(compressed_index_path),
-                compression: Some(alg),
+                compression: Some(index_compression_alg),
             })
         )?;
 
-        Ok((file_paths, CompressionAlgorithm::Deflate))
+        Ok(stats)
     }
 
     /// Store all files in `root_dir` into the backend under `prefix`.
@@ -809,35 +812,26 @@ mod backend_tests {
             fs::write(path, "data").await?;
         }
 
+        const ARCHIVE_PATH: &str = "folder/test.zip";
+
         let local_index_location = storage
             .config
             .archive_index_cache
             .path
-            .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
+            .join(format!("{ARCHIVE_PATH}.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
-        let (stored_files, compression_alg) = storage
-            .store_all_in_archive("folder/test.zip", dir.path())
+        let stats = storage
+            .store_all_in_archive(ARCHIVE_PATH, dir.path())
             .await?;
 
         assert!(
             storage
-                .exists(&format!("folder/test.zip.{ARCHIVE_INDEX_FILE_EXTENSION}"))
+                .exists(&format!("{ARCHIVE_PATH}.{ARCHIVE_INDEX_FILE_EXTENSION}"))
                 .await?
         );
 
-        assert_eq!(compression_alg, CompressionAlgorithm::Deflate);
-        assert_eq!(stored_files.len(), files.len());
-        for name in &files {
-            assert!(get_file_info(&stored_files, name).is_some());
-        }
-        assert_eq!(
-            get_file_info(&stored_files, "Cargo.toml").unwrap().mime(),
-            "text/toml"
-        );
-        assert_eq!(
-            get_file_info(&stored_files, "src/main.rs").unwrap().mime(),
-            "text/rust"
-        );
+        assert_eq!(stats.alg, CompressionAlgorithm::Deflate);
+        assert_eq!(stats.file_count, files.len() as u64);
 
         // delete the existing index to test the download of it
         if local_index_location.exists() {

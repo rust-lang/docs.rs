@@ -11,12 +11,12 @@ use docs_rs_database::{
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
-    AsyncStorage, FileEntry, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
+    ArchiveStatistics, AsyncStorage, compress, rustdoc_archive_path, rustdoc_json_path,
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId,
-    SimpleBuildError, Version, VersionReq,
+    BuildError, BuildId, BuildStatus, DocCoverage, KrateName, ReleaseId, SimpleBuildError, Version,
+    VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -418,7 +418,7 @@ impl<'a> FakeRelease<'a> {
             source_directory: &Path,
             package: &MetadataPackage,
             storage: &AsyncStorage,
-        ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        ) -> Result<ArchiveStatistics> {
             debug!(
                 "adding directory {:?} from {}",
                 kind,
@@ -430,9 +430,11 @@ impl<'a> FakeRelease<'a> {
                 FileKind::Sources => source_archive_path(&krate_name, &package.version),
             };
             debug!("store in archive: {:?}", archive);
-            storage
+            let stats = storage
                 .store_all_in_archive(&archive, source_directory)
-                .await
+                .await?;
+
+            Ok(stats)
         }
 
         debug!("before upload source");
@@ -456,9 +458,8 @@ impl<'a> FakeRelease<'a> {
             store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
         }
 
-        let (source_meta, algs) =
-            upload_files(FileKind::Sources, source_tmp.path(), &package, &storage).await?;
-        debug!(?source_meta, "added source files");
+        let stats = upload_files(FileKind::Sources, source_tmp.path(), &package, &storage).await?;
+        debug!("added source files");
 
         // If the test didn't add custom builds, inject a default one
         let builds = self.builds.unwrap_or_else(|| vec![FakeBuild::default()]);
@@ -485,9 +486,8 @@ impl<'a> FakeRelease<'a> {
                 debug!("added platform files for {}", platform);
             }
 
-            let (files, _) =
-                upload_files(FileKind::Rustdoc, rustdoc_path, &package, &storage).await?;
-            debug!(?files, "uploaded rustdoc files");
+            upload_files(FileKind::Rustdoc, rustdoc_path, &package, &storage).await?;
+            debug!("uploaded rustdoc files");
         }
 
         let mut async_conn = pool.get_async().await?;
@@ -557,12 +557,11 @@ impl<'a> FakeRelease<'a> {
             &package,
             crate_dir,
             default_target,
-            file_list_to_json(source_meta),
             self.doc_targets,
             &self.registry_release_data,
             self.has_docs,
             self.has_examples,
-            iter::once(algs),
+            iter::once(stats.alg),
             repository,
             24,
         )

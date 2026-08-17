@@ -426,38 +426,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_file_list_dont_break_the_view() {
-        async_wrapper(|env| async move {
-            let release_id = env
-                .fake_release()
-                .await
-                .name("fake")
-                .version("0.1.0")
-                .source_file("README.md", b"hello")
-                .create()
-                .await?;
-
-            let path = "/crate/fake/0.1.0/source/README.md";
-            let web = env.web_app().await;
-            web.assert_success(path).await?;
-
-            let mut conn = env.async_conn().await?;
-            sqlx::query!(
-                "UPDATE releases
-                     SET files = NULL
-                     WHERE id = $1",
-                release_id.0,
-            )
-            .execute(&mut *conn)
-            .await?;
-
-            assert!(web.get(path).await?.status().is_success());
-
-            Ok(())
-        });
-    }
-
-    #[test]
     fn latest_contains_links_to_latest() {
         async_wrapper(|env| async move {
             env.fake_release()
