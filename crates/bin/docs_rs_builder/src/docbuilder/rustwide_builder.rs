@@ -106,9 +106,11 @@ fn load_metadata_from_rustwide(
     workspace: &Workspace,
     toolchain: &Toolchain,
     source_dir: &Path,
+    host_unstable_flags: &[String],
 ) -> Result<CargoMetadata> {
     let res = Command::new(workspace, toolchain.cargo())
         .args(["metadata", "--format-version", "1"])
+        .args(host_unstable_flags)
         .current_directory(source_dir)
         .log_output(false)
         .run_capture()?;
@@ -495,10 +497,17 @@ impl RustwideBuilder {
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = load_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
-            .map_err(|err| {
-                err.context(format!("failed to load local package {}", path.display()))
-            })?;
+        let host_unstable_flags = Metadata::from_crate_root(path)
+            .map(|metadata| metadata.unstable_cargo_flags())
+            .unwrap_or_default();
+
+        let metadata = load_metadata_from_rustwide(
+            &self.workspace,
+            &self.toolchain,
+            path,
+            &host_unstable_flags,
+        )
+        .map_err(|err| err.context(format!("failed to load local package {}", path.display())))?;
         let package = metadata.root();
         self.build_package(
             &package
@@ -639,12 +648,18 @@ impl RustwideBuilder {
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let source_stats = {
+        let (source_stats, host_unstable_flags) = {
             let _span = info_span!("adding sources into database").entered();
             debug!("adding sources into database");
             let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
             krate.copy_source_to(&self.workspace, temp_dir.path())?;
+
+            // Read from this copy: rustwide's prepare phase needs the flags before the build
+            // closure below gets access to the sources.
+            let host_unstable_flags = Metadata::from_crate_root(temp_dir.path())
+                .map(|metadata| metadata.unstable_cargo_flags())
+                .unwrap_or_default();
 
             let stats = self.runtime.block_on(
                 self.storage
@@ -654,11 +669,12 @@ impl RustwideBuilder {
             fs::remove_dir_all(temp_dir.path())?;
 
             algs.insert(stats.alg);
-            stats
+            (stats, host_unstable_flags)
         };
 
         let successful = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
+            .extra_cargo_args(&host_unstable_flags)
             .run(|build| {
                 // NOTE: rustwide will run `copy_source_to` again when preparing the call to this
                 // closure.
@@ -693,7 +709,8 @@ impl RustwideBuilder {
                         let _span = info_span!("cargo_generate_lockfile").entered();
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .current_directory(build.host_source_dir())
-                            .arg("generate-lockfile")
+                            .args(["generate-lockfile"])
+                            .args(&host_unstable_flags)
                             .run_capture()?;
                     }
                     {
@@ -701,6 +718,7 @@ impl RustwideBuilder {
                         Command::new(&self.workspace, self.toolchain.cargo())
                             .current_directory(build.host_source_dir())
                             .args(["fetch", "--locked"])
+                            .args(&host_unstable_flags)
                             .run_capture()?;
                     }
                     res =
@@ -1145,6 +1163,7 @@ impl RustwideBuilder {
             &self.workspace,
             &self.toolchain,
             &build.host_source_dir(),
+            &metadata.unstable_cargo_flags(),
         )?;
 
         let mut rustdoc_flags = vec![
@@ -2355,6 +2374,52 @@ mod tests {
         assert_contains(&targets, "x86_64-apple-darwin");
         // Part of the default targets.
         assert_contains(&targets, "aarch64-apple-darwin");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_bindeps_metadata_with_unstable_flags() -> Result<()> {
+        let env = TestEnvironment::new()?;
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        let crate_path = Path::new("tests/crates/bindeps-test");
+        let metadata = Metadata::from_crate_root(crate_path)?;
+        let unstable_flags = metadata.unstable_cargo_flags();
+
+        assert!(
+            load_metadata_from_rustwide(&builder.workspace, &builder.toolchain, crate_path, &[])
+                .is_err(),
+            "cargo metadata should fail without -Zbindeps",
+        );
+
+        assert!(
+            load_metadata_from_rustwide(
+                &builder.workspace,
+                &builder.toolchain,
+                crate_path,
+                &unstable_flags,
+            )
+            .is_ok(),
+            "cargo metadata should succeed with -Zbindeps",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_bindeps_crate_full_build() -> Result<()> {
+        let env = TestEnvironment::new()?;
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/bindeps-test"))?
+                .successful
+        );
 
         Ok(())
     }
