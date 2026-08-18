@@ -13,9 +13,6 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
 [group('sqlx')]
 [group('testing')]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
-    #!/usr/bin/env bash
-    set -euo pipefail
-
     # sqlx prepare needs `--workspace` twice:
     # https://github.com/transact-rs/sqlx/issues/3362
     # once for the sqlx-cli, once for the inner `cargo check` command.
