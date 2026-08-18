@@ -7,4 +7,4 @@
 - [Infrastructure](infrastructure/index.md)
     - [Fastly CDN](infrastructure/fastly-cdn.md)
     - [Fastly NgWAF](infrastructure/ngwaf.md)
-    - [Legacy](infrastructure/legacy.md)
+    - [Legacy Infrastructure](infrastructure/legacy.md)
