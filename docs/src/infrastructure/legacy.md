@@ -112,29 +112,34 @@ release. _It doesn't revert database migrations._
 
 ## Nginx
 
-In the legacy infrastructure, nginx:
+Nginx:
 
 - acts as a reverse proxy to our web server,
 - compresses content, and
 - authenticates with the CDN.
 
-Before we had the NgWAF, it also handled our rate limiting.
+Before we had the NgWAF, it also handled our rate limiting and IP-blocks in case
+of attacks.
 
 ### Changes and Deployment
 
-Changes are made manually on the server in `/etc/nginx/`, after which nginx is
-normally restarted via systemd.
+Changes are made manually on the server in `/etc/nginx/`, after which nginx has
+to be manually restarted via systemd.
 
 ## Web Server
 
 Our web server:
 
 - lives
-  [in the `docs_rs_web` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_web), and
+  [in the `docs_rs_web` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_web),
+  and
 - is based on [the `axum` crate](https://docs.rs/axum/latest/axum/).
 
 Besides serving some static and database-backed content, it acts as a proxy for
 the stored rustdoc HTML files, rewriting them on the fly to match our UI.
+
+Since we're recompressing & rewriting HTML for many requests, we're more CPU
+bound than a typical webserver.
 
 ## Index Watcher
 
