@@ -10,14 +10,14 @@ flowchart TD
   subgraph ec2[EC2 instance]
     nginx[nginx] --> web[web server] --> |accesses| psql[PostgreSQL database]
     watcher[index watcher] --> |enqueues builds| psql
-    psql --> |reads queued builds| builder[builders × 4]
+    builder[builders × 4] --> |reads queued builds| psql
   end
 
   fastly --> nginx
   web -->|reads docs| s3[AWS S3]
   builder --> |uploads docs| s3
 
-  index[crates.io Git index] --> |is pulled by| watcher
+  watcher --> |pulls updates from| index[crates.io Git index]
 ```
 
 ## Fastly CDN
