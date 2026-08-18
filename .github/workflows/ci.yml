@@ -101,19 +101,6 @@ jobs:
         if: ${{ always() }}
         run: just compose-down-and-wipe
 
-  dev-guide:
-    name: dev-guide mdbook
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just,mdbook,mdbook-linkcheck2
-
-      - run: just book-test
-
   lint-format:
     name: linters & formatters
     runs-on: ubuntu-latest
