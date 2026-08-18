@@ -9,3 +9,14 @@ The build servers:
 
 The code lives
 [in the `docs_rs_builder` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_builder).
+
+## Build environment
+
+Docs.rs / `rustwide` are internally using the
+[`crates-build-env` docker images](https://github.com/rust-lang/crates-build-env)
+as the build environment for the crate.
+
+If you're missing a system dependency,
+[you can add them to the image yourself](add-dependencies.md)
+
+Also see the [docs.rs build info page](https://docs.rs/about/builds).

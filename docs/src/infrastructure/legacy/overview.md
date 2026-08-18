@@ -69,7 +69,7 @@ implementation details.
 ## Build Servers
 
 The build servers generate documentation for queued releases and upload it to
-S3. See [Build Server](../../binaries/build-server.md) for implementation
+S3. See [Build Server](../../binaries/build-server/index.md) for implementation
 details.
 
 We currently run **four** parallel build servers.
