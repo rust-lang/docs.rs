@@ -57,16 +57,16 @@ See [Nginx](nginx.md) for configuration and deployment details.
 ## Web Server
 
 The web server handles requests from nginx and serves docs.rs content. See
-[Web Server](../../services/web-server.md) for implementation details.
+[Web Server](../../binaries/web-server.md) for implementation details.
 
 ## Index Watcher
 
 The index watcher monitors the crates.io index and updates the build queue and
-stored releases. See [Index Watcher](../../services/index-watcher.md) for
+stored releases. See [Index Watcher](../../binaries/index-watcher.md) for
 implementation details.
 
 ## Build Servers
 
 The build servers generate documentation for queued releases and upload it to
-S3. See [Build Server](../../services/build-server.md) for implementation
+S3. See [Build Server](../../binaries/build-server.md) for implementation
 details.
