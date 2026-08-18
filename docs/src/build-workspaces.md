@@ -12,12 +12,12 @@ are inherited from the workspaces `Cargo.toml` configuration file.
 To build documentation, rustdoc requires a fully specified package but rustdoc does not understand workspaces which are only defined in cargo.
 Thus our crate needs to be packaged by cargo before running the documentation.
 This step will replace all of the `value.workspace = true` statements with their respective values.
-```ignore
+```console
 cargo package
 ```
 This will emit a packaged  crate into the `target/package/your_crate_name-version` folder.
 Now the commands specified in our `README.md` can be executed targeting this folder.
-```ignore
+```console
 cargo run -- build crate --local /path/to/source/target/package/your_crate_name-version/
 ```
 
@@ -37,7 +37,7 @@ $ tree
 3 directories, 4 files
 ```
 The actual contents of `my_lib` do not matter, only the two configuration files.
-```ignore
+```console
 $ cat Cargo.toml
 [workspace]
 members = [
