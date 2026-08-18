@@ -1,8 +1,8 @@
 # Build Workspaces
 ## When do we need this?
-Many workspace packages do not need manual intervention and can be built simply by executing the commands listed in the main [Readme.md](../Readme.md) file.
+Many workspace packages do not need manual intervention and can be built simply by executing the commands listed in the main `README.md` file.
 However, some workspaces require an additional step.
-This is the case when values such as 
+This is the case when values such as
 ```toml
 version.workspace = true
 ```
@@ -12,12 +12,12 @@ are inherited from the workspaces `Cargo.toml` configuration file.
 To build documentation, rustdoc requires a fully specified package but rustdoc does not understand workspaces which are only defined in cargo.
 Thus our crate needs to be packaged by cargo before running the documentation.
 This step will replace all of the `value.workspace = true` statements with their respective values.
-```
+```ignore
 cargo package
 ```
 This will emit a packaged  crate into the `target/package/your_crate_name-version` folder.
-Now the commands specified in [Readme.md](../Readme.md) can be executed targeting this folder.
-```
+Now the commands specified in our `README.md` can be executed targeting this folder.
+```ignore
 cargo run -- build crate --local /path/to/source/target/package/your_crate_name-version/
 ```
 
@@ -37,7 +37,7 @@ $ tree
 3 directories, 4 files
 ```
 The actual contents of `my_lib` do not matter, only the two configuration files.
-```
+```ignore
 $ cat Cargo.toml
 [workspace]
 members = [
