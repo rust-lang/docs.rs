@@ -1,0 +1,39 @@
+// Checks that the docs.rs source code viewer page looks as expected.
+go-to: |DOC_PATH| + "/crate/sysinfo/latest/source/Cargo.toml"
+// We enforce a theme to ensure that the color checks will succeed.
+set-local-storage: {"rustdoc-theme": "dark", "rustdoc-use-system-theme": "false"}
+reload:
+
+// Bugs appears when window size is at maximum given width so we set it.
+set-window-size: (800, 800)
+
+// First we ensure that the "documentation link button" is taking only one line.
+store-size: (".doc-link > span", {"height": icon_height})
+store-size: (".doc-link", {"height": button_height})
+assert-css: (".doc-link", {"padding-top": "10px", "padding-bottom": "10px"})
+// As confirmed just above, there is 20px of padding, so we subtract it from the check below.
+assert: |button_height| - 20 < |icon_height| * 2
+
+// We check that hovering the side menu toggle will update the border color and also change the
+// mouse cursor.
+assert-css: (".toggle-source", {"border-color": "#4e4e4e", "cursor": "pointer"})
+assert-css: (".toggle-source > button", {"cursor": "pointer"})
+move-cursor-to: ".toggle-source > button"
+assert-css: (".toggle-source:hover", {"border-color": "#c0c0c0", "cursor": "pointer"})
+assert-css: (".toggle-source >button:hover", {"cursor": "pointer"})
+
+store-size: ("#side-menu", {"width": side_menu_width})
+store-size: ("#source-code-container", {"width": source_width})
+
+// Now we hide the side menu.
+click: ".toggle-source > button"
+wait-for: "#side-menu.collapsed"
+
+store-size: ("#side-menu", {"width": side_menu_width2})
+store-size: ("#source-code-container", {"width": source_width2})
+
+// The elements width should have changed (smaller side menu and bigger source).
+assert: |side_menu_width| > |side_menu_width2|
+assert: |source_width| < |source_width2|
+// The total width should not have changed.
+assert: |source_width2| + |side_menu_width2| == |source_width| + |side_menu_width|

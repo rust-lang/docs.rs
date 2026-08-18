@@ -12,17 +12,9 @@ store-value: (nb_tabs, 4)
 // updated.
 assert-count: (|tabs_menu_selector| + " > li", |nb_tabs|)
 
-call-function: ("check-tab-not-centered", {"tab_name": " Crate", "click_next": false})
-
-// Source points to crates.io, so only assert its label; following it would leave docs.rs.
-assert-text: (|tabs_menu_selector| + " > li:nth-of-type(2) .title", " Source")
-
-go-to: |DOC_PATH| + "/crate/sysinfo/latest/builds"
-store-value: (current_tab, 3)
-call-function: ("check-tab-not-centered", {"tab_name": " Builds", "click_next": false})
-
-go-to: |DOC_PATH| + "/crate/sysinfo/latest/features"
-store-value: (current_tab, 4)
+call-function: ("check-tab-not-centered", {"tab_name": " Crate", "click_next": true})
+call-function: ("check-tab-not-centered", {"tab_name": " Source", "click_next": true})
+call-function: ("check-tab-not-centered", {"tab_name": " Builds", "click_next": true})
 call-function: ("check-tab-not-centered", {"tab_name": "Feature flags", "click_next": false})
 
 assert: |nb_tabs| == |current_tab|
