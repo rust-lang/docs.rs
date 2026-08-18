@@ -43,7 +43,7 @@ That includes:
 - nginx
 - web server
 - index watcher
-- build servers (four at the time of writing)
+- build servers
 
 ## Nginx
 
