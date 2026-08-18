@@ -40,13 +40,14 @@ cli +args: _touch-docker-env cli-db-migrate
 # Initialize the `docs.rs` database
 [group('cli')]
 [group('database')]
-cli-db-migrate:
+cli-db-migrate version="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
     # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
     # Otherwise we would have a stack overflow / infinite recursion.
-    #
-    # TODO: potential optimization: only run the container when we have to
-    # run migrations?
-    just _cli cli database migrate
+    export SQLX_OFFLINE=1
+    just _cli docs_rs_admin cli database migrate {{ version }}
 
 # add a release to the build queue
 [group('cli')]
