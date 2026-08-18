@@ -23,7 +23,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: clone test crate
-        run: git clone git@github.com:hyperium/headers.git
+        run: git clone https://github.com/hyperium/headers.git
 
       - name: run tests
         run: just cli-test-local-build-image ghcr.io/rust-lang/crates-build-env/linux-micro ./headers
