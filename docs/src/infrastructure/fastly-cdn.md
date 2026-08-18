@@ -21,7 +21,7 @@ server easier to test and manage.
 
 We also use the
 [Fastly origin shield](https://www.fastly.com/documentation/guides/getting-started/hosts/shielding/)
-to reduce the load on our web servers.
+to reduce the load on our web servers and improve cache ratios.
 
 ## Changes and Deployment
 
