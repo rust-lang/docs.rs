@@ -119,4 +119,4 @@ cargo run -- build crate -l path/to/docs_rs_workspace_package/target/package/my_
 
 then the build succeeds.
 
-{{#include ./links.md}}
+{{#include ../links.md}}

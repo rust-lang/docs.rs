@@ -1,8 +1,6 @@
 # The docs.rs dev guide
 
 - [General code architecture](general-code-architecture.md)
-- [Build workspaces](build-workspaces.md)
-- [Docker commands](docker-commands.md)
 - [Binaries](services/index.md)
   - [Web Server](services/web-server.md)
   - [Index Watcher](services/index-watcher.md)
@@ -16,5 +14,8 @@
     - [deploying a new version](infrastructure/legacy/deployment.md)
     - [nginx](infrastructure/legacy/nginx.md)
     - [systemd](infrastructure/legacy/systemd.md)
+- [Development](development/index.md)
+    - [Docker commands](development/docker-commands.md)
+    - [Build workspaces](development/build-workspaces.md)
 - [Design](design/index.md)
   - [Archive Storage](design/archive-storage-and-indexes.md)
