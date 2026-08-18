@@ -1,6 +1,5 @@
-This book contains general documentation to help contribute on `docs.rs`.
-We provide some `just` recipes to help with building & developing the book.
-
+This book contains general documentation to help contribute on `docs.rs`. We
+provide some `just` recipes to help with building & developing the book.
 
 ```bash
 $ just book-build # build the book
