@@ -14,3 +14,4 @@ target
 archive_cache
 .workspace
 docs/book/
+docs/src/generated/
