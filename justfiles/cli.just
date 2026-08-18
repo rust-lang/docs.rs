@@ -35,7 +35,7 @@ _cli package service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
 # Only for commands that just need `db` and `s3` and minimal system dependencies.
 [group('cli')]
 cli +args: _touch-docker-env cli-db-migrate
-  just _cli docs_rs_admin cli {{ args }}
+    just _cli docs_rs_admin cli {{ args }}
 
 # Initialize the `docs.rs` database
 [group('cli')]
@@ -62,7 +62,7 @@ cli-queue-add crate_name crate_version:
 [group('builder')]
 [group('cli')]
 cli-build +args: _touch-docker-env cli-db-migrate
-  just _cli docs_rs_builder builder-cli {{ args }}
+    just _cli docs_rs_builder builder-cli {{ args }}
 
 # set the nightly rust version to be used for builds. Format: `nightly-YYYY-MM-DD`
 # or just `nightly` for always using the latest nightly.
@@ -104,7 +104,7 @@ cli-watcher +args: _touch-docker-env cli-db-migrate
 [group('cli')]
 [group('queue')]
 cli-queue-reset-last-seen-ref ref="--head":
-  just cli-watcher queue set-last-seen-reference {{ ref }}
+    just cli-watcher queue set-last-seen-reference {{ ref }}
 
 # find differences between crates.io and our own database, and fix them on our side.
 [group('cli')]
