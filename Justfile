@@ -12,7 +12,9 @@ export AWS_ACCESS_KEY_ID := env("AWS_ACCESS_KEY_ID", "cratesfyi")
 export AWS_SECRET_ACCESS_KEY := env("AWS_SECRET_ACCESS_KEY", "secret_key")
 export S3_ENDPOINT := env("S3_ENDPOINT", "http://localhost:9000")
 
-export DOCSRS_CLI_MODE := env("DOCSRS_CLI_MODE", "local")
+# Native CLI builds are supported on amd64 Linux. Use Docker everywhere else.
+cli_mode_default := if os() + "-" + arch() == "linux-x86_64" { "local" } else { "docker" }
+export DOCSRS_CLI_MODE := env("DOCSRS_CLI_MODE", cli_mode_default)
 
 # List available commands
 _default:
