@@ -8,12 +8,12 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
     -c 500 \
     {{ host }}/rayon/1.11.0/rayon/
 
-# update sqlx metadata offline mode, for all
+# update sqlx metadata offline mode, for all 
 # crates that have it.
 [group('testing')]
 [group('sqlx')]
 sqlx-prepare *args: _ensure_db_and_s3_are_running
-  # sqlx prepare needs `--workspace` twice:
+  # sqlx prepare needs `--workspace` twice: 
   # https://github.com/transact-rs/sqlx/issues/3362
   # once for the sqlx-cli, once for the inner `cargo check` command.
 
@@ -45,11 +45,11 @@ sqlx-migrate-revert target="0": _ensure_db_and_s3_are_running
     --target-version {{ target }}
 
 
-# Format the code using `cargo fmt`.
+# Format the code using `cargo fmt`. 
 [group('testing')]
 format:
     rustup component add rustfmt
-    # like this we get both the non-zero exit code, and the local code is
+    # like this we get both the non-zero exit code, and the local code is 
     # formatted.
     cargo fmt --all -- --check || { cargo fmt --all && exit 1; }
 
@@ -63,7 +63,7 @@ clippy *args:
     --workspace \
     --locked \
     {{ args }} \
-    -- -D warnings
+    -- -D warnings 
 
 # run clippy --fix
 [group('testing')]
@@ -80,7 +80,7 @@ lint: format lint-dependencies-machete
     just sort-cargo-toml --check
     just clippy
   else
-    just sort-cargo-toml
+    just sort-cargo-toml 
     just clippy-fix
   fi
 
@@ -89,23 +89,23 @@ sort-cargo-toml *args:
   #!/usr/bin/env bash
   set -euo pipefail
 
-  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3")}} != 'true' ]; then
+  if [ {{semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3")}} != 'true' ]; then 
     echo "cargo-sort to old, must be >=2.1.3"
     exit 1;
   fi
 
-  cargo sort --workspace {{ args }}
+  cargo sort --workspace {{ args }} 
 
 
 [group('testing')]
-lint-dependencies-machete:
+lint-dependencies-machete: 
   #!/usr/bin/env bash
   set -euo pipefail
 
-  # check unused deps with cargo machete is fast,
-  # but has many false positives.
-  # While it can also recurse into subdirs, it would
-  # also stumble onto our broken crates in `/tests/crates/*`,
+  # check unused deps with cargo machete is fast, 
+  # but has many false positives. 
+  # While it can also recurse into subdirs, it would 
+  # also stumble onto our broken crates in `/tests/crates/*`, 
   # where I also don't want to add machete-metadata.
   fd \
     --glob 'Cargo.toml' \
@@ -119,7 +119,7 @@ lint-dependencies-udeps:
   set -euo pipefail
 
   # check unused deps with cargo udeps.
-  # Optional, since udeps is much slower because it
+  # Optional, since udeps is much slower because it 
   # needs to additionally compile the workspace with nightly
   echo "check for unused normal dependencies"
   cargo +nightly udeps --workspace
@@ -135,7 +135,7 @@ lint-js *args:
     eslint.config.js \
     gui-tests \
     {{ args }}
-
+  
 [group('testing')]
 run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
   just cli-build-update-toolchain
@@ -145,7 +145,7 @@ run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
   just cli-build-crate zbus 5.15.0
   just cli-build-add-essential-files
 
-  just _cli gui_tests
+  just _cli gui_tests 
 
 _build-test-binaries:
   #!/usr/bin/env bash
