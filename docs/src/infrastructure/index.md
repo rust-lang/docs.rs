@@ -1,4 +1,4 @@
 # Infrastructure
 
-We're currently running on our legacy infrastructure while continuing to work
-on a new, scalable infrastructure.
+We currently run on our legacy infrastructure while continuing to develop a
+new, scalable replacement.

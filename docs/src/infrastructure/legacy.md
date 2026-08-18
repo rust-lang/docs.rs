@@ -17,7 +17,7 @@ flowchart TD
   web -->|reads docs| s3[AWS S3]
   builder --> |uploads docs| s3
 
-  index[crates.io Git index] --> |gets pulled by| watcher
+  index[crates.io Git index] --> |is pulled by| watcher
 ```
 
 ## Fastly CDN
@@ -60,12 +60,12 @@ When something is blocked, the user will see one of the following:
 - status `406 NOT ACCEPTABLE` for normal security rules, or
 - status `429 Too Many Requests` for rate limiting.
 
-_These status codes are only used in the NgWAF, so if a user sees them, the
-NgWAF is the actor blocking the request._
+_These status codes are only used by the NgWAF, so if a user sees one, the
+NgWAF is the component blocking the request._
 
 ### Changes and Deployment
 
-The integration between the Fastly CDN and NgWAF lives in
+The integration between the Fastly CDN and NgWAF is implemented in
 [our Compute WASM module](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs/src/ngwaf.rs).
 
 In the legacy architecture, the rules are defined manually in the
@@ -82,7 +82,7 @@ Most of the legacy docs.rs infrastructure runs on a single large EC2 instance.
 That includes:
 
 - nginx
-- webserver
+- web server
 - index watcher
 - build servers (four at the time of writing)
 
@@ -118,13 +118,13 @@ Nginx:
 - compresses content, and
 - authenticates with the CDN.
 
-Before we had the NgWAF, it also handled our rate limiting and IP-blocks in case
-of attacks.
+Before we had the NgWAF, nginx also handled rate limiting and IP blocking during
+attacks.
 
 ### Changes and Deployment
 
-Changes are made manually on the server in `/etc/nginx/`, after which nginx has
-to be manually restarted via systemd.
+Changes are made manually on the server in `/etc/nginx/`, after which nginx must
+be restarted via systemd.
 
 ## Web Server
 
@@ -138,23 +138,23 @@ Our web server:
 Besides serving some static and database-backed content, it acts as a proxy for
 the stored rustdoc HTML files, rewriting them on the fly to match our UI.
 
-Since we're recompressing & rewriting HTML for many requests, we're more CPU
-bound than a typical webserver.
+Because we recompress and rewrite HTML for many requests, we're more CPU-bound
+than a typical web server.
 
 ## Index Watcher
 
-A small process that manages a clone of the
+The index watcher is a small process that manages a clone of the
 [`crates.io-index` repository](https://github.com/rust-lang/crates.io-index).
 
 We update it once a minute and use
 [`crates-index-diff`](https://docs.rs/crates-index-diff/latest/crates_index_diff/)
 to determine the changes.
 
-Depending on the event, we:
+Depending on the change, we:
 
 - add the release to the build queue,
-- update the yank status of the release, or
-- delete the crate or release entirely.
+- update the release's yanked status, or
+- delete the crate or release entirely from our storage.
 
 The code lives
 [in the `docs_rs_watcher` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_watcher).
