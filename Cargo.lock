@@ -1998,6 +1998,7 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_repository_stats",
+ "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",
  "docs_rs_uri",
