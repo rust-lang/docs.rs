@@ -3,30 +3,37 @@
 [![Build Status](https://github.com/rust-lang/docs.rs/workflows/CI/badge.svg)](https://github.com/rust-lang/docs.rs/actions?workflow=CI)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/rust-lang/docs.rs/main/LICENSE)
 
-Docs.rs (formerly cratesfyi) is an open source project to host documentation
-of crates for the Rust Programming Language.
+Docs.rs (formerly cratesfyi) is an open source project to host documentation of
+crates for the Rust Programming Language.
 
 Docs.rs automatically builds crates' documentation released on crates.io using
 the nightly release of the Rust compiler.
 
-This readme is for developing docs.rs. See [the about page](https://docs.rs/about) for user-facing documentation.
-
+This readme is for developing docs.rs. See
+[the about page](https://docs.rs/about) for user-facing documentation.
 
 ## How the documentation is generated
 
-docs.rs uses [rustdoc](https://github.com/rust-lang/rust/tree/main/src/librustdoc) to generate the documentation for every crate release on crates.io.
-You can read the [the rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/what-is-rustdoc.html) for more details.
+docs.rs uses
+[rustdoc](https://github.com/rust-lang/rust/tree/main/src/librustdoc) to
+generate the documentation for every crate release on crates.io. You can read
+the
+[the rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/what-is-rustdoc.html)
+for more details.
 
 ## Changing the build environment
 
-To make a change to [the build environment](https://github.com/rust-lang/crates-build-env)
-and test that it works on docs.rs, see [the wiki](https://forge.rust-lang.org/docs-rs/add-dependencies.html).
+To make a change to
+[the build environment](https://github.com/rust-lang/crates-build-env) and test
+that it works on docs.rs, see
+[the wiki](https://forge.rust-lang.org/docs-rs/add-dependencies.html).
 
 ## Development
 
-The recommended way to develop docs.rs is a combination of `cargo run` for
-the main binary and [docker-compose](https://docs.docker.com/compose/) for the external services.
-This gives you reasonable incremental build times without having to add new users and packages to your host machine.
+The recommended way to develop docs.rs is a combination of `cargo run` for the
+main binary and [docker-compose](https://docs.docker.com/compose/) for the
+external services. This gives you reasonable incremental build times without
+having to add new users and packages to your host machine.
 
 ### Dependencies
 
@@ -45,8 +52,8 @@ There may be other dependencies that have not been documented.
 
 ### Getting started
 
-Make sure you have docker-compose and are able to download ~10GB data on the first run. Also ensure that
-docker is installed and the service is running.
+Make sure you have docker-compose and are able to download ~10GB data on the
+first run. Also ensure that docker is installed and the service is running.
 
 ```sh
 git clone https://github.com/rust-lang/docs.rs.git docs.rs
@@ -87,8 +94,9 @@ If you need to store big files in the repository's directory it's recommended to
 put them in the `ignored/` subdirectory, which is ignored both by git and
 Docker.
 
-Running the database and S3 server outside of docker-compose is possible, but not recommended or supported.
-Note that you will need docker installed no matter what, since it's used for Rustwide sandboxing.
+Running the database and S3 server outside of docker-compose is possible, but
+not recommended or supported. Note that you will need docker installed no matter
+what, since it's used for Rustwide sandboxing.
 
 ### Running tests
 
@@ -102,8 +110,10 @@ To run GUI tests:
 just run-gui-tests
 ```
 
-They use the [browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework. You
-can take a look at its [documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/main/goml-script.md).
+They use the
+[browser-ui-test](https://github.com/GuillaumeGomez/browser-UI-test/) framework.
+You can take a look at its
+[documentation](https://github.com/GuillaumeGomez/browser-UI-test/blob/main/goml-script.md).
 
 Alternatively, you can start the web server and run the test manually:
 
@@ -124,10 +134,11 @@ npm install browser-ui-test
 
 ### Pure docker-compose
 
-If you have trouble with the above commands, consider using `just compose-up-web`,
-which uses docker-compose for the web server as well.
-This will not cache dependencies - in particular, you'll have to rebuild all 400 whenever the lockfile changes -
-but makes sure that you're in a known environment so you should have fewer problems getting started.
+If you have trouble with the above commands, consider using
+`just compose-up-web`, which uses docker-compose for the web server as well.
+This will not cache dependencies - in particular, you'll have to rebuild all 400
+whenever the lockfile changes - but makes sure that you're in a known
+environment so you should have fewer problems getting started.
 
 You can put environment overrides for the docker containers into `.docker.env`,
 first. The migrations will be run by our just recipes when needed.
@@ -137,7 +148,8 @@ just cli-db-migrate
 just compose-up-web
 ```
 
-You can also use the `builder` compose profile to run builds on systems which don't support running builds directly (mostly on Mac OS or Windows):
+You can also use the `builder` compose profile to run builds on systems which
+don't support running builds directly (mostly on Mac OS or Windows):
 
 ```sh
 just compose-up-builder
@@ -151,7 +163,8 @@ just cli-build-update-toolchain
 just cli-build-crate regex 1.3.1
 ```
 
-You can also run other non-build commands like the setup steps above, or queueing crates for the background builders from within the `cli` container:
+You can also run other non-build commands like the setup steps above, or
+queueing crates for the background builders from within the `cli` container:
 
 ```sh
 just cli-db-migrate
@@ -159,11 +172,13 @@ just cli-queue-add regex 1.3.1
 ```
 
 If you want to run the registry watcher, you can use the `watcher` profile:
+
 ```sh
 just compose-up-watcher
 ```
 
-It it was never run, we will start watching for registry changes at the current HEAD of the index.
+It it was never run, we will start watching for registry changes at the current
+HEAD of the index.
 
 If you want to start from another point:
 
@@ -171,20 +186,21 @@ If you want to start from another point:
 just cli-queue-reset-last-seen-ref GIT_REF
 ```
 
-Note that running tests is currently not supported when using pure docker-compose.
+Note that running tests is currently not supported when using pure
+docker-compose.
 
-Some of the above commands are included in the `Justfile` for ease of use,
-check `just --list` for an overview.
+Some of the above commands are included in the `Justfile` for ease of use, check
+`just --list` for an overview.
 
-Some of the above commands are included in the `Justfile` for ease of use,
-check the `[compose]` group in `just --list`.
+Some of the above commands are included in the `Justfile` for ease of use, check
+the `[compose]` group in `just --list`.
 
 Please file bugs for any trouble you have running docs.rs!
 
 ### Docker-Compose
 
-The services started by Docker-Compose are defined in [docker-compose.yml].
-For convenience, there are plenty of `just` recipes built around it.
+The services started by Docker-Compose are defined in [docker-compose.yml]. For
+convenience, there are plenty of `just` recipes built around it.
 
 [docker-compose.yml]: ./docker-compose.yml
 
@@ -193,7 +209,8 @@ For convenience, there are plenty of `just` recipes built around it.
 The `just` recipes for compose handle rebuilds themselves, so nothing needs to
 be done here.
 
-If you want to completely clean up the database, don't forget to remove the volumes too:
+If you want to completely clean up the database, don't forget to remove the
+volumes too:
 
 ```sh
 # just shut down containers normally
@@ -205,43 +222,48 @@ $ just compose-down-and-wipe
 
 #### testing opentelemetry metrics
 
-When you add or update any metrics you might want to test them. While there is
-a way to check metric in unit-tests (see `TestEnvironment::collected_metrics`),
+When you add or update any metrics you might want to test them. While there is a
+way to check metric in unit-tests (see `TestEnvironment::collected_metrics`),
 you might also want to test manually.
 
 We have set up a small docker-compose service (`opentelemetry`) you can start up
-via `docker compose up opentelemetry`. This start up a local instance of
-the [opentelemetry collector
-contrib](https://hub.docker.com/r/otel/opentelemetry-collector-contrib) image,
-configured for debug-logging.
+via `docker compose up opentelemetry`. This start up a local instance of the
+[opentelemetry collector contrib](https://hub.docker.com/r/otel/opentelemetry-collector-contrib)
+image, configured for debug-logging.
 
-After configuring your local environment for `OTEL_EXPORTER_OTLP_ENDPOINT` => `http://localhost:4317`
-(either in `.env` or `.docker.env`, depending on how you run the webserver), you
-can see any metrics you report and how they are exported to your collector.
+After configuring your local environment for `OTEL_EXPORTER_OTLP_ENDPOINT` =>
+`http://localhost:4317` (either in `.env` or `.docker.env`, depending on how you
+run the webserver), you can see any metrics you report and how they are exported
+to your collector.
 
 #### FAQ
 
 ##### I see the error `standard_init_linux.go:211: exec user process caused "no such file or directory"` when I use docker-compose.
 
-You probably have [CRLF line endings](https://en.wikipedia.org/wiki/CRLF).
-This causes the hashbang in the docker-entrypoint to be `/bin/sh\r` instead of `/bin/sh`.
-This is probably because you have `git.autocrlf` set to true,
+You probably have [CRLF line endings](https://en.wikipedia.org/wiki/CRLF). This
+causes the hashbang in the docker-entrypoint to be `/bin/sh\r` instead of
+`/bin/sh`. This is probably because you have `git.autocrlf` set to true,
 [set it to `input`](https://stackoverflow.com/questions/10418975) instead.
 
 ##### I see the error `/opt/rustwide/cargo-home/bin/cargo: cannot execute binary file: Exec format error` when running builds.
 
-You are most likely not on a Linux platform. Running builds directly is only supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the `docker compose run --rm builder-a build [...]` workaround described above.
+You are most likely not on a Linux platform. Running builds directly is only
+supported on `x86_64-unknown-linux-gnu`. On other platforms you can use the
+`docker compose run --rm builder-a build [...]` workaround described above.
 
-See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more details about supporting more platforms directly.
+See [rustwide#41](https://github.com/rust-lang/rustwide/issues/41) for more
+details about supporting more platforms directly.
 
 ##### All tests are failing or timing out
 
 Our test setup needs a certain about of file descriptors.
 
 At least 4096 should be enough, you can set it via:
+
 ```sh
 $ ulimit -n 4096
 ```
+
 ### CLI
 
 See `cargo run -- --help` for a full list of commands.
@@ -289,8 +311,8 @@ cargo run --bin docs_rs_builder -- build crate --local /path/to/source
 cargo run --bin docs_rs_admin -- database update-repository-fields
 ```
 
-If you want to explore or edit database manually, you can connect to the database
-with the `psql` command.
+If you want to explore or edit database manually, you can connect to the
+database with the `psql` command.
 
 ```sh
 . ./.env
@@ -337,14 +359,20 @@ cargo run --bin docs_rs_admin -- queue repository-priority set <owner/repo> -10
 cargo run --bin docs_rs_admin -- queue repository-priority remove <owner/repo>
 ```
 
-
 ### Updating vendored sources
 
-The instructions & links for updating Font Awesome can be found [on their website](https://fontawesome.com/how-to-use/on-the-web/advanced/svg-sprites). Similarly, Pure-CSS also [explains on theirs](https://purecss.io/start/).
+The instructions & links for updating Font Awesome can be found
+[on their website](https://fontawesome.com/how-to-use/on-the-web/advanced/svg-sprites).
+Similarly, Pure-CSS also [explains on theirs](https://purecss.io/start/).
 
-When updating Font Awesome, make sure to change `$fa-font-path` in `scss/_variables.scss` (it should be at the top of the file) to `../-/static`. This will point font awesome at the correct path from which to request font and icon resources.
+When updating Font Awesome, make sure to change `$fa-font-path` in
+`scss/_variables.scss` (it should be at the top of the file) to `../-/static`.
+This will point font awesome at the correct path from which to request font and
+icon resources.
 
 ### Contact
 
-Docs.rs is run and maintained by the [docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#team-docs-rs).
-You can find us in #t-docs-rs on [zulip](https://rust-lang.zulipchat.com/#narrow/stream/t-docs-rs)
+Docs.rs is run and maintained by the
+[docs.rs team](https://www.rust-lang.org/governance/teams/dev-tools#team-docs-rs).
+You can find us in #t-docs-rs on
+[zulip](https://rust-lang.zulipchat.com/#narrow/stream/t-docs-rs)
