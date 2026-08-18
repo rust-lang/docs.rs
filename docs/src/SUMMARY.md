@@ -16,3 +16,4 @@
   - [Legacy Infrastructure](infrastructure/legacy/overview.md)
     - [deploying a new version](infrastructure/legacy/deployment.md)
     - [nginx](infrastructure/legacy/nginx.md)
+    - [systemd](infrastructure/legacy/systemd.md)
