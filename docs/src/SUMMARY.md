@@ -4,5 +4,5 @@
 - [Archive storage and indexes](archive-storage-and-indexes.md)
 - [Build workspaces](build-workspaces.md)
 - [Docker commands](docker-commands.md)
-- [Hosting](hosting/index.md)
-    - [Legacy hosting](hosting/legacy.md)
+- [Infrastructure](infrastructure/index.md)
+    - [Legacy](infrastructure/legacy.md)

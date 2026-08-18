@@ -1,4 +1,4 @@
-# legacy hosting
+# legacy infrastructure
 
 ```mermaid
 flowchart TD
