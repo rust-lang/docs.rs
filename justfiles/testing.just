@@ -30,7 +30,8 @@ sqlx-check:
 
 [group('sqlx')]
 [group('testing')]
-sqlx-migrate-run: cli-db-migrate
+sqlx-migrate-run version="":
+    just cli-db-migrate {{ version }}
 
 _format_justfile justfile:
     #!/usr/bin/env bash
