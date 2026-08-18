@@ -85,13 +85,14 @@ cli-test-local-build-image docker_tag local_crate_path: _touch-docker-env _ensur
 
     if [ -e "{{ local_crate_path }}" ]; then
         docker compose run --build --rm \
-            -e DOCSRS_DOCKER_IMAGE={{ docker_tag }} \ # will take precedence over the image in `.docker.env`
+            -e DOCSRS_DOCKER_IMAGE={{ docker_tag }} \
             -e RUST_BACKTRACE=1 \
             -v "{{ local_crate_path }}":/opt/rustwide/workdir \
             builder-cli \
             build crate --local /opt/rustwide/workdir
+
     else
-        echo "$YOUR_CRATE does not exist";
+        echo "{{ local_crate_path }} does not exist";
         exit 1
     fi
 
