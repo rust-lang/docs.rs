@@ -51,17 +51,7 @@ Use the image to build your crate.
 
 ```sh
 cd ../../docs.rs
-cp .env.sample .env
-docker compose build
-# avoid docker compose creating the volume if it doesn't exist
-if [ -e "$YOUR_CRATE" ]; then
-  docker compose run -e DOCSRS_DOCKER_IMAGE=build-env \
-                     -e RUST_BACKTRACE=1 \
-                     -v "$YOUR_CRATE":/opt/rustwide/workdir \
-    web build crate --local /opt/rustwide/workdir
-else
-  echo "$YOUR_CRATE does not exist";
-fi
+just cli-test-local-build-image build-env "$YOUR_CRATE"
 ```
 
 ## Making multiple changes
@@ -80,10 +70,7 @@ container; it should take much less time now:
 cd ../crates-build-env/linux
 docker build --tag build-env .
 cd ../../docs.rs
-docker compose run -e DOCSRS_DOCKER_IMAGE=build-env \
-                     -e RUST_BACKTRACE=1 \
-                     -v "$YOUR_CRATE":/opt/rustwide/workdir \
-    web build crate --local /opt/rustwide/workdir
+just cli-test-local-build-image build-env "$YOUR_CRATE"
 ```
 
 ## Run the lint script
