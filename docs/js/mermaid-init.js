@@ -19,7 +19,8 @@
     const theme = lastThemeWasLight ? 'default' : 'dark';
     mermaid.initialize({ startOnLoad: true, theme });
 
-    // Simplest way to make mermaid re-render the diagrams in the new theme is via refreshing the page
+    // The simplest way to make Mermaid render the diagrams in the new theme is
+    // to refresh the page.
 
     for (const darkTheme of darkThemes) {
         document.getElementById('mdbook-theme-' + darkTheme).addEventListener('click', () => {

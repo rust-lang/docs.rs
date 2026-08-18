@@ -1,6 +1,6 @@
-# legacy infrastructure
+# Legacy Infrastructure
 
-Here's a simplified graph of the different moving pieces.
+Here is a simplified diagram of the different moving pieces.
 
 ```mermaid
 flowchart TD
@@ -8,164 +8,162 @@ flowchart TD
   fastly <--> |uses| ngwaf[Fastly NgWAF]
 
   subgraph ec2[EC2 instance]
-    nginx[nginx] --> web[webserver] --> |accesses| psql[postgres database]
+    nginx[nginx] --> web[web server] --> |accesses| psql[PostgreSQL database]
     watcher[index watcher] --> |enqueues builds| psql
-    psql --> |reads queued builds| builder[builder * 4]
+    psql --> |reads queued builds| builder[builders × 4]
   end
 
   fastly --> nginx
   web -->|reads docs| s3[AWS S3]
   builder --> |uploads docs| s3
 
-  index[crates.io git index] --> |gets pulled by| watcher
+  index[crates.io Git index] --> |gets pulled by| watcher
 ```
 
 ## Fastly CDN
 
-In the CDN, we run a
-[Fastly compute WASM module](https://www.fastly.com/documentation/guides/compute/developer-guides/rust/),
-the code lives in our
-[`simpleinfra` repo](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs).
+Within the CDN, we run a
+[Fastly Compute WASM module](https://www.fastly.com/documentation/guides/compute/developer-guides/rust/).
+The code lives in our
+[`simpleinfra` repository](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs).
 
-This enables us to move performance critical logic to the edge, and allows
-writing integration tests for it.
+This enables us to move performance-critical logic to the edge and write
+integration tests for it.
 
-The Fastly service
-[if configured via Terraform in the same
-repo](https://github.com/rust-lang/simpleinfra/blob/master/terraform/docs-rs/fastly.tf)
+[The Fastly service is configured via Terraform in the same
+repository](https://github.com/rust-lang/simpleinfra/blob/master/terraform/docs-rs/fastly.tf).
 
-What content to cache or not is purely defined in the `Cache-Control` headers
-that our webserver returns. There should not be any cache rules in the CDN
-module. Also for now we don't want any business logic in the CDN, so the
-webserver is easier to test & manage.
+What content is cached is defined solely by the `Cache-Control` headers that our
+web server returns. There should not be any cache rules in the CDN module. For
+now, we also don't want any business logic in the CDN, which makes the web
+server easier to test and manage.
 
 We also use the
 [Fastly origin shield](https://www.fastly.com/documentation/guides/getting-started/hosts/shielding/)
-to reduce load on our webservers.
+to reduce the load on our web servers.
 
-### changes & deployment
+### Changes and Deployment
 
-Changes are typically done by us in
-[the `simpleinfra` repo](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/),
-and then reviewed & _manually_ applied by the infra-team.
+We typically make changes in
+[the `simpleinfra` repository](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/),
+after which they are reviewed and _manually_ applied by the infrastructure team.
 
 ## Fastly NgWAF
 
 We also use the
-[Fastly Web-Application firewall (NgWAF)](https://www.fastly.com/documentation/guides/next-gen-waf/).
+[Fastly Web Application Firewall (NgWAF)](https://www.fastly.com/documentation/guides/next-gen-waf/).
 It's integrated with the WASM module above, so all blocking happens in the CDN
-and no malicious request will reach our origin servers.
+and no malicious requests reach our origin servers.
 
-When something is blocked, the user will see one of
+When something is blocked, the user will see one of the following:
 
-- status `406 NOT ACCEPTABLE` for normal security rules
+- status `406 NOT ACCEPTABLE` for normal security rules, or
 - status `429 Too Many Requests` for rate limiting.
 
 _These status codes are only used in the NgWAF, so if a user sees them, the
 NgWAF is the actor blocking the request._
 
-### changes & deployment
+### Changes and Deployment
 
-The integration between the Fastly CDN & NgWAF lives in
-[our compute WASM module](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs/src/ngwaf.rs).
+The integration between the Fastly CDN and NgWAF lives in
+[our Compute WASM module](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs/src/ngwaf.rs).
 
 In the legacy architecture, the rules are defined manually in the
-[Signal Sciences Dashboard](https://dashboard.signalsciences.net/). With the
-planned new infrastructure we'll start managing these in Terraform too.
+[Signal Sciences dashboard](https://dashboard.signalsciences.net/). With the
+planned new infrastructure, we'll start managing these in Terraform as well.
 
-_New or updated rules are typically distributed & active across Fastly's CDN in
-< 1 min, sometimes 2-3 minutes._
+_New or updated rules are typically distributed and active across Fastly's CDN
+within one minute, though it can sometimes take two to three minutes._
 
-## EC2 instance
+## EC2 Instance
 
-Most of docs.rs' legacy infrastructure runs on a single huge EC2 instance.
+Most of the legacy docs.rs infrastructure runs on a single large EC2 instance.
 
 That includes:
 
 - nginx
 - webserver
 - index watcher
-- build servers (4 at the time of writing)
+- build servers (four at the time of writing)
 
-### deployment
+### Deployment
 
-- ssh into the docs.rs server via bastion
-- run `docs_rs_admin  build lock` to lock the build queue
-- check [the build queue](https://docs.rs/releases/queue) until there are no
-  in-progress builds any more.
-- run the `deploy-docs.rs` bash script.
-- if you update content that is typically cached, you need to run
-  `docs_rs_admin cdn purge all`
-- `docs_rs_admin build unlock` to continue builds
+- SSH into the docs.rs server through the bastion host.
+- Run `docs_rs_admin build lock` to lock the build queue.
+- Check [the build queue](https://docs.rs/releases/queue) until no builds are in
+  progress.
+- Run the `deploy-docs.rs` Bash script.
+- If you update content that is typically cached, run
+  `docs_rs_admin cdn purge all`.
+- Run `docs_rs_admin build unlock` to resume builds.
 
-`deploy-docs.rs` will
+`deploy-docs.rs` will:
 
-- `git tag` the old `HEAD` as the previous release
-- `git pull` the repo,
+- tag the old `HEAD` as the previous release with `git tag`,
+- pull the repository with `git pull`,
 - run a build,
-- copy the binaries
-- restart the systemd services
-- run database migrations
-- purge the CDN for in-repo static content
+- copy the binaries,
+- restart the systemd services,
+- run database migrations, and
+- purge the CDN of static content stored in the repository.
 
-There is also a `revert-docs.rs` script that reverts to the old tagged release.
-_It doesn't reverting database migrations._
+There is also a `revert-docs.rs` script that reverts to the previously tagged
+release. _It doesn't revert database migrations._
 
 ## Nginx
 
-In the old infra, it does:
+In the legacy infrastructure, nginx:
 
-- act as reverse proxy to our webserver
-- compresses content
+- acts as a reverse proxy to our web server,
+- compresses content, and
 - authenticates with the CDN.
 
-Before we had the NgWAF, it also handled our rate-limiting.
+Before we had the NgWAF, it also handled our rate limiting.
 
-### changes & deployment
+### Changes and Deployment
 
-Changes are done manually locally on the server (in `/etc/nginx/`), nginx then
+Changes are made manually on the server in `/etc/nginx/`, after which nginx is
 normally restarted via systemd.
 
-## Webserver
+## Web Server
 
-Our webserver.
+Our web server:
 
-- code lives
-  [in the `docs_rs_web` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_web)
-- is based on [the `axum` crate](https://docs.rs/axum/latest/axum/)
+- lives
+  [in the `docs_rs_web` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_web), and
+- is based on [the `axum` crate](https://docs.rs/axum/latest/axum/).
 
-Next to some static and database content, it acts as a proxy to the stored
-rustdoc HTML files, rewriting the HTML on the fly to make it match our UI.
+Besides serving some static and database-backed content, it acts as a proxy for
+the stored rustdoc HTML files, rewriting them on the fly to match our UI.
 
-## Index-watcher
+## Index Watcher
 
 A small process that manages a clone of the
-[`crates.io-index` repo](https://github.com/rust-lang/crates.io-index).
+[`crates.io-index` repository](https://github.com/rust-lang/crates.io-index).
 
-We update it once a minute, and use
+We update it once a minute and use
 [`crates-index-diff`](https://docs.rs/crates-index-diff/latest/crates_index_diff/)
 to determine the changes.
 
-Depending on the event, we will:
+Depending on the event, we:
 
 - add the release to the build queue,
 - update the yank status of the release, or
-- delete the crate or release completely.
+- delete the crate or release entirely.
 
 The code lives
-[in the `docs_rs_watcher` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_watcher)
+[in the `docs_rs_watcher` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_watcher).
 
 ## Builder
 
-The build-servers will
+The build servers:
 
 - read releases from the build queue,
 - use [`rustwide`](https://docs.rs/rustwide/latest/rustwide/) to run
-  `cargo
-doc`, isolating the build in docker containers for security.
-- package the docs into ZIP-File, and upload it to S3.
+  `cargo doc`, isolating each build in a Docker container for security, and
+- package the documentation into a ZIP file and upload it to S3.
 
-Currently we run **4** parallel build-servers.
+We currently run **four** parallel build servers.
 
 The code lives
-[in the `docs_rs_builder` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_builder)
+[in the `docs_rs_builder` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_builder).
