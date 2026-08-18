@@ -1,7 +1,7 @@
 # The docs.rs dev guide
 
 - [General code architecture](general-code-architecture.md)
-- [Services](binaries/index.md)
+- [Binaries](binaries/index.md)
   - [Web Server](binaries/web-server.md)
   - [Index Watcher](binaries/index-watcher.md)
   - [Build Server](binaries/build-server.md)
