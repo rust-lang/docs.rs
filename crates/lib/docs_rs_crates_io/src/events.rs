@@ -57,17 +57,31 @@ impl IndexChangeV1 {
             _ => None,
         }
     }
-}
 
-impl fmt::Display for IndexChangeV1 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match *self {
+    pub fn name(&self) -> &str {
+        match self {
+            IndexChangeV1::Added(crate_version) => &crate_version.name,
+            IndexChangeV1::Unyanked(crate_version) => &crate_version.name,
+            IndexChangeV1::Yanked(crate_version) => &crate_version.name,
+            IndexChangeV1::CrateDeleted { name } => name,
+            IndexChangeV1::VersionDeleted(crate_version) => &crate_version.name,
+        }
+    }
+
+    pub fn kind(&self) -> &'static str {
+        match *self {
             IndexChangeV1::Added(_) => "added",
             IndexChangeV1::Yanked(_) => "yanked",
             IndexChangeV1::CrateDeleted { .. } => "crate deleted",
             IndexChangeV1::VersionDeleted(_) => "version deleted",
             IndexChangeV1::Unyanked(_) => "unyanked",
-        })
+        }
+    }
+}
+
+impl fmt::Display for IndexChangeV1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.kind())
     }
 }
 
