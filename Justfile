@@ -24,3 +24,7 @@ import 'justfiles/testing.just'
 
 psql:
   psql $DOCSRS_DATABASE_URL
+
+book:
+  cargo install mdbook
+  mdbook build docs --open
