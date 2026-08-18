@@ -37,3 +37,7 @@ book-test: book-build
 
 [group('book')]
 book-open: (book-build "--open")
+
+[group('book')]
+book-watch: _ensure_mdbook_installed
+    mdbook watch ./docs --open
