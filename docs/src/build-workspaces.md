@@ -1,6 +1,6 @@
 # Build Workspaces
 ## When do we need this?
-Many workspace packages do not need manual intervention and can be built simply by executing the commands listed in the main `README.md` file.
+Many workspace packages do not need manual intervention and can be built simply by executing the commands listed in the main [README.md] file.
 However, some workspaces require an additional step.
 This is the case when values such as
 ```toml
@@ -16,7 +16,7 @@ This step will replace all of the `value.workspace = true` statements with their
 cargo package
 ```
 This will emit a packaged  crate into the `target/package/your_crate_name-version` folder.
-Now the commands specified in our `README.md` can be executed targeting this folder.
+Now the commands specified in our [README.md] can be executed targeting this folder.
 ```console
 cargo run -- build crate --local /path/to/source/target/package/your_crate_name-version/
 ```
@@ -91,3 +91,4 @@ cargo run -- build crate -l path/to/docs_rs_workspace_package/target/package/my_
 ```
 then the build succeeds.
 
+{{#include ./links.md}}
