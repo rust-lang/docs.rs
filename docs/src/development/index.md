@@ -1,1 +1,1 @@
-# how to develop docs.rs
+# Developing docs.rs

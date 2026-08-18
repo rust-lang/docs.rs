@@ -3,9 +3,9 @@
 We still maintain a legacy daemon binary
 [in the `cratesfyi` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/cratesfyi).
 
-It's only used in the legacy infrastructure, and merges these services in one
-process:
+It's used only in the legacy infrastructure and combines these services into
+one process:
 
-- a Web Server
-- an index watcher
-- one build-server
+- a web server,
+- an index watcher, and
+- one build server.

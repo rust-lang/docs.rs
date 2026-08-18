@@ -1,3 +1,4 @@
-# Design docus
+# Design
 
-Documents some pieces of design and their choices.
+These documents describe parts of the docs.rs design and the decisions behind
+them.

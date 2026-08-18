@@ -36,9 +36,8 @@ rules, and deployment details.
 
 ## EC2 Instance
 
-Most of the legacy docs.rs infrastructure runs on a single large EC2 instance.
-
-That includes:
+Most of the legacy docs.rs infrastructure runs on a single large EC2 instance,
+including the following services:
 
 - nginx
 - web server
@@ -53,7 +52,7 @@ Nginx:
 - compresses content, and
 - authenticates with the CDN.
 
-See [NGINX](nginx.md) for configuration and deployment details.
+See [Nginx](nginx.md) for configuration and deployment details.
 
 ## Web Server
 

@@ -3,7 +3,7 @@
 The index watcher is a small process that manages a clone of the
 [`crates.io-index` repository](https://github.com/rust-lang/crates.io-index).
 
-We update it once a minute and use
+The watcher updates the clone once a minute and uses
 [`crates-index-diff`](https://docs.rs/crates-index-diff/latest/crates_index_diff/)
 to determine the changes.
 

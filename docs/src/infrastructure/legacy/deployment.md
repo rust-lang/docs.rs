@@ -22,7 +22,7 @@
 There is also a `revert-docs.rs` script that reverts to the previously tagged
 release. _It doesn't revert database migrations._
 
-## configuration
+## Configuration
 
-To update the service configuration, you need to update the corresponding dotenv
-files, see the [systemd setup](systemd.md).
+To update a service's configuration, update the corresponding dotenv file. See
+the [systemd setup](systemd.md) for details.

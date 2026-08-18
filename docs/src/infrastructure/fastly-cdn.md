@@ -14,10 +14,10 @@ the CDN before they reach our origin servers.
 [The Fastly service is configured via Terraform in the same
 repository](https://github.com/rust-lang/simpleinfra/blob/master/terraform/docs-rs/fastly.tf).
 
-What content is cached is defined solely by the `Cache-Control` headers that our
-web server returns. There should not be any cache rules in the CDN module. For
-now, we also don't want any business logic in the CDN, which makes the web
-server easier to test and manage.
+The `Cache-Control` headers returned by our web server determine which content is
+cached. There should not be any cache rules in the CDN module. For now, we also
+don't want any business logic in the CDN, which makes the web server easier to
+test and manage.
 
 We also use the
 [Fastly origin shield](https://www.fastly.com/documentation/guides/getting-started/hosts/shielding/)

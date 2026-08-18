@@ -1,7 +1,7 @@
 # The docs.rs dev guide
 
 - [General code architecture](general-code-architecture.md)
-- [Binaries](services/index.md)
+- [Services](services/index.md)
   - [Web Server](services/web-server.md)
   - [Index Watcher](services/index-watcher.md)
   - [Build Server](services/build-server.md)
@@ -11,9 +11,9 @@
   - [Fastly CDN](infrastructure/fastly-cdn.md)
   - [Fastly NgWAF](infrastructure/ngwaf.md)
   - [Legacy Infrastructure](infrastructure/legacy/overview.md)
-    - [deploying a new version](infrastructure/legacy/deployment.md)
-    - [nginx](infrastructure/legacy/nginx.md)
-    - [systemd](infrastructure/legacy/systemd.md)
+    - [Deploying a New Version](infrastructure/legacy/deployment.md)
+    - [Nginx](infrastructure/legacy/nginx.md)
+    - [systemd Service Setup](infrastructure/legacy/systemd.md)
 - [Development](development/index.md)
   - [Docker commands](development/docker-commands.md)
   - [Build workspaces](development/build-workspaces.md)

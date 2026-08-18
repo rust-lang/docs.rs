@@ -1,5 +1,7 @@
 # Nginx
 
+Nginx:
+
 - acts as a reverse proxy to our web server,
 - compresses content, and
 - authenticates with the CDN.

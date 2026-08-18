@@ -1,11 +1,10 @@
 # Admin CLI
 
-The Admin CLI provides some helper commands to manage your docs.rs deployment.
-It directly connects to the database & S3 and helps with some admin activities,
-so _the CLI theoretically even when running on a separate machine without direct
-access to the other services_.
+The Admin CLI provides helper commands for managing a docs.rs deployment. It
+connects directly to the database and S3, so _it can theoretically run on a
+separate machine without direct access to the other services_.
 
-## features
+## Features
 
 You can get help via:
 
