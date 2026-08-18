@@ -5,6 +5,6 @@
 - [Build workspaces](build-workspaces.md)
 - [Docker commands](docker-commands.md)
 - [Infrastructure](infrastructure/index.md)
-    - [Legacy](infrastructure/legacy.md)
     - [Fastly CDN](infrastructure/fastly-cdn.md)
     - [Fastly NgWAF](infrastructure/ngwaf.md)
+    - [Legacy](infrastructure/legacy.md)
