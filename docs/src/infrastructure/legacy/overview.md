@@ -43,6 +43,7 @@ including the following services:
 - web server
 - index watcher
 - build servers
+- postgresql database
 
 ## Nginx
 
@@ -70,3 +71,18 @@ implementation details.
 The build servers generate documentation for queued releases and upload it to
 S3. See [Build Server](../../binaries/build-server.md) for implementation
 details.
+
+We currently run **four** parallel build servers.
+
+## PostgreSQL database
+
+The database server runs locally on the EC2 instance. Currently we run postgres
+v10.
+
+## S3
+
+We use S3 for object storage.
+
+The service accesses S3 using the IAM role attached to the EC2 instance through
+its instance profile. The AWS SDK automatically obtains temporary credentials
+through IMDS.
