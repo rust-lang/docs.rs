@@ -189,15 +189,32 @@ _gui-tests_env: _ensure_db_and_s3_are_running cli-db-migrate
     just cli-build-add-essential-files
 
 [group('testing')]
-run-gui-tests: _gui-tests_env compose-up-web
+run-gui-tests: _gui-tests_env
     #!/usr/bin/env bash
     set -euo pipefail
 
-    DOCSRS_CLI_MODE=docker \
-      just _cli gui_tests
+    case "${DOCSRS_CLI_MODE}" in
+      docker)
+        just _run-gui-tests-docker
+        ;;
+      local)
+        just _run-gui-tests-local
+        ;;
+      *)
+        echo "Invalid DOCSRS_CLI_MODE: ${DOCSRS_CLI_MODE}" >&2
+        echo "Expected one of: docker, local" >&2
+        exit 2
+        ;;
+    esac
 
-[group('testing')]
-run-gui-tests-local: # _gui-tests_env
+_run-gui-tests-docker:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    just compose-up-web
+    just _cli UNUSED gui_tests
+
+_run-gui-tests-local:
     #!/usr/bin/env bash
     set -euo pipefail
 

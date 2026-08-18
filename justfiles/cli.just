@@ -17,7 +17,7 @@ _cli package service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
     # Instead we explicitly start any dependent services first via
     # `_ensure_db_and_s3_are_running`.
 
-    case "${DOCSRS_CLI_MODE:-docker}" in
+    case "${DOCSRS_CLI_MODE}" in
       docker)
         docker compose run --build --rm {{ service_name }} {{ args }}
         ;;
