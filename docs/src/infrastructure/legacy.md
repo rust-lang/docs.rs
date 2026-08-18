@@ -87,47 +87,16 @@ be restarted via systemd.
 
 ## Web Server
 
-Our web server:
-
-- lives
-  [in the `docs_rs_web` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_web),
-  and
-- is based on [the `axum` crate](https://docs.rs/axum/latest/axum/).
-
-Besides serving some static and database-backed content, it acts as a proxy for
-the stored rustdoc HTML files, rewriting them on the fly to match our UI.
-
-Because we recompress and rewrite HTML for many requests, we're more CPU-bound
-than a typical web server.
+The web server handles requests from nginx and serves docs.rs content. See
+[Web Server](../services/web-server.md) for implementation details.
 
 ## Index Watcher
 
-The index watcher is a small process that manages a clone of the
-[`crates.io-index` repository](https://github.com/rust-lang/crates.io-index).
+The index watcher monitors the crates.io index and updates the build queue and
+stored releases. See [Index Watcher](../services/index-watcher.md) for
+implementation details.
 
-We update it once a minute and use
-[`crates-index-diff`](https://docs.rs/crates-index-diff/latest/crates_index_diff/)
-to determine the changes.
+## Build Servers
 
-Depending on the change, we:
-
-- add the release to the build queue,
-- update the release's yanked status, or
-- delete the crate or release entirely from our storage.
-
-The code lives
-[in the `docs_rs_watcher` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_watcher).
-
-## Builder
-
-The build servers:
-
-- read releases from the build queue,
-- use [`rustwide`](https://docs.rs/rustwide/latest/rustwide/) to run
-  `cargo doc`, isolating each build in a Docker container for security, and
-- package the documentation into a ZIP file and upload it to S3.
-
-We currently run **four** parallel build servers.
-
-The code lives
-[in the `docs_rs_builder` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_builder).
+The build servers generate documentation for queued releases and upload it to
+S3. See [Build Server](../services/build-server.md) for implementation details.
