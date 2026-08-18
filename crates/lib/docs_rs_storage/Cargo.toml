@@ -45,7 +45,6 @@ mime = { workspace = true }
 moka = { version = "0.12.14", features = ["future"] }
 opentelemetry = { workspace = true }
 rand = { workspace = true, optional = true }
-serde_json = { workspace = true }
 sqlx = { workspace = true } # for sqlite
 strum = { workspace = true }
 tempfile = { workspace = true }

@@ -35,8 +35,9 @@ use tracing::{error, warn};
 // (200), so the SDK's retry layer never sees these — we have to retry them
 // ourselves. See:
 // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-static RETRYABLE_DELETE_OBJECT_ERROR_CODES: [&str; 4] = [
+static RETRYABLE_DELETE_OBJECT_ERROR_CODES: [&str; 5] = [
     "InternalError",
+    "OperationAborted",
     "RequestTimeout",
     "ServiceUnavailable",
     "SlowDown",
@@ -461,10 +462,7 @@ impl StorageBackendMethods for S3Backend {
                 .unwrap_or(mime::APPLICATION_OCTET_STREAM),
             date_updated,
             etag,
-            content_length: res
-                .content_length
-                .and_then(|length| length.try_into().ok())
-                .unwrap_or(0),
+            content_length: res.content_length.and_then(|length| length.try_into().ok()),
             content: Box::new(res.body.into_async_read()),
             compression,
         })
@@ -566,30 +564,17 @@ impl S3Backend {
     async fn delete_batch_with_retry(&self, keys: Vec<String>) -> Result<(), Error> {
         let mut remaining = keys;
         for attempt in 1.. {
-            let resp = match self
+            // Request-level failures are retried by the AWS SDK. We only retry
+            // per-object failures returned in a successful `DeleteObjects`
+            // response below, since the SDK cannot see those as errors.
+            let resp = self
                 .client
                 .delete_objects()
                 .bucket(&self.bucket)
                 .delete(Self::delete_request(&remaining)?)
                 .send()
                 .await
-            {
-                Ok(resp) => resp,
-                Err(err)
-                    if attempt <= self.max_retries && Self::is_retryable_delete_error(&err) =>
-                {
-                    let backoff = retry_backoff(attempt);
-                    warn!(
-                        attempt,
-                        ?backoff,
-                        ?err,
-                        "retrying s3 delete_objects request after transient error",
-                    );
-                    time::sleep(backoff).await;
-                    continue;
-                }
-                Err(err) => return Err(err.into()),
-            };
+                .with_context(|| format!("failed to delete files from s3: {remaining:?}"))?;
 
             let Some(errs) = resp.errors.filter(|e| !e.is_empty()) else {
                 return Ok(());
@@ -638,25 +623,6 @@ impl S3Backend {
         }
 
         unreachable!("unbounded retry loop should return or fail internally")
-    }
-
-    fn is_retryable_delete_error<E>(err: &SdkError<E>) -> bool
-    where
-        E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
-    {
-        if let Some(err_code) = err.code()
-            && RETRYABLE_DELETE_OBJECT_ERROR_CODES.contains(&err_code)
-        {
-            return true;
-        }
-
-        if let SdkError::ServiceError(err) = err
-            && err.raw().status().is_server_error()
-        {
-            return true;
-        }
-
-        false
     }
 
     fn delete_request(keys: &[String]) -> Result<Delete, Error> {

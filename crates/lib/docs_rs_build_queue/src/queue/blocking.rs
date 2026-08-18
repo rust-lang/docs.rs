@@ -11,8 +11,8 @@ use tracing::error;
 
 #[derive(Debug)]
 pub struct BuildQueue {
-    runtime: Handle,
-    inner: Arc<AsyncBuildQueue>,
+    pub(crate) runtime: Handle,
+    pub(crate) inner: Arc<AsyncBuildQueue>,
 }
 
 /// sync versions of async methods
@@ -165,15 +165,10 @@ impl BuildQueue {
 
 #[cfg(test)]
 mod tests {
-    use crate::Config;
-
     use super::*;
+    use crate::{Config, testing::test_env::BlockingTestEnv};
     use chrono::Utc;
-    use docs_rs_config::AppConfig as _;
-    use docs_rs_database::{AsyncPoolClient, testing::TestDatabase};
-    use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::{KRATE, V1, V2};
-    use docs_rs_utils::block_on_async_with_conn;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
 
@@ -181,84 +176,14 @@ mod tests {
     const BAR: KrateName = KrateName::from_static("bar");
     const BAZ: KrateName = KrateName::from_static("baz");
 
-    // when we start migrating / spitting the binaries,
-    // we probably will create  amore powerfull & flexible
-    // test& app context. Then we could migrate this.
-    struct TestEnv {
-        db: TestDatabase,
-        queue: BuildQueue,
-        metrics: TestMetrics,
-        runtime: runtime::Runtime,
-    }
-
-    impl TestEnv {
-        pub(crate) fn runtime(&self) -> &runtime::Runtime {
-            &self.runtime
-        }
-
-        pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
-            self.db.async_conn().await
-        }
-
-        fn queued_builds(&self) -> Result<u64> {
-            let collected_metrics = self.metrics.collected_metrics();
-
-            Ok(collected_metrics
-                .get_metric("build_queue", "docsrs.build_queue.queued_builds")?
-                .get_u64_counter()
-                .value())
-        }
-
-        fn failed_count(&self) -> u64 {
-            let collected_metrics = self.metrics.collected_metrics();
-
-            if let Ok(metric) = collected_metrics
-                .get_metric("build_queue", "docsrs.build_queue.failed_crates_count")
-            {
-                metric.get_u64_counter().value()
-            } else {
-                0
-            }
-        }
-    }
-
-    fn test_queue(config: Config) -> Result<TestEnv> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-
-        let metrics = TestMetrics::new();
-        let db = runtime.block_on(TestDatabase::new(
-            &docs_rs_database::Config::test_config()?,
-            metrics.provider(),
-        ))?;
-
-        let async_queue = Arc::new(AsyncBuildQueue::new(
-            db.pool().clone(),
-            Arc::new(config),
-            metrics.provider(),
-        ));
-
-        Ok(TestEnv {
-            db,
-            queue: BuildQueue {
-                runtime: runtime.handle().clone().into(),
-                inner: async_queue,
-            },
-            metrics,
-            runtime,
-        })
-    }
-
     #[test]
     fn test_wait_between_build_attempts() -> Result<()> {
-        let env = test_queue(Config {
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue_with_config(Config {
             build_attempts: 99,
             delay_between_build_attempts: Duration::from_secs(1),
             ..Default::default()
-        })?;
-
-        let queue = &env.queue;
+        });
 
         queue.add_crate(&KRATE, &V1, 0)?;
 
@@ -273,14 +198,16 @@ mod tests {
             unreachable!();
         })?;
 
-        block_on_async_with_conn!(env, |mut conn| async {
+        env.block_on_async_with_conn(async |conn| {
             // fake the build-attempt timestamp so it's older
-            Ok(sqlx::query!(
+            sqlx::query!(
                 "UPDATE queue SET last_attempt = $1",
                 Utc::now() - chrono::Duration::try_seconds(60).unwrap()
             )
             .execute(&mut *conn)
-            .await?)
+            .await?;
+
+            Ok(())
         })?;
 
         let mut handled = false;
@@ -299,12 +226,12 @@ mod tests {
     #[test]
     fn test_add_and_process_crates() -> Result<()> {
         const MAX_ATTEMPTS: u16 = 3;
-        let env = test_queue(Config {
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
             ..Default::default()
-        })?;
-        let queue = &env.queue;
+        });
 
         const LOW_PRIORITY: KrateName = KrateName::from_static("low-priority");
         const HIGH_PRIORITY_FOO: KrateName = KrateName::from_static("high-priority-foo");
@@ -379,8 +306,8 @@ mod tests {
 
     #[test]
     fn test_pending_count() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
         assert_eq!(queue.pending_count()?, 0);
         queue.add_crate(&FOO, &V1, 0)?;
         assert_eq!(queue.pending_count()?, 1);
@@ -398,8 +325,8 @@ mod tests {
 
     #[test]
     fn test_prioritized_count() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         assert_eq!(queue.prioritized_count()?, 0);
         queue.add_crate(&FOO, &V1, 0)?;
@@ -420,8 +347,8 @@ mod tests {
 
     #[test]
     fn test_count_by_priority() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         assert!(queue.pending_count_by_priority()?.is_empty());
 
@@ -446,12 +373,12 @@ mod tests {
     fn test_failed_count_for_reattempts() -> Result<()> {
         const MAX_ATTEMPTS: u16 = 3;
 
-        let env = test_queue(Config {
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
             ..Default::default()
-        })?;
-        let queue = &env.queue;
+        });
 
         assert_eq!(env.failed_count(), 0);
         queue.add_crate(&FOO, &V1, -100)?;
@@ -483,12 +410,12 @@ mod tests {
     fn test_failed_count_after_error() -> Result<()> {
         const MAX_ATTEMPTS: u16 = 3;
 
-        let env = test_queue(Config {
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
             delay_between_build_attempts: Duration::ZERO,
             ..Default::default()
-        })?;
-        let queue = &env.queue;
+        });
 
         assert_eq!(env.failed_count(), 0);
         queue.add_crate(&FOO, &V1, -100)?;
@@ -515,8 +442,8 @@ mod tests {
 
     #[test]
     fn test_queued_crates() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         let test_crates = [(BAR, 0), (FOO, -10), (BAZ, 10)];
         for krate in &test_crates {
@@ -537,8 +464,8 @@ mod tests {
 
     #[test]
     fn test_queue_lock() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         // unlocked without config
         assert!(!queue.is_locked()?);
@@ -554,8 +481,8 @@ mod tests {
 
     #[test]
     fn test_add_long_name() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         let name: KrateName = "krate".repeat(100)[..64].parse().unwrap();
 
@@ -571,8 +498,8 @@ mod tests {
 
     #[test]
     fn test_add_long_version() -> Result<()> {
-        let env = test_queue(Config::default())?;
-        let queue = env.queue;
+        let env = BlockingTestEnv::new()?;
+        let queue = env.queue();
 
         let long_version = Version::parse(&format!(
             "1.2.3-{}+{}",

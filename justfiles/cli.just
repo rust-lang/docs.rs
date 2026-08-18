@@ -41,66 +41,63 @@ cli +args: _touch-docker-env cli-db-migrate
 [group('cli')]
 [group('database')]
 cli-db-migrate:
-  #!/usr/bin/env bash
-  set -euo pipefail
-
-  # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
-  # Otherwise we would have a stack overflow / infinite recursion.
-  #
-  # TODO: potential optimization: only run the container when we have to
-  # run migrations?
-  SQLX_OFFLINE=true just _cli docs_rs_admin cli database migrate
+    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
+    # Otherwise we would have a stack overflow / infinite recursion.
+    #
+    # TODO: potential optimization: only run the container when we have to
+    # run migrations?
+    just _cli cli database migrate
 
 # add a release to the build queue
 [group('cli')]
 [group('queue')]
 cli-queue-add crate_name crate_version:
-  # only does things with the database, so can use the lightweight `cli` container.
-  just cli queue add {{ crate_name }} {{ crate_version }}
+    # only does things with the database, so can use the lightweight `cli` container.
+    just cli queue add {{ crate_name }} {{ crate_version }}
 
 # run builder CLI command in its own one-off `build-server` docker container.
 # Uses a separate builder-cli container & workspace that doesn't conflict
 # with the continiously running build-servers.
-[group('cli')]
 [group('builder')]
+[group('cli')]
 cli-build +args: _touch-docker-env cli-db-migrate
   just _cli docs_rs_builder builder-cli {{ args }}
 
 # set the nightly rust version to be used for builds. Format: `nightly-YYYY-MM-DD`
 # or just `nightly` for always using the latest nightly.
-[group('cli')]
 [group('builder')]
+[group('cli')]
 cli-build-set-toolchain name only_first_time="false":
-  #!/usr/bin/env bash
-  set -euo pipefail
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-  FLAG=""
-  if [ "{{only_first_time}}" = "true" ]; then FLAG="--only-first-time"; fi
-  just cli-build build set-toolchain {{ name }} $FLAG
+    FLAG=""
+    if [ "{{ only_first_time }}" = "true" ]; then FLAG="--only-first-time"; fi
+    just cli-build build set-toolchain {{ name }} $FLAG
 
 # update the toolchain in the builders
-[group('cli')]
 [group('builder')]
+[group('cli')]
 cli-build-update-toolchain:
-  just cli-build build update-toolchain
+    just cli-build build update-toolchain
 
 # build & upload toolchain shared static resources
-[group('cli')]
 [group('builder')]
+[group('cli')]
 cli-build-add-essential-files:
-  just cli-build build add-essential-files
+    just cli-build build add-essential-files
 
 # build a release
-[group('cli')]
 [group('builder')]
+[group('cli')]
 cli-build-crate name version:
-  just cli-build build crate {{ name }} {{ version }}
+    just cli-build build crate {{ name }} {{ version }}
 
 # run registry-watcher CLI command in its own one-off `registry-watcher` docker container.
 [group('cli')]
 [group('watcher')]
 cli-watcher +args: _touch-docker-env cli-db-migrate
-  just _cli registry-watcher-cli {{ args }}
+    just _cli registry-watcher-cli {{ args }}
 
 # Update last seen reference to the given hash, or the current `HEAD`.
 [group('cli')]
@@ -112,4 +109,4 @@ cli-queue-reset-last-seen-ref ref="--head":
 [group('cli')]
 [group('database')]
 cli-db-synchronize *args:
-  just cli-watcher database synchronize {{ args }}
+    just cli-watcher database synchronize {{ args }}

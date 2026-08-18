@@ -1024,7 +1024,7 @@ mod tests {
                     date_updated: Utc::now(),
                     etag: None,
                     compression: None,
-                    content_length: content.len(),
+                    content_length: Some(content.len()),
                     content: Box::new(Cursor::new(content)),
                 })
             })
@@ -1079,7 +1079,7 @@ mod tests {
                     date_updated: Utc::now(),
                     etag: None,
                     compression: None,
-                    content_length: content.len(),
+                    content_length: Some(content.len()),
                     content: Box::new(Cursor::new(content)),
                 })
             })

@@ -1,3 +1,13 @@
 // Checks the content of the 404 page.
 go-to: |DOC_PATH| + "/non-existing-crate"
 assert-text: ("#crate-title", "The requested crate does not exist")
+
+// Checks the 404 page of a page missing inside an existing crate version.
+go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/removed_module/index.html"
+assert-text: ("#crate-title", "This page does not exist")
+assert-text: (".description", "The latest version of `sysinfo` (0.23.5) exists", CONTAINS)
+assert-count: ("#recovery-links a", 2)
+assert-text: ("#recovery-links a:nth-of-type(1)", "Documentation home for this version")
+assert-attribute: ("#recovery-links a:nth-of-type(1)", {"href": "/sysinfo/latest/sysinfo/"})
+assert-text: ("#recovery-links a:nth-of-type(2)", "All versions of sysinfo")
+assert-attribute: ("#recovery-links a:nth-of-type(2)", {"href": "/crate/sysinfo/latest"})

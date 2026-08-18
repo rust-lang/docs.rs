@@ -1,4 +1,6 @@
-use crate::{blob::Blob, file::FileEntry, storage::non_blocking::AsyncStorage};
+use crate::{
+    blob::Blob, file::FileEntry, result::ArchiveStatistics, storage::non_blocking::AsyncStorage,
+};
 use anyhow::Result;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
 use std::{fmt, path::Path, sync::Arc};
@@ -26,15 +28,11 @@ impl Storage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.fetch_source_file(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
+        self.runtime.block_on(
+            self.inner
+                .fetch_source_file(name, version, latest_build_id, path),
+        )
     }
 
     pub fn rustdoc_file_exists(
@@ -43,15 +41,11 @@ impl Storage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<bool> {
-        self.runtime.block_on(self.inner.rustdoc_file_exists(
-            name,
-            version,
-            latest_build_id,
-            path,
-            archive_storage,
-        ))
+        self.runtime.block_on(
+            self.inner
+                .rustdoc_file_exists(name, version, latest_build_id, path),
+        )
     }
 
     pub fn exists_in_archive(
@@ -66,30 +60,11 @@ impl Storage {
         )
     }
 
-    pub fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get(path, max_size))
-    }
-
-    pub fn get_from_archive(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        path: &str,
-        max_size: usize,
-    ) -> Result<Blob> {
-        self.runtime.block_on(self.inner.get_from_archive(
-            archive_path,
-            latest_build_id,
-            path,
-            max_size,
-        ))
-    }
-
     pub fn store_all_in_archive(
         &self,
         archive_path: &str,
         root_dir: &Path,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+    ) -> Result<ArchiveStatistics> {
         self.runtime
             .block_on(self.inner.store_all_in_archive(archive_path, root_dir))
     }

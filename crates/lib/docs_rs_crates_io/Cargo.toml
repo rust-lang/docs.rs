@@ -1,0 +1,19 @@
+[package]
+name = "docs_rs_crates_io"
+version = "0.1.0"
+description = "types & logic for the direct integration between docs.rs & crates.io"
+
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lints]
+workspace = true

@@ -330,7 +330,6 @@ pub(crate) async fn rustdoc_redirector_handler(
                     &krate.version,
                     krate.latest_build_id,
                     inner_path,
-                    krate.archive_storage,
                 )
                 .await
             {
@@ -654,7 +653,6 @@ pub(crate) async fn rustdoc_html_server_handler(
             &krate.version,
             krate.latest_build_id,
             &storage_path,
-            krate.archive_storage,
         )
         .await
     {
@@ -682,7 +680,6 @@ pub(crate) async fn rustdoc_html_server_handler(
                         &krate.version,
                         krate.latest_build_id,
                         &params.storage_path(),
-                        krate.archive_storage,
                     )
                     .await?
                 {
@@ -725,7 +722,18 @@ pub(crate) async fn rustdoc_html_server_handler(
                 )
             }
 
-            return Err(AxumNope::ResourceNotFound);
+            // The crate and version exist and have docs, but this specific
+            // page within them does not (e.g. a module removed/renamed in a
+            // newer release reached via `/latest/`). Return a 404 that
+            // acknowledges the version and offers recovery links instead of a
+            // bare "resource not found" (issue #2568).
+            return Err(AxumNope::ResourceNotFoundInVersion {
+                name: params.name().to_string(),
+                version: krate.version.to_string(),
+                is_latest_url: params.req_version().is_latest(),
+                version_root_url: params.clone().with_inner_path("").rustdoc_url(),
+                crate_details_url: params.crate_details_url(),
+            });
         }
     };
 
@@ -825,7 +833,6 @@ pub(crate) async fn target_redirect_handler(
             &crate_details.version,
             crate_details.latest_build_id,
             &storage_path,
-            crate_details.archive_storage,
         )
         .await?
     {
@@ -1093,12 +1100,25 @@ mod test {
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;
+    use http::header::CONTENT_LENGTH;
     use kuchikiki::traits::TendrilSink;
     use pretty_assertions::assert_eq;
     use reqwest::StatusCode;
     use std::{collections::BTreeMap, str::FromStr as _};
     use test_case::test_case;
     use tracing::info;
+
+    fn has_content_len(headers: &HeaderMap) -> bool {
+        let content_length: usize = headers
+            .get(CONTENT_LENGTH)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        content_length > 0
+    }
 
     async fn try_latest_version_redirect(
         krate: &str,
@@ -1148,16 +1168,14 @@ mod test {
             .with_context(|| anyhow!("no redirect found for {}", path))
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
+    #[test]
     // https://github.com/rust-lang/docs.rs/issues/2313
-    fn help_html(archive_storage: bool) {
+    fn help_html() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("krate")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("help.html")
                 .create()
                 .await?;
@@ -1177,17 +1195,15 @@ mod test {
         });
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
+    #[test]
     // regression test for https://github.com/rust-lang/docs.rs/issues/552
-    fn settings_html(archive_storage: bool) {
+    fn settings_html() {
         async_wrapper(|env| async move {
             // first release works, second fails
             env.fake_release()
                 .await
                 .name("buggy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("settings.html")
                 .rustdoc_file("scrape-examples-help.html")
                 .rustdoc_file("directory_1/index.html")
@@ -1201,7 +1217,6 @@ mod test {
                 .await
                 .name("buggy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .build_result_failed()
                 .create()
                 .await?;
@@ -1272,15 +1287,13 @@ mod test {
         });
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn default_target_redirects_to_base(archive_storage: bool) {
+    #[test]
+    fn default_target_redirects_to_base() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1313,7 +1326,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .default_target(target)
                 .create()
@@ -1330,7 +1342,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.3.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("all.html")
                 .default_target(target)
@@ -1358,7 +1369,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(true)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1402,7 +1412,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .rustdoc_file("dummy/index.html")
             .create()
             .await?;
@@ -1433,15 +1442,13 @@ mod test {
         Ok(())
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn go_to_latest_version(archive_storage: bool) {
+    #[test]
+    fn go_to_latest_version() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/blah/index.html")
                 .rustdoc_file("dummy/blah/blah.html")
                 .rustdoc_file("dummy/struct.will-be-deleted.html")
@@ -1451,7 +1458,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/blah/index.html")
                 .rustdoc_file("dummy/blah/blah.html")
                 .create()
@@ -1499,15 +1505,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn go_to_latest_version_keeps_platform(archive_storage: bool) {
+    #[test]
+    fn go_to_latest_version_keeps_platform() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .add_platform("x86_64-pc-windows-msvc")
                 .rustdoc_file("dummy/struct.Blah.html")
                 .create()
@@ -1516,7 +1520,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .add_platform("x86_64-pc-windows-msvc")
                 .create()
                 .await?;
@@ -1563,15 +1566,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn redirect_latest_goes_to_crate_if_build_failed(archive_storage: bool) {
+    #[test]
+    fn redirect_latest_goes_to_crate_if_build_failed() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1579,7 +1580,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .build_result_failed()
                 .create()
                 .await?;
@@ -1593,15 +1593,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn redirect_latest_does_not_go_to_yanked_versions(archive_storage: bool) {
+    #[test]
+    fn redirect_latest_does_not_go_to_yanked_versions() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1609,7 +1607,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1617,7 +1614,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()
@@ -1636,9 +1632,8 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn no_latest_stable_button_when_latest_stable_is_yanked(archive_storage: bool) {
+    #[test]
+    fn no_latest_stable_button_when_latest_stable_is_yanked() {
         async fn has_latest_redirect_button(
             path: &str,
             web: &axum::Router,
@@ -1658,7 +1653,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0-pre.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -1666,7 +1660,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()
@@ -1680,9 +1673,8 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn yanked_release_shows_warning_in_nav(archive_storage: bool) {
+    #[test]
+    fn yanked_release_shows_warning_in_nav() {
         async fn has_yanked_warning(path: &str, web: &axum::Router) -> Result<bool, anyhow::Error> {
             web.assert_success(path).await?;
             let data = web.get(path).await?.text().await?;
@@ -1700,7 +1692,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()
@@ -1712,7 +1703,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .yanked(true)
                 .create()
@@ -1749,15 +1739,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn crate_name_percent_decoded_redirect(archive_storage: bool) {
+    #[test]
+    fn crate_name_percent_decoded_redirect() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("fake-crate")
                 .version("0.0.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("fake_crate/index.html")
                 .create()
                 .await?;
@@ -1770,9 +1758,8 @@ mod test {
         });
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn base_redirect_handles_mismatched_separators(archive_storage: bool) {
+    #[test]
+    fn base_redirect_handles_mismatched_separators() {
         async_wrapper(|env| async move {
             let rels = [
                 ("dummy-dash", "0.1.0"),
@@ -1788,7 +1775,6 @@ mod test {
                     .await
                     .name(name)
                     .version(version)
-                    .archive_storage(archive_storage)
                     .rustdoc_file(&(name.replace('-', "_") + "/index.html"))
                     .create()
                     .await?;
@@ -1837,15 +1823,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn specific_pages_do_not_handle_mismatched_separators(archive_storage: bool) {
+    #[test]
+    fn specific_pages_do_not_handle_mismatched_separators() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy-dash")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy_dash/index.html")
                 .create()
                 .await?;
@@ -1854,7 +1838,6 @@ mod test {
                 .await
                 .name("dummy_mixed-separators")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy_mixed_separators/index.html")
                 .create()
                 .await?;
@@ -1923,9 +1906,8 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn platform_links_go_to_current_path(archive_storage: bool) {
+    #[test]
+    fn platform_links_go_to_current_path() {
         async fn get_platform_links(
             path: &str,
             web: &axum::Router,
@@ -1971,7 +1953,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .add_target("x86_64-unknown-linux-gnu")
@@ -2031,7 +2012,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-pc-windows-msvc")
@@ -2091,7 +2071,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.3.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
                 .default_target("x86_64-unknown-linux-gnu")
@@ -2151,7 +2130,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.4.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("settings.html")
                 .rustdoc_file("dummy/index.html")
                 .rustdoc_file("dummy/struct.Dummy.html")
@@ -2305,7 +2283,6 @@ mod test {
                 .await
                 .name("foo_ab")
                 .version("0.0.1")
-                .archive_storage(true)
                 .create()
                 .await?;
 
@@ -2360,15 +2337,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_fully_yanked_crate_404s(archive_storage: bool) {
+    #[test]
+    fn test_fully_yanked_crate_404s() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("1.0.0")
-                .archive_storage(archive_storage)
                 .yanked(true)
                 .create()
                 .await?;
@@ -2391,16 +2366,14 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_no_trailing_target_slash(archive_storage: bool) {
+    #[test]
+    fn test_no_trailing_target_slash() {
         // regression test for https://github.com/rust-lang/docs.rs/issues/856
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(archive_storage)
                 .create()
                 .await?;
             let web = env.web_app().await;
@@ -2413,7 +2386,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.2.0")
-                .archive_storage(archive_storage)
                 .add_platform("aarch64-apple-darwin")
                 .create()
                 .await?;
@@ -2621,15 +2593,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_no_trailing_rustdoc_slash(archive_storage: bool) {
+    #[test]
+    fn test_no_trailing_rustdoc_slash() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("tokio")
                 .version("0.2.21")
-                .archive_storage(archive_storage)
                 .rustdoc_file("tokio/time/index.html")
                 .create()
                 .await?;
@@ -2643,15 +2613,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_non_ascii(archive_storage: bool) {
+    #[test]
+    fn test_non_ascii() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("const_unit_poc")
                 .version("1.0.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("const_unit_poc/units/constant.Ω.html")
                 .create()
                 .await?;
@@ -2665,15 +2633,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_latest_version_keeps_query(archive_storage: bool) {
+    #[test]
+    fn test_latest_version_keeps_query() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("tungstenite")
                 .version("0.10.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("tungstenite/index.html")
                 .create()
                 .await?;
@@ -2681,7 +2647,6 @@ mod test {
                 .await
                 .name("tungstenite")
                 .version("0.11.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("tungstenite/index.html")
                 .create()
                 .await?;
@@ -2699,15 +2664,13 @@ mod test {
         });
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn latest_version_works_when_source_deleted(archive_storage: bool) {
+    #[test]
+    fn latest_version_works_when_source_deleted() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("pyo3")
                 .version("0.2.7")
-                .archive_storage(archive_storage)
                 .source_file("src/objects/exc.rs", b"//! some docs")
                 .create()
                 .await?;
@@ -2745,15 +2708,13 @@ mod test {
             .collect()
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_version_link_goes_to_docs(archive_storage: bool) {
+    #[test]
+    fn test_version_link_goes_to_docs() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("hexponent")
                 .version("0.3.0")
-                .archive_storage(archive_storage)
                 .rustdoc_file("hexponent/index.html")
                 .add_target("x86_64-unknown-linux-gnu")
                 .default_target("x86_64-pc-windows-msvc")
@@ -2763,7 +2724,6 @@ mod test {
                 .await
                 .name("hexponent")
                 .version("0.3.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("hexponent/index.html")
                 .rustdoc_file("hexponent/something.html")
                 .add_target("x86_64-unknown-linux-gnu")
@@ -3003,15 +2963,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_missing_target_redirects_to_search(archive_storage: bool) {
+    #[test]
+    fn test_missing_target_redirects_to_search() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("winapi")
                 .version("0.3.9")
-                .archive_storage(archive_storage)
                 .rustdoc_file("winapi/macro.ENUM.html")
                 .create()
                 .await?;
@@ -3030,15 +2988,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_redirect_source_not_rust(archive_storage: bool) {
+    #[test]
+    fn test_redirect_source_not_rust() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("winapi")
                 .version("0.3.8")
-                .archive_storage(archive_storage)
                 .source_file("src/docs.md", b"created by Peter Rabbit")
                 .create()
                 .await?;
@@ -3047,7 +3003,6 @@ mod test {
                 .await
                 .name("winapi")
                 .version("0.3.9")
-                .archive_storage(archive_storage)
                 .create()
                 .await?;
 
@@ -3109,24 +3064,6 @@ mod test {
         });
     }
 
-    #[test]
-    fn download_old_storage_version_404() {
-        async_wrapper(|env| async move {
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.1.0")
-                .archive_storage(false)
-                .create()
-                .await?;
-
-            let web = env.web_app().await;
-            web.assert_not_found("/crate/dummy/0.1.0/download").await?;
-
-            Ok(())
-        });
-    }
-
     #[tokio::test(flavor = "multi_thread")]
     async fn download_semver() -> Result<()> {
         let env = TestEnvironment::new().await?;
@@ -3135,7 +3072,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .create()
             .await?;
 
@@ -3159,7 +3095,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .create()
             .await?;
 
@@ -3192,7 +3127,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .create()
             .await?;
 
@@ -3200,7 +3134,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.2.0")
-            .archive_storage(true)
             .create()
             .await?;
 
@@ -3218,6 +3151,7 @@ mod test {
             resp.headers().get(CONTENT_DISPOSITION).unwrap(),
             "attachment; filename=\"rustdoc-dummy-0.2.0.zip\""
         );
+        assert!(has_content_len(resp.headers()));
         web.assert_conditional_get(path, &resp).await?;
 
         check_archive_consistency(&web.assert_success(path).await?.bytes().await?)?;
@@ -3233,7 +3167,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(true)
                 .rustdoc_file_with(name, b"content")
                 .create()
                 .await?;
@@ -3302,7 +3235,6 @@ mod test {
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .archive_storage(true)
                 .create()
                 .await?;
 
@@ -3343,7 +3275,6 @@ mod test {
                 .name("clap")
                 .version("2.24.0")
                 .add_platform("i686-pc-windows-gnu")
-                .archive_storage(true)
                 .create()
                 .await?;
             let web = env.web_app().await;
@@ -3366,7 +3297,6 @@ mod test {
                 .await
                 .name("clap")
                 .version("2.24.0")
-                .archive_storage(true)
                 .create()
                 .await?;
             let web = env.web_app().await;
@@ -3390,7 +3320,6 @@ mod test {
                 .await
                 .name("something")
                 .version("1.2.3")
-                .archive_storage(true)
                 .build_result_failed()
                 .create()
                 .await?;
@@ -3408,15 +3337,13 @@ mod test {
         })
     }
 
-    #[test_case(true)]
-    #[test_case(false)]
-    fn test_redirect_with_query_args(archive_storage: bool) {
+    #[test]
+    fn test_redirect_with_query_args() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
                 .name("fake")
                 .version("0.0.1")
-                .archive_storage(archive_storage)
                 .rustdoc_file("fake/index.html")
                 .binary(true) // binary => rustdoc_status = false
                 .create()
@@ -3438,7 +3365,6 @@ mod test {
             .await
             .name("minidumper")
             .version("0.1.0")
-            .archive_storage(true)
             .create()
             .await?;
 
@@ -3464,7 +3390,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .create()
@@ -3474,7 +3399,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.2.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .create()
@@ -3583,7 +3507,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .create()
@@ -3593,7 +3516,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.2.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .create()
@@ -3616,6 +3538,9 @@ mod test {
                 expected_compression.file_extension()
             )
         );
+
+        assert!(has_content_len(resp.headers()));
+
         web.assert_conditional_get(&path, &resp).await?;
 
         {
@@ -3649,7 +3574,6 @@ mod test {
             .await
             .name(NAME)
             .version(VERSION)
-            .archive_storage(true)
             .default_target(TARGET)
             .create()
             .await?;
@@ -3708,7 +3632,6 @@ mod test {
             .await
             .name(KRATE)
             .version(V2)
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .create()
             .await?;
@@ -3740,7 +3663,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.1.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .binary(true) // binary => rustdoc_status = false
@@ -3751,7 +3673,6 @@ mod test {
             .await
             .name("dummy")
             .version("0.2.0")
-            .archive_storage(true)
             .default_target("x86_64-unknown-linux-gnu")
             .add_target("i686-pc-windows-msvc")
             .create()

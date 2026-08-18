@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
+use rustwide::cmd::DockerRuntime;
 use std::{
     num::ParseIntError,
     ops::{Deref, RangeInclusive},
@@ -32,6 +33,8 @@ pub struct Config {
     pub build_cpu_cores: Option<BuildCores>,
     pub include_default_targets: bool,
     pub disable_memory_limit: bool,
+    /// Docker runtime the builder should use.
+    pub docker_runtime: DockerRuntime,
 
     // other module configs
     pub build_limits: Arc<docs_rs_build_limits::Config>,
@@ -57,6 +60,7 @@ impl AppConfig for Config {
                 86400,
             )?),
             compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
+            docker_runtime: maybe_env("DOCSRS_DOCKER_RUNTIME")?.unwrap_or_default(),
             build_limits: Arc::new(docs_rs_build_limits::Config::from_environment()?),
         };
 
@@ -266,6 +270,7 @@ mod tests {
             include_default_targets: true,
             disable_memory_limit: false,
             build_limits: Arc::new(docs_rs_build_limits::Config::default()),
+            docker_runtime: DockerRuntime::default(),
         }
     }
 }

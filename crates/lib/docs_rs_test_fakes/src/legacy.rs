@@ -1,5 +1,5 @@
+use crate::FakeGithubStats;
 use anyhow::{Context as _, Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
@@ -11,12 +11,12 @@ use docs_rs_database::{
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
-    AsyncStorage, FileEntry, compress, file_list_to_json, rustdoc_archive_path, rustdoc_json_path,
+    ArchiveStatistics, AsyncStorage, compress, rustdoc_archive_path, rustdoc_json_path,
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, CompressionAlgorithm, DocCoverage, KrateName, ReleaseId,
-    SimpleBuildError, Version, VersionReq,
+    BuildError, BuildId, BuildStatus, DocCoverage, KrateName, ReleaseId, SimpleBuildError, Version,
+    VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -82,10 +82,10 @@ pub struct FakeRelease<'a> {
     registry_release_data: ReleaseData,
     has_docs: bool,
     has_examples: bool,
-    archive_storage: bool,
     /// This stores the content, while `package.readme` stores the filename
     readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
+    github_stats_id: Option<i32>,
     doc_coverage: Option<DocCoverage>,
     no_cargo_toml: bool,
 }
@@ -155,8 +155,8 @@ impl<'a> FakeRelease<'a> {
             has_examples: false,
             readme: None,
             github_stats: None,
+            github_stats_id: None,
             doc_coverage: None,
-            archive_storage: false,
             no_cargo_toml: false,
         }
     }
@@ -236,11 +236,6 @@ impl<'a> FakeRelease<'a> {
 
     pub fn yanked(mut self, new: bool) -> Self {
         self.registry_release_data.yanked = new;
-        self
-    }
-
-    pub fn archive_storage(mut self, new: bool) -> Self {
-        self.archive_storage = new;
         self
     }
 
@@ -339,12 +334,19 @@ impl<'a> FakeRelease<'a> {
         forks: i32,
         issues: i32,
     ) -> Self {
-        self.github_stats = Some(FakeGithubStats {
-            repo: repo.into(),
-            stars,
-            forks,
-            issues,
-        });
+        self.github_stats = Some(
+            FakeGithubStats::builder()
+                .repo(repo)
+                .stars(stars)
+                .forks(forks)
+                .issues(issues)
+                .build(),
+        );
+        self
+    }
+
+    pub fn github_stats_id(mut self, id: i32) -> Self {
+        self.github_stats_id = Some(id);
         self
     }
 
@@ -362,7 +364,6 @@ impl<'a> FakeRelease<'a> {
         let pool = self.pool;
         let mut rustdoc_files = self.rustdoc_files;
         let storage = self.storage;
-        let archive_storage = self.archive_storage;
 
         // Upload all source files as rustdoc files
         // In real life, these would be highlighted HTML, but for testing we just use the files themselves.
@@ -415,39 +416,25 @@ impl<'a> FakeRelease<'a> {
         async fn upload_files(
             kind: FileKind,
             source_directory: &Path,
-            archive_storage: bool,
             package: &MetadataPackage,
             storage: &AsyncStorage,
-        ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+        ) -> Result<ArchiveStatistics> {
             debug!(
                 "adding directory {:?} from {}",
                 kind,
                 source_directory.display()
             );
-            if archive_storage {
-                // NOTE: should we migrate MetadataPackage?
-                let krate_name: KrateName = package.name.parse()?;
+            let krate_name: KrateName = package.name.parse()?;
+            let archive = match kind {
+                FileKind::Rustdoc => rustdoc_archive_path(&krate_name, &package.version),
+                FileKind::Sources => source_archive_path(&krate_name, &package.version),
+            };
+            debug!("store in archive: {:?}", archive);
+            let stats = storage
+                .store_all_in_archive(&archive, source_directory)
+                .await?;
 
-                let archive = match kind {
-                    FileKind::Rustdoc => rustdoc_archive_path(&krate_name, &package.version),
-                    FileKind::Sources => source_archive_path(&krate_name, &package.version),
-                };
-                debug!("store in archive: {:?}", archive);
-                Ok(storage
-                    .store_all_in_archive(&archive, source_directory)
-                    .await?)
-            } else {
-                let prefix = match kind {
-                    FileKind::Rustdoc => "rustdoc",
-                    FileKind::Sources => "sources",
-                };
-                storage
-                    .store_all(
-                        format!("{}/{}/{}/", prefix, package.name, package.version),
-                        source_directory,
-                    )
-                    .await
-            }
+            Ok(stats)
         }
 
         debug!("before upload source");
@@ -471,15 +458,8 @@ impl<'a> FakeRelease<'a> {
             store_files_into(&[("Cargo.toml", content.as_bytes())], source_tmp.path())?;
         }
 
-        let (source_meta, algs) = upload_files(
-            FileKind::Sources,
-            source_tmp.path(),
-            archive_storage,
-            &package,
-            &storage,
-        )
-        .await?;
-        debug!(?source_meta, "added source files");
+        let stats = upload_files(FileKind::Sources, source_tmp.path(), &package, &storage).await?;
+        debug!("added source files");
 
         // If the test didn't add custom builds, inject a default one
         let builds = self.builds.unwrap_or_else(|| vec![FakeBuild::default()]);
@@ -506,22 +486,19 @@ impl<'a> FakeRelease<'a> {
                 debug!("added platform files for {}", platform);
             }
 
-            let (files, _) = upload_files(
-                FileKind::Rustdoc,
-                rustdoc_path,
-                archive_storage,
-                &package,
-                &storage,
-            )
-            .await?;
-            debug!(?files, "uploaded rustdoc files");
+            upload_files(FileKind::Rustdoc, rustdoc_path, &package, &storage).await?;
+            debug!("uploaded rustdoc files");
         }
 
         let mut async_conn = pool.get_async().await?;
 
-        let repository = match self.github_stats {
-            Some(stats) => Some(stats.create(&mut async_conn).await?),
-            None => None,
+        let repository = match (self.github_stats, self.github_stats_id) {
+            (Some(_), Some(_)) => {
+                bail!("can't have both given github stats and an external github stats id")
+            }
+            (Some(stats), None) => Some(stats.create(&mut async_conn).await?),
+            (None, Some(id)) => Some(id),
+            (None, None) => None,
         };
 
         let crate_tmp = create_temp_dir();
@@ -580,14 +557,12 @@ impl<'a> FakeRelease<'a> {
             &package,
             crate_dir,
             default_target,
-            file_list_to_json(source_meta),
             self.doc_targets,
             &self.registry_release_data,
             self.has_docs,
             self.has_examples,
-            iter::once(algs),
+            iter::once(stats.alg),
             repository,
-            archive_storage,
             24,
         )
         .await?;
@@ -608,32 +583,6 @@ impl<'a> FakeRelease<'a> {
         }
 
         Ok(release_id)
-    }
-}
-
-pub struct FakeGithubStats {
-    pub repo: String,
-    pub stars: i32,
-    pub forks: i32,
-    pub issues: i32,
-}
-
-impl FakeGithubStats {
-    pub async fn create(&self, conn: &mut sqlx::PgConnection) -> Result<i32> {
-        let existing_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM repositories")
-            .fetch_one(&mut *conn)
-            .await?
-            .unwrap();
-        let host_id = b64.encode(format!("FAKE ID {existing_count}"));
-
-        let id = sqlx::query_scalar!(
-            "INSERT INTO repositories (host, host_id, name, description, last_commit, stars, forks, issues, updated_at)
-             VALUES ('github.com', $1, $2, 'Fake description!', NOW(), $3, $4, $5, NOW())
-             RETURNING id",
-            host_id, self.repo, self.stars, self.forks, self.issues,
-        ).fetch_one(&mut *conn).await?;
-
-        Ok(id)
     }
 }
 

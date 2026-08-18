@@ -1,5 +1,10 @@
 use crate::{
-    Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics,
+    Config,
+    docbuilder::{
+        build_error::RustwideBuildError,
+        rustwide_ext::{RustwideBuildExt as _, find_single_file_in_doc_output_dir},
+    },
+    metrics::BuilderMetrics,
     utils::copy::copy_dir_all,
 };
 use anyhow::{Context as _, Error, Result, anyhow, bail};
@@ -24,8 +29,7 @@ use docs_rs_rustdoc_json::{
     read_format_version_from_rustdoc_json,
 };
 use docs_rs_storage::{
-    AsyncStorage, Storage, compress, file_list_to_json, get_file_list, rustdoc_archive_path,
-    rustdoc_json_path, source_archive_path,
+    AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
@@ -46,8 +50,9 @@ use rustwide::{
 };
 use std::{
     collections::{HashMap, HashSet},
+    fmt,
     fs::{self, File},
-    io::BufReader,
+    io::{BufRead as _, BufReader},
     path::{Path, PathBuf},
     sync::{Arc, LazyLock},
     time::Instant,
@@ -172,7 +177,8 @@ impl RustwideBuilder {
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
         let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking());
+            .enable_networking(limits.networking())
+            .docker_runtime(self.config.docker_runtime);
 
         if let Some(cores) = &self.config.build_cpu_cores {
             builder.cpuset_cpus(Some(cores.0.clone()))
@@ -459,11 +465,10 @@ impl RustwideBuilder {
 
                 info!("copying essential files for {}", rustc_version);
                 assert!(!metadata.proc_macro);
-                let source = build.host_target_dir().join(HOST_TARGET).join("doc");
                 let dest = tempfile::Builder::new()
                     .prefix("essential-files")
                     .tempdir()?;
-                copy_dir_all(source, &dest)?;
+                copy_dir_all(res.doc_output_dir, &dest)?;
 
                 // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
                 // put in their own directory, "static.files". To make sure those files are
@@ -635,23 +640,22 @@ impl RustwideBuilder {
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let (source_files_list, source_size) = {
+        let source_stats = {
             let _span = info_span!("adding sources into database").entered();
             debug!("adding sources into database");
             let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
             krate.copy_source_to(&self.workspace, temp_dir.path())?;
 
-            let (files_list, new_alg) = self.runtime.block_on(
+            let stats = self.runtime.block_on(
                 self.storage
                     .store_all_in_archive(&source_archive_path(name, version), &temp_dir),
             )?;
 
             fs::remove_dir_all(temp_dir.path())?;
 
-            algs.insert(new_alg);
-            let source_size: u64 = files_list.iter().map(|info| info.size).sum();
-            (files_list, source_size)
+            algs.insert(stats.alg);
+            stats
         };
 
         let successful = build_dir
@@ -675,7 +679,6 @@ impl RustwideBuilder {
                 }
 
 
-                let mut has_docs = false;
                 let mut successful_targets = Vec::new();
 
                 // Perform an initial build
@@ -705,24 +708,13 @@ impl RustwideBuilder {
                         self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
                 }
 
-                if res.successful()
-                    && let Some(name) = res.cargo_metadata.root().library_name() {
-                        let host_target = build.host_target_dir();
-                        has_docs = host_target
-                            .join(default_target)
-                            .join("doc")
-                            .join(name)
-                            .is_dir();
-                    }
+                let has_docs = res.has_docs();
 
                 let mut target_build_logs = HashMap::new();
                 let documentation_size = if has_docs {
                     debug!("adding documentation for the default target to the database");
-                    self.copy_docs(
-                        &build.host_target_dir(),
+                    res.copy_docs(
                         local_storage.path(),
-                        default_target,
-                        true,
                     )?;
 
                     successful_targets.push(res.target.clone());
@@ -747,16 +739,15 @@ impl RustwideBuilder {
                         target_build_logs.insert(target, (target_res.build_log, successful));
                     }
 
-                    let (file_list, new_alg) =
+                    let doc_stats  =
                         self.runtime.block_on(
                         self.storage.store_all_in_archive(
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;
-                    let documentation_size = file_list.iter().map(|info| info.size).sum::<u64>();
-                    self.builder_metrics.documentation_size.record(documentation_size, &[]);
-                    algs.insert(new_alg);
-                    Some(documentation_size)
+                    self.builder_metrics.documentation_size.record(doc_stats.original_size, &[]);
+                    algs.insert(doc_stats.alg);
+                    Some(doc_stats.original_size)
                 } else {
                     None
                 };
@@ -852,15 +843,13 @@ impl RustwideBuilder {
                     cargo_metadata,
                     &build.host_source_dir(),
                     &res.target,
-                    file_list_to_json(source_files_list),
                     successful_targets,
                     &release_data,
                     has_docs,
                     has_examples,
                     algs,
                     repository,
-                    true,
-                    source_size,
+                    source_stats.original_size,
                 ))?;
 
                 if let Some(repository_id) = repository {
@@ -949,9 +938,9 @@ impl RustwideBuilder {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
-            if build.host_target_dir().join(target).join("doc").is_dir() {
+            if target_res.doc_output_dir.is_dir() {
                 debug!("adding documentation for target {} to the database", target,);
-                self.copy_docs(&build.host_target_dir(), local_storage, target, false)?;
+                target_res.copy_docs(local_storage)?;
                 successful_targets.push(target.to_string());
             }
         }
@@ -1001,39 +990,15 @@ impl RustwideBuilder {
             return Ok(());
         };
 
-        let json_dir = if metadata.proc_macro {
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+        if metadata.proc_macro {
             assert!(
                 is_default_target && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
             );
-            build.host_target_dir().join("doc")
-        } else {
-            build.host_target_dir().join(target).join("doc")
-        };
+        }
 
-        let json_filename = fs::read_dir(&json_dir)?
-            .filter_map(|entry| {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if path.is_file() && path.extension()? == "json" {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .next()
-            .ok_or_else(|| {
-                anyhow!(
-                    "no JSON file found in target/doc after successful rustdoc json build.\n\
-                     search directory: {}\n\
-                     files: {:?}",
-                    json_dir.to_string_lossy(),
-                    get_file_list(&json_dir)
-                        .filter_map(Result::ok)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect::<Vec<_>>(),
-                )
-            })?;
+        let json_filename = find_single_file_in_doc_output_dir(&doc_output_dir, "json")?;
 
         let format_version = {
             let _span = info_span!("read_format_version").entered();
@@ -1123,6 +1088,9 @@ impl RustwideBuilder {
 
         self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
             .process_lines(&mut |line, _| {
+                // NOTE: legacy for old nightlies.
+                // can be removed when the new nightly is used in prod, and coverage
+                // works.
                 if line.starts_with('{') && line.ends_with('}') {
                     match doc_coverage::parse_line(line) {
                         Ok(file_coverages) => coverage.extend(file_coverages),
@@ -1132,6 +1100,23 @@ impl RustwideBuilder {
             })
             .log_output(true)
             .run()?;
+
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+        match find_single_file_in_doc_output_dir(&doc_output_dir, "json") {
+            Ok(coverage_json_file) => {
+                let reader = BufReader::new(File::open(&coverage_json_file)?);
+                for line in reader.lines() {
+                    let line = line?;
+                    match doc_coverage::parse_line(&line) {
+                        Ok(file_coverages) => coverage.extend(file_coverages),
+                        Err(err) => warn!(?err, line, "failed to parse coverage line"),
+                    }
+                }
+            }
+            Err(err) => {
+                warn!(?err, "can't find coverage output file");
+            }
+        }
 
         Ok(
             if coverage.total_items == 0 && coverage.documented_items == 0 {
@@ -1224,7 +1209,14 @@ impl RustwideBuilder {
                     rustdoc_flags,
                     collect_metrics,
                 )
-                .and_then(|command| command.run().map_err(Into::into))
+                .and_then(|command| {
+                    command
+                        // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
+                        // docs.rs, but once it's stable we can remove this flag.
+                        .arg("-Zrustdoc-scrape-examples")
+                        .run()
+                        .map_err(Into::into)
+                })
             })
         };
 
@@ -1242,21 +1234,13 @@ impl RustwideBuilder {
             fs::remove_dir_all(&metric_output)?;
         }
 
-        // For proc-macros, cargo will put the output in `target/doc`.
-        // Move it to the target-specific directory for consistency with other builds.
-        // NOTE: don't rename this if the build failed, because `target/doc` won't exist.
+        let doc_output_dir = build.doc_output_dir(metadata, target);
+
         if result.is_ok() && metadata.proc_macro {
             assert!(
                 is_default_target && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
             );
-            // mv target/doc target/$target/doc
-            let target_dir = build.host_target_dir();
-            let old_dir = target_dir.join("doc");
-            let new_dir = target_dir.join(target).join("doc");
-            debug!("rename {} to {}", old_dir.display(), new_dir.display());
-            std::fs::create_dir(target_dir.join(target))?;
-            std::fs::rename(old_dir, new_dir)?;
         }
 
         Ok(FullBuildResult {
@@ -1269,6 +1253,8 @@ impl RustwideBuilder {
             cargo_metadata,
             build_log: storage.to_string(),
             target: target.to_string(),
+            is_default_target,
+            doc_output_dir,
         })
     }
 
@@ -1297,9 +1283,6 @@ impl RustwideBuilder {
             format!(
                 r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
             ),
-            // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
-            // docs.rs, but once it's stable we can remove this flag.
-            "-Zrustdoc-scrape-examples".into(),
         ];
         if let Some(cargo_job_limit) = self.config.cargo_job_limit() {
             cargo_args.push(format!("-j{cargo_job_limit}"));
@@ -1365,30 +1348,6 @@ impl RustwideBuilder {
         Ok(command.args(&cargo_args))
     }
 
-    #[instrument(skip(self))]
-    fn copy_docs(
-        &self,
-        target_dir: &Path,
-        local_storage: &Path,
-        target: &str,
-        is_default_target: bool,
-    ) -> Result<()> {
-        let source = target_dir.join(target).join("doc");
-
-        let mut dest = local_storage.to_path_buf();
-        // only add target name to destination directory when we are copying a non-default target.
-        // this is allowing us to host documents in the root of the crate documentation directory.
-        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
-        // default target: x86_64-pc-windows-msvc. But since it will be built under
-        // target/x86_64-pc-windows-msvc we still need target in this function.
-        if !is_default_target {
-            dest = dest.join(target);
-        }
-
-        info!("copy {} to {}", source.display(), dest.display());
-        copy_dir_all(source, dest).map_err(Into::into)
-    }
-
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats.load_repository(metadata))
@@ -1398,14 +1357,48 @@ impl RustwideBuilder {
 struct FullBuildResult {
     result: BuildResult,
     target: String,
+    is_default_target: bool,
     cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
+    /// the directory where cargo/rustdoc put the docs.
+    doc_output_dir: PathBuf,
 }
 
 impl FullBuildResult {
     pub(crate) fn successful(&self) -> bool {
         self.result.successful()
+    }
+
+    pub(crate) fn has_docs(&self) -> bool {
+        if self.successful()
+            && let Some(name) = self.cargo_metadata.root().library_name()
+        {
+            self.doc_output_dir.join(name).is_dir()
+        } else {
+            false
+        }
+    }
+
+    #[instrument(skip(self))]
+    fn copy_docs<P>(&self, dest: P) -> Result<()>
+    where
+        P: Into<PathBuf> + fmt::Debug,
+    {
+        let source = &self.doc_output_dir;
+        let mut dest = dest.into();
+
+        // only add target name to destination directory when we are copying a non-default target.
+        // this is allowing us to host documents in the root of the crate documentation directory.
+        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
+        // default target: x86_64-pc-windows-msvc. But since it will be built under
+        // target/x86_64-pc-windows-msvc we still need target in this function.
+        if !self.is_default_target {
+            dest = dest.join(&self.target);
+        }
+
+        info!("copy {} to {}", source.display(), dest.display());
+        copy_dir_all(source, dest).map_err(Into::into)
     }
 }
 
@@ -1522,7 +1515,6 @@ mod tests {
                         r.rustdoc_status,
                         r.default_target,
                         r.doc_targets,
-                        r.archive_storage,
                         r.source_size as "source_size!",
                         cov.total_items,
                         b.id as build_id,
@@ -1559,7 +1551,6 @@ mod tests {
         assert_eq!(row.rustdoc_status, Some(true));
         assert_eq!(row.default_target, Some(default_target.into()));
         assert!(row.total_items.is_some());
-        assert!(row.archive_storage);
         assert!(!row.docsrs_version.unwrap().is_empty());
         assert!(!row.rustc_version.unwrap().is_empty());
         assert_eq!(row.build_status.unwrap(), "success");
@@ -1842,7 +1833,6 @@ mod tests {
                 },
                 Path::new("/unknown/"),
                 "x86_64-unknown-linux-gnu",
-                serde_json::Value::Array(vec![]),
                 vec![
                     "i686-pc-windows-msvc".into(),
                     "aarch64-unknown-linux-gnu".into(),
@@ -1855,7 +1845,6 @@ mod tests {
                 false,
                 iter::once(CompressionAlgorithm::Deflate),
                 None,
-                true,
                 42,
             )
             .await?;
@@ -1894,6 +1883,7 @@ mod tests {
     #[test_case("scsys-macros", Version::new(0, 2, 6))]
     #[test_case("scsys-derive", Version::new(0, 2, 6))]
     #[test_case("thiserror-impl", Version::new(1, 0, 26))]
+    #[test_case("contained-macros", Version::new(0, 2, 5))]
     #[ignore]
     fn test_proc_macro(crate_: &'static str, version: Version) -> Result<()> {
         let env = TestEnvironment::new()?;
@@ -1908,6 +1898,23 @@ mod tests {
                 .successful
         );
 
+        // check coverage
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert!(row.total_items.unwrap() > 0);
+
         let storage = env.blocking_storage()?;
 
         // doc archive exists
@@ -1917,6 +1924,23 @@ mod tests {
         // source archive exists
         let source_archive = source_archive_path(&crate_, &version);
         assert!(storage.exists(&source_archive)?);
+
+        // test if rustdoc json was created
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    crate_, version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with(&format!(
+                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
+                        crate_, version
+                    ))
+                })
+                .is_some()
+        );
 
         Ok(())
     }
@@ -2068,7 +2092,7 @@ mod tests {
         );
         assert!(
             storage
-                .fetch_source_file(&crate_, &version, None, "src/main.rs", true)
+                .fetch_source_file(&crate_, &version, None, "src/main.rs")
                 .is_ok()
         );
 
@@ -2367,6 +2391,128 @@ mod tests {
             builder
                 .build_local_package(Path::new("tests/crates/hello-world"))?
                 .successful
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_with_examples() -> Result<()> {
+        // there was a bug where coverage and rustdoc json was broken for
+        // libraries with examples.
+        // This test ensures that this works.
+
+        let mut config = Config::test_config()?;
+        config.include_default_targets = false;
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_local_package(Path::new("tests/crates/with-examples"))?
+                .successful
+        );
+
+        // check release record in the db
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT
+                        c.name,
+                        r.version,
+                        r.rustdoc_status,
+                        cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert_eq!(row.name, "with-examples");
+        assert_eq!(row.version, "0.1.0");
+        assert!(row.total_items.unwrap() > 0);
+
+        let storage = env.blocking_storage()?;
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    row.name, row.version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with("with-examples_0.1.0_x86_64-unknown-linux-gnu_latest.json.zst")
+                })
+                .is_some()
+        );
+
+        Ok(())
+    }
+
+    #[test_case("ffizz-string", Version::new(0, 5, 0))]
+    #[test_case("ffizz-passby", Version::new(0, 5, 0))]
+    #[ignore]
+    fn test_with_examples_custom_scrape(crate_: &'static str, version: Version) -> Result<()> {
+        // some crates add `-Zrustdoc-scrape-examples` themselves in their `cargo-args`.
+        // In this case we just remove it.
+        let crate_: KrateName = crate_.parse().unwrap();
+
+        let mut config = Config::test_config()?;
+        config.include_default_targets = false;
+        let env = TestEnvironment::builder().config(config).build()?;
+
+        let mut builder = env.build_builder()?;
+        builder.update_toolchain()?;
+        assert!(
+            builder
+                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .successful
+        );
+
+        // check release record in the db
+        let row = block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query!(
+                r#"SELECT
+                        c.name,
+                        r.version,
+                        r.rustdoc_status,
+                        cov.total_items
+                    FROM
+                        crates as c
+                        INNER JOIN releases AS r ON c.id = r.crate_id
+                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
+                "#
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Into::into)
+        })?;
+
+        assert_eq!(row.name, crate_.as_str());
+        assert_eq!(row.version, version.to_string());
+        assert!(row.total_items.unwrap() > 0);
+
+        let storage = env.blocking_storage()?;
+        assert!(
+            storage
+                .list_prefix(&format!(
+                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
+                    row.name, row.version
+                ))
+                .filter_map(|res| res.ok())
+                .find(|path| {
+                    path.ends_with(&format!(
+                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
+                        row.name, row.version
+                    ))
+                })
+                .is_some()
         );
 
         Ok(())

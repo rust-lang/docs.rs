@@ -54,7 +54,6 @@ opentelemetry = { workspace = true }
 postcard = { workspace = true }
 rayon-core = "1.13.0"
 regex = { workspace = true }
-reqwest = { workspace = true }
 sentry = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -92,6 +91,7 @@ kuchikiki = "0.8"
 mockito = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
+reqwest = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }

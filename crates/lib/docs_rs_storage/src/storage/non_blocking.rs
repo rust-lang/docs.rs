@@ -9,6 +9,7 @@ use crate::{
     errors::PathNotFoundError,
     file::FileEntry,
     metrics::StorageMetrics,
+    result::ArchiveStatistics,
     types::{FileRange, StorageKind},
     utils::{
         file_list::{get_file_list, walk_dir_recursive},
@@ -84,11 +85,9 @@ impl AsyncStorage {
     /// * `name` - the crate name
     /// * `version` - the crate version
     /// * `latest_build_id` - the id of the most recent build. used purely to invalidate the local archive
-    ///   index cache, when `archive_storage` is `true.` Without it we wouldn't know that we have
+    ///   index cache. Without it we wouldn't know that we have
     ///   to invalidate the locally cached file after a rebuild.
     /// * `path` - the wanted path inside the documentation.
-    /// * `archive_storage` - if `true`, we will assume we have a remove ZIP archive and an index
-    ///    where we can fetch the requested path from inside the ZIP file.
     #[instrument(skip(self))]
     pub async fn stream_rustdoc_file(
         &self,
@@ -96,17 +95,10 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<StreamingBlob> {
         trace!("fetch rustdoc file");
-        Ok(if archive_storage {
-            self.stream_from_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.get_stream(&remote_path).await?
-        })
+        self.stream_from_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -116,9 +108,8 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<Blob> {
-        self.stream_source_file(name, version, latest_build_id, path, archive_storage)
+        self.stream_source_file(name, version, latest_build_id, path)
             .await?
             .materialize(self.config.max_file_size_for(path))
             .await
@@ -131,16 +122,10 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<StreamingBlob> {
         trace!("fetch source file");
-        Ok(if archive_storage {
-            self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            let remote_path = format!("sources/{name}/{version}/{path}");
-            self.get_stream(&remote_path).await?
-        })
+        self.stream_from_archive(&source_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -150,16 +135,9 @@ impl AsyncStorage {
         version: &Version,
         latest_build_id: Option<BuildId>,
         path: &str,
-        archive_storage: bool,
     ) -> Result<bool> {
-        Ok(if archive_storage {
-            self.exists_in_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
-                .await?
-        } else {
-            // Add rustdoc prefix, name and version to the path for accessing the file stored in the database
-            let remote_path = format!("rustdoc/{name}/{version}/{path}");
-            self.exists(&remote_path).await?
-        })
+        self.exists_in_archive(&rustdoc_archive_path(name, version), latest_build_id, path)
+            .await
     }
 
     #[instrument(skip(self))]
@@ -201,20 +179,6 @@ impl AsyncStorage {
         Ok(self.get_raw_stream(path).await?.decompress().await?)
     }
 
-    #[cfg(test)]
-    pub(crate) async fn get_range(
-        &self,
-        path: &str,
-        max_size: usize,
-        range: FileRange,
-        compression: Option<CompressionAlgorithm>,
-    ) -> Result<Blob> {
-        self.get_range_stream(path, range, compression)
-            .await?
-            .materialize(max_size)
-            .await
-    }
-
     /// get a decompressing stream to a range inside an object in storage
     #[instrument(skip(self))]
     pub(crate) async fn get_range_stream(
@@ -231,17 +195,16 @@ impl AsyncStorage {
         Ok(raw_stream.decompress().await?)
     }
 
-    #[instrument(skip(self))]
-    pub async fn get_from_archive(
+    #[cfg(test)]
+    async fn get_from_archive(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         path: &str,
-        max_size: usize,
     ) -> Result<Blob> {
         self.stream_from_archive(archive_path, latest_build_id, path)
             .await?
-            .materialize(max_size)
+            .materialize(self.config.max_file_size_for(path))
             .await
     }
 
@@ -313,7 +276,7 @@ impl AsyncStorage {
         &self,
         archive_path: &str,
         root_dir: impl AsRef<Path> + fmt::Debug,
-    ) -> Result<(Vec<FileEntry>, CompressionAlgorithm)> {
+    ) -> Result<ArchiveStatistics> {
         let root_dir = root_dir.as_ref();
 
         // Keep the TempPath guards alive until after both uploads complete; dropping them earlier
@@ -321,16 +284,15 @@ impl AsyncStorage {
         let zip_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let zip_path = zip_temp_path.to_path_buf();
 
-        let file_paths =
-            spawn_blocking({
+        let stats = spawn_blocking({
                 use std::{io, fs};
                 let archive_path = archive_path.to_owned();
                 let root_dir = root_dir.to_owned();
                 let zip_path = zip_path.clone();
 
-                move || {
-                    let mut file_paths = Vec::new();
+                let mut stats = ArchiveStatistics::new(CompressionAlgorithm::Deflate);
 
+                move || {
                     // We are only using the `zip` library to create the archives and the matching
                     // index-file. The ZIP format allows more compression formats, and these can even be mixed
                     // in a single archive.
@@ -360,20 +322,23 @@ impl AsyncStorage {
                             let mut file = fs::File::open(root_dir.join(&file_path))?;
                             zip.start_file(file_path.to_str().unwrap(), options)?;
                             io::copy(&mut file, &mut zip)?;
-                            file_paths.push(FileEntry{path: file_path, size: file.metadata()?.len()});
+
+                        stats.file_count +=1 ;
+                        stats.original_size +=  file.metadata()?.len();
                         }
 
                         let mut zip_file = zip.finish()?.into_inner()?;
                         zip_file.flush()?;
                     }
 
-                    Ok(file_paths)
+                    Ok(stats)
                 }
             })
             .await?;
 
-        let alg = CompressionAlgorithm::default();
         let remote_index_path = format!("{}.{ARCHIVE_INDEX_FILE_EXTENSION}", archive_path);
+        let index_compression_alg = CompressionAlgorithm::default();
+
         let compressed_index_temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         let compressed_index_path = compressed_index_temp_path.to_path_buf();
         {
@@ -394,7 +359,7 @@ impl AsyncStorage {
                 compress_async(
                     &mut io::BufReader::new(fs::File::open(&local_index_path).await?),
                     &mut compressed_index_writer,
-                    alg,
+                    index_compression_alg,
                 )
                 .await?;
                 compressed_index_writer.flush().await?;
@@ -412,11 +377,11 @@ impl AsyncStorage {
                 path: remote_index_path,
                 mime: mime::APPLICATION_OCTET_STREAM,
                 source: StreamUploadSource::File(compressed_index_path),
-                compression: Some(alg),
+                compression: Some(index_compression_alg),
             })
         )?;
 
-        Ok((file_paths, CompressionAlgorithm::Deflate))
+        Ok(stats)
     }
 
     /// Store all files in `root_dir` into the backend under `prefix`.
@@ -658,7 +623,9 @@ mod backend_tests {
 
         for range in [0..=4, 5..=12] {
             let partial_blob = storage
-                .get_range("foo/bar.txt", usize::MAX, range.clone(), None)
+                .get_range_stream("foo/bar.txt", range.clone(), None)
+                .await?
+                .materialize(usize::MAX)
                 .await?;
             let range = (*range.start() as usize)..=(*range.end() as usize);
             assert_eq!(blob.content[range], partial_blob.content);
@@ -676,7 +643,7 @@ mod backend_tests {
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
                 storage
-                    .get_range(path, usize::MAX, 0..=4, None)
+                    .get_range_stream(path, 0..=4, None)
                     .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
@@ -845,35 +812,26 @@ mod backend_tests {
             fs::write(path, "data").await?;
         }
 
+        const ARCHIVE_PATH: &str = "folder/test.zip";
+
         let local_index_location = storage
             .config
             .archive_index_cache
             .path
-            .join(format!("folder/test.zip.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
+            .join(format!("{ARCHIVE_PATH}.0.{ARCHIVE_INDEX_FILE_EXTENSION}"));
 
-        let (stored_files, compression_alg) = storage
-            .store_all_in_archive("folder/test.zip", dir.path())
+        let stats = storage
+            .store_all_in_archive(ARCHIVE_PATH, dir.path())
             .await?;
 
         assert!(
             storage
-                .exists(&format!("folder/test.zip.{ARCHIVE_INDEX_FILE_EXTENSION}"))
+                .exists(&format!("{ARCHIVE_PATH}.{ARCHIVE_INDEX_FILE_EXTENSION}"))
                 .await?
         );
 
-        assert_eq!(compression_alg, CompressionAlgorithm::Deflate);
-        assert_eq!(stored_files.len(), files.len());
-        for name in &files {
-            assert!(get_file_info(&stored_files, name).is_some());
-        }
-        assert_eq!(
-            get_file_info(&stored_files, "Cargo.toml").unwrap().mime(),
-            "text/toml"
-        );
-        assert_eq!(
-            get_file_info(&stored_files, "src/main.rs").unwrap().mime(),
-            "text/rust"
-        );
+        assert_eq!(stats.alg, CompressionAlgorithm::Deflate);
+        assert_eq!(stats.file_count, files.len() as u64);
 
         // delete the existing index to test the download of it
         if local_index_location.exists() {
@@ -897,14 +855,14 @@ mod backend_tests {
         );
 
         let file = storage
-            .get_from_archive("folder/test.zip", None, "Cargo.toml", usize::MAX)
+            .get_from_archive("folder/test.zip", None, "Cargo.toml")
             .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "folder/test.zip/Cargo.toml");
 
         let file = storage
-            .get_from_archive("folder/test.zip", None, "src/main.rs", usize::MAX)
+            .get_from_archive("folder/test.zip", None, "src/main.rs")
             .await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");

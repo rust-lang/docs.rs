@@ -300,10 +300,16 @@ impl Metadata {
                 .expect("serializing a string should never fail")
                 .to_string();
             cargo_args.push(format!("build.rustflags={rustflags}"));
-            cargo_args.push("-Zhost-config".into());
-            cargo_args.push("-Ztarget-applies-to-host".into());
-            cargo_args.push("--config".into());
-            cargo_args.push(format!("host.rustflags={rustflags}"));
+            if !self.proc_macro {
+                // Proc-macro crates are built only for the host and we deliberately omits
+                // --target for them, so Cargo already applies build.rustflags to their build.
+                // Enabling host config instead suppresses build.rustdocflags for that host build,
+                // dropping custom rustdoc flags and JSON output.
+                cargo_args.push("-Zhost-config".into());
+                cargo_args.push("-Ztarget-applies-to-host".into());
+                cargo_args.push("--config".into());
+                cargo_args.push(format!("host.rustflags={rustflags}"));
+            }
         }
 
         cargo_args.push("--config".into());
@@ -313,7 +319,24 @@ impl Metadata {
         cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
 
         cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
-        cargo_args.extend_from_slice(&self.cargo_args);
+        cargo_args.reserve(cargo_args.len() + self.cargo_args.len());
+        let mut cargo_args_iter = self.cargo_args.iter().peekable();
+        while let Some(arg) = cargo_args_iter.next() {
+            // custom `-Z rustdoc-scrape-examples` is unnecessary since we add it ourselves,
+            // and it breaks rustdoc json & coverage builds.
+            if arg == "-Zrustdoc-scrape-examples" {
+                continue;
+            }
+            if arg == "-Z"
+                && let Some(next_arg) = cargo_args_iter.peek()
+                && next_arg.as_str() == "rustdoc-scrape-examples"
+            {
+                cargo_args_iter.next();
+                continue;
+            }
+
+            cargo_args.push(arg.to_owned());
+        }
         cargo_args
     }
 
@@ -851,5 +874,18 @@ mod test_calculations {
             "-Zbuild-std".into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
+
+        // We add `-Zrustdoc-scrape-examples` ourselves, so providing it in metadata will
+        // be ignored.
+        for cargo_args in [
+            vec!["-Zrustdoc-scrape-examples".into()],
+            vec!["-Z".into(), "rustdoc-scrape-examples".into()],
+        ] {
+            let metadata = Metadata {
+                cargo_args,
+                ..Metadata::default()
+            };
+            assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args(&[]));
+        }
     }
 }

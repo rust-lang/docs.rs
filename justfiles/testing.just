@@ -16,21 +16,15 @@ sqlx-prepare *args: _ensure_db_and_s3_are_running
     #!/usr/bin/env bash
     set -euo pipefail
 
+    # sqlx prepare needs `--workspace` twice:
+    # https://github.com/transact-rs/sqlx/issues/3362
+    # once for the sqlx-cli, once for the inner `cargo check` command.
+
     cargo sqlx prepare \
         --database-url $DOCSRS_DATABASE_URL \
         --workspace \
         {{ args }} \
-        -- --all-targets --all-features
-
-    for subcrate in crates/lib/* crates/bin/*; do
-      echo "Preparing SQLx metadata for ${subcrate}..."
-      # NOTE: potential optimization: only run this command when `sqlx` 
-      # is in the dependencies of the subcrate.
-      (cd "${subcrate}" && cargo sqlx prepare \
-          --database-url $DOCSRS_DATABASE_URL \
-          {{ args }} \
-          -- --all-targets --all-features)
-    done
+        -- --workspace --all-targets --all-features
 
 [group('sqlx')]
 [group('testing')]
@@ -53,13 +47,71 @@ sqlx-migrate-revert target="0": _ensure_db_and_s3_are_running
       --source ./crates/lib/docs_rs_database/migrations \
       --target-version {{ target }}
 
-# Format the code using `cargo fmt`.
+_format_justfile justfile:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "formatting {{ justfile }}.."
+    # like this we get both the non-zero exit code, and the local code is
+    # formatted.
+    if ! just --fmt --justfile "{{ justfile }}" --check >/dev/null; then
+      just --fmt --justfile "{{ justfile }}"
+      exit 1
+    fi
+
+_format_markdown mdfile:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "formatting {{ mdfile }}.."
+    # like this we get both the non-zero exit code, and the local code is
+    # formatted.
+    if ! deno fmt --quiet --check "{{ mdfile }}" >/dev/null; then
+      deno fmt "{{ mdfile }}"
+      exit 1
+    fi
+
+_format_rust:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "running cargo fmt"
+    rustup component add rustfmt
+    if ! cargo fmt --all -- --check >/dev/null; then
+      echo "rust files weren't formatted..." >&2
+      cargo fmt --all
+      exit 1
+    fi
+
+# Format the code using `cargo fmt` and `just --fmt`.
+#
+# Will continue with other formatters when some fail.
 [group('testing')]
 format:
-    rustup component add rustfmt
-    # like this we get both the non-zero exit code, and the local code is 
-    # formatted.
-    cargo fmt --all -- --check || { cargo fmt --all && exit 1; }
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    exit_code=0
+
+    just _format_rust || exit_code=1
+
+    fd \
+      --type file \
+      --threads 1 \
+      '^(Justfile|.+\.just)$' . \
+      --exec just _format_justfile {} || exit_code=1
+
+    echo "formatting markdown files"
+    fd \
+      --type file \
+      --threads 1 \
+      --extension md \
+      --exclude 'crates/lib/font-awesome-as-a-crate/' \
+      --exclude 'crates/bin/docs_rs_web/assets/syntaxes/' \
+      --exclude 'crates/bin/docs_rs_web/static/' \
+      --exec just _format_markdown {} || exit_code=1
+
+    exit "$exit_code"
 
 # run clippy, in our config
 [group('testing')]
@@ -71,7 +123,7 @@ clippy *args:
       --workspace \
       --locked \
       {{ args }} \
-      -- -D warnings 
+      -- -D warnings
 
 # run clippy --fix
 [group('testing')]
@@ -88,7 +140,7 @@ lint: format lint-dependencies-machete
       just sort-cargo-toml --check
       just clippy
     else
-      just sort-cargo-toml 
+      just sort-cargo-toml
       just clippy-fix
     fi
 
@@ -97,22 +149,22 @@ sort-cargo-toml *args:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [ {{ semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3") }} != 'true' ]; then 
+    if [ {{ semver_matches(trim_start_match(shell("cargo-sort --version"), "cargo-sort "), ">=2.1.3") }} != 'true' ]; then
       echo "cargo-sort to old, must be >=2.1.3"
       exit 1;
     fi
 
-    cargo sort --workspace {{ args }} 
+    cargo sort --workspace {{ args }}
 
 [group('testing')]
 lint-dependencies-machete:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # check unused deps with cargo machete is fast, 
-    # but has many false positives. 
-    # While it can also recurse into subdirs, it would 
-    # also stumble onto our broken crates in `/tests/crates/*`, 
+    # check unused deps with cargo machete is fast,
+    # but has many false positives.
+    # While it can also recurse into subdirs, it would
+    # also stumble onto our broken crates in `/tests/crates/*`,
     # where I also don't want to add machete-metadata.
     fd \
       --glob 'Cargo.toml' \
@@ -126,7 +178,7 @@ lint-dependencies-udeps:
     set -euo pipefail
 
     # check unused deps with cargo udeps.
-    # Optional, since udeps is much slower because it 
+    # Optional, since udeps is much slower because it
     # needs to additionally compile the workspace with nightly
     echo "check for unused normal dependencies"
     cargo +nightly udeps --workspace
@@ -143,7 +195,7 @@ lint-js *args:
       gui-tests \
       {{ args }}
 
-_gui-tests_env: _ensure_db_and_s3_are_running cli-db-migrate 
+_gui-tests_env: _ensure_db_and_s3_are_running cli-db-migrate
     just cli-build-update-toolchain
     just cli-build-crate sysinfo 0.23.4
     just cli-build-crate sysinfo 0.23.5
@@ -156,8 +208,8 @@ run-gui-tests: _gui-tests_env compose-up-web
     #!/usr/bin/env bash
     set -euo pipefail
 
-    DOCSRS_CLI_MODE=docker \ 
-      just _cli gui_tests 
+    DOCSRS_CLI_MODE=docker \
+      just _cli gui_tests
 
 [group('testing')]
 run-gui-tests-local: # _gui-tests_env
@@ -196,7 +248,6 @@ run-gui-tests-local: # _gui-tests_env
     npx --no-install puppeteer browsers install chrome
 
     node ./gui-tests/tester.js
-
 
 _build-test-binaries:
     #!/usr/bin/env bash

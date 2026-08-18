@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            c.name as \"name: KrateName\"\n\n        FROM\n            crates AS c\n            INNER JOIN releases AS r ON c.latest_version_id = r.id\n            INNER JOIN repositories AS repo ON r.repository_id = repo.id\n\n        WHERE\n            repo.crate_count >= $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: KrateName",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "af1b135f6b08d1b7a8a4c79e1b3bb821decc862cf905aa21feff167d401befbf"
+}
