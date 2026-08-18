@@ -1,0 +1,36 @@
+on:
+  push:
+    tags:
+      # if you update these tag-patterns, they also have to be updated in
+      # https://github.com/rust-lang/team/blob/main/repos/rust-lang/docs.rs.toml
+      - 'font-awesome-as-a-crate-v*'
+      - 'docs_rs_crates_io-v*'
+
+jobs:
+  publish:
+    name: publish ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    environment: publish
+    permissions:
+      id-token: write  # Required for OIDC token exchange
+    strategy:
+      matrix:
+        include:
+          # new crates to be published have to be added to:
+          # https://github.com/rust-lang/team/blob/main/repos/rust-lang/docs.rs.toml
+          - package: font-awesome-as-a-crate
+            tag_prefix: font-awesome-as-a-crate-v
+          - package: docs_rs_crates_io
+            tag_prefix: docs_rs_crates_io-v
+    steps:
+      - uses: actions/checkout@v6
+        if: startsWith(github.ref_name, matrix.tag_prefix)
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        if: startsWith(github.ref_name, matrix.tag_prefix)
+        id: auth
+
+      - run: cargo publish --package '${{ matrix.package }}'
+        if: startsWith(github.ref_name, matrix.tag_prefix)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
