@@ -56,6 +56,18 @@ _format_justfile justfile:
       exit 1
     fi
 
+_format_markdown mdfile:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "formatting {{ mdfile }}.."
+    # like this we get both the non-zero exit code, and the local code is
+    # formatted.
+    if ! deno fmt --quiet --check "{{ mdfile }}" >/dev/null; then
+      deno fmt "{{ mdfile }}"
+      exit 1
+    fi
+
 _format_rust:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -85,6 +97,16 @@ format:
       --threads 1 \
       '^(Justfile|.+\.just)$' . \
       --exec just _format_justfile {} || exit_code=1
+
+    echo "formatting markdown files"
+    fd \
+      --type file \
+      --threads 1 \
+      --extension md \
+      --exclude 'crates/lib/font-awesome-as-a-crate/' \
+      --exclude 'crates/bin/docs_rs_web/assets/syntaxes/' \
+      --exclude 'crates/bin/docs_rs_web/static/' \
+      --exec just _format_markdown {} || exit_code=1
 
     exit "$exit_code"
 
