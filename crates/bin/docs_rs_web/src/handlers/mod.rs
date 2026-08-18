@@ -15,7 +15,7 @@ pub(crate) mod status;
 
 use crate::Config;
 use crate::metrics::WebMetrics;
-use crate::middleware::{csp, security};
+use crate::middleware::csp;
 use crate::page::{self, TemplateData};
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
@@ -87,7 +87,6 @@ async fn apply_middleware(
                 set_sentry_transaction_name_from_axum_route,
             ))
             .layer(CatchPanicLayer::new())
-            .layer(middleware::from_fn(security::security_middleware))
             .layer(option_layer(
                 config
                     .report_request_timeouts
