@@ -2,7 +2,11 @@
 
 ```mermaid
 flowchart TD
-  A[Start] --> B{Decision}
-  B -->|Yes| C[Success]
-  B -->|No| D[Try again]
+  user[User] --> fastly[Fastly CDN]
+
+  subgraph ec2[EC2 server]
+    nginx[nginx] --> web[docs.rs webserver]
+  end
+
+  fastly --> nginx
 ```
