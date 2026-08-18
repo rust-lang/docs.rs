@@ -29,12 +29,15 @@ _ensure_mdbook_installed:
     set -euo pipefail
 
     for package in mdbook mdbook-linkcheck2 mdbook-mermaid; do
-      # Check whether the binary is already installed.
-      command -v "$package" >/dev/null 2>&1 || \
-        # Try installing with `cargo binstall` (faster).
-        cargo binstall "$package" || \
-        # Fall back to a normal `cargo install`.
-        cargo install "$package";
+      if command -v "$package" >/dev/null 2>&1; then
+        continue
+      fi
+
+      if command -v cargo-binstall >/dev/null 2>&1; then
+        cargo binstall "$package"
+      else
+        cargo install "$package"
+      fi
     done
 
 [group('book')]
