@@ -6,10 +6,10 @@ it yourself in the to the
 
 ## Preconditions
 
-Docker and docker-compose must be installed. For example, on Debian or Ubuntu:
+Docker and docker compose must be installed. For example, on Debian or Ubuntu:
 
 ```sh
-sudo apt-get install docker.io docker-compose
+sudo apt-get install docker.io docker compose
 ```
 
 ## Getting started
@@ -32,7 +32,7 @@ YOUR_CRATE=/path/to/your/crate
 ## Add package
 
 Next, add the package to `crates-build-env/linux/packages.txt` in the correct
-alphabetical order. This should be the name of a package in the **Ubuntu 20.04**
+alphabetical order. This should be the name of a package in the **Ubuntu 26.04**
 Repositories. See [the package home page](https://packages.ubuntu.com/) for a
 full list/search bar, or use `apt search` locally.
 
@@ -52,10 +52,10 @@ Use the image to build your crate.
 ```sh
 cd ../../docs.rs
 cp .env.sample .env
-docker-compose build
-# avoid docker-compose creating the volume if it doesn't exist
+docker compose build
+# avoid docker compose creating the volume if it doesn't exist
 if [ -e "$YOUR_CRATE" ]; then
-  docker-compose run -e DOCSRS_DOCKER_IMAGE=build-env \
+  docker compose run -e DOCSRS_DOCKER_IMAGE=build-env \
                      -e RUST_BACKTRACE=1 \
                      -v "$YOUR_CRATE":/opt/rustwide/workdir \
     web build crate --local /opt/rustwide/workdir
@@ -80,7 +80,7 @@ container; it should take much less time now:
 cd ../crates-build-env/linux
 docker build --tag build-env .
 cd ../../docs.rs
-docker-compose run -e DOCSRS_DOCKER_IMAGE=build-env \
+docker compose run -e DOCSRS_DOCKER_IMAGE=build-env \
                      -e RUST_BACKTRACE=1 \
                      -v "$YOUR_CRATE":/opt/rustwide/workdir \
     web build crate --local /opt/rustwide/workdir

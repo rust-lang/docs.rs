@@ -5,7 +5,7 @@
   - [Web Server](binaries/web-server.md)
   - [Index Watcher](binaries/index-watcher.md)
   - [Build Server](binaries/build-server/index.md)
-      - [add new dependencies to the build environment](binaries/build-server/add-dependencies.md)
+    - [add new dependencies to the build environment](binaries/build-server/add-dependencies.md)
   - [Admin CLI](binaries/admin_cli.md)
   - [Legacy Daemon](binaries/legacy_daemon.md)
 - [Infrastructure](infrastructure/index.md)
