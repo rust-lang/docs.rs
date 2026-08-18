@@ -1,3 +1,10 @@
 [book]
 src = "src"
 title = "The docs.rs dev guide"
+
+[build]
+create-missing = false
+
+[output.html]
+
+[output.linkcheck2]
