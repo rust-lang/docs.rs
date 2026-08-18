@@ -24,9 +24,18 @@ import 'justfiles/testing.just'
 psql:
     psql $DOCSRS_DATABASE_URL
 
-@_ensure_mdbook_installed:
-    command -v mdbook >/dev/null 2>&1 || cargo install mdbook
-    command -v mdbook >/dev/null 2>&1 || cargo install mdbook-linkcheck2
+_ensure_mdbook_installed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    for package in mdbook mdbook-linkcheck2 mdbook-mermaid; do 
+      # check if the binary is already installed
+      command -v "$package" >/dev/null 2>&1 || \
+        # try installing with `cargo binstall` ( faster)
+        cargo binstall "$package" || \
+        # fall back to normal `cargo install`
+        cargo install "$package"; 
+    done
 
 [group('book')]
 book-build *args: _ensure_mdbook_installed
