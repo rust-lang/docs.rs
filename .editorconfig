@@ -9,7 +9,7 @@ indent_style = space
 indent_size = 4
 
 [Justfile]
-indent_size = 4
+indent_size = 2
 
 [*.js]
 max_line_length = 100
