@@ -22,58 +22,17 @@ flowchart TD
 
 ## Fastly CDN
 
-Within the CDN, we run a
-[Fastly Compute WASM module](https://www.fastly.com/documentation/guides/compute/developer-guides/rust/).
-The code lives in our
-[`simpleinfra` repository](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs).
+The Fastly CDN caches responses from docs.rs and runs our Compute module at the
+edge. It integrates with the [Fastly NgWAF](ngwaf.md) to block malicious
+requests at the CDN level before they reach our origin servers.
 
-This enables us to move performance-critical logic to the edge and write
-integration tests for it.
-
-[The Fastly service is configured via Terraform in the same
-repository](https://github.com/rust-lang/simpleinfra/blob/master/terraform/docs-rs/fastly.tf).
-
-What content is cached is defined solely by the `Cache-Control` headers that our
-web server returns. There should not be any cache rules in the CDN module. For
-now, we also don't want any business logic in the CDN, which makes the web
-server easier to test and manage.
-
-We also use the
-[Fastly origin shield](https://www.fastly.com/documentation/guides/getting-started/hosts/shielding/)
-to reduce the load on our web servers.
-
-### Changes and Deployment
-
-We typically make changes in
-[the `simpleinfra` repository](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/),
-after which they are reviewed and _manually_ applied by the infrastructure team.
+See [Fastly CDN](fastly-cdn.md) for implementation and deployment details.
 
 ## Fastly NgWAF
 
-We also use the
-[Fastly Web Application Firewall (NgWAF)](https://www.fastly.com/documentation/guides/next-gen-waf/).
-It's integrated with the WASM module above, so all blocking happens in the CDN
-and no malicious requests reach our origin servers.
-
-When something is blocked, the user will see one of the following:
-
-- status `406 NOT ACCEPTABLE` for normal security rules, or
-- status `429 Too Many Requests` for rate limiting.
-
-_These status codes are only used by the NgWAF, so if a user sees one, the
-NgWAF is the component blocking the request._
-
-### Changes and Deployment
-
-The integration between the Fastly CDN and NgWAF is implemented in
-[our Compute WASM module](https://github.com/rust-lang/simpleinfra/tree/master/terraform/docs-rs/fastly-compute-docs-rs/src/ngwaf.rs).
-
-In the legacy architecture, the rules are defined manually in the
-[Signal Sciences dashboard](https://dashboard.signalsciences.net/). With the
-planned new infrastructure, we'll start managing these in Terraform as well.
-
-_New or updated rules are typically distributed and active across Fastly's CDN
-within one minute, though it can sometimes take two to three minutes._
+Fastly's Web Application Firewall filters malicious requests at the CDN before
+they reach our origin servers. See [Fastly NgWAF](ngwaf.md) for integration,
+rules, and deployment details.
 
 ## EC2 Instance
 
