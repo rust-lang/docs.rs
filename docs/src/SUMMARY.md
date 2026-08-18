@@ -11,4 +11,6 @@
 - [Infrastructure](infrastructure/index.md)
     - [Fastly CDN](infrastructure/fastly-cdn.md)
     - [Fastly NgWAF](infrastructure/ngwaf.md)
-    - [Legacy Infrastructure](infrastructure/legacy.md)
+    - [Legacy Infrastructure](infrastructure/legacy/overview.md)
+        - [deploying a new version](infrastructure/legacy/deployment.md)
+        - [nginx](infrastructure/legacy/nginx.md)
