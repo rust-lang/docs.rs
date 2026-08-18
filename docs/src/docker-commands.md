@@ -1,17 +1,17 @@
 # See list of docker images
 
-```ignore
+```console
 $ docker compose logs -f db
 ```
 
 # Stop your containers and remove them with all their data
 
-```ignore
+```console
 $ docker compose down -v
 ```
 
 # Check logs of the DB
 
-```ignore
+```console
 $ docker compose logs -f db
 ```
