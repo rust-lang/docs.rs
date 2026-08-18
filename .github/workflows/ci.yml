@@ -112,9 +112,7 @@ jobs:
         with:
           tool: just,mdbook,mdbook-linkcheck2
 
-      - run: |
-          just book-build
-          just book-test
+      - run: just book-test
 
   lint-rs:
     name: rust linters
