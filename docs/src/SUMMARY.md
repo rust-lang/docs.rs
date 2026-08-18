@@ -9,6 +9,7 @@
     - [Index Watcher](services/index-watcher.md)
     - [Build Server](services/build-server.md)
     - [Admin CLI](services/admin_cli.md)
+    - [Legacy Daemon](services/legacy_daemon.md)
 - [Infrastructure](infrastructure/index.md)
     - [Fastly CDN](infrastructure/fastly-cdn.md)
     - [Fastly NgWAF](infrastructure/ngwaf.md)
