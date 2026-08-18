@@ -35,9 +35,9 @@ jobs:
 
       - name: run sqlx migration up & down
         run: |
-          just sqlx-migrate-run \
-            sqlx-check \
-            sqlx-migrate-run "0"
+          just sqlx-migrate-run
+          just sqlx-check
+          just sqlx-migrate-run "0"
 
       - name: shut down test environment
         if: ${{ always() }}
