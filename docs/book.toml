@@ -1,0 +1,3 @@
+[book]
+src = "src"
+title = "The docs.rs dev guide"
