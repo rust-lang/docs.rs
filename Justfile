@@ -34,7 +34,7 @@ book-build *args: _ensure_mdbook_installed
 
 [group('book')]
 [working-directory('./docs/')]
-book-test: _ensure_mdbook_installed
+book-test: book-build
     mdbook test
 
 [group('book')]

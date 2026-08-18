@@ -1,6 +1,9 @@
-This book contains general documentation to help contribute on `docs.rs`. If you want a
-"book version", you can build it using the `mdbook` tool with this command:
+This book contains general documentation to help contribute on `docs.rs`.
+We provide some `just` recipes to help with building & developing the book.
 
-```
-just book-open
+
+```bash
+$ just book-build # build the book
+$ just book-open # build the book and directly open it
+$ just book-test # run the mdbook build, linkcheck & test
 ```
