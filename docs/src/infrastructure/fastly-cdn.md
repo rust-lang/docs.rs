@@ -8,8 +8,8 @@ The code lives in our
 This enables us to move performance-critical logic to the edge and write
 integration tests for it.
 
-The Compute module uses [Fastly NgWAF](ngwaf.md) to block malicious requests
-at the CDN before they reach our origin servers.
+The Compute module uses [Fastly NgWAF](ngwaf.md) to block malicious requests at
+the CDN before they reach our origin servers.
 
 [The Fastly service is configured via Terraform in the same
 repository](https://github.com/rust-lang/simpleinfra/blob/master/terraform/docs-rs/fastly.tf).

@@ -21,4 +21,3 @@
 
 There is also a `revert-docs.rs` script that reverts to the previously tagged
 release. _It doesn't revert database migrations._
-

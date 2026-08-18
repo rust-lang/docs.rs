@@ -10,8 +10,8 @@ When something is blocked, the user will see one of the following:
 - status `406 NOT ACCEPTABLE` for normal security rules, or
 - status `429 Too Many Requests` for rate limiting.
 
-_These status codes are only used by the NgWAF, so if a user sees one, the
-NgWAF is the component blocking the request._
+_These status codes are only used by the NgWAF, so if a user sees one, the NgWAF
+is the component blocking the request._
 
 ## Changes and Deployment
 

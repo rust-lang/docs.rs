@@ -5,7 +5,7 @@ _ensure_db_and_s3_are_running: _touch-docker-env
     docker compose up -d db s3 --wait
 
 _touch-docker-env:
-  touch .docker.env
+    touch .docker.env
 
 # helper recipe to ensure a CLI tool is installed.
 # * Accepts multiple names
@@ -30,4 +30,3 @@ _ensure_cargo_installed *packages:
         cargo install "$package"
       fi
     done
-

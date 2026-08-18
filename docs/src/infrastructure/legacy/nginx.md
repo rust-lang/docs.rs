@@ -10,4 +10,5 @@ Before we had the NgWAF, nginx also handled rate limiting and IP blocking during
 attacks.
 
 ## Changes are made manually on the server in `/etc/nginx/`, after which nginx must
+
 be restarted via systemd.
