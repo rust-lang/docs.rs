@@ -3,7 +3,7 @@
 Here is a simplified diagram of the different moving pieces.
 
 ```mermaid
-flowchart TD
+flowchart LR
   user[User] --> fastly[Fastly CDN]
   fastly <--> |uses| ngwaf[Fastly NgWAF]
 
