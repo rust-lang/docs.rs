@@ -18,6 +18,8 @@ env:
 jobs:
   sqlx:
     runs-on: ubuntu-latest
+    env:
+      DOCSRS_CLI_MODE: local
     steps:
       - uses: actions/checkout@v7
 
