@@ -8,30 +8,46 @@
 
 # low-level helper to run any CLI command in its own one-off docker container,
 # ensuring that `db` and `s3` are running.
-_cli service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
-    # dependencies in the docker-compose file are ignored 
+_cli package service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # dependencies in the docker-compose file are ignored
     # when running a one-off service with `docker compose run`.
-    # Instead we explicitly start any dependent services first via 
+    # Instead we explicitly start any dependent services first via
     # `_ensure_db_and_s3_are_running`.
 
-    docker compose run --build --rm {{ service_name }} {{ args }}
+    case "${DOCSRS_CLI_MODE}" in
+      docker)
+        docker compose run --build --rm {{ service_name }} {{ args }}
+        ;;
+      local)
+        cargo run -p {{ package }} -- {{ args }}
+        ;;
+      *)
+        echo "Invalid DOCSRS_CLI_MODE: ${DOCSRS_CLI_MODE}" >&2
+        echo "Expected one of: docker, local" >&2
+        exit 2
+        ;;
+    esac
 
 # run any CLI command in its own one-off `cli` docker container. Args are passed to the container.
 # Only for commands that just need `db` and `s3` and minimal system dependencies.
 [group('cli')]
 cli +args: _touch-docker-env cli-db-migrate
-    just _cli cli {{ args }}
+    just _cli docs_rs_admin cli {{ args }}
 
 # Initialize the `docs.rs` database
 [group('cli')]
 [group('database')]
-cli-db-migrate:
-    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`. 
+cli-db-migrate version="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
     # Otherwise we would have a stack overflow / infinite recursion.
-    # 
-    # TODO: potential optimization: only run the container when we have to 
-    # run migrations?
-    just _cli cli database migrate
+    export SQLX_OFFLINE=1
+    just _cli docs_rs_admin cli database migrate {{ version }}
 
 # add a release to the build queue
 [group('cli')]
@@ -46,7 +62,7 @@ cli-queue-add crate_name crate_version:
 [group('builder')]
 [group('cli')]
 cli-build +args: _touch-docker-env cli-db-migrate
-    just _cli builder-cli {{ args }}
+    just _cli docs_rs_builder builder-cli {{ args }}
 
 # set the nightly rust version to be used for builds. Format: `nightly-YYYY-MM-DD`
 # or just `nightly` for always using the latest nightly.

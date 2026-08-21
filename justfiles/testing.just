@@ -30,19 +30,8 @@ sqlx-check:
 
 [group('sqlx')]
 [group('testing')]
-sqlx-migrate-run: _ensure_db_and_s3_are_running
-    cargo sqlx migrate run \
-      --database-url $DOCSRS_DATABASE_URL \
-      --source ./crates/lib/docs_rs_database/migrations
-
-[group('sqlx')]
-[group('testing')]
-sqlx-migrate-revert target="0": _ensure_db_and_s3_are_running
-    # --target 0 means "revert everything"
-    cargo sqlx migrate revert \
-      --database-url $DOCSRS_DATABASE_URL \
-      --source ./crates/lib/docs_rs_database/migrations \
-      --target-version {{ target }}
+sqlx-migrate-run version="":
+    just cli-db-migrate {{ version }}
 
 _format_justfile justfile:
     #!/usr/bin/env bash
@@ -192,8 +181,7 @@ lint-js *args:
       gui-tests \
       {{ args }}
 
-[group('testing')]
-run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
+_gui-tests_env: _ensure_db_and_s3_are_running cli-db-migrate
     just cli-build-update-toolchain
     just cli-build-crate sysinfo 0.23.4
     just cli-build-crate sysinfo 0.23.5
@@ -201,7 +189,68 @@ run-gui-tests: _ensure_db_and_s3_are_running cli-db-migrate compose-up-web
     just cli-build-crate zbus 5.15.0
     just cli-build-add-essential-files
 
-    just _cli gui_tests
+[group('testing')]
+run-gui-tests: _gui-tests_env
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    case "${DOCSRS_CLI_MODE}" in
+      docker)
+        just _run-gui-tests-docker
+        ;;
+      local)
+        just _run-gui-tests-local
+        ;;
+      *)
+        echo "Invalid DOCSRS_CLI_MODE: ${DOCSRS_CLI_MODE}" >&2
+        echo "Expected one of: docker, local" >&2
+        exit 2
+        ;;
+    esac
+
+_run-gui-tests-docker:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    just compose-up-web
+    just _cli UNUSED gui_tests
+
+_run-gui-tests-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    cargo build -p docs_rs_web
+
+    web_pid=""
+
+    cleanup() {
+      if [ -n "$web_pid" ]; then
+        kill "$web_pid" 2>/dev/null || true
+        wait "$web_pid" 2>/dev/null || true
+      fi
+    }
+    trap cleanup EXIT INT TERM
+
+    cargo run -p docs_rs_web &
+    web_pid=$!
+
+    # Fail instead of waiting forever if the server fails to start.
+    for _ in {1..100}; do
+      if curl --silent --fail http://localhost:3000/ >/dev/null; then
+        break
+      fi
+      if ! kill -0 "$web_pid" 2>/dev/null; then
+        wait "$web_pid"
+      fi
+      sleep 0.2
+    done
+
+    curl --silent --fail http://localhost:3000/ >/dev/null
+
+    npm install --loglevel verbose --force
+    npx --no-install puppeteer browsers install chrome
+
+    node ./gui-tests/tester.js
 
 _build-test-binaries:
     #!/usr/bin/env bash
