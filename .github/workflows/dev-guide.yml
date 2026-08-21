@@ -13,7 +13,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         run: rustup update stable && rustup default stable
