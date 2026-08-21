@@ -16,26 +16,11 @@ export S3_ENDPOINT := env("S3_ENDPOINT", "http://localhost:9000")
 _default:
     @just --list
 
+import 'justfiles/book.just'
 import 'justfiles/cli.just'
-import 'justfiles/utils.just'
 import 'justfiles/services.just'
 import 'justfiles/testing.just'
+import 'justfiles/utils.just'
 
 psql:
     psql $DOCSRS_DATABASE_URL
-
-@_ensure_mdbook_installed:
-    command -v mdbook >/dev/null 2>&1 || cargo install mdbook
-    command -v mdbook >/dev/null 2>&1 || cargo install mdbook-linkcheck2
-
-[group('book')]
-book-build *args: _ensure_mdbook_installed
-    mdbook build docs {{ args }}
-
-[group('book')]
-[working-directory('./docs/')]
-book-test: book-build
-    mdbook test
-
-[group('book')]
-book-open: (book-build "--open")

@@ -9,9 +9,9 @@
 # low-level helper to run any CLI command in its own one-off docker container,
 # ensuring that `db` and `s3` are running.
 _cli service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
-    # dependencies in the docker-compose file are ignored 
+    # dependencies in the docker-compose file are ignored
     # when running a one-off service with `docker compose run`.
-    # Instead we explicitly start any dependent services first via 
+    # Instead we explicitly start any dependent services first via
     # `_ensure_db_and_s3_are_running`.
 
     docker compose run --build --rm {{ service_name }} {{ args }}
@@ -26,10 +26,10 @@ cli +args: _touch-docker-env cli-db-migrate
 [group('cli')]
 [group('database')]
 cli-db-migrate:
-    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`. 
+    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
     # Otherwise we would have a stack overflow / infinite recursion.
-    # 
-    # TODO: potential optimization: only run the container when we have to 
+    #
+    # TODO: potential optimization: only run the container when we have to
     # run migrations?
     just _cli cli database migrate
 
@@ -77,6 +77,24 @@ cli-build-add-essential-files:
 [group('cli')]
 cli-build-crate name version:
     just cli-build build crate {{ name }} {{ version }}
+
+# can be used to test your locally checked out crate with a locally built crates-build-env image
+cli-test-local-build-image docker_tag local_crate_path: _touch-docker-env _ensure_db_and_s3_are_running cli-db-migrate
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ -e "{{ local_crate_path }}" ]; then
+        docker compose run --build --rm \
+            -e DOCSRS_DOCKER_IMAGE={{ docker_tag }} \
+            -e RUST_BACKTRACE=1 \
+            -v "{{ local_crate_path }}":/opt/rustwide/workdir \
+            builder-cli \
+            build crate --local /opt/rustwide/workdir
+
+    else
+        echo "{{ local_crate_path }} does not exist";
+        exit 1
+    fi
 
 # run registry-watcher CLI command in its own one-off `registry-watcher` docker container.
 [group('cli')]
