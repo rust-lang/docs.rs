@@ -1,0 +1,48 @@
+name: Dev-Guide mdBook
+
+on:
+  pull_request:
+  pull_request_target:
+    branches:
+      - main
+    types: [closed]
+
+jobs:
+  test:
+    name: build and test
+    if: ${{ github.event_name == 'pull_request' || github.event.pull_request.merged }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        run: rustup update stable && rustup default stable
+
+      - name: Install mdbook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,mdbook,mdbook-linkcheck2
+
+      - run:
+          just book-test  # also runs the build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/book/html
+
+  # Deploy is run as a separate job as it needs elevated permissions
+  deploy:
+    name: deploy
+    needs: test  # the `test` job uploads the pages artifact
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged && github.repository_owner == 'rust-lang'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{steps.deployment.outputs.page_url}}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        id: deployment
