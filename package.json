@@ -4,6 +4,6 @@
     "browser-ui-test": "^0.25.0"
   },
   "overrides": {
-    "puppeteer": "25.7.0"
+    "puppeteer": "25.8.0"
   }
 }
