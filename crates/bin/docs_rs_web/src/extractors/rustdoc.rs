@@ -1586,7 +1586,10 @@ mod tests {
             params.rustdoc_url(),
             format!("/krate/latest/{OTHER_TARGET}/path_add/static.html")
         );
-        assert_eq!(params.source_url(), "/crate/krate/latest/source/".to_string());
+        assert_eq!(
+            params.source_url(),
+            "/crate/krate/latest/source/".to_string()
+        );
         assert_eq!(
             params.target_redirect_url(),
             format!("/crate/krate/latest/target-redirect/{OTHER_TARGET}/path_add/static.html")
