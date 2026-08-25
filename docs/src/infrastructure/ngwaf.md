@@ -10,8 +10,8 @@ When something is blocked, the user will see one of the following:
 - status `406 NOT ACCEPTABLE` for normal security rules, or
 - status `429 Too Many Requests` for rate limiting.
 
-_These status codes are only used by the NgWAF, so if a user sees one, the NgWAF
-is the component blocking the request._
+**These status codes are only used by the NgWAF, so if a user sees one, the
+NgWAF is the component blocking the request.**
 
 ## Changes and Deployment
 
@@ -22,5 +22,5 @@ In the legacy architecture, the rules are defined manually in the
 [Signal Sciences dashboard](https://dashboard.signalsciences.net/). With the
 planned new infrastructure, we'll start managing these in Terraform as well.
 
-_New or updated rules are typically distributed and active across Fastly's CDN
-within one minute, though it can sometimes take two to three minutes._
+**New or updated rules are typically distributed and active across Fastly's CDN
+within one minute, though it can sometimes take two to three minutes.**
