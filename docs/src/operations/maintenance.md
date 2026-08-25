@@ -78,4 +78,14 @@ $ docs_rs_admin database blacklist add <CRATE_NAME>
 Use the `list` and `remove` subcommands to inspect or change the blacklist.
 
 > **Warning:** Blacklisting a crate does not remove content already published on
-> the website. Existing content must be removed separately when required.
+> the website.
+
+When existing content must also be removed, use the
+[`docs_rs_watcher`](../binaries/index-watcher.md) binary after blacklisting the
+crate:
+
+```console
+$ docs_rs_watcher database delete crate <CRATE_NAME>
+```
+
+This deletes the crate's existing releases from the database and storage.
