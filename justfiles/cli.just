@@ -9,9 +9,9 @@
 # low-level helper to run any CLI command in its own one-off docker container,
 # ensuring that `db` and `s3` are running.
 _cli service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
-    # dependencies in the docker-compose file are ignored 
+    # dependencies in the docker-compose file are ignored
     # when running a one-off service with `docker compose run`.
-    # Instead we explicitly start any dependent services first via 
+    # Instead we explicitly start any dependent services first via
     # `_ensure_db_and_s3_are_running`.
 
     docker compose run --build --rm {{ service_name }} {{ args }}
@@ -26,10 +26,10 @@ cli +args: _touch-docker-env cli-db-migrate
 [group('cli')]
 [group('database')]
 cli-db-migrate:
-    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`. 
+    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
     # Otherwise we would have a stack overflow / infinite recursion.
-    # 
-    # TODO: potential optimization: only run the container when we have to 
+    #
+    # TODO: potential optimization: only run the container when we have to
     # run migrations?
     just _cli cli database migrate
 
