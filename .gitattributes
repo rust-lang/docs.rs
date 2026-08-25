@@ -1,2 +1,3 @@
 *.sh eol=lf
 .sqlx/*.json binary linguist-generated=true
+docs/js/*.js binary linguist-generated=true

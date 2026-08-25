@@ -5,6 +5,10 @@ title = "The docs.rs dev guide"
 [build]
 create-missing = false
 
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
 [output.html]
+additional-js = ["js/mermaid.min.js", "js/mermaid-init.js"]
 
 [output.linkcheck2]

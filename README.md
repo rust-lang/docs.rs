@@ -23,10 +23,10 @@ for more details.
 
 ## Changing the build environment
 
-To make a change to
-[the build environment](https://github.com/rust-lang/crates-build-env) and test
-that it works on docs.rs, see
-[the wiki](https://forge.rust-lang.org/docs-rs/add-dependencies.html).
+Docs.rs / `rustwide` are internally using the
+[`crates-build-env` docker images](https://github.com/rust-lang/crates-build-env)
+as the build environment for the crate. If you're missing a system dependency,
+you can add it there.
 
 ## Development
 
