@@ -230,7 +230,7 @@ _build-test-binaries: _ensure_nextest_installed
     set -euo pipefail
 
     export SQLX_OFFLINE=1
-    cargo nextest run --no-run --workspace --locked
+    RUSTC_WRAPPER= cargo nextest run --no-run --workspace --locked
 
 [group('testing')]
 run-tests: _ensure_db_and_s3_are_running _build-test-binaries
@@ -248,9 +248,12 @@ run-tests: _ensure_db_and_s3_are_running _build-test-binaries
 
     cargo nextest run --workspace --locked --no-fail-fast
 
+    # run doctests
+    cargo test --doc --workspace --locked
+
 [group('builder')]
 [group('testing')]
-run-builder-tests: _ensure_nextest_installed _ensure_db_and_s3_are_running
+run-builder-tests: _ensure_db_and_s3_are_running _build-test-binaries
     #!/usr/bin/env bash
     set -euo pipefail
 
