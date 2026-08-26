@@ -165,6 +165,19 @@ Run the complete lint suite with:
 $ just lint
 ```
 
+Linting GitHub Actions workflows requires
+[`actionlint`](https://github.com/rhysd/actionlint/blob/main/docs/install.md). If
+it is not installed, that check is skipped with a warning.
+
+Run all formatters with:
+
+```console
+$ just format
+```
+
+If files are not formatted correctly, this command rewrites them and exits with
+an error so that you can review the changes.
+
 Run browser-based GUI tests with:
 
 ```console
