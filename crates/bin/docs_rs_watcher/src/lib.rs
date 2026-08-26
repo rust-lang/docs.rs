@@ -3,6 +3,7 @@ pub mod consistency;
 mod db;
 mod index;
 pub mod index_watcher;
+mod metrics;
 mod rebuilds;
 mod service_metrics;
 #[cfg(test)]
@@ -13,7 +14,11 @@ pub use db::{delete_crate, delete_version};
 pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
-use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
+use crate::{
+    index_watcher::get_new_crates,
+    metrics::{EventSource, WatcherMetrics},
+    service_metrics::OtelServiceMetrics,
+};
 use anyhow::Result;
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
@@ -28,6 +33,7 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
     let mut last_gc = Instant::now();
 
     let queue = context.build_queue()?;
+    let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
         if queue.is_locked().await? {
@@ -36,9 +42,10 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config).await {
+            match get_new_crates(context, &index, config, &metrics).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
+                    metrics.record_poll_error(EventSource::Git);
                     error!(?e, "Failed to get new crates");
                 }
             }
