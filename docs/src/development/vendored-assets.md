@@ -26,5 +26,8 @@ needed, and run:
 
 ```console
 $ cargo test --package docs_rs_web
-$ just run-gui-tests
+$ just prepare-gui-tests run-gui-tests
 ```
+
+For the container integration path, set both CLI modes to `docker` and run
+`just prepare-gui-tests run-gui-tests-e2e` instead.

@@ -1,97 +1,71 @@
-# a collection of just commands to wrap various docs.rs CLI commands,
-# and run them in a one-off docker container.
-# _Which_ container depends on the command itself and its dependencies.
-# Most service containers have their corresponding CLI container:
-# * web -> cli
-# * builder-x -> builder-cli
-# * registry-watcher -> registry-watcher-cli
+# Builder commands default to the host on amd64 Linux and Docker elsewhere.
+builder_cli_mode_default := if os() + "-" + arch() == "linux-x86_64" { "local" } else { "docker" }
+export DOCSRS_BUILDER_CLI_MODE := env("DOCSRS_BUILDER_CLI_MODE", builder_cli_mode_default)
 
-# low-level helper to run any CLI command in its own one-off docker container,
-# ensuring that `db` and `s3` are running.
-_cli service_name *args: _touch-docker-env _ensure_db_and_s3_are_running
-    # dependencies in the docker-compose file are ignored
-    # when running a one-off service with `docker compose run`.
-    # Instead we explicitly start any dependent services first via
-    # `_ensure_db_and_s3_are_running`.
+# Admin and watcher commands default to the host on every platform.
+export DOCSRS_CLI_MODE := env("DOCSRS_CLI_MODE", "local")
 
-    docker compose run --build --rm {{ service_name }} {{ args }}
-
-# run any CLI command in its own one-off `cli` docker container. Args are passed to the container.
-# Only for commands that just need `db` and `s3` and minimal system dependencies.
-[group('cli')]
-cli +args: _touch-docker-env cli-db-migrate
-    just _cli cli {{ args }}
-
-# Initialize the `docs.rs` database
-[group('cli')]
-[group('database')]
-cli-db-migrate:
-    # intentially not using `cli` recipe, because it has a dependency on `cli-db-migrate`.
-    # Otherwise we would have a stack overflow / infinite recursion.
-    #
-    # TODO: potential optimization: only run the container when we have to
-    # run migrations?
-    just _cli cli database migrate
-
-# add a release to the build queue
-[group('cli')]
-[group('queue')]
-cli-queue-add crate_name crate_version:
-    # only does things with the database, so can use the lightweight `cli` container.
-    just cli queue add {{ crate_name }} {{ crate_version }}
-
-# run builder CLI command in its own one-off `build-server` docker container.
-# Uses a separate builder-cli container & workspace that doesn't conflict
-# with the continiously running build-servers.
-[group('builder')]
-[group('cli')]
-cli-build +args: _touch-docker-env cli-db-migrate
-    just _cli builder-cli {{ args }}
-
-# set the nightly rust version to be used for builds. Format: `nightly-YYYY-MM-DD`
-# or just `nightly` for always using the latest nightly.
-[group('builder')]
-[group('cli')]
-cli-build-set-toolchain name only_first_time="false":
+_run-cli mode package service_name *args:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    FLAG=""
-    if [ "{{ only_first_time }}" = "true" ]; then FLAG="--only-first-time"; fi
-    just cli-build build set-toolchain {{ name }} $FLAG
+    case "{{ mode }}" in
+      local)
+        cargo run -p {{ package }} -- {{ args }}
+        ;;
+      docker)
+        just docker-run {{ service_name }} {{ args }}
+        ;;
+      *)
+        echo "Invalid CLI mode: {{ mode }}" >&2
+        echo "Expected one of: local, docker" >&2
+        exit 2
+        ;;
+    esac
 
-# update the toolchain in the builders
-[group('builder')]
+# Run a docs_rs_admin command using DOCSRS_CLI_MODE.
 [group('cli')]
-cli-build-update-toolchain:
-    just cli-build build update-toolchain
+cli *args: _ensure_db_migrated
+    SQLX_OFFLINE=1 just _run-cli "$DOCSRS_CLI_MODE" docs_rs_admin cli {{ args }}
 
-# build & upload toolchain shared static resources
-[group('builder')]
-[group('cli')]
-cli-build-add-essential-files:
-    just cli-build build add-essential-files
+_builder *args:
+    # on non-linux (and arm/linux) we need to run the builder inside
+    # a docker container because many places expect the builder to
+    # run on a linux host.
+    just _run-cli "$DOCSRS_BUILDER_CLI_MODE" docs_rs_builder builder-cli {{ args }}
 
-# build a release
-[group('builder')]
+# Run a docs_rs_builder command using DOCSRS_BUILDER_CLI_MODE.
 [group('cli')]
-cli-build-crate name version:
-    just cli-build build crate {{ name }} {{ version }}
+builder *args: _ensure_db_migrated
+    just _builder {{ args }}
 
-# run registry-watcher CLI command in its own one-off `registry-watcher` docker container.
+# Run a docs_rs_watcher command using DOCSRS_CLI_MODE.
 [group('cli')]
-[group('watcher')]
-cli-watcher +args: _touch-docker-env cli-db-migrate
-    just _cli registry-watcher-cli {{ args }}
+watcher *args: _ensure_db_migrated
+    just _run-cli "$DOCSRS_CLI_MODE" docs_rs_watcher registry-watcher-cli {{ args }}
 
-# Update last seen reference to the given hash, or the current `HEAD`.
+# Migrate to an optional version using docs_rs_admin and DOCSRS_CLI_MODE.
 [group('cli')]
-[group('queue')]
-cli-queue-reset-last-seen-ref ref="--head":
-    just cli-watcher queue set-last-seen-reference {{ ref }}
+cli-db-migrate version="": compose-up-resources
+    SQLX_OFFLINE=1 just _run-cli "$DOCSRS_CLI_MODE" docs_rs_admin cli database migrate {{ version }}
 
-# find differences between crates.io and our own database, and fix them on our side.
-[group('cli')]
-[group('database')]
-cli-db-synchronize *args:
-    just cli-watcher database synchronize {{ args }}
+# Run the web server on the host.
+[group('development')]
+web *args: _ensure_db_migrated
+    cargo run -p docs_rs_web -- {{ args }}
+
+# Watch web and shared-library sources, restarting the host web server on changes.
+[group('development')]
+web-watch: _ensure_db_migrated (_ensure_cargo_installed "cargo-watch")
+    cargo watch \
+      --watch .cargo \
+      --watch Cargo.lock \
+      --watch Cargo.toml \
+      --watch crates/bin/docs_rs_web \
+      --watch crates/lib \
+      --exec 'run -p docs_rs_web'
+
+# Import a published crate release into the local environment.
+[group('development')]
+import-release +args: _ensure_db_migrated
+    cargo run -p docs_rs_import_release -- {{ args }}

@@ -32,11 +32,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: run sqlx migration up & down
-        run: |
-          just sqlx-migrate-run \
-            sqlx-check \
-            sqlx-migrate-revert
+      - name: Test database migrations
+        run: just test-database-migrations
 
       - name: shut down test environment
         if: ${{ always() }}
@@ -90,12 +87,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Expose GitHub cache credentials
+        uses: crazy-max/ghaction-github-runtime@v4
+
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,sqlx-cli
 
-      - name: Run GUI tests
-        run: just run-gui-tests
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Run end-to-end GUI tests
+        env:
+          # run all necessary admin commands from the docker images, as
+          # we would in prod.
+          DOCSRS_CLI_MODE: docker
+          # run the preparation / builds for the e2e tests not
+          # on the gh action host, but inside our builder docker image.
+          # Like this we know this works.
+          DOCSRS_BUILDER_CLI_MODE: docker
+        run: just prepare-gui-tests run-gui-tests-e2e
 
       - name: shut down test environment
         if: ${{ always() }}

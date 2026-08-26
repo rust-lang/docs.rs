@@ -15,6 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
       - name: setup docker buildx
         uses: docker/setup-buildx-action@v4
 
@@ -31,17 +35,4 @@ jobs:
             *.cache-to=type=gha,mode=max,scope=docs-rs-images
 
       - name: smoke test packaged binaries
-        run: |
-          set -euo pipefail
-
-          docker buildx bake --file docker-bake.hcl --print |
-            jq -r '
-              . as $bake
-              | $bake.group.default.targets[] as $target
-              | $bake.target[$target].tags[0]
-                // error("Bake target \($target) has no image tag")
-            ' |
-            while IFS= read -r image; do
-              echo "testing $image..."
-              docker run --rm "$image" --help
-            done
+        run: just docker-smoke-test
