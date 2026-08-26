@@ -1,0 +1,1 @@
+-- do nothing, we don't have that extension available in the postgres container any more
