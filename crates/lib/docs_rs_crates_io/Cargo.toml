@@ -9,11 +9,12 @@ repository.workspace = true
 edition.workspace = true
 
 [dependencies]
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
+chrono = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0"
+serde_json = { workspace = true }
+test-case = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,6 +1,35 @@
 use chrono::{DateTime, Utc};
 use std::fmt;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeKind {
+    Added,
+    AddedAndYanked,
+    Unyanked,
+    Yanked,
+    CrateDeleted,
+    VersionDeleted,
+}
+
+impl ChangeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Added => "added",
+            Self::AddedAndYanked => "added_and_yanked",
+            Self::Unyanked => "unyanked",
+            Self::Yanked => "yanked",
+            Self::CrateDeleted => "crate_deleted",
+            Self::VersionDeleted => "version_deleted",
+        }
+    }
+}
+
+impl fmt::Display for ChangeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// A change that can happen to a crate on our index.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
@@ -21,7 +50,7 @@ impl IndexChangeV1 {
     /// Return the added crate, if this is this kind of change.
     pub fn added(&self) -> Option<&CrateVersion> {
         match self {
-            IndexChangeV1::Added(v) => Some(v),
+            Self::Added(version) => Some(version),
             _ => None,
         }
     }
@@ -29,7 +58,7 @@ impl IndexChangeV1 {
     /// Return the yanked crate, if this is this kind of change.
     pub fn yanked(&self) -> Option<&CrateVersion> {
         match self {
-            IndexChangeV1::Yanked(v) => Some(v),
+            Self::Yanked(version) => Some(version),
             _ => None,
         }
     }
@@ -37,7 +66,7 @@ impl IndexChangeV1 {
     /// Return the unyanked crate, if this is this kind of change.
     pub fn unyanked(&self) -> Option<&CrateVersion> {
         match self {
-            IndexChangeV1::Unyanked(v) => Some(v),
+            Self::Unyanked(version) => Some(version),
             _ => None,
         }
     }
@@ -45,7 +74,7 @@ impl IndexChangeV1 {
     /// Return the deleted crate, if this is this kind of change.
     pub fn crate_deleted(&self) -> Option<&str> {
         match self {
-            IndexChangeV1::CrateDeleted { name } => Some(name.as_str()),
+            Self::CrateDeleted { name } => Some(name),
             _ => None,
         }
     }
@@ -53,21 +82,45 @@ impl IndexChangeV1 {
     /// Return the deleted version crate, if this is this kind of change.
     pub fn version_deleted(&self) -> Option<&CrateVersion> {
         match self {
-            IndexChangeV1::VersionDeleted(v) => Some(v),
+            Self::VersionDeleted(version) => Some(version),
             _ => None,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Added(crate_version)
+            | Self::Unyanked(crate_version)
+            | Self::Yanked(crate_version)
+            | Self::VersionDeleted(crate_version) => &crate_version.name,
+            Self::CrateDeleted { name } => name,
+        }
+    }
+
+    pub fn version(&self) -> Option<&str> {
+        match self {
+            Self::Added(crate_version)
+            | Self::Unyanked(crate_version)
+            | Self::Yanked(crate_version)
+            | Self::VersionDeleted(crate_version) => Some(&crate_version.version),
+            Self::CrateDeleted { .. } => None,
+        }
+    }
+
+    pub fn kind(&self) -> ChangeKind {
+        match self {
+            Self::Added(_) => ChangeKind::Added,
+            Self::Unyanked(_) => ChangeKind::Unyanked,
+            Self::Yanked(_) => ChangeKind::Yanked,
+            Self::CrateDeleted { .. } => ChangeKind::CrateDeleted,
+            Self::VersionDeleted(_) => ChangeKind::VersionDeleted,
         }
     }
 }
 
 impl fmt::Display for IndexChangeV1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match *self {
-            IndexChangeV1::Added(_) => "added",
-            IndexChangeV1::Yanked(_) => "yanked",
-            IndexChangeV1::CrateDeleted { .. } => "crate deleted",
-            IndexChangeV1::VersionDeleted(_) => "version deleted",
-            IndexChangeV1::Unyanked(_) => "unyanked",
-        })
+        self.kind().fmt(f)
     }
 }
 
@@ -76,7 +129,7 @@ impl fmt::Display for IndexChangeV1 {
 pub struct Event<T> {
     /// Unique event identifier for deduplication and tracing.
     pub id: String,
-    /// Timestamp when the event occured
+    /// Timestamp when the event occurred.
     pub occurred_at: DateTime<Utc>,
     /// The typed payload.
     #[serde(flatten)]
@@ -100,6 +153,7 @@ pub struct CrateVersion {
 mod tests {
     use super::*;
     use serde_json::json;
+    use test_case::test_case;
 
     fn crate_version() -> CrateVersion {
         CrateVersion {
@@ -131,67 +185,81 @@ mod tests {
         );
     }
 
+    #[test_case(ChangeKind::Added, "added"; "added")]
+    #[test_case(ChangeKind::AddedAndYanked, "added_and_yanked"; "added and yanked")]
+    #[test_case(ChangeKind::Unyanked, "unyanked"; "unyanked")]
+    #[test_case(ChangeKind::Yanked, "yanked"; "yanked")]
+    #[test_case(ChangeKind::CrateDeleted, "crate_deleted"; "crate deleted")]
+    #[test_case(ChangeKind::VersionDeleted, "version_deleted"; "version deleted")]
+    fn change_kind_formats_as_expected(kind: ChangeKind, expected: &str) {
+        assert_eq!(kind.as_str(), expected);
+        assert_eq!(kind.to_string(), expected);
+    }
+
+    #[test_case(IndexChangeV1::Added(crate_version()), "added", json!({ "name": "clap", "vers": "4.5.0" }); "added")]
+    #[test_case(IndexChangeV1::Unyanked(crate_version()), "unyanked", json!({ "name": "clap", "vers": "4.5.0" }); "unyanked")]
+    #[test_case(IndexChangeV1::Yanked(crate_version()), "yanked", json!({ "name": "clap", "vers": "4.5.0" }); "yanked")]
+    #[test_case(IndexChangeV1::CrateDeleted { name: "old-crate".into() }, "crate_deleted", json!({ "name": "old-crate" }); "crate deleted")]
+    #[test_case(IndexChangeV1::VersionDeleted(crate_version()), "version_deleted", json!({ "name": "clap", "vers": "4.5.0" }); "version deleted")]
+    fn change_serializes_with_expected_variant_shape(
+        change: IndexChangeV1,
+        change_type: &str,
+        payload: serde_json::Value,
+    ) {
+        assert_eq!(
+            serde_json::to_value(change).unwrap(),
+            json!({
+                "type": change_type,
+                "payload": payload,
+            })
+        );
+    }
+
+    #[test_case(IndexChangeV1::Added(crate_version()), ChangeKind::Added, "clap", Some("4.5.0"); "added")]
+    #[test_case(IndexChangeV1::Unyanked(crate_version()), ChangeKind::Unyanked, "clap", Some("4.5.0"); "unyanked")]
+    #[test_case(IndexChangeV1::Yanked(crate_version()), ChangeKind::Yanked, "clap", Some("4.5.0"); "yanked")]
+    #[test_case(IndexChangeV1::CrateDeleted { name: "old-crate".into() }, ChangeKind::CrateDeleted, "old-crate", None; "crate deleted")]
+    #[test_case(IndexChangeV1::VersionDeleted(crate_version()), ChangeKind::VersionDeleted, "clap", Some("4.5.0"); "version deleted")]
+    fn change_metadata_matches_variant(
+        change: IndexChangeV1,
+        kind: ChangeKind,
+        name: &str,
+        version: Option<&str>,
+    ) {
+        assert_eq!(change.name(), name);
+        assert_eq!(change.version(), version);
+        assert_eq!(change.kind(), kind);
+        assert_eq!(change.to_string(), kind.as_str());
+    }
+
     #[test]
-    fn change_serializes_with_expected_variant_shapes() {
-        let crate_version = crate_version();
+    fn variant_accessors_only_match_their_variant() {
+        let added = IndexChangeV1::Added(crate_version());
+        assert_eq!(added.added(), Some(&crate_version()));
+        assert_eq!(added.yanked(), None);
+        assert_eq!(added.unyanked(), None);
+        assert_eq!(added.crate_deleted(), None);
+        assert_eq!(added.version_deleted(), None);
 
-        let cases = [
-            (
-                IndexChangeV1::Added(crate_version.clone()),
-                json!({
-                    "type": "added",
-                    "payload": {
-                        "name": "clap",
-                        "vers": "4.5.0",
-                    }
-                }),
-            ),
-            (
-                IndexChangeV1::Unyanked(crate_version.clone()),
-                json!({
-                    "type": "unyanked",
-                    "payload": {
-                        "name": "clap",
-                        "vers": "4.5.0",
-                    }
-                }),
-            ),
-            (
-                IndexChangeV1::Yanked(crate_version.clone()),
-                json!({
-                    "type": "yanked",
-                    "payload": {
-                        "name": "clap",
-                        "vers": "4.5.0",
-                    }
-                }),
-            ),
-            (
-                IndexChangeV1::CrateDeleted {
-                    name: "old-crate".into(),
-                },
-                json!({
-                    "type": "crate_deleted",
-                    "payload": {
-                        "name": "old-crate"
-                    }
-                }),
-            ),
-            (
-                IndexChangeV1::VersionDeleted(crate_version),
-                json!({
-                    "type": "version_deleted",
-                    "payload": {
-                        "name": "clap",
-                        "vers": "4.5.0",
-                    }
-                }),
-            ),
-        ];
-
-        for (event, expected) in cases {
-            assert_eq!(serde_json::to_value(&event).unwrap(), expected);
-        }
+        assert_eq!(
+            IndexChangeV1::Yanked(crate_version()).yanked(),
+            Some(&crate_version())
+        );
+        assert_eq!(
+            IndexChangeV1::Unyanked(crate_version()).unyanked(),
+            Some(&crate_version())
+        );
+        assert_eq!(
+            IndexChangeV1::CrateDeleted {
+                name: "old-crate".into(),
+            }
+            .crate_deleted(),
+            Some("old-crate")
+        );
+        assert_eq!(
+            IndexChangeV1::VersionDeleted(crate_version()).version_deleted(),
+            Some(&crate_version())
+        );
     }
 
     #[test]

@@ -5,12 +5,14 @@ use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use docs_rs_types::{CrateId, KrateName, Version};
 use sqlx::Connection;
 use tokio::fs;
+use tracing::instrument;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
 static LIBRARY_STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "rustdoc-json", "sources"];
 static OTHER_STORAGE_PATHS_TO_DELETE: &[&str] = &["sources"];
 
+#[instrument(skip_all, fields(name=%name))]
 pub async fn delete_crate(
     conn: &mut sqlx::PgConnection,
     storage: &AsyncStorage,
@@ -56,6 +58,7 @@ pub async fn delete_crate(
     Ok(())
 }
 
+#[instrument(skip_all, fields(name=%name, version=%version))]
 pub async fn delete_version(
     conn: &mut sqlx::PgConnection,
     storage: &AsyncStorage,
