@@ -20,7 +20,6 @@ docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_uri = { path = "../docs_rs_uri" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
-hex = "0.4.3"
 hostname = "0.4.0"
 opentelemetry = { workspace = true }
 rand = { workspace = true, optional = true }

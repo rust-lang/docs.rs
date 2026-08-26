@@ -2161,7 +2161,6 @@ dependencies = [
  "docs_rs_uri",
  "docs_rs_utils",
  "futures-util",
- "hex",
  "hostname",
  "opentelemetry",
  "rand 0.10.2",
