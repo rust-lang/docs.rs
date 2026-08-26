@@ -18,9 +18,13 @@ _default:
 
 import 'justfiles/book.just'
 import 'justfiles/cli.just'
+import 'justfiles/docker.just'
+import 'justfiles/linting.just'
 import 'justfiles/services.just'
+import 'justfiles/sqlx.just'
 import 'justfiles/testing.just'
 import 'justfiles/utils.just'
 
-psql:
+# Open a PostgreSQL shell for the local docs.rs database.
+psql: compose-up-resources
     psql $DOCSRS_DATABASE_URL

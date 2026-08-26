@@ -1,32 +1,44 @@
-
-_ensure_db_and_s3_are_running: _touch-docker-env
-    # dependencies in the docker-cli file are ignored
-    # here. Instead we explicitly start any dependent services first.
-    docker compose up -d db s3 --wait
-
 _touch-docker-env:
     touch .docker.env
+    touch .env
 
-# helper recipe to ensure a CLI tool is installed.
-# * Accepts multiple names
+# Helper recipe to ensure a Cargo CLI tool is installed.
+# The executable name defaults to the package name, but can be overridden for
+# packages such as `sqlx-cli`, which installs an executable named `sqlx`.
 # * uses `cargo binstall` if it exists.
 #
 # example usage:
 # ```
-# _ensure_mdbook_installed: (_ensure_cargo_installed "mdbook" "mdbook-linkcheck2")
+# _ensure_sqlx_cli_installed: (_ensure_cargo_installed "sqlx-cli" "sqlx")
 # ```
-_ensure_cargo_installed *packages:
+_ensure_cargo_installed package binary=package:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    for package in {{ packages }} ; do
-      if command -v "$package" >/dev/null 2>&1; then
-        continue
-      fi
+    if command -v "{{ binary }}" >/dev/null 2>&1; then
+      exit 0
+    fi
 
-      if command -v cargo-binstall >/dev/null 2>&1; then
-        cargo binstall -y "$package"
-      else
-        cargo install "$package"
-      fi
-    done
+    if command -v cargo-binstall >/dev/null 2>&1; then
+      cargo binstall -y "{{ package }}"
+    else
+      cargo install "{{ package }}"
+    fi
+
+_ensure_db_migrated:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    case "$DOCSRS_CLI_MODE" in
+      local)
+        just sqlx-migrate-run
+        ;;
+      docker)
+        just cli-db-migrate
+        ;;
+      *)
+        echo "Invalid CLI mode: $DOCSRS_CLI_MODE" >&2
+        echo "Expected one of: local, docker" >&2
+        exit 2
+        ;;
+    esac

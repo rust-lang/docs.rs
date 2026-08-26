@@ -35,43 +35,30 @@ jobs:
           git fetch origin
           git rebase origin/main
 
-      - name: install `just`
-        run: sudo snap install --edge --classic just
+      - name: Install development tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,sqlx-cli
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
-      - name: Launch postgres
-        run: |
-          cp .env.sample .env
-          mkdir -p ${DOCSRS_PREFIX}/public-html
-          docker compose up -d db s3
-          # Give the database enough time to start up
-          sleep 5
-          # Make sure the database is actually working
-          psql "${DOCSRS_DATABASE_URL}"
-
-      - name: install SQLX CLI
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: run database migrations
-        run: cargo sqlx migrate run --database-url $DOCSRS_DATABASE_URL
-
       - name: Commit sqlx changes on main branch if any
         id: sqlx_check
         run: |
-          just sqlx-prepare
+          just sqlx-update
           # If there are differences in the SQLX files, then we push them on the main branch
-          if git status --porcelain .sqlx ; then
+          if [ -n "$(git status --porcelain .sqlx)" ]; then
             echo "need_pr=1" >> "$GITHUB_OUTPUT"
           else
             echo "need_pr=0" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Clean up the database
-        run: docker compose down --volumes
+      - name: shut down test environment
+        if: ${{ always() }}
+        run: just compose-down-and-wipe
 
       - name: Open pull request
         if: ${{ steps.sqlx_check.outputs.need_pr == '1' }}
