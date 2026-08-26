@@ -3,15 +3,40 @@
 The local services are defined in the repository's `docker-compose.yml`. The
 `just` recipes wrap common Compose operations, run database migrations when
 needed, and rebuild application images automatically when their inputs change.
-Containerized application builds have less effective incremental caching than
-host builds, so changes to `Cargo.lock` can require a lengthy dependency
-rebuild.
 
 List all available recipes with:
 
 ```console
 $ just --list
 ```
+
+## Build images directly
+
+Docker images are defined in `docker-bake.hcl`. Build one image with its Bake
+target:
+
+```console
+$ docker buildx bake build-server
+```
+
+Build all application images with:
+
+```console
+$ docker buildx bake
+```
+
+The images are loaded into the local Docker daemon. For example, smoke-test the
+build-server image with:
+
+```console
+$ docker run --rm docs-rs-build-server:ci --help
+```
+
+The Docker build stores cargo-chef's compiled dependency baseline in an image
+layer that can be reused by remote builders. Application builds additionally
+share a Cargo target cache local to the Buildx builder, which enables
+incremental rebuilds after source changes. A new Buildx builder starts without
+that local incremental cache.
 
 ## Start services
 
