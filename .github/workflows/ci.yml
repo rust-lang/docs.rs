@@ -112,42 +112,20 @@ jobs:
         with:
           tool: just,fd-find,cargo-machete,cargo-udeps,cargo-sort@2.1.3
 
+      - name: Install actionlint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: linters-${{ env.RUST_CACHE_KEY }}
 
-      - run: |
-          just lint
-          just lint-dependencies-udeps
-
-  lint-js:
-    name: js linters
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: 2.9.5
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-
-      - run: just lint-js
-
-  lint-actions:
-    name: gh actions linters
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      # We check that all github actions workflows have valid syntax
-      - name: Validate YAML file
-        uses: raven-actions/actionlint@v2
-        with:
-          files: .github/workflow/*
-          flags: "-ignore SC2086"  # ignore some shellcheck errors
+      - run: just format
+      - run: just lint
+      - run: just lint-dependencies-udeps

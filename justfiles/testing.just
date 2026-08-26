@@ -68,7 +68,9 @@ _format_markdown mdfile:
       exit 1
     fi
 
-_format_rust:
+# format rust code
+[group('testing')]
+format-rust:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -80,9 +82,7 @@ _format_rust:
       exit 1
     fi
 
-# Format the code using `cargo fmt` and `just --fmt`.
-#
-# Will continue with other formatters when some fail.
+# run all formatters, continue after error
 [group('testing')]
 format:
     #!/usr/bin/env bash
@@ -90,15 +90,25 @@ format:
 
     exit_code=0
 
-    just _format_rust || exit_code=1
+    just format-rust || exit_code=1
+    just format-just || exit_code=1
+    just format-markdown || exit_code=1
+    just format-cargo-toml || exit_code=1
 
+    exit "$exit_code"
+
+# format all justfiles
+[group('testing')]
+format-just:
     fd \
       --type file \
       --threads 1 \
       '^(Justfile|.+\.just)$' . \
       --exec just _format_justfile {} || exit_code=1
 
-    echo "formatting markdown files"
+# format all markdown files we maintain
+[group('testing')]
+format-markdown:
     fd \
       --type file \
       --threads 1 \
@@ -107,8 +117,6 @@ format:
       --exclude 'crates/bin/docs_rs_web/assets/syntaxes/' \
       --exclude 'crates/bin/docs_rs_web/static/' \
       --exec just _format_markdown {} || exit_code=1
-
-    exit "$exit_code"
 
 # run clippy, in our config
 [group('testing')]
@@ -127,22 +135,29 @@ clippy *args:
 clippy-fix:
     just clippy --fix --allow-dirty --allow-staged
 
-# run all linters, for local development & CI
 [group('testing')]
-lint: format lint-dependencies-machete
+lint-rust:
     #!/usr/bin/env bash
     set -euo pipefail
 
     if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-      just sort-cargo-toml --check
       just clippy
     else
-      just sort-cargo-toml
       just clippy-fix
     fi
 
+# run all linters, for local development & CI
 [group('testing')]
-sort-cargo-toml *args:
+lint: lint-rust lint-actions lint-js lint-dependencies-machete
+
+# validate GitHub Actions workflows
+[group('testing')]
+lint-actions:
+    @command -v actionlint >/dev/null || { echo "warning: actionlint not installed, skipping"; exit 0; }
+    actionlint -ignore SC2086
+
+[group('testing')]
+format-cargo-toml *args:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -151,7 +166,12 @@ sort-cargo-toml *args:
       exit 1;
     fi
 
-    cargo sort --workspace {{ args }}
+    # like this we get both the non-zero exit code, and the local code is
+    # formatted.
+    if ! cargo sort --workspace --check {{ args }} >/dev/null; then
+      cargo sort --workspace {{ args }}
+      exit 1
+    fi
 
 [group('testing')]
 lint-dependencies-machete:
