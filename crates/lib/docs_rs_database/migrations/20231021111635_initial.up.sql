@@ -1,15 +1,11 @@
--- generated via: 
+-- generated via:
 -- `pg_dump --schema-only --no-owner cratesfyi`
 --
--- and then manually removing 
+-- and then manually removing
 -- * the `public.` schema references from this file, so it also works for the test setup
 -- * the `SET` settings
 
 CREATE SCHEMA IF NOT EXISTS public;
-
-CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
-COMMENT ON EXTENSION fuzzystrmatch IS 'determine similarities and distance between strings';
-
 
 
 CREATE TYPE feature AS (

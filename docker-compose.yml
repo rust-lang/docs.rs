@@ -225,10 +225,7 @@ services:
             - manual
 
     db:
-        build:
-            context: ./dockerfiles
-            dockerfile: ./Dockerfile-postgres
-            <<: *docker-cache
+        image: postgres:18-alpine
         volumes:
             - postgres-data:/var/lib/postgresql
         environment:
