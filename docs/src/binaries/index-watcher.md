@@ -15,3 +15,17 @@ Depending on the change, we:
 
 The code lives
 [in the `docs_rs_watcher` subcrate](https://github.com/rust-lang/docs.rs/tree/main/crates/bin/docs_rs_watcher).
+
+## Starting position in local development
+
+On its first run, the watcher stores the current HEAD of the registry index as
+its last-seen reference. It therefore watches new changes rather than queuing
+every release already present in the index.
+
+To start from a particular Git reference, set it before starting the watcher:
+
+```console
+$ just cli-queue-reset-last-seen-ref <GIT_REF>
+```
+
+Omit the reference, or pass `--head`, to reset it to the index's current HEAD.

@@ -18,3 +18,11 @@ as the build environment for the crate. If you're missing a system dependency,
 you can add it there.
 
 Also see the [docs.rs build info page](https://docs.rs/about/builds).
+
+The root
+[README](https://github.com/rust-lang/docs.rs#build-documentation-for-a-crate)
+documents building a published release or a local package during development.
+
+Docs.rs invokes rustdoc with its nightly toolchain. See the
+[rustdoc book](https://doc.rust-lang.org/nightly/rustdoc/) for rustdoc-specific
+behavior and options.
