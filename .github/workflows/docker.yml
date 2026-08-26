@@ -10,15 +10,7 @@ on:
 
 jobs:
   docker:
-    strategy:
-      matrix:
-        target: [
-          "web-server",
-          "build-server",
-          "registry-watcher",
-          "cli"
-        ]
-    name: Test docker image builds
+    name: Test Docker images
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,22 +18,30 @@ jobs:
       - name: setup docker buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: build docker image
-        uses: docker/build-push-action@v7
+      - name: build docker images
+        uses: docker/bake-action@v7
         with:
-          context: .
-          file: "./dockerfiles/Dockerfile"
-          platforms: linux/amd64
-          target: ${{ matrix.target }}
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            PROFILE=release
-            PROFILE_DIR=release
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          push: false
+          source: .
+          files: docker-bake.hcl
+          # All targets share a cache scope so their common Dockerfile stages
+          # can be reused across images and CI runs.
+          set: |
+            *.args.GIT_SHA=${{ github.sha }}
+            *.cache-from=type=gha,scope=docs-rs-images
+            *.cache-to=type=gha,mode=max,scope=docs-rs-images
 
-          # TODO: later we would set `push: true` and also provide nice tags
-          # for the images.
-          # Unclear is how the deploy would work then.
+      - name: smoke test packaged binaries
+        run: |
+          set -euo pipefail
+
+          docker buildx bake --file docker-bake.hcl --print |
+            jq -r '
+              . as $bake
+              | $bake.group.default.targets[] as $target
+              | $bake.target[$target].tags[0]
+                // error("Bake target \($target) has no image tag")
+            ' |
+            while IFS= read -r image; do
+              echo "testing $image..."
+              docker run --rm "$image" --help
+            done
