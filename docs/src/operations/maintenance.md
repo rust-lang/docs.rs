@@ -24,6 +24,27 @@ $ docs_rs_admin queue add <CRATE_NAME> <VERSION> --priority <PRIORITY>
 **These days, crate authors can request rebuilds from the crates.io interface,
 so queuing rebuilds like this is more the exception.**
 
+### Manage Default Build Priorities
+
+Default priorities apply to crate names matching a PostgreSQL pattern. Lower
+numbers run first:
+
+```console
+$ docs_rs_admin queue default-priority list
+$ docs_rs_admin queue default-priority get <CRATE_NAME>
+$ docs_rs_admin queue default-priority set 'tokio-%' -5
+$ docs_rs_admin queue default-priority remove 'tokio-%'
+```
+
+Repository-specific overrides match `repositories.name`:
+
+```console
+$ docs_rs_admin queue repository-priority list
+$ docs_rs_admin queue repository-priority get <OWNER/REPOSITORY>
+$ docs_rs_admin queue repository-priority set <OWNER/REPOSITORY> -10
+$ docs_rs_admin queue repository-priority remove <OWNER/REPOSITORY>
+```
+
 ## Pin a Nightly Toolchain
 
 If the latest nightly breaks documentation builds, pin a known-good nightly:
@@ -66,6 +87,33 @@ $ docs_rs_admin database limits set <CRATE_NAME> \
 ```
 
 Use the `get`, `list`, and `remove` subcommands to inspect or remove overrides.
+
+### Update Repository Statistics
+
+Update GitHub and GitLab repository metadata with:
+
+```console
+$ docs_rs_admin database update-repository-fields
+```
+
+Set `DOCSRS_GITHUB_ACCESSTOKEN` to a GitHub access token before running this
+command. `DOCSRS_GITLAB_ACCESSTOKEN` is optional; setting it raises the GitLab
+API rate limit, while leaving it unset uses unauthenticated requests.
+
+### Run or Revert Database Migrations
+
+Apply all pending migrations with:
+
+```console
+$ docs_rs_admin database migrate
+```
+
+Pass a migration version to move the database to that precise version, including
+reverting newer migrations:
+
+```console
+$ docs_rs_admin database migrate <MIGRATION_VERSION>
+```
 
 ### Blacklist a Crate
 
