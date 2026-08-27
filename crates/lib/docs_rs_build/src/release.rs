@@ -1,4 +1,4 @@
-use crate::{BuildEnvironment, ReleaseBuildResult};
+use crate::BuildEnvironment;
 use anyhow::{Context as _, Result};
 use docs_rs_build_limits::Limits;
 use docsrs_metadata::Metadata;
@@ -22,11 +22,6 @@ impl<'release> ReleaseContext<'release> {
     pub fn limits(mut self, limits: Limits) -> Self {
         self.limits = limits;
         self
-    }
-
-    /// Build coverage, rustdoc JSON, and HTML for the environment's target set.
-    pub fn build_targets(self) -> Result<BuildResult<ReleaseBuildResult>> {
-        self.run(|build| build.build_targets())
     }
 
     /// Run selected build operations in one reusable sandbox.
