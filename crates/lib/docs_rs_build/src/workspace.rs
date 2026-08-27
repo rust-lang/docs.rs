@@ -84,7 +84,7 @@ impl BuildEnvironment {
             toolchain,
             cpu_limit: None,
             docker_runtime: DockerRuntime::default(),
-            include_default_targets: true,
+            include_default_targets: false,
         }
     }
 
