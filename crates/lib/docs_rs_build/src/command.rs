@@ -28,6 +28,21 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--extern-html-root-takes-precedence",
 ];
 
+#[derive(Debug)]
+pub enum Emit {
+    HtmlStaticFiles,
+    HtmlNonStaticFiles,
+}
+
+impl Emit {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::HtmlStaticFiles => "html-static-files",
+            Self::HtmlNonStaticFiles => "html-non-static-files",
+        }
+    }
+}
+
 /// Options that vary between invocations of the docs.rs Cargo command.
 #[derive(Clone, Debug, Default)]
 pub struct CommandOptions {
@@ -262,22 +277,20 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Build HTML documentation without emitting shared static files.
     pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
-        self.build_html(target, false)
+        self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
     pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
-        self.build_html(docsrs_metadata::HOST_TARGET, true)
+        self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
     }
 
-    fn build_html(&self, target: &str, emit_static_files: bool) -> StepResult<PathBuf> {
+    fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
-            let emit = if emit_static_files {
-                "--emit=html-static-files"
-            } else {
-                "--emit=html-non-static-files"
-            };
-            let mut rustdoc_args = vec![emit.into()];
-            rustdoc_args.extend(["--resource-suffix".into(), self.resource_suffix.clone()]);
+            let rustdoc_args = vec![
+                format!("--emit={}", emit.as_str()),
+                "--resource-suffix".into(),
+                self.resource_suffix.clone(),
+            ];
 
             self.command(target, CommandOptions { rustdoc_args })
                 .map_err(BuildStepError::Output)?
@@ -289,10 +302,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         })
     }
 
-    fn capture_step<T>(
-        &self,
-        run: impl FnOnce() -> std::result::Result<T, BuildStepError>,
-    ) -> StepResult<T> {
+    fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(self.limits.max_log_size());
         let result = logging::capture(&storage, run);
@@ -323,6 +333,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         .arg("generate-lockfile")
         .run_capture()
         .context("generating a replacement lockfile")?;
+
         Command::new(
             self.environment.workspace(),
             self.environment.configured_toolchain().cargo(),
@@ -331,6 +342,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         .args(["fetch", "--locked"])
         .run_capture()
         .context("fetching dependencies for the replacement lockfile")?;
+
         Ok(())
     }
 
