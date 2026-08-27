@@ -16,6 +16,7 @@ use std::{
     ffi::OsStr,
     fs::{self, File},
     io::{BufRead as _, BufReader},
+    iter,
     path::{Path, PathBuf},
 };
 use tracing::warn;
@@ -100,7 +101,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         );
 
         if uses_build_std(&cargo_args) {
-            self.fetch_build_std_dependencies(&[target])?;
+            self.fetch_build_std_dependencies([target])?;
         } else if !DEFAULT_TARGETS.contains(&target) {
             self.environment
                 .configured_toolchain()
@@ -143,12 +144,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
-    pub(crate) fn fetch_build_std_dependencies(&self, targets: &[&str]) -> Result<()> {
+    pub(crate) fn fetch_build_std_dependencies<'a>(
+        &self,
+        targets: impl IntoIterator<Item = &'a str>,
+    ) -> Result<()> {
         let missing_targets: Vec<_> = {
             let fetched_targets = self.fetched_build_std_targets.borrow();
             targets
-                .iter()
-                .copied()
+                .into_iter()
                 .filter(|target| !fetched_targets.contains(*target))
                 .collect()
         };
@@ -188,10 +191,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .take(self.limits.targets())
             .collect();
 
-        let mut fetch_targets = Vec::with_capacity(1 + other_targets.len());
-        fetch_targets.push(default_target);
-        fetch_targets.extend(other_targets.iter());
-        self.fetch_build_std_dependencies(&fetch_targets)?;
+        self.fetch_build_std_dependencies(iter::once(default_target).chain(other_targets.iter()));
+
         let cargo_metadata = self.load_cargo_metadata()?;
 
         let mut default_target_result = self.build_target(default_target).is_default(true).run()?;
