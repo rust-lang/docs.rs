@@ -13,7 +13,9 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 /// User agent used when the docs.rs build environment accesses remote services.
 pub const DOCS_RS_USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 
-fn resolve_image(name: &str) -> Result<SandboxImage> {
+/// Resolve a sandbox image name, preferring an existing local image and
+/// falling back to a remote image that rustwide will pull when needed.
+pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
     match SandboxImage::local(name) {
         Ok(image) => Ok(image),
         Err(CommandError::SandboxImageMissing(_)) => Ok(SandboxImage::remote(name)?),
@@ -27,7 +29,7 @@ pub struct BuildEnvironment {
     workspace: Option<Workspace>,
     toolchain: Toolchain,
     running_inside_docker: bool,
-    sandbox_image: Option<String>,
+    sandbox_image: Option<SandboxImage>,
     fast_init: bool,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
@@ -63,8 +65,8 @@ impl BuildEnvironment {
     }
 
     /// Override rustwide's sandbox image.
-    pub fn sandbox_image(mut self, image: impl Into<String>) -> Self {
-        self.sandbox_image = Some(image.into());
+    pub fn sandbox_image(mut self, image: SandboxImage) -> Self {
+        self.sandbox_image = Some(image);
         self
     }
 
@@ -79,8 +81,8 @@ impl BuildEnvironment {
         let mut builder = WorkspaceBuilder::new(&self.path, DOCS_RS_USER_AGENT)
             .running_inside_docker(self.running_inside_docker)
             .fast_init(self.fast_init);
-        if let Some(image_name) = &self.sandbox_image {
-            builder = builder.sandbox_image(resolve_image(image_name)?);
+        if let Some(image) = self.sandbox_image.take() {
+            builder = builder.sandbox_image(image);
         }
         self.workspace = Some(builder.init()?);
         Ok(self)
