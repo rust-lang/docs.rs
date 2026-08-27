@@ -6,25 +6,26 @@ use std::time::Duration;
 
 const GB: usize = 1024 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, bon::Builder)]
+#[builder(on(_, into))]
 pub struct Limits {
+    #[builder(default = 3 * GB)]
     pub memory: usize,
+    #[builder(default = crate::DEFAULT_MAX_TARGETS)]
     pub targets: usize,
+    #[builder(default = Duration::from_secs(15 * 60))] // 15 minutes
     pub timeout: Duration,
+    #[builder(default = false)]
     pub networking: bool,
+    #[builder(default = 100usize * 1024)] // 100 KiB
     pub max_log_size: usize,
 }
 
 impl Limits {
-    pub fn new(config: &Config) -> Self {
-        Self {
-            // 3 GB default default
-            memory: config.build_default_memory_limit.unwrap_or(3 * GB),
-            timeout: Duration::from_secs(15 * 60), // 15 minutes
-            targets: crate::DEFAULT_MAX_TARGETS,
-            networking: false,
-            max_log_size: 100 * 1024, // 100 KB
-        }
+    pub fn from_config(config: &Config) -> Self {
+        Self::builder()
+            .maybe_memory(config.build_default_memory_limit)
+            .build()
     }
 
     pub async fn for_crate(
@@ -32,7 +33,7 @@ impl Limits {
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
     ) -> Result<Self> {
-        let default = Self::new(config);
+        let default = Self::from_config(config);
         let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
         Ok(Self {
             memory: overrides

@@ -2032,6 +2032,7 @@ name = "docs_rs_build_limits"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bon",
  "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
