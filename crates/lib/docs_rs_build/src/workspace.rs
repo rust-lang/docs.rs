@@ -31,6 +31,7 @@ pub struct BuildEnvironment {
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
+    // default limits on the builder host.
     default_limits: Limits,
 }
 
