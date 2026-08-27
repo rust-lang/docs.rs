@@ -70,10 +70,10 @@ impl Default for CrateVersion {
     }
 }
 
-impl TryFrom<&crates_index_diff::CrateVersion> for CrateVersion {
+impl TryFrom<crates_index_diff::CrateVersion> for CrateVersion {
     type Error = anyhow::Error;
 
-    fn try_from(value: &crates_index_diff::CrateVersion) -> Result<Self, Self::Error> {
+    fn try_from(value: crates_index_diff::CrateVersion) -> Result<Self, Self::Error> {
         Ok(Self {
             name: value.name.parse()?,
             version: value.version.parse()?,
