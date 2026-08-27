@@ -1,4 +1,6 @@
-use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
+use crate::{
+    ActiveReleaseBuild, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult,
+};
 use anyhow::{Context as _, Result, bail};
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
@@ -35,36 +37,7 @@ pub struct CommandOptions {
     pub rustdoc_args: Vec<String>,
 }
 
-/// One prepared crate release inside an active rustwide build.
-///
-/// This binds metadata and limits once so every target and output-mode command
-/// for the release uses the same configuration.
-pub struct ActiveReleaseBuild<'build, 'ws> {
-    environment: &'build BuildEnvironment,
-    build: &'build Build<'ws>,
-    metadata: Metadata,
-    limits: Limits,
-    resource_suffix: String,
-}
-
 impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
-    pub(crate) fn new(
-        environment: &'build BuildEnvironment,
-        build: &'build Build<'ws>,
-        limits: Limits,
-    ) -> Result<Self> {
-        let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-        let resource_suffix = environment.resource_suffix()?;
-
-        Ok(Self {
-            environment,
-            build,
-            metadata,
-            limits,
-            resource_suffix,
-        })
-    }
-
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
     /// The command runs inside this build's sandbox. Dependencies must be

@@ -1,7 +1,8 @@
-use crate::{ActiveReleaseBuild, BuildEnvironment, ReleaseBuildResult};
+use crate::{BuildEnvironment, ReleaseBuildResult};
 use anyhow::{Context as _, Result};
 use docs_rs_build_limits::Limits;
-use rustwide::{BuildResult, Crate, Workspace};
+use docsrs_metadata::Metadata;
+use rustwide::{Build, BuildResult, Crate, Workspace};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -47,6 +48,34 @@ impl<'release> ReleaseContext<'release> {
             .build(environment.configured_toolchain(), krate, sandbox)
             .run(|build| callback(ActiveReleaseBuild::new(environment, build, limits)?));
         finish_cached_build(environment.workspace(), krate, result)
+    }
+}
+
+/// A prepared release inside an active rustwide sandbox.
+pub struct ActiveReleaseBuild<'build, 'ws> {
+    pub(crate) environment: &'build BuildEnvironment,
+    pub(crate) build: &'build Build<'ws>,
+    pub(crate) metadata: Metadata,
+    pub(crate) limits: Limits,
+    pub(crate) resource_suffix: String,
+}
+
+impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
+    pub(crate) fn new(
+        environment: &'build BuildEnvironment,
+        build: &'build Build<'ws>,
+        limits: Limits,
+    ) -> Result<Self> {
+        let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+        let resource_suffix = environment.resource_suffix()?;
+
+        Ok(Self {
+            environment,
+            build,
+            metadata,
+            limits,
+            resource_suffix,
+        })
     }
 }
 
