@@ -2011,6 +2011,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_build"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_build_limits",
+ "docsrs-metadata",
+ "rustwide",
+]
+
+[[package]]
 name = "docs_rs_build_limits"
 version = "0.0.0"
 dependencies = [
