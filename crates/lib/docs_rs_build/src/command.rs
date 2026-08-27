@@ -130,7 +130,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Targets selected by this release's docs.rs metadata.
-    pub fn targets(&self) -> BuildTargets<'_> {
+    /// Fall back to the default target list, or the host-target.
+    pub fn metadata_targets(&self) -> BuildTargets<'_> {
         self.metadata
             .targets(self.environment.includes_default_targets())
     }
@@ -156,9 +157,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
     pub fn build_docs(self) -> Result<ReleaseBuildResult> {
-        let selected_targets = self.targets();
-        let default_target = selected_targets.default_target;
-        let other_targets: Vec<_> = selected_targets
+        let metadata_targets = self.metadata_targets();
+        let default_target = metadata_targets.default_target;
+        let other_targets: Vec<_> = metadata_targets
             .other_targets
             .into_iter()
             // the default target is already extracted above.
@@ -204,7 +205,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
     pub fn build_target(&self, target: &str) -> Result<TargetBuildResult> {
-        let is_default = target == self.targets().default_target;
+        let is_default = target == self.metadata_targets().default_target;
         self.build_target_inner(target, is_default)
     }
 

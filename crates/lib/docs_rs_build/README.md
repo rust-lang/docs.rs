@@ -28,7 +28,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io("serde", "1.0.219");
     let build = environment
         .release(&krate)
-        .run(|build| build.build_targets())?;
+        .run(|build| build.build_docs())?;
 
     println!("sandbox statistics: {:#?}", build.statistics());
     let release = build.into_inner();
@@ -64,7 +64,7 @@ rustwide build and sandbox:
 #     .build()?;
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {
-    let target = build.targets().default_target.to_owned();
+    let target = build.selected_targets().default_target.to_owned();
     let json = build.build_rustdoc_json(&target);
     let documentation = build.build_documentation(&target);
     Ok((json, documentation))
