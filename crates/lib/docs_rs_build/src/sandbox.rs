@@ -1,10 +1,15 @@
 use anyhow::Context as _;
 use docs_rs_build_limits::Limits;
 use rustwide::{
-    Build, BuildDirectory, BuildResult, Crate, Toolchain, Workspace,
+    Build, BuildResult, Crate, Toolchain, Workspace,
     cmd::{Command, DockerRuntime, SandboxBuilder},
 };
-use std::ops::RangeInclusive;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    ops::RangeInclusive,
+};
+use tracing::warn;
 
 use crate::{ReleaseBuildResult, ReleaseContext, StepResult};
 use std::path::PathBuf;
@@ -92,14 +97,33 @@ impl<'a> BuildEnvironment<'a> {
     /// Build all documentation artifacts for a crate release in one sandbox.
     pub fn build_release(
         &self,
-        build_dir: &mut BuildDirectory,
         krate: &Crate,
         limits: Limits,
     ) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
+        self.with_release(krate, limits, |release| release.build_all_targets())
+    }
+
+    /// Run selected release operations with build-directory and cache cleanup.
+    ///
+    /// The callback receives the active release after rustwide has prepared its
+    /// source and started its reusable sandbox. Every operation invoked on that
+    /// context runs in the same sandbox.
+    pub fn with_release<R>(
+        &self,
+        krate: &Crate,
+        limits: Limits,
+        callback: impl for<'build, 'ws> FnOnce(ReleaseContext<'build, 'a, 'ws>) -> anyhow::Result<R>,
+    ) -> anyhow::Result<BuildResult<R>> {
+        self.workspace.purge_all_build_dirs()?;
+        krate.fetch(self.workspace)?;
+
+        let mut build_dir = self.workspace.build_dir(&build_dir_name(krate));
         let sandbox = self.sandbox(&limits);
-        build_dir
+        let result = build_dir
             .build(self.toolchain, krate, sandbox)
-            .run(|build| self.release(build, limits)?.build_all_targets())
+            .run(|build| callback(self.release(build, limits)?));
+
+        finish_cached_build(self.workspace, krate, result)
     }
 
     /// Build the shared rustdoc static files for this toolchain.
@@ -110,6 +134,7 @@ impl<'a> BuildEnvironment<'a> {
         &self,
         limits: Limits,
     ) -> anyhow::Result<BuildResult<StepResult<PathBuf>>> {
+        self.workspace.purge_all_build_dirs()?;
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         krate.fetch(self.workspace)?;
 
@@ -121,10 +146,7 @@ impl<'a> BuildEnvironment<'a> {
             .build(self.toolchain, &krate, sandbox)
             .run(|build| Ok(self.release(build, limits)?.build_essential_files()));
 
-        krate
-            .purge_from_cache(self.workspace)
-            .context("purging the essential-files dummy crate from rustwide's cache")?;
-        result
+        finish_cached_build(self.workspace, &krate, result)
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
@@ -148,6 +170,32 @@ impl<'a> BuildEnvironment<'a> {
             anyhow::bail!("invalid output returned by `rustc --version`");
         };
         Ok(format!("-{}", parse_rustc_version(version)?))
+    }
+}
+
+fn build_dir_name(krate: &Crate) -> String {
+    let mut hasher = DefaultHasher::new();
+    krate.to_string().hash(&mut hasher);
+    format!("release-{:016x}", hasher.finish())
+}
+
+fn finish_cached_build<T>(
+    workspace: &Workspace,
+    krate: &Crate,
+    result: anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let purge = krate
+        .purge_from_cache(workspace)
+        .context("purging the crate from rustwide's cache");
+
+    match (result, purge) {
+        (Ok(output), Ok(())) => Ok(output),
+        (Ok(_), Err(purge_error)) => Err(purge_error),
+        (Err(build_error), Ok(())) => Err(build_error),
+        (Err(build_error), Err(purge_error)) => {
+            warn!(?purge_error, "failed to purge crate after failed build");
+            Err(build_error)
+        }
     }
 }
 
