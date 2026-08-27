@@ -14,7 +14,11 @@ use docs_rs_context::Context;
 use docs_rs_crates_io::events::{IndexChangeEventV1, IndexChangeV1};
 use docs_rs_types::KrateName;
 use docs_rs_utils::retry_async;
-use std::time::{Duration, Instant};
+use std::{
+    future::Future,
+    pin::Pin,
+    time::{Duration, Instant},
+};
 use tokio::time;
 use tracing::{debug, error, instrument, warn};
 
@@ -39,19 +43,29 @@ const DELAY_BETWEEN_PRIORITY_RECHECK: Duration = Duration::from_secs(60);
 /// Should be longer than the longest time our server takes to handle a message.
 const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(600);
 
-trait SqsActions {
-    async fn delete_message(&self, queue_url: &str, receipt_handle: &str) -> Result<()>;
+trait SqsActions: Sync {
+    fn delete_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 }
 
 impl SqsActions for Client {
-    async fn delete_message(&self, queue_url: &str, receipt_handle: &str) -> Result<()> {
-        self.delete_message()
-            .queue_url(queue_url)
-            .receipt_handle(receipt_handle)
-            .send()
-            .await
-            .context("error deleting SQS message")?;
-        Ok(())
+    fn delete_message<'a>(
+        &'a self,
+        queue_url: &'a str,
+        receipt_handle: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            self.delete_message()
+                .queue_url(queue_url)
+                .receipt_handle(receipt_handle)
+                .send()
+                .await
+                .context("error deleting SQS message")?;
+            Ok(())
+        })
     }
 }
 
@@ -127,7 +141,7 @@ pub(crate) async fn run_sqs_subscriber(
 }
 
 async fn process_messages(
-    client: &impl SqsActions,
+    client: &dyn SqsActions,
     queue_url: &str,
     context: &Context,
     config: &Config,
@@ -285,9 +299,15 @@ mod tests {
     }
 
     impl SqsActions for FakeSqsActions {
-        async fn delete_message(&self, _queue_url: &str, receipt_handle: &str) -> Result<()> {
-            self.deleted.lock().unwrap().push(receipt_handle.into());
-            Ok(())
+        fn delete_message<'a>(
+            &'a self,
+            _queue_url: &'a str,
+            receipt_handle: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            Box::pin(async move {
+                self.deleted.lock().unwrap().push(receipt_handle.into());
+                Ok(())
+            })
         }
     }
 
