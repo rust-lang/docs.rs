@@ -7,7 +7,7 @@ use std::time::Duration;
 const GB: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, bon::Builder)]
-#[builder(on(_, into))]
+#[builder(on(_, into, overwritable))]
 pub struct Limits {
     #[builder(default = 3 * GB)]
     pub memory: usize,
@@ -21,11 +21,17 @@ pub struct Limits {
     pub max_log_size: usize,
 }
 
+use limits_builder::State;
+
+impl<S: State> LimitsBuilder<S> {
+    pub fn load_config(self, config: &Config) -> LimitsBuilder<S> {
+        self.maybe_memory(config.build_default_memory_limit)
+    }
+}
+
 impl Limits {
-    pub fn from_config(config: &Config) -> Self {
-        Self::builder()
-            .maybe_memory(config.build_default_memory_limit)
-            .build()
+    pub fn from_config(config: &Config) -> Limits {
+        Self::builder().load_config(config).build()
     }
 
     pub async fn for_crate(
@@ -33,21 +39,14 @@ impl Limits {
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
     ) -> Result<Self> {
-        let default = Self::from_config(config);
         let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
-        Ok(Self {
-            memory: overrides
-                .memory
-                .unwrap_or(default.memory)
-                .max(default.memory),
-            targets: overrides
-                .targets
-                .or(overrides.timeout.map(|_| 1))
-                .unwrap_or(default.targets),
-            timeout: overrides.timeout.unwrap_or(default.timeout),
-            networking: default.networking,
-            max_log_size: default.max_log_size,
-        })
+
+        Ok(Self::builder()
+            .load_config(config)
+            .maybe_memory(overrides.memory)
+            .maybe_targets(overrides.targets)
+            .maybe_timeout(overrides.timeout)
+            .build())
     }
 
     pub fn memory(&self) -> usize {
@@ -95,7 +94,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         let krate = KrateName::from_static("hexponent");
         // limits work if no crate has limits set
@@ -187,7 +186,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         Overrides::save(
             &mut conn,
