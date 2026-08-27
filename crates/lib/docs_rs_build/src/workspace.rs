@@ -86,7 +86,7 @@ impl BuildEnvironment {
             .run(|build| Ok(build.build_essential_files()))
     }
 
-    pub(crate) fn sandbox(&self, limits: &Limits) -> SandboxBuilder {
+    pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {
         let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking())

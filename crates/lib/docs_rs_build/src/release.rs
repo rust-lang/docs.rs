@@ -1,12 +1,11 @@
 use crate::{BuildEnvironment, ReleaseBuild};
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use docs_rs_build_limits::Limits;
-use rustwide::{BuildResult, Crate, Workspace};
+use rustwide::{BuildResult, Crate};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
-use tracing::warn;
 
 /// A crate release whose build lifecycle is managed by docs.rs.
 pub struct ReleaseContext<'release> {
@@ -38,11 +37,12 @@ impl<'release> ReleaseContext<'release> {
         let limits = limits
             .as_ref()
             .unwrap_or_else(|| environment.default_limits());
-        let sandbox = environment.sandbox(limits);
+        let sandbox = environment.sandbox_builder(limits);
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
-            .run(|build| callback(ReleaseBuild::new(environment, build, limits)?));
-        finish_cached_build(environment.workspace(), krate, result)
+            .run(|build| callback(ReleaseBuild::new(environment, build, limits)?))?;
+        krate.purge_from_cache(environment.workspace())?;
+        Ok(result)
     }
 }
 
@@ -50,19 +50,4 @@ fn build_dir_name(krate: &Crate) -> String {
     let mut hasher = DefaultHasher::new();
     krate.to_string().hash(&mut hasher);
     format!("release-{:016x}", hasher.finish())
-}
-
-fn finish_cached_build<T>(workspace: &Workspace, krate: &Crate, result: Result<T>) -> Result<T> {
-    let purge = krate
-        .purge_from_cache(workspace)
-        .context("purging the crate from rustwide's cache");
-    match (result, purge) {
-        (Ok(output), Ok(())) => Ok(output),
-        (Ok(_), Err(error)) => Err(error),
-        (Err(error), Ok(())) => Err(error),
-        (Err(build_error), Err(purge_error)) => {
-            warn!(?purge_error, "failed to purge crate after failed build");
-            Err(build_error)
-        }
-    }
 }
