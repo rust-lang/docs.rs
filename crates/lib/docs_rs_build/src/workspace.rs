@@ -1,5 +1,5 @@
 use crate::{CpuLimit, ReleaseContext, StepResult};
-use anyhow::Result;
+use anyhow::{Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use rustwide::{
@@ -84,11 +84,9 @@ impl BuildEnvironment {
     }
 
     /// Build the shared rustdoc static files for this toolchain.
-    pub fn build_essential_files(
-        &self,
-        limits: Limits,
-    ) -> anyhow::Result<BuildResult<StepResult<PathBuf>>> {
+    pub fn build_essential_files(&self) -> Result<BuildResult<StepResult<PathBuf>>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
+        let limits = Limits::default();
         self.release(&krate, limits)?
             .run(|build| Ok(build.build_essential_files()))
     }
@@ -121,36 +119,36 @@ impl BuildEnvironment {
         self.include_default_targets
     }
 
-    pub(crate) fn resource_suffix(&self) -> anyhow::Result<String> {
+    pub(crate) fn resource_suffix(&self) -> Result<String> {
         let output = Command::new(self.workspace(), self.toolchain.rustc())
             .arg("--version")
             .log_output(false)
             .run_capture()?;
         let [version] = output.stdout_lines() else {
-            anyhow::bail!("invalid output returned by `rustc --version`");
+            bail!("invalid output returned by `rustc --version`");
         };
         Ok(format!("-{}", parse_rustc_version(version)?))
     }
 }
 
-fn parse_rustc_version(version: &str) -> anyhow::Result<String> {
+fn parse_rustc_version(version: &str) -> Result<String> {
     let mut outer = version.splitn(3, ' ');
     let _binary = outer.next();
     let release = outer
         .next()
-        .ok_or_else(|| anyhow::anyhow!("missing release in rustc version `{version}`"))?;
+        .ok_or_else(|| anyhow!("missing release in rustc version `{version}`"))?;
     let details = outer
         .next()
         .and_then(|value| value.strip_prefix('('))
         .and_then(|value| value.strip_suffix(')'))
-        .ok_or_else(|| anyhow::anyhow!("missing details in rustc version `{version}`"))?;
+        .ok_or_else(|| anyhow!("missing details in rustc version `{version}`"))?;
     let mut details = details.split_whitespace();
     let commit = details
         .next()
-        .ok_or_else(|| anyhow::anyhow!("missing commit in rustc version `{version}`"))?;
+        .ok_or_else(|| anyhow!("missing commit in rustc version `{version}`"))?;
     let date = details
         .next()
-        .ok_or_else(|| anyhow::anyhow!("missing date in rustc version `{version}`"))?;
+        .ok_or_else(|| anyhow!("missing date in rustc version `{version}`"))?;
     Ok(format!("{}-{release}-{commit}", date.replace('-', "")))
 }
 
