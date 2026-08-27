@@ -18,7 +18,7 @@ fn main() -> Result<()> {
 
     let krate = Crate::crates_io(&name, &version);
     let build = environment.release(&krate).run(|build| {
-        let target = build.selected_targets().default_target.to_owned();
+        let target = build.metadata_targets().default_target.to_owned();
 
         // Both commands run in the same prepared rustwide sandbox.
         let rustdoc_json = build.build_rustdoc_json(&target);
