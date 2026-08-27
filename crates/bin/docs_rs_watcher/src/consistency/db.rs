@@ -60,7 +60,10 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection) -> Result<Crates> {
     Ok(crates)
 }
 
-pub(super) async fn load_single(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<Crates> {
+pub(super) async fn load_single(
+    conn: &mut sqlx::PgConnection,
+    name: &KrateName,
+) -> Result<Option<Crate>> {
     let rows = sqlx::query!(
         r#"SELECT version as "version!: Version", yanked
            FROM (
@@ -85,7 +88,7 @@ pub(super) async fn load_single(conn: &mut sqlx::PgConnection, name: &KrateName)
     .await?;
 
     if rows.is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     let mut releases: Releases = rows
@@ -97,10 +100,10 @@ pub(super) async fn load_single(conn: &mut sqlx::PgConnection, name: &KrateName)
         .collect();
     releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
 
-    Ok(vec![Crate {
+    Ok(Some(Crate {
         name: name.clone(),
         releases,
-    }])
+    }))
 }
 
 #[cfg(test)]
@@ -223,8 +226,8 @@ mod tests {
 
         let mut conn = env.async_conn().await?;
         assert_eq!(
-            load_single(&mut conn, &KRATE).await?,
-            vec![Crate {
+            load_single(&mut conn, &KRATE).await?.unwrap(),
+            Crate {
                 name: KRATE,
                 releases: vec![
                     Release {
@@ -236,7 +239,7 @@ mod tests {
                         yanked: None,
                     },
                 ],
-            }]
+            }
         );
 
         Ok(())

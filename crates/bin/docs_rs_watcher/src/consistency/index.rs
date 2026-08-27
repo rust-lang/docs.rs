@@ -63,7 +63,7 @@ pub(super) async fn load(config: &Config) -> Result<Crates> {
     .await
 }
 
-pub(super) async fn load_single(name: &KrateName) -> Result<Crates> {
+pub(super) async fn load_single(name: &KrateName) -> Result<Option<Crate>> {
     let url = sparse_index_url(name);
     let response = reqwest::Client::builder()
         .user_agent(APP_USER_AGENT)
@@ -73,7 +73,7 @@ pub(super) async fn load_single(name: &KrateName) -> Result<Crates> {
         .await?;
 
     if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     let bytes = response.error_for_status()?.bytes().await?;
@@ -94,10 +94,10 @@ pub(super) async fn load_single(name: &KrateName) -> Result<Crates> {
         .collect();
     releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
 
-    Ok(vec![Crate {
+    Ok(Some(Crate {
         name: name.clone(),
         releases,
-    }])
+    }))
 }
 
 fn sparse_index_url(name: &KrateName) -> EscapedURI {
