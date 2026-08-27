@@ -70,24 +70,22 @@ impl BuildEnvironment {
         })
     }
 
-    /// Enter the context of a single crate
+    /// Enter the context of a single releas
     pub fn release<'release>(
         &'release self,
         krate: &'release Crate,
-        limits: Limits,
     ) -> Result<ReleaseContext<'release>> {
         Ok(ReleaseContext {
             environment: self,
             krate,
-            limits,
+            limits: None,
         })
     }
 
     /// Build the shared rustdoc static files for this toolchain.
     pub fn build_essential_files(&self) -> Result<BuildResult<StepResult<PathBuf>>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        let limits = Limits::default();
-        self.release(&krate, limits)?
+        self.release(&krate)?
             .run(|build| Ok(build.build_essential_files()))
     }
 
@@ -117,6 +115,10 @@ impl BuildEnvironment {
 
     pub(crate) fn includes_default_targets(&self) -> bool {
         self.include_default_targets
+    }
+
+    pub(crate) fn default_limits(&self) -> &Limits {
+        &self.default_limits
     }
 
     pub(crate) fn resource_suffix(&self) -> Result<String> {

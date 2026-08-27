@@ -13,13 +13,13 @@ use tracing::warn;
 pub struct ReleaseContext<'release> {
     pub(crate) environment: &'release BuildEnvironment,
     pub(crate) krate: &'release Crate,
-    pub(crate) limits: Limits,
+    pub(crate) limits: Option<Limits>,
 }
 
 impl<'release> ReleaseContext<'release> {
     /// Override the environment's default limits for this release.
     pub fn limits(mut self, limits: Limits) -> Self {
-        self.limits = limits;
+        self.limits = Some(limits);
         self
     }
 
@@ -36,6 +36,7 @@ impl<'release> ReleaseContext<'release> {
         environment.workspace().purge_all_build_dirs()?;
         krate.fetch(environment.workspace())?;
         let mut build_dir = environment.workspace().build_dir(&build_dir_name(krate));
+        let limits = limits.as_ref().unwrap_or(self.environment.default_limits());
         let sandbox = environment.sandbox(&limits);
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
@@ -49,7 +50,7 @@ pub struct ActiveReleaseBuild<'build, 'ws> {
     pub(crate) environment: &'build BuildEnvironment,
     pub(crate) build: &'build Build<'ws>,
     pub(crate) metadata: Metadata,
-    pub(crate) limits: Limits,
+    pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
 }
 
@@ -57,7 +58,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     pub(crate) fn new(
         environment: &'build BuildEnvironment,
         build: &'build Build<'ws>,
-        limits: Limits,
+        limits: &'build Limits,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
         let resource_suffix = environment.resource_suffix()?;
