@@ -197,13 +197,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let cargo_metadata = self.load_cargo_metadata()?;
 
-        let mut default_target_result = self.build_target(default_target).is_default(true).run()?;
-        if !default_target_result.successful()
-            && self.build.host_source_dir().join("Cargo.lock").exists()
-        {
-            self.retry_without_lockfile()?;
-            default_target_result = self.build_target(default_target).is_default(true).run()?;
-        }
+        let default_target_result = self.build_target(default_target).is_default(true).run()?;
 
         let default_has_docs = default_target_result.successful()
             && cargo_metadata.root().library_name().is_some_and(|name| {
@@ -234,10 +228,24 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         #[builder(start_fn)] target: &str,
         is_default: Option<bool>,
+        #[builder(default = false)] retry_without_lockfile: bool,
     ) -> Result<TargetBuildResult> {
         let is_default =
             is_default.unwrap_or_else(|| target == self.metadata_targets().default_target);
+        let mut target_result = self.build_target_once(target, is_default);
 
+        if retry_without_lockfile
+            && !target_result.successful()
+            && self.build.host_source_dir().join("Cargo.lock").exists()
+        {
+            self.regenerate_lockfile()?;
+            target_result = self.build_target_once(target, is_default);
+        }
+
+        Ok(target_result)
+    }
+
+    fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
         let coverage_result = self.build_coverage(target);
@@ -248,13 +256,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             debug_assert!(is_default, "proc macros only support their host target");
         }
 
-        Ok(TargetBuildResult {
+        TargetBuildResult {
             target: target.into(),
             is_default,
             documentation: documentation_result,
             rustdoc_json: rustdoc_json_result,
             coverage: coverage_result,
-        })
+        }
     }
 
     /// Collect documentation coverage for one target.
@@ -352,7 +360,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
     }
 
-    fn retry_without_lockfile(&self) -> Result<()> {
+    fn regenerate_lockfile(&self) -> Result<()> {
         let source_dir = self.build.host_source_dir();
         fs::remove_file(source_dir.join("Cargo.lock"))?;
 
