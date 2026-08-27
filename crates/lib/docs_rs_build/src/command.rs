@@ -1,5 +1,6 @@
 use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 use anyhow::{Context as _, Result, bail};
+use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
@@ -59,6 +60,7 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) resource_suffix: String,
 }
 
+#[bon]
 impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub(crate) fn new(
         environment: &'build BuildEnvironment,
@@ -76,9 +78,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             resource_suffix,
         })
     }
-}
 
-impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
@@ -172,12 +172,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.fetch_build_std_dependencies(&fetch_targets)?;
         let cargo_metadata = self.load_cargo_metadata()?;
 
-        let mut default_target_result = self.build_target_inner(default_target, true)?;
+        let mut default_target_result = self.build_target(default_target).is_default(true).run()?;
         if !default_target_result.successful()
             && self.build.host_source_dir().join("Cargo.lock").exists()
         {
             self.retry_without_lockfile()?;
-            default_target_result = self.build_target_inner(default_target, true)?;
+            default_target_result = self.build_target(default_target).is_default(true).run()?;
         }
 
         let default_has_docs = default_target_result.successful()
@@ -192,7 +192,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         if default_has_docs {
             for target in other_targets {
-                target_results.push(self.build_target_inner(target, false)?);
+                target_results.push(self.build_target(target).target(false).run()?);
             }
         }
 
@@ -204,12 +204,15 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
-    pub fn build_target(&self, target: &str) -> Result<TargetBuildResult> {
-        let is_default = target == self.metadata_targets().default_target;
-        self.build_target_inner(target, is_default)
-    }
+    #[builder(finish_fn(name=run))]
+    pub fn build_target(
+        &self,
+        #[builder(start_fn)] target: &str,
+        is_default: Option<bool>,
+    ) -> Result<TargetBuildResult> {
+        let is_default =
+            is_default.unwrap_or_else(|| target == self.metadata_targets().default_target);
 
-    fn build_target_inner(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
         let coverage_result = self.build_coverage(target);
