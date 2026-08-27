@@ -141,9 +141,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
     pub fn build_targets(self) -> Result<ReleaseBuildResult> {
-        let selected = self
-            .metadata
-            .targets(self.environment.includes_default_targets());
+        let selected = self.targets();
         let default_target = selected.default_target.to_string();
         let other_targets: Vec<_> = selected
             .other_targets
@@ -189,7 +187,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
     pub fn build_target(&self, target: &str) -> Result<TargetBuildResult> {
-        let is_default = target == self.metadata.targets(true).default_target;
+        let is_default = target == self.targets().default_target;
         self.build_target_inner(target, is_default)
     }
 
@@ -225,14 +223,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
             self.command(target, CommandOptions { rustdoc_args })
                 .map_err(BuildStepError::Output)?
-                .process_lines(&mut |line, _| {
-                    if line.starts_with('{') && line.ends_with('}') {
-                        match doc_coverage::parse_line(line) {
-                            Ok(file_coverages) => coverage.extend(file_coverages),
-                            Err(error) => warn!(?error, line, "failed to parse coverage line"),
-                        }
-                    }
-                })
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
@@ -353,9 +343,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         .current_directory(self.build.host_source_dir())
         .log_output(false)
         .run_capture()?;
+
         let [metadata] = output.stdout_lines() else {
             bail!("invalid output returned by `cargo metadata`");
         };
+
         CargoMetadata::load_from_metadata(metadata)
     }
 }
