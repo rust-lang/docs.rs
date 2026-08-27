@@ -1,6 +1,35 @@
 use chrono::{DateTime, Utc};
 use std::fmt;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChangeKind {
+    Added,
+    AddedAndYanked,
+    Unyanked,
+    Yanked,
+    CrateDeleted,
+    VersionDeleted,
+}
+
+impl ChangeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Added => "added",
+            Self::AddedAndYanked => "added_and_yanked",
+            Self::Unyanked => "unyanked",
+            Self::Yanked => "yanked",
+            Self::CrateDeleted => "crate_deleted",
+            Self::VersionDeleted => "version_deleted",
+        }
+    }
+}
+
+impl fmt::Display for ChangeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// A change that can happen to a crate on our index.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
@@ -57,17 +86,41 @@ impl IndexChangeV1 {
             _ => None,
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            IndexChangeV1::Added(crate_version) => &crate_version.name,
+            IndexChangeV1::Unyanked(crate_version) => &crate_version.name,
+            IndexChangeV1::Yanked(crate_version) => &crate_version.name,
+            IndexChangeV1::CrateDeleted { name } => name,
+            IndexChangeV1::VersionDeleted(crate_version) => &crate_version.name,
+        }
+    }
+
+    pub fn version(&self) -> Option<&str> {
+        match self {
+            IndexChangeV1::Added(crate_version) => Some(&crate_version.version),
+            IndexChangeV1::Unyanked(crate_version) => Some(&crate_version.version),
+            IndexChangeV1::Yanked(crate_version) => Some(&crate_version.version),
+            IndexChangeV1::CrateDeleted { .. } => None,
+            IndexChangeV1::VersionDeleted(crate_version) => Some(&crate_version.version),
+        }
+    }
+
+    pub fn kind(&self) -> ChangeKind {
+        match *self {
+            IndexChangeV1::Added(_) => ChangeKind::Added,
+            IndexChangeV1::Yanked(_) => ChangeKind::Yanked,
+            IndexChangeV1::CrateDeleted { .. } => ChangeKind::CrateDeleted,
+            IndexChangeV1::VersionDeleted(_) => ChangeKind::VersionDeleted,
+            IndexChangeV1::Unyanked(_) => ChangeKind::Unyanked,
+        }
+    }
 }
 
 impl fmt::Display for IndexChangeV1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match *self {
-            IndexChangeV1::Added(_) => "added",
-            IndexChangeV1::Yanked(_) => "yanked",
-            IndexChangeV1::CrateDeleted { .. } => "crate deleted",
-            IndexChangeV1::VersionDeleted(_) => "version deleted",
-            IndexChangeV1::Unyanked(_) => "unyanked",
-        })
+        self.kind().fmt(f)
     }
 }
 
