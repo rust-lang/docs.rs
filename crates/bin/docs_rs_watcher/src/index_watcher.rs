@@ -16,7 +16,43 @@ use docs_rs_database::{
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
 use std::time::Instant;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
+
+trait ChangeExt {
+    fn name(&self) -> &str;
+    fn version(&self) -> Option<&str>;
+    fn kind(&self) -> ChangeKind;
+    fn first_crate_version(&self) -> &crates_index_diff::CrateVersion;
+}
+
+impl ChangeExt for Change {
+    fn first_crate_version(&self) -> &crates_index_diff::CrateVersion {
+        self.versions().first().expect("always exists")
+    }
+
+    fn name(&self) -> &str {
+        self.first_crate_version().name.as_str()
+    }
+
+    fn version(&self) -> Option<&str> {
+        if let Change::CrateDeleted { .. } = self {
+            None
+        } else {
+            Some(self.first_crate_version().version.as_str())
+        }
+    }
+
+    fn kind(&self) -> ChangeKind {
+        match *self {
+            Change::Added(_) => ChangeKind::Added,
+            Change::Yanked(_) => ChangeKind::Yanked,
+            Change::CrateDeleted { .. } => ChangeKind::CrateDeleted,
+            Change::VersionDeleted(_) => ChangeKind::VersionDeleted,
+            Change::Unyanked(_) => ChangeKind::Unyanked,
+            Change::AddedAndYanked(_) => ChangeKind::AddedAndYanked,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct CrateVersion {
@@ -151,40 +187,14 @@ async fn process_changes(
 
     for change in changes {
         let start = Instant::now();
-        // temporarily log all changes, so we can compare them with the SQS changes we see.
-        // They share the same log-target, and most tracing fields.
-        let (change_type, crate_name, crate_version) = match change {
-            Change::Added(version) => (
-                ChangeKind::Added,
-                version.name.as_str(),
-                version.version.as_str(),
-            ),
-            Change::AddedAndYanked(version) => (
-                ChangeKind::AddedAndYanked,
-                version.name.as_str(),
-                version.version.as_str(),
-            ),
-            Change::Unyanked(version) => (
-                ChangeKind::Unyanked,
-                version.name.as_str(),
-                version.version.as_str(),
-            ),
-            Change::Yanked(version) => (
-                ChangeKind::Yanked,
-                version.name.as_str(),
-                version.version.as_str(),
-            ),
-            Change::CrateDeleted { name, .. } => (ChangeKind::CrateDeleted, name.as_str(), ""),
-            Change::VersionDeleted(version) => (
-                ChangeKind::VersionDeleted,
-                version.name.as_str(),
-                version.version.as_str(),
-            ),
-        };
+        let crate_name = change.name();
+        let crate_version = change.version();
+        let change_type = change.kind();
+
         debug!(
             target: "docs_rs_watcher::index_event",
             source = %EventSource::Git,
-            change_type = %change_type,
+            %change_type,
             crate_name,
             crate_version,
             "crates.io index event"
@@ -222,16 +232,22 @@ async fn process_changes(
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
+#[instrument(skip_all, fields(name, version))]
 pub(crate) async fn process_change(
     context: &Context,
     change: &Change,
     config: &Config,
 ) -> Result<bool> {
-    let crate_version: CrateVersion = change
-        .versions()
-        .first()
-        .expect("always exists")
-        .try_into()?;
+    // 1: use the `CrateVersion` from `crates-index-diff`.
+    let crate_version = change.first_crate_version();
+
+    // record name & version on the tracing span for performance instrumentation.
+    tracing::Span::current()
+        .record("name", crate_version.name.as_str())
+        .record("version", crate_version.version.as_str());
+
+    // 2: now, convert to our own internal `CrateVersion.`
+    let crate_version: CrateVersion = crate_version.clone().try_into()?;
 
     match change {
         Change::Added(_release) => process_version_added(context, &crate_version).await?,
