@@ -36,7 +36,7 @@ impl<'release> ReleaseContext<'release> {
         let mut build_dir = environment.workspace().build_dir(&build_dir_name(krate));
         let sandbox = environment.sandbox(&limits);
         let result = build_dir
-            .build(environment.toolchain(), krate, sandbox)
+            .build(environment.configured_toolchain(), krate, sandbox)
             .run(|build| callback(ActiveReleaseBuild::new(environment, build, limits)?));
         finish_cached_build(environment.workspace(), krate, result)
     }

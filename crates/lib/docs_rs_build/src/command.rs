@@ -79,7 +79,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
 
         if !DEFAULT_TARGETS.contains(&target) && !uses_build_std(&cargo_args) {
             self.environment
-                .toolchain()
+                .configured_toolchain()
                 .add_target(self.environment.workspace(), target)?;
         }
 
@@ -329,7 +329,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
 
         Command::new(
             self.environment.workspace(),
-            self.environment.toolchain().cargo(),
+            self.environment.configured_toolchain().cargo(),
         )
         .current_directory(&source_dir)
         .arg("generate-lockfile")
@@ -337,7 +337,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
         .context("generating a replacement lockfile")?;
         Command::new(
             self.environment.workspace(),
-            self.environment.toolchain().cargo(),
+            self.environment.configured_toolchain().cargo(),
         )
         .current_directory(source_dir)
         .args(["fetch", "--locked"])
@@ -349,7 +349,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
         let output = Command::new(
             self.environment.workspace(),
-            self.environment.toolchain().cargo(),
+            self.environment.configured_toolchain().cargo(),
         )
         .args(["metadata", "--format-version", "1"])
         .current_directory(self.build.host_source_dir())
