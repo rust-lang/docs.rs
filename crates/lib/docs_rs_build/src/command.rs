@@ -112,8 +112,9 @@ impl<'build, 'env, 'ws> ActiveReleaseBuild<'build, 'env, 'ws> {
     }
 
     /// Targets selected by this release's docs.rs metadata.
-    pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
-        self.metadata.targets(include_default_targets)
+    pub fn targets(&self) -> BuildTargets<'_> {
+        self.metadata
+            .targets(self.environment.includes_default_targets())
     }
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
@@ -141,21 +142,10 @@ impl<'build, 'env, 'ws> ActiveReleaseBuild<'build, 'env, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    /// Build every target explicitly configured by the crate.
-    ///
-    /// This does not add docs.rs's standard target set when the crate has not
-    /// configured targets in its package metadata.
-    pub fn build_configured_targets(self) -> Result<ReleaseBuildResult> {
-        self.build_targets(false)
-    }
-
-    /// Build the full target set used by docs.rs.
-    pub fn build_all_targets(self) -> Result<ReleaseBuildResult> {
-        self.build_targets(true)
-    }
-
-    fn build_targets(self, include_default_targets: bool) -> Result<ReleaseBuildResult> {
-        let selected = self.metadata.targets(include_default_targets);
+    pub(crate) fn build_targets(self) -> Result<ReleaseBuildResult> {
+        let selected = self
+            .metadata
+            .targets(self.environment.includes_default_targets());
         let default_target = selected.default_target.to_string();
         let other_targets: Vec<_> = selected
             .other_targets

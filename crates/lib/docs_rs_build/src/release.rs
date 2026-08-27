@@ -16,14 +16,9 @@ pub struct ReleaseContext<'release, 'env> {
 }
 
 impl<'release, 'env> ReleaseContext<'release, 'env> {
-    /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
-    pub fn build_all_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
-        self.run(|build| build.build_all_targets())
-    }
-
-    /// Build only targets explicitly selected by the crate's docs.rs metadata.
-    pub fn build_configured_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
-        self.run(|build| build.build_configured_targets())
+    /// Build coverage, rustdoc JSON, and HTML for the environment's target set.
+    pub fn build_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
+        self.run(|build| build.build_targets())
     }
 
     /// Run selected build operations in one reusable sandbox.

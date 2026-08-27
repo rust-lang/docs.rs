@@ -66,6 +66,7 @@ pub struct BuildEnvironment<'a> {
     toolchain: &'a Toolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
+    include_default_targets: bool,
 }
 
 impl<'a> BuildEnvironment<'a> {
@@ -76,6 +77,7 @@ impl<'a> BuildEnvironment<'a> {
             toolchain,
             cpu_limit: None,
             docker_runtime: DockerRuntime::default(),
+            include_default_targets: true,
         }
     }
 
@@ -88,6 +90,13 @@ impl<'a> BuildEnvironment<'a> {
     /// Select the Docker runtime used for release sandboxes.
     pub fn docker_runtime(mut self, docker_runtime: DockerRuntime) -> Self {
         self.docker_runtime = docker_runtime;
+        self
+    }
+
+    /// Configure whether crates without an explicit target list are built for
+    /// docs.rs's standard target set in addition to their default target.
+    pub fn include_default_targets(mut self, include: bool) -> Self {
+        self.include_default_targets = include;
         self
     }
 
@@ -136,6 +145,10 @@ impl<'a> BuildEnvironment<'a> {
 
     pub(crate) fn cargo_jobs(&self) -> Option<usize> {
         self.cpu_limit.as_ref().and_then(CpuLimit::cargo_jobs)
+    }
+
+    pub(crate) fn includes_default_targets(&self) -> bool {
+        self.include_default_targets
     }
 
     pub(crate) fn resource_suffix(&self) -> anyhow::Result<String> {
