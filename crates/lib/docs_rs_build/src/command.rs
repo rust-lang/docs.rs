@@ -40,7 +40,7 @@ pub struct CommandOptions {
 ///
 /// This binds metadata and limits once so every target and output-mode command
 /// for the release uses the same configuration.
-pub struct ReleaseContext<'build, 'env, 'ws> {
+pub struct ActiveReleaseBuild<'build, 'env, 'ws> {
     environment: &'build BuildEnvironment<'env>,
     build: &'build Build<'ws>,
     metadata: Metadata,
@@ -48,7 +48,7 @@ pub struct ReleaseContext<'build, 'env, 'ws> {
     resource_suffix: String,
 }
 
-impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
+impl<'build, 'env, 'ws> ActiveReleaseBuild<'build, 'env, 'ws> {
     pub(crate) fn new(
         environment: &'build BuildEnvironment<'env>,
         build: &'build Build<'ws>,

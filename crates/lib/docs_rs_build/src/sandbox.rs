@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use docs_rs_build_limits::Limits;
 use rustwide::{
-    Build, BuildResult, Crate, Toolchain, Workspace,
+    BuildResult, Crate, Toolchain, Workspace,
     cmd::{Command, DockerRuntime, SandboxBuilder},
 };
 use std::{
@@ -11,7 +11,7 @@ use std::{
 };
 use tracing::warn;
 
-use crate::{ReleaseBuildResult, ReleaseContext, StepResult};
+use crate::{ActiveReleaseBuild, ReleaseBuildResult, StepResult};
 use std::path::PathBuf;
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
@@ -43,6 +43,13 @@ pub struct BuildEnvironment<'a> {
     toolchain: &'a Toolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
+}
+
+/// A crate release whose build lifecycle is managed by docs.rs.
+pub struct ReleaseContext<'release, 'env> {
+    environment: &'release BuildEnvironment<'env>,
+    krate: &'release Crate,
+    limits: Limits,
 }
 
 impl<'a> BuildEnvironment<'a> {
@@ -82,48 +89,18 @@ impl<'a> BuildEnvironment<'a> {
         }
     }
 
-    /// Bind prepared crate state to an active rustwide build.
-    ///
-    /// Metadata is loaded after rustwide prepares the source directory, then
-    /// stored here once for all target and output-mode invocations.
-    pub fn release<'build, 'ws>(
-        &'build self,
-        build: &'build Build<'ws>,
+    /// Create a release whose build directory, sandbox, and caches are managed
+    /// by this library.
+    pub fn release<'release>(
+        &'release self,
+        krate: &'release Crate,
         limits: Limits,
-    ) -> anyhow::Result<ReleaseContext<'build, 'a, 'ws>> {
-        ReleaseContext::new(self, build, limits)
-    }
-
-    /// Build all documentation artifacts for a crate release in one sandbox.
-    pub fn build_release(
-        &self,
-        krate: &Crate,
-        limits: Limits,
-    ) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
-        self.with_release(krate, limits, |release| release.build_all_targets())
-    }
-
-    /// Run selected release operations with build-directory and cache cleanup.
-    ///
-    /// The callback receives the active release after rustwide has prepared its
-    /// source and started its reusable sandbox. Every operation invoked on that
-    /// context runs in the same sandbox.
-    pub fn with_release<R>(
-        &self,
-        krate: &Crate,
-        limits: Limits,
-        callback: impl for<'build, 'ws> FnOnce(ReleaseContext<'build, 'a, 'ws>) -> anyhow::Result<R>,
-    ) -> anyhow::Result<BuildResult<R>> {
-        self.workspace.purge_all_build_dirs()?;
-        krate.fetch(self.workspace)?;
-
-        let mut build_dir = self.workspace.build_dir(&build_dir_name(krate));
-        let sandbox = self.sandbox(&limits);
-        let result = build_dir
-            .build(self.toolchain, krate, sandbox)
-            .run(|build| callback(self.release(build, limits)?));
-
-        finish_cached_build(self.workspace, krate, result)
+    ) -> ReleaseContext<'release, 'a> {
+        ReleaseContext {
+            environment: self,
+            krate,
+            limits,
+        }
     }
 
     /// Build the shared rustdoc static files for this toolchain.
@@ -134,19 +111,9 @@ impl<'a> BuildEnvironment<'a> {
         &self,
         limits: Limits,
     ) -> anyhow::Result<BuildResult<StepResult<PathBuf>>> {
-        self.workspace.purge_all_build_dirs()?;
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        krate.fetch(self.workspace)?;
-
-        let sandbox = self.sandbox(&limits);
-        let mut build_dir = self.workspace.build_dir(&format!(
-            "essential-files-{DUMMY_CRATE_NAME}-{DUMMY_CRATE_VERSION}"
-        ));
-        let result = build_dir
-            .build(self.toolchain, &krate, sandbox)
-            .run(|build| Ok(self.release(build, limits)?.build_essential_files()));
-
-        finish_cached_build(self.workspace, &krate, result)
+        self.release(&krate, limits)
+            .run(|build| Ok(build.build_essential_files()))
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
@@ -170,6 +137,46 @@ impl<'a> BuildEnvironment<'a> {
             anyhow::bail!("invalid output returned by `rustc --version`");
         };
         Ok(format!("-{}", parse_rustc_version(version)?))
+    }
+}
+
+impl<'release, 'env> ReleaseContext<'release, 'env> {
+    /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
+    pub fn build_all_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
+        self.run(|build| build.build_all_targets())
+    }
+
+    /// Build only targets explicitly selected by the crate's docs.rs metadata.
+    pub fn build_configured_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
+        self.run(|build| build.build_configured_targets())
+    }
+
+    /// Run selected build operations in one reusable sandbox.
+    ///
+    /// Fetching, build-directory creation, and cache cleanup are handled around
+    /// the callback. The active build exposes the artifact-specific methods.
+    pub fn run<R>(
+        self,
+        callback: impl for<'build, 'ws> FnOnce(
+            ActiveReleaseBuild<'build, 'env, 'ws>,
+        ) -> anyhow::Result<R>,
+    ) -> anyhow::Result<BuildResult<R>> {
+        let Self {
+            environment,
+            krate,
+            limits,
+        } = self;
+
+        environment.workspace.purge_all_build_dirs()?;
+        krate.fetch(environment.workspace)?;
+
+        let mut build_dir = environment.workspace.build_dir(&build_dir_name(krate));
+        let sandbox = environment.sandbox(&limits);
+        let result = build_dir
+            .build(environment.toolchain, krate, sandbox)
+            .run(|build| callback(ActiveReleaseBuild::new(environment, build, limits)?));
+
+        finish_cached_build(environment.workspace, krate, result)
     }
 }
 

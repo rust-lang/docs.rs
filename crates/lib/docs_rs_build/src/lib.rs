@@ -10,7 +10,7 @@ mod result;
 mod sandbox;
 mod workspace;
 
-pub use command::{CommandOptions, DOC_OUTPUT_DIR_NAME, ReleaseContext};
+pub use command::{ActiveReleaseBuild, CommandOptions, DOC_OUTPUT_DIR_NAME};
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
-pub use sandbox::{BuildEnvironment, CpuLimit};
+pub use sandbox::{BuildEnvironment, CpuLimit, ReleaseContext};
 pub use workspace::{DOCS_RS_USER_AGENT, WorkspaceConfig};
