@@ -1,11 +1,12 @@
 use crate::{CpuLimit, ReleaseContext, StepResult};
 use anyhow::Result;
+use bon::bon;
 use docs_rs_build_limits::Limits;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
@@ -25,86 +26,44 @@ pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 pub struct BuildEnvironment {
-    path: PathBuf,
-    workspace: Option<Workspace>,
+    workspace: Workspace,
     toolchain: Toolchain,
-    running_inside_docker: bool,
-    sandbox_image: Option<SandboxImage>,
-    fast_init: bool,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
 }
 
+#[bon]
 impl BuildEnvironment {
-    /// Configure a build environment using nightly and rustwide's default image.
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self {
-            path: path.into(),
-            workspace: None,
-            toolchain: Toolchain::dist("nightly"),
-            running_inside_docker: false,
-            sandbox_image: None,
-            fast_init: false,
-            cpu_limit: None,
-            docker_runtime: DockerRuntime::default(),
-            include_default_targets: true,
-        }
-    }
+    #[builder(
+        on(_, into),
+        finish_fn(name = build),
+    )]
+    pub fn new(
+        #[builder(start_fn)] path: &Path,
+        #[builder(default = Toolchain::dist("nightly"))] toolchain: Toolchain,
+        #[builder(default = false)] running_inside_docker: bool,
+        mut sandbox_image: Option<SandboxImage>,
+        #[builder(default = false)] fast_init: bool,
+        cpu_limit: Option<CpuLimit>,
+        #[builder(default)] docker_runtime: DockerRuntime,
+        #[builder(default = false)] include_default_targets: bool,
+    ) -> Result<Self> {
+        let mut builder = WorkspaceBuilder::new(path, DOCS_RS_USER_AGENT)
+            .running_inside_docker(running_inside_docker)
+            .fast_init(fast_init);
 
-    /// Override the nightly toolchain used by default.
-    pub fn toolchain(mut self, toolchain: Toolchain) -> Self {
-        self.toolchain = toolchain;
-        self
-    }
-
-    /// Enable support for running this build driver inside Docker.
-    pub fn running_inside_docker(mut self, running_inside_docker: bool) -> Self {
-        self.running_inside_docker = running_inside_docker;
-        self
-    }
-
-    /// Override rustwide's sandbox image.
-    pub fn sandbox_image(mut self, image: SandboxImage) -> Self {
-        self.sandbox_image = Some(image);
-        self
-    }
-
-    /// Prefer initialization speed over build performance.
-    pub fn fast_init(mut self, fast_init: bool) -> Self {
-        self.fast_init = fast_init;
-        self
-    }
-
-    /// Initialize and take ownership of the rustwide workspace.
-    pub fn init(mut self) -> Result<Self> {
-        let mut builder = WorkspaceBuilder::new(&self.path, DOCS_RS_USER_AGENT)
-            .running_inside_docker(self.running_inside_docker)
-            .fast_init(self.fast_init);
-        if let Some(image) = self.sandbox_image.take() {
+        if let Some(image) = sandbox_image.take() {
             builder = builder.sandbox_image(image);
         }
-        self.workspace = Some(builder.init()?);
-        Ok(self)
-    }
 
-    /// Apply a CPU restriction to release sandboxes.
-    pub fn cpu_limit(mut self, cpu_limit: Option<CpuLimit>) -> Self {
-        self.cpu_limit = cpu_limit;
-        self
-    }
-
-    /// Select the Docker runtime used for release sandboxes.
-    pub fn docker_runtime(mut self, docker_runtime: DockerRuntime) -> Self {
-        self.docker_runtime = docker_runtime;
-        self
-    }
-
-    /// Configure whether crates without an explicit target list are built for
-    /// docs.rs's standard target set in addition to their default target.
-    pub fn include_default_targets(mut self, include: bool) -> Self {
-        self.include_default_targets = include;
-        self
+        Ok(Self {
+            workspace: builder.init()?,
+            toolchain,
+            cpu_limit,
+            docker_runtime,
+            include_default_targets,
+        })
     }
 
     /// Create a release managed by this environment.
@@ -113,9 +72,6 @@ impl BuildEnvironment {
         krate: &'release Crate,
         limits: Limits,
     ) -> Result<ReleaseContext<'release>> {
-        if self.workspace.is_none() {
-            anyhow::bail!("build environment has not been initialized");
-        }
         Ok(ReleaseContext {
             environment: self,
             krate,
@@ -146,9 +102,7 @@ impl BuildEnvironment {
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
-        self.workspace
-            .as_ref()
-            .expect("release creation checks workspace initialization")
+        &self.workspace
     }
 
     pub(crate) fn configured_toolchain(&self) -> &Toolchain {

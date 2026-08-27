@@ -44,7 +44,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         config: Option<C>,
         registry_api_config: Option<docs_rs_registry_api::Config>,
         storage_config: Option<StorageConfig>,
-        build_queue_config: Option<docs_rs_build_queue::Config>,
+        build_tueue_config: Option<docs_rs_build_queue::Config>,
     ) -> Result<Self> {
         docs_rs_logging::testing::init();
 

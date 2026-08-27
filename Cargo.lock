@@ -2015,6 +2015,7 @@ name = "docs_rs_build"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "bon",
  "docs_rs_build_limits",
  "docs_rs_cargo_metadata",
  "docs_rs_types",
