@@ -9,13 +9,13 @@ use std::{
 use tracing::warn;
 
 /// A crate release whose build lifecycle is managed by docs.rs.
-pub struct ReleaseContext<'release, 'env> {
-    pub(crate) environment: &'release BuildEnvironment<'env>,
+pub struct ReleaseContext<'release> {
+    pub(crate) environment: &'release BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Limits,
 }
 
-impl<'release, 'env> ReleaseContext<'release, 'env> {
+impl<'release> ReleaseContext<'release> {
     /// Build coverage, rustdoc JSON, and HTML for the environment's target set.
     pub fn build_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
         self.run(|build| build.build_targets())
@@ -24,9 +24,7 @@ impl<'release, 'env> ReleaseContext<'release, 'env> {
     /// Run selected build operations in one reusable sandbox.
     pub fn run<R>(
         self,
-        callback: impl for<'build, 'ws> FnOnce(
-            ActiveReleaseBuild<'build, 'env, 'ws>,
-        ) -> anyhow::Result<R>,
+        callback: impl for<'build, 'ws> FnOnce(ActiveReleaseBuild<'build, 'ws>) -> anyhow::Result<R>,
     ) -> anyhow::Result<BuildResult<R>> {
         let Self {
             environment,

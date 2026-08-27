@@ -14,7 +14,6 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 pub const DOCS_RS_USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
 
 /// Configuration for the rustwide workspace used by a docs.rs build.
-#[derive(Clone, Debug)]
 pub struct WorkspaceConfig {
     /// Persistent directory containing rustwide state and caches.
     pub path: PathBuf,
@@ -24,6 +23,7 @@ pub struct WorkspaceConfig {
     pub sandbox_image: Option<String>,
     /// Prefer initialization speed over runtime performance.
     pub fast_init: bool,
+    toolchain: Toolchain,
 }
 
 impl WorkspaceConfig {
@@ -34,11 +34,18 @@ impl WorkspaceConfig {
             running_inside_docker: false,
             sandbox_image: None,
             fast_init: false,
+            toolchain: Toolchain::dist("nightly"),
         }
     }
 
+    /// Override the nightly toolchain used by default.
+    pub fn toolchain(mut self, toolchain: Toolchain) -> Self {
+        self.toolchain = toolchain;
+        self
+    }
+
     /// Initialize the configured rustwide workspace.
-    pub fn init(&self) -> Result<Workspace> {
+    pub fn init(self) -> Result<BuildEnvironment> {
         let mut builder = WorkspaceBuilder::new(&self.path, DOCS_RS_USER_AGENT)
             .running_inside_docker(self.running_inside_docker)
             .fast_init(self.fast_init);
@@ -48,7 +55,7 @@ impl WorkspaceConfig {
             builder = builder.sandbox_image(image);
         }
 
-        builder.init()
+        Ok(BuildEnvironment::new(builder.init()?, self.toolchain))
     }
 }
 
@@ -61,17 +68,17 @@ fn resolve_image(name: &str) -> Result<SandboxImage> {
 }
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
-pub struct BuildEnvironment<'a> {
-    workspace: &'a Workspace,
-    toolchain: &'a Toolchain,
+pub struct BuildEnvironment {
+    workspace: Workspace,
+    toolchain: Toolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
 }
 
-impl<'a> BuildEnvironment<'a> {
+impl BuildEnvironment {
     /// Create an environment using a prepared rustwide workspace and toolchain.
-    pub fn new(workspace: &'a Workspace, toolchain: &'a Toolchain) -> Self {
+    pub fn new(workspace: Workspace, toolchain: Toolchain) -> Self {
         Self {
             workspace,
             toolchain,
@@ -105,7 +112,7 @@ impl<'a> BuildEnvironment<'a> {
         &'release self,
         krate: &'release Crate,
         limits: Limits,
-    ) -> ReleaseContext<'release, 'a> {
+    ) -> ReleaseContext<'release> {
         ReleaseContext {
             environment: self,
             krate,
@@ -136,11 +143,11 @@ impl<'a> BuildEnvironment<'a> {
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
-        self.workspace
+        &self.workspace
     }
 
     pub(crate) fn toolchain(&self) -> &Toolchain {
-        self.toolchain
+        &self.toolchain
     }
 
     pub(crate) fn cargo_jobs(&self) -> Option<usize> {
@@ -152,7 +159,7 @@ impl<'a> BuildEnvironment<'a> {
     }
 
     pub(crate) fn resource_suffix(&self) -> anyhow::Result<String> {
-        let output = Command::new(self.workspace, self.toolchain.rustc())
+        let output = Command::new(&self.workspace, self.toolchain.rustc())
             .arg("--version")
             .log_output(false)
             .run_capture()?;
