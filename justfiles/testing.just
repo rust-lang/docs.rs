@@ -263,4 +263,4 @@ run-builder-tests: _ensure_db_and_s3_are_running _build-test-binaries
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
 
-    cargo nextest run --locked --run-ignored ignored --test-threads=1
+    cargo nextest run --locked --run-ignored=only --test-threads=1
