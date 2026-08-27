@@ -1,10 +1,25 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result, bail};
 use docs_rs_build_limits::Limits;
+use docs_rs_cargo_metadata::CargoMetadata;
+use docs_rs_types::doc_coverage::{self, DocCoverage};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
-use rustwide::{Build, cmd::Command};
-use std::path::PathBuf;
+use rustwide::{
+    Build,
+    cmd::Command,
+    logging::{self, LogStorage},
+};
+use std::{
+    ffi::OsStr,
+    fs::{self, File},
+    io::{BufRead as _, BufReader},
+    path::{Path, PathBuf},
+};
+use tracing::warn;
 
-use crate::BuildEnvironment;
+use crate::{
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, ReleaseOptions, StepResult,
+    TargetBuildResult,
+};
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -121,6 +136,226 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
     pub fn rustwide_build(&self) -> &Build<'ws> {
         self.build
     }
+
+    /// Build coverage, rustdoc JSON, and HTML for every selected target.
+    ///
+    /// All commands execute through the same rustwide build and reusable
+    /// sandbox. Coverage and JSON failures are returned with their individual
+    /// steps and do not prevent the primary HTML build from running.
+    pub fn build(self, mut options: ReleaseOptions) -> Result<ReleaseBuildResult> {
+        if options.resource_suffix.is_empty() {
+            options.resource_suffix = self.environment.resource_suffix()?;
+        }
+
+        let selected = self.metadata.targets(options.include_default_targets);
+        let default_target = selected.default_target.to_string();
+        let other_targets: Vec<_> = selected
+            .other_targets
+            .into_iter()
+            .take(self.limits.targets())
+            .map(str::to_string)
+            .collect();
+
+        let mut fetch_targets = Vec::with_capacity(1 + other_targets.len());
+        fetch_targets.push(default_target.as_str());
+        fetch_targets.extend(other_targets.iter().map(String::as_str));
+        self.fetch_build_std_dependencies(&fetch_targets)?;
+        let cargo_metadata = self.load_cargo_metadata()?;
+
+        let mut default = self.build_target(&default_target, true, &options)?;
+        if !default.successful() && self.build.host_source_dir().join("Cargo.lock").exists() {
+            self.retry_without_lockfile()?;
+            default = self.build_target(&default_target, true, &options)?;
+        }
+
+        let has_docs = default.successful()
+            && cargo_metadata.root().library_name().is_some_and(|name| {
+                default
+                    .documentation
+                    .output
+                    .as_ref()
+                    .is_some_and(|path| path.join(name).is_dir())
+            });
+        let mut targets = vec![default];
+
+        if has_docs {
+            for target in other_targets {
+                targets.push(self.build_target(&target, false, &options)?);
+            }
+        }
+
+        Ok(ReleaseBuildResult {
+            metadata: self.metadata,
+            cargo_metadata,
+            targets,
+        })
+    }
+
+    fn build_target(
+        &self,
+        target: &str,
+        is_default: bool,
+        options: &ReleaseOptions,
+    ) -> Result<TargetBuildResult> {
+        // Coverage must precede the HTML build because Cargo currently clears
+        // rustdoc's target output directory between these invocations.
+        let coverage = options
+            .generate_coverage
+            .then(|| self.build_coverage(target));
+        let rustdoc_json = options
+            .generate_rustdoc_json
+            .then(|| self.build_rustdoc_json(target));
+        let documentation = self.build_documentation(target, options);
+
+        if documentation.successful() && self.metadata.proc_macro {
+            debug_assert!(is_default, "proc macros only support their host target");
+        }
+
+        Ok(TargetBuildResult {
+            target: target.into(),
+            is_default,
+            documentation,
+            rustdoc_json,
+            coverage,
+        })
+    }
+
+    fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
+        self.capture_step(|| {
+            let mut coverage = DocCoverage::default();
+            let rustdoc_args = vec![
+                "--output-format".into(),
+                "json".into(),
+                "--show-coverage".into(),
+            ];
+
+            self.command(target, CommandOptions { rustdoc_args })
+                .map_err(BuildStepError::Output)?
+                .process_lines(&mut |line, _| {
+                    if line.starts_with('{') && line.ends_with('}') {
+                        match doc_coverage::parse_line(line) {
+                            Ok(file_coverages) => coverage.extend(file_coverages),
+                            Err(error) => warn!(?error, line, "failed to parse coverage line"),
+                        }
+                    }
+                })
+                .log_output(true)
+                .run()
+                .map_err(BuildStepError::Command)?;
+
+            let output_dir = self.output_dir(target);
+            if let Ok(path) = find_single_output_file(&output_dir, "json") {
+                let reader = BufReader::new(File::open(path).map_err(anyhow::Error::from)?);
+                for line in reader.lines() {
+                    let line = line.map_err(anyhow::Error::from)?;
+                    match doc_coverage::parse_line(&line) {
+                        Ok(file_coverages) => coverage.extend(file_coverages),
+                        Err(error) => warn!(?error, line, "failed to parse coverage line"),
+                    }
+                }
+            }
+
+            Ok((coverage.total_items != 0 || coverage.documented_items != 0).then_some(coverage))
+        })
+    }
+
+    fn build_rustdoc_json(&self, target: &str) -> StepResult<PathBuf> {
+        self.capture_step(|| {
+            self.command(
+                target,
+                CommandOptions {
+                    rustdoc_args: vec!["--output-format".into(), "json".into()],
+                },
+            )
+            .map_err(BuildStepError::Output)?
+            .run()
+            .map_err(BuildStepError::Command)?;
+
+            find_single_output_file(self.output_dir(target), "json").map_err(BuildStepError::Output)
+        })
+    }
+
+    fn build_documentation(&self, target: &str, options: &ReleaseOptions) -> StepResult<PathBuf> {
+        self.capture_step(|| {
+            let emit = if options.emit_static_files {
+                "--emit=html-static-files"
+            } else {
+                "--emit=html-non-static-files"
+            };
+            let mut rustdoc_args = vec![emit.into()];
+            if !options.resource_suffix.is_empty() {
+                rustdoc_args.extend(["--resource-suffix".into(), options.resource_suffix.clone()]);
+            }
+
+            self.command(target, CommandOptions { rustdoc_args })
+                .map_err(BuildStepError::Output)?
+                .arg("-Zrustdoc-scrape-examples")
+                .run()
+                .map_err(BuildStepError::Command)?;
+
+            Ok(self.output_dir(target))
+        })
+    }
+
+    fn capture_step<T>(
+        &self,
+        run: impl FnOnce() -> std::result::Result<T, BuildStepError>,
+    ) -> StepResult<T> {
+        let mut storage = LogStorage::new(log::LevelFilter::Info);
+        storage.set_max_size(self.limits.max_log_size());
+        let result = logging::capture(&storage, run);
+
+        match result {
+            Ok(output) => StepResult {
+                output: Some(output),
+                error: None,
+                log: storage.to_string(),
+            },
+            Err(error) => StepResult {
+                output: None,
+                error: Some(error),
+                log: storage.to_string(),
+            },
+        }
+    }
+
+    fn retry_without_lockfile(&self) -> Result<()> {
+        let source_dir = self.build.host_source_dir();
+        fs::remove_file(source_dir.join("Cargo.lock"))?;
+
+        Command::new(
+            self.environment.workspace(),
+            self.environment.toolchain().cargo(),
+        )
+        .current_directory(&source_dir)
+        .arg("generate-lockfile")
+        .run_capture()
+        .context("generating a replacement lockfile")?;
+        Command::new(
+            self.environment.workspace(),
+            self.environment.toolchain().cargo(),
+        )
+        .current_directory(source_dir)
+        .args(["fetch", "--locked"])
+        .run_capture()
+        .context("fetching dependencies for the replacement lockfile")?;
+        Ok(())
+    }
+
+    fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
+        let output = Command::new(
+            self.environment.workspace(),
+            self.environment.toolchain().cargo(),
+        )
+        .args(["metadata", "--format-version", "1"])
+        .current_directory(self.build.host_source_dir())
+        .log_output(false)
+        .run_capture()?;
+        let [metadata] = output.stdout_lines() else {
+            bail!("invalid output returned by `cargo metadata`");
+        };
+        CargoMetadata::load_from_metadata(metadata)
+    }
 }
 
 fn cargo_args(
@@ -164,14 +399,72 @@ fn uses_build_std(args: &[String]) -> bool {
     })
 }
 
+fn find_single_output_file(
+    directory: impl AsRef<Path>,
+    extension: impl AsRef<OsStr>,
+) -> Result<PathBuf> {
+    let directory = directory.as_ref();
+    let extension = extension.as_ref();
+    let matches: Vec<_> = fs::read_dir(directory)
+        .with_context(|| format!("reading rustdoc output directory {}", directory.display()))?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            if !entry.file_type().ok()?.is_file() {
+                return None;
+            }
+            let path = entry.path();
+            path.extension()
+                .is_some_and(|actual| actual.eq_ignore_ascii_case(extension))
+                .then_some(path)
+        })
+        .collect();
+
+    if matches.len() != 1 {
+        bail!(
+            "found {} instead of exactly one {} file in {}: {:?}",
+            matches.len(),
+            extension.to_string_lossy(),
+            directory.display(),
+            matches,
+        );
+    }
+
+    Ok(matches.into_iter().next().expect("length checked above"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
 
     #[test]
     fn recognizes_build_std_spellings() {
         assert!(uses_build_std(&["-Zbuild-std=core".into()]));
         assert!(uses_build_std(&["-Z".into(), "build-std".into()]));
         assert!(!uses_build_std(&["-Zunstable-options".into()]));
+    }
+
+    #[test]
+    fn finds_exactly_one_output_file() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        fs::write(directory.path().join("crate.json"), "{}")?;
+        fs::write(directory.path().join("index.html"), "")?;
+
+        assert_eq!(
+            find_single_output_file(directory.path(), OsStr::new("json"))?,
+            directory.path().join("crate.json")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_ambiguous_output_files() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        fs::write(directory.path().join("one.json"), "{}")?;
+        fs::write(directory.path().join("two.json"), "{}")?;
+
+        let error = find_single_output_file(directory.path(), "json").unwrap_err();
+        assert!(error.to_string().contains("found 2 instead of exactly one"));
+        Ok(())
     }
 }

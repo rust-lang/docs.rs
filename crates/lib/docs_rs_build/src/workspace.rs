@@ -43,7 +43,7 @@ impl WorkspaceConfig {
             builder = builder.sandbox_image(image);
         }
 
-        Ok(builder.init()?)
+        builder.init()
     }
 }
 

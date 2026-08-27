@@ -2016,8 +2016,14 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "docs_rs_build_limits",
+ "docs_rs_cargo_metadata",
+ "docs_rs_types",
  "docsrs-metadata",
+ "log",
  "rustwide",
+ "tempfile",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
