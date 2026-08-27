@@ -155,48 +155,50 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    pub fn build_targets(self) -> Result<ReleaseBuildResult> {
-        let selected = self.targets();
-        let default_target = selected.default_target.to_string();
-        let other_targets: Vec<_> = selected
+    pub fn build_docs(self) -> Result<ReleaseBuildResult> {
+        let selected_targets = self.targets();
+        let default_target = selected_targets.default_target;
+        let other_targets: Vec<_> = selected_targets
             .other_targets
             .into_iter()
-            .take(self.limits.targets())
-            .map(str::to_string)
+            // the default target is already extracted above.
+            .take(self.limits.targets() - 1)
             .collect();
 
         let mut fetch_targets = Vec::with_capacity(1 + other_targets.len());
-        fetch_targets.push(default_target.as_str());
-        fetch_targets.extend(other_targets.iter().map(String::as_str));
+        fetch_targets.push(default_target);
+        fetch_targets.extend(other_targets.iter());
         self.fetch_build_std_dependencies(&fetch_targets)?;
         let cargo_metadata = self.load_cargo_metadata()?;
 
-        let mut default = self.build_target_inner(&default_target, true)?;
-        if !default.successful() && self.build.host_source_dir().join("Cargo.lock").exists() {
+        let mut default_target_result = self.build_target_inner(default_target, true)?;
+        if !default_target_result.successful()
+            && self.build.host_source_dir().join("Cargo.lock").exists()
+        {
             self.retry_without_lockfile()?;
-            default = self.build_target_inner(&default_target, true)?;
+            default_target_result = self.build_target_inner(default_target, true)?;
         }
 
-        let has_docs = default.successful()
+        let default_has_docs = default_target_result.successful()
             && cargo_metadata.root().library_name().is_some_and(|name| {
-                default
+                default_target_result
                     .documentation
                     .output
                     .as_ref()
                     .is_some_and(|path| path.join(name).is_dir())
             });
-        let mut targets = vec![default];
+        let mut target_results = vec![default_target_result];
 
-        if has_docs {
+        if default_has_docs {
             for target in other_targets {
-                targets.push(self.build_target_inner(&target, false)?);
+                target_results.push(self.build_target_inner(target, false)?);
             }
         }
 
         Ok(ReleaseBuildResult {
             metadata: self.metadata,
             cargo_metadata,
-            targets,
+            targets: target_results,
         })
     }
 
@@ -209,20 +211,20 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     fn build_target_inner(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage = self.build_coverage(target);
-        let rustdoc_json = self.build_rustdoc_json(target);
-        let documentation = self.build_documentation(target);
+        let coverage_result = self.build_coverage(target);
+        let rustdoc_json_result = self.build_rustdoc_json(target);
+        let documentation_result = self.build_documentation(target);
 
-        if documentation.successful() && self.metadata.proc_macro {
+        if documentation_result.successful() && self.metadata.proc_macro {
             debug_assert!(is_default, "proc macros only support their host target");
         }
 
         Ok(TargetBuildResult {
             target: target.into(),
             is_default,
-            documentation,
-            rustdoc_json,
-            coverage,
+            documentation: documentation_result,
+            rustdoc_json: rustdoc_json_result,
+            coverage: coverage_result,
         })
     }
 
@@ -305,9 +307,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(self.limits.max_log_size());
-        let result = logging::capture(&storage, run);
+        let captured_result = logging::capture(&storage, run);
 
-        match result {
+        match captured_result {
             Ok(output) => StepResult {
                 output: Some(output),
                 error: None,

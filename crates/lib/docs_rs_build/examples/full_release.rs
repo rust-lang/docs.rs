@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io(&name, &version);
     let build = environment
         .release(&krate)
-        .run(|build| build.build_targets())?;
+        .run(|build| build.build_docs())?;
 
     println!("sandbox statistics: {:#?}", build.statistics());
     let release = build.into_inner();
