@@ -1,5 +1,5 @@
 use crate::{ActiveReleaseBuild, BuildEnvironment, ReleaseBuildResult};
-use anyhow::Context as _;
+use anyhow::{Context as _, Result};
 use docs_rs_build_limits::Limits;
 use rustwide::{BuildResult, Crate, Workspace};
 use std::{
@@ -16,16 +16,22 @@ pub struct ReleaseContext<'release> {
 }
 
 impl<'release> ReleaseContext<'release> {
+    /// Override the environment's default limits for this release.
+    pub fn limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
+        self
+    }
+
     /// Build coverage, rustdoc JSON, and HTML for the environment's target set.
-    pub fn build_targets(self) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
+    pub fn build_targets(self) -> Result<BuildResult<ReleaseBuildResult>> {
         self.run(|build| build.build_targets())
     }
 
     /// Run selected build operations in one reusable sandbox.
     pub fn run<R>(
         self,
-        callback: impl for<'build, 'ws> FnOnce(ActiveReleaseBuild<'build, 'ws>) -> anyhow::Result<R>,
-    ) -> anyhow::Result<BuildResult<R>> {
+        callback: impl for<'build, 'ws> FnOnce(ActiveReleaseBuild<'build, 'ws>) -> Result<R>,
+    ) -> Result<BuildResult<R>> {
         let Self {
             environment,
             krate,
@@ -48,11 +54,7 @@ fn build_dir_name(krate: &Crate) -> String {
     format!("release-{:016x}", hasher.finish())
 }
 
-fn finish_cached_build<T>(
-    workspace: &Workspace,
-    krate: &Crate,
-    result: anyhow::Result<T>,
-) -> anyhow::Result<T> {
+fn finish_cached_build<T>(workspace: &Workspace, krate: &Crate, result: Result<T>) -> Result<T> {
     let purge = krate
         .purge_from_cache(workspace)
         .context("purging the crate from rustwide's cache");
