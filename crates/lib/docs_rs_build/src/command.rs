@@ -39,15 +39,16 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
     pub(crate) fn new(
         environment: &'build BuildEnvironment<'env>,
         build: &'build Build<'ws>,
-        metadata: Metadata,
         limits: Limits,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+
+        Ok(Self {
             environment,
             build,
             metadata,
             limits,
-        }
+        })
     }
 
     /// Prepare the Cargo command used by docs.rs for one documentation target.

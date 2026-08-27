@@ -1,5 +1,4 @@
 use docs_rs_build_limits::Limits;
-use docsrs_metadata::Metadata;
 use rustwide::{
     Build, Toolchain, Workspace,
     cmd::{DockerRuntime, SandboxBuilder},
@@ -80,10 +79,9 @@ impl<'a> BuildEnvironment<'a> {
     pub fn release<'build, 'ws>(
         &'build self,
         build: &'build Build<'ws>,
-        metadata: Metadata,
         limits: Limits,
-    ) -> ReleaseContext<'build, 'a, 'ws> {
-        ReleaseContext::new(self, build, metadata, limits)
+    ) -> anyhow::Result<ReleaseContext<'build, 'a, 'ws>> {
+        ReleaseContext::new(self, build, limits)
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
