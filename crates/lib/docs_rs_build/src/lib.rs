@@ -5,13 +5,15 @@
 //! as the build queue, database records, and artifact storage belong in
 //! `docs_rs_builder`, while local and CI frontends can use this crate directly.
 
+mod build;
 mod command;
 mod release;
 mod result;
 mod sandbox;
 mod workspace;
 
-pub use command::{CommandOptions, DOC_OUTPUT_DIR_NAME, DocsRsCommand, ReleaseBuild};
+pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
+pub use command::{CommandOptions, DocsRsCommand};
 pub use release::ReleaseContext;
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 pub use sandbox::CpuLimit;
