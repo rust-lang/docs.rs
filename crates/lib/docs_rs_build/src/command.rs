@@ -162,8 +162,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let other_targets: Vec<_> = metadata_targets
             .other_targets
             .into_iter()
-            // the default target is already extracted above.
-            .take(self.limits.targets() - 1)
+            .take(self.limits.targets())
             .collect();
 
         let mut fetch_targets = Vec::with_capacity(1 + other_targets.len());
