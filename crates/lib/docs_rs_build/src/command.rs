@@ -140,7 +140,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    pub(crate) fn build_targets(self) -> Result<ReleaseBuildResult> {
+    pub fn build_targets(self) -> Result<ReleaseBuildResult> {
         let selected = self
             .metadata
             .targets(self.environment.includes_default_targets());
