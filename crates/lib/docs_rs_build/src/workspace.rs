@@ -153,7 +153,6 @@ fn parse_rustc_version(version: &str) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
 
     #[test]
     fn parses_rustc_resource_version() {
