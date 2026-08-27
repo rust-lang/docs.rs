@@ -1,6 +1,12 @@
 use docs_rs_build_limits::Limits;
-use rustwide::cmd::{DockerRuntime, SandboxBuilder};
+use docsrs_metadata::Metadata;
+use rustwide::{
+    Build, Toolchain, Workspace,
+    cmd::{DockerRuntime, SandboxBuilder},
+};
 use std::ops::RangeInclusive;
+
+use crate::ReleaseContext;
 
 /// CPU restriction applied to the build sandbox.
 #[derive(Clone, Debug, PartialEq)]
@@ -22,37 +28,74 @@ impl CpuLimit {
     }
 }
 
-/// Extension methods for applying docs.rs restrictions to a rustwide sandbox.
-pub trait DocsRsSandboxBuilderExt {
-    /// Apply the limits and runtime configuration used for a docs.rs build.
-    ///
-    /// The builder is returned so callers can compose these settings with
-    /// additional mounts or other rustwide configuration.
-    fn apply_docsrs_limits(
-        self,
-        limits: &Limits,
-        cpu_limit: Option<&CpuLimit>,
-        docker_runtime: DockerRuntime,
-    ) -> Self;
+/// Shared rustwide configuration used to build crate releases.
+pub struct BuildEnvironment<'a> {
+    workspace: &'a Workspace,
+    toolchain: &'a Toolchain,
+    cpu_limit: Option<CpuLimit>,
+    docker_runtime: DockerRuntime,
 }
 
-impl DocsRsSandboxBuilderExt for SandboxBuilder {
-    fn apply_docsrs_limits(
-        self,
-        limits: &Limits,
-        cpu_limit: Option<&CpuLimit>,
-        docker_runtime: DockerRuntime,
-    ) -> Self {
-        let builder = self
+impl<'a> BuildEnvironment<'a> {
+    /// Create an environment using a prepared rustwide workspace and toolchain.
+    pub fn new(workspace: &'a Workspace, toolchain: &'a Toolchain) -> Self {
+        Self {
+            workspace,
+            toolchain,
+            cpu_limit: None,
+            docker_runtime: DockerRuntime::default(),
+        }
+    }
+
+    /// Apply a CPU restriction to release sandboxes.
+    pub fn cpu_limit(mut self, cpu_limit: Option<CpuLimit>) -> Self {
+        self.cpu_limit = cpu_limit;
+        self
+    }
+
+    /// Select the Docker runtime used for release sandboxes.
+    pub fn docker_runtime(mut self, docker_runtime: DockerRuntime) -> Self {
+        self.docker_runtime = docker_runtime;
+        self
+    }
+
+    /// Create the sandbox builder for a release.
+    pub fn sandbox(&self, limits: &Limits) -> SandboxBuilder {
+        let builder = SandboxBuilder::new()
             .memory_limit(Some(limits.memory()))
             .enable_networking(limits.networking())
-            .docker_runtime(docker_runtime);
+            .docker_runtime(self.docker_runtime);
 
-        match cpu_limit {
+        match &self.cpu_limit {
             Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(*limit)),
             Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.clone())),
             None => builder,
         }
+    }
+
+    /// Bind prepared crate state to an active rustwide build.
+    ///
+    /// Metadata is loaded after rustwide prepares the source directory, then
+    /// stored here once for all target and output-mode invocations.
+    pub fn release<'build, 'ws>(
+        &'build self,
+        build: &'build Build<'ws>,
+        metadata: Metadata,
+        limits: Limits,
+    ) -> ReleaseContext<'build, 'a, 'ws> {
+        ReleaseContext::new(self, build, metadata, limits)
+    }
+
+    pub(crate) fn workspace(&self) -> &Workspace {
+        self.workspace
+    }
+
+    pub(crate) fn toolchain(&self) -> &Toolchain {
+        self.toolchain
+    }
+
+    pub(crate) fn cargo_jobs(&self) -> Option<usize> {
+        self.cpu_limit.as_ref().and_then(CpuLimit::cargo_jobs)
     }
 }
 

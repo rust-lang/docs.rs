@@ -1,8 +1,10 @@
 use anyhow::Result;
 use docs_rs_build_limits::Limits;
-use docsrs_metadata::{DEFAULT_TARGETS, Metadata};
-use rustwide::{Build, Toolchain, Workspace, cmd::Command};
+use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
+use rustwide::{Build, cmd::Command};
 use std::path::PathBuf;
+
+use crate::BuildEnvironment;
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -20,87 +22,112 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
 pub struct CommandOptions {
     /// Extra rustdoc flags, such as the HTML or JSON output mode.
     pub rustdoc_args: Vec<String>,
-    /// Cargo job count selected to match the sandbox CPU restriction.
-    pub cargo_jobs: Option<usize>,
 }
 
-/// Shared environment needed to construct docs.rs build commands.
-pub struct BuildContext<'a> {
-    workspace: &'a Workspace,
-    toolchain: &'a Toolchain,
+/// One prepared crate release inside an active rustwide build.
+///
+/// This binds metadata and limits once so every target and output-mode command
+/// for the release uses the same configuration.
+pub struct ReleaseContext<'build, 'env, 'ws> {
+    environment: &'build BuildEnvironment<'env>,
+    build: &'build Build<'ws>,
+    metadata: Metadata,
+    limits: Limits,
 }
 
-impl<'a> BuildContext<'a> {
-    /// Create a build context using a prepared rustwide workspace and toolchain.
-    pub fn new(workspace: &'a Workspace, toolchain: &'a Toolchain) -> Self {
+impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
+    pub(crate) fn new(
+        environment: &'build BuildEnvironment<'env>,
+        build: &'build Build<'ws>,
+        metadata: Metadata,
+        limits: Limits,
+    ) -> Self {
         Self {
-            workspace,
-            toolchain,
+            environment,
+            build,
+            metadata,
+            limits,
         }
     }
-}
 
-/// Docs.rs-specific operations on a rustwide build.
-pub trait DocsRsBuildExt<'ws> {
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
     /// fetched beforehand because docs.rs invokes Cargo in offline mode.
-    fn docsrs_command<'pl>(
-        &self,
-        context: &BuildContext<'_>,
-        target: &str,
-        metadata: &Metadata,
-        limits: &Limits,
-        options: CommandOptions,
-    ) -> Result<Command<'ws, 'pl>>;
-
-    /// Return the host path containing documentation for a target.
-    ///
-    /// Cargo places proc-macro documentation in the host target directory even
-    /// when a target argument is otherwise in use.
-    fn docsrs_output_dir(&self, metadata: &Metadata, target: &str) -> PathBuf;
-}
-
-impl<'ws> DocsRsBuildExt<'ws> for Build<'ws> {
-    fn docsrs_command<'pl>(
-        &self,
-        context: &BuildContext<'_>,
-        target: &str,
-        metadata: &Metadata,
-        limits: &Limits,
-        options: CommandOptions,
-    ) -> Result<Command<'ws, 'pl>> {
-        let cargo_args = cargo_args(target, metadata, options);
+    pub fn command<'pl>(&self, target: &str, options: CommandOptions) -> Result<Command<'ws, 'pl>> {
+        let cargo_args = cargo_args(
+            target,
+            &self.metadata,
+            self.environment.cargo_jobs(),
+            options,
+        );
 
         if !DEFAULT_TARGETS.contains(&target) && !uses_build_std(&cargo_args) {
-            context.toolchain.add_target(context.workspace, target)?;
+            self.environment
+                .toolchain()
+                .add_target(self.environment.workspace(), target)?;
         }
 
         let mut command = self
+            .build
             .cargo()
-            .timeout(Some(limits.timeout()))
+            .timeout(Some(self.limits.timeout()))
             .no_output_timeout(None);
 
-        for (key, value) in metadata.environment_variables() {
+        for (key, value) in self.metadata.environment_variables() {
             command = command.env(key, value);
         }
 
         Ok(command.args(&cargo_args))
     }
 
-    fn docsrs_output_dir(&self, metadata: &Metadata, target: &str) -> PathBuf {
-        if metadata.proc_macro {
-            self.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
+    /// Return the host path containing documentation for a target.
+    ///
+    /// Cargo places proc-macro documentation in the host target directory even
+    /// when a target argument is otherwise in use.
+    pub fn output_dir(&self, target: &str) -> PathBuf {
+        if self.metadata.proc_macro {
+            self.build.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
         } else {
-            self.host_target_dir()
+            self.build
+                .host_target_dir()
                 .join(target)
                 .join(DOC_OUTPUT_DIR_NAME)
         }
     }
+
+    /// Targets selected by this release's docs.rs metadata.
+    pub fn targets(&self, include_default_targets: bool) -> BuildTargets<'_> {
+        self.metadata.targets(include_default_targets)
+    }
+
+    /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
+    pub fn fetch_build_std_dependencies(&self, targets: &[&str]) -> Result<()> {
+        self.build.fetch_build_std_dependencies(targets)
+    }
+
+    /// Metadata parsed from the prepared crate source.
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
+    /// Limits applied to this release.
+    pub fn limits(&self) -> &Limits {
+        &self.limits
+    }
+
+    /// The underlying active rustwide build.
+    pub fn rustwide_build(&self) -> &Build<'ws> {
+        self.build
+    }
 }
 
-fn cargo_args(target: &str, metadata: &Metadata, mut options: CommandOptions) -> Vec<String> {
+fn cargo_args(
+    target: &str,
+    metadata: &Metadata,
+    cargo_jobs: Option<usize>,
+    mut options: CommandOptions,
+) -> Vec<String> {
     let mut additional_args = vec![
         "--offline".into(),
         "-Zunstable-options".into(),
@@ -109,7 +136,7 @@ fn cargo_args(target: &str, metadata: &Metadata, mut options: CommandOptions) ->
         ),
     ];
 
-    if let Some(jobs) = options.cargo_jobs {
+    if let Some(jobs) = cargo_jobs {
         additional_args.push(format!("-j{jobs}"));
     }
 

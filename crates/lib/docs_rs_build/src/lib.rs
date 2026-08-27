@@ -9,6 +9,6 @@ mod command;
 mod sandbox;
 mod workspace;
 
-pub use command::{BuildContext, CommandOptions, DOC_OUTPUT_DIR_NAME, DocsRsBuildExt};
-pub use sandbox::{CpuLimit, DocsRsSandboxBuilderExt};
+pub use command::{CommandOptions, DOC_OUTPUT_DIR_NAME, ReleaseContext};
+pub use sandbox::{BuildEnvironment, CpuLimit};
 pub use workspace::{DOCS_RS_USER_AGENT, WorkspaceConfig};
