@@ -16,10 +16,7 @@ use std::{
 };
 use tracing::warn;
 
-use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, ReleaseOptions, StepResult,
-    TargetBuildResult,
-};
+use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -56,19 +53,16 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         environment: &'build BuildEnvironment<'env>,
         build: &'build Build<'ws>,
         limits: Limits,
-        mut options: ReleaseOptions,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-        if options.resource_suffix.is_empty() {
-            options.resource_suffix = environment.resource_suffix()?;
-        }
+        let resource_suffix = environment.resource_suffix()?;
 
         Ok(Self {
             environment,
             build,
             metadata,
             limits,
-            resource_suffix: options.resource_suffix,
+            resource_suffix,
         })
     }
 

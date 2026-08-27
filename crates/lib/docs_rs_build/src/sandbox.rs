@@ -5,7 +5,7 @@ use rustwide::{
 };
 use std::ops::RangeInclusive;
 
-use crate::{ReleaseBuildResult, ReleaseContext, ReleaseOptions};
+use crate::{ReleaseBuildResult, ReleaseContext};
 
 /// CPU restriction applied to the build sandbox.
 #[derive(Clone, Debug, PartialEq)]
@@ -80,9 +80,8 @@ impl<'a> BuildEnvironment<'a> {
         &'build self,
         build: &'build Build<'ws>,
         limits: Limits,
-        options: ReleaseOptions,
     ) -> anyhow::Result<ReleaseContext<'build, 'a, 'ws>> {
-        ReleaseContext::new(self, build, limits, options)
+        ReleaseContext::new(self, build, limits)
     }
 
     /// Build all documentation artifacts for a crate release in one sandbox.
@@ -91,12 +90,11 @@ impl<'a> BuildEnvironment<'a> {
         build_dir: &mut BuildDirectory,
         krate: &Crate,
         limits: Limits,
-        options: ReleaseOptions,
     ) -> anyhow::Result<BuildResult<ReleaseBuildResult>> {
         let sandbox = self.sandbox(&limits);
         build_dir
             .build(self.toolchain, krate, sandbox)
-            .run(|build| self.release(build, limits, options)?.build_all_targets())
+            .run(|build| self.release(build, limits)?.build_all_targets())
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {

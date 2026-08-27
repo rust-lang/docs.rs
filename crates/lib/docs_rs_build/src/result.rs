@@ -4,15 +4,6 @@ use docsrs_metadata::Metadata;
 use rustwide::cmd::CommandError;
 use std::path::PathBuf;
 
-/// Options controlling the artifacts produced for a release.
-#[derive(Clone, Debug, Default)]
-pub struct ReleaseOptions {
-    /// Rust compiler version suffix used to share rustdoc static assets.
-    ///
-    /// When empty, it is detected from the configured toolchain.
-    pub resource_suffix: String,
-}
-
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildStepError {
