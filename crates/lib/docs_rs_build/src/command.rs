@@ -191,7 +191,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .take(self.limits.targets())
             .collect();
 
-        self.fetch_build_std_dependencies(iter::once(default_target).chain(other_targets.iter()));
+        self.fetch_build_std_dependencies(
+            iter::once(default_target).chain(other_targets.iter().copied()),
+        )?;
 
         let cargo_metadata = self.load_cargo_metadata()?;
 
