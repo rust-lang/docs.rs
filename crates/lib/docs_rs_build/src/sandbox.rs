@@ -11,24 +11,6 @@ pub enum CpuLimit {
     Cores(RangeInclusive<usize>),
 }
 
-/// Construct the sandbox configuration for a docs.rs build.
-pub fn sandbox_builder(
-    limits: &Limits,
-    cpu_limit: Option<&CpuLimit>,
-    docker_runtime: DockerRuntime,
-) -> SandboxBuilder {
-    let builder = SandboxBuilder::new()
-        .memory_limit(Some(limits.memory()))
-        .enable_networking(limits.networking())
-        .docker_runtime(docker_runtime);
-
-    match cpu_limit {
-        Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(*limit)),
-        Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.clone())),
-        None => builder,
-    }
-}
-
 impl CpuLimit {
     /// Number of Cargo jobs matching this CPU restriction, when it is integral.
     pub fn cargo_jobs(&self) -> Option<usize> {
@@ -36,6 +18,40 @@ impl CpuLimit {
             Self::Quota(limit) if limit.fract() == 0.0 && *limit >= 1.0 => Some(*limit as usize),
             Self::Cores(cores) => Some(cores.clone().count()),
             Self::Quota(_) => None,
+        }
+    }
+}
+
+/// Extension methods for applying docs.rs restrictions to a rustwide sandbox.
+pub trait DocsRsSandboxBuilderExt {
+    /// Apply the limits and runtime configuration used for a docs.rs build.
+    ///
+    /// The builder is returned so callers can compose these settings with
+    /// additional mounts or other rustwide configuration.
+    fn apply_docsrs_limits(
+        self,
+        limits: &Limits,
+        cpu_limit: Option<&CpuLimit>,
+        docker_runtime: DockerRuntime,
+    ) -> Self;
+}
+
+impl DocsRsSandboxBuilderExt for SandboxBuilder {
+    fn apply_docsrs_limits(
+        self,
+        limits: &Limits,
+        cpu_limit: Option<&CpuLimit>,
+        docker_runtime: DockerRuntime,
+    ) -> Self {
+        let builder = self
+            .memory_limit(Some(limits.memory()))
+            .enable_networking(limits.networking())
+            .docker_runtime(docker_runtime);
+
+        match cpu_limit {
+            Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(*limit)),
+            Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.clone())),
+            None => builder,
         }
     }
 }

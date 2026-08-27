@@ -2,6 +2,10 @@ use anyhow::Result;
 use docs_rs_build_limits::Limits;
 use docsrs_metadata::{DEFAULT_TARGETS, Metadata};
 use rustwide::{Build, Toolchain, Workspace, cmd::Command};
+use std::path::PathBuf;
+
+/// Name of rustdoc's documentation output directory.
+pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--static-root-path",
@@ -34,14 +38,34 @@ impl<'a> BuildContext<'a> {
             toolchain,
         }
     }
+}
 
+/// Docs.rs-specific operations on a rustwide build.
+pub trait DocsRsBuildExt<'ws> {
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
-    /// The returned command runs inside `build`'s sandbox. Dependencies must be
-    /// fetched before calling it because the command uses Cargo's offline mode.
-    pub fn documentation_command<'ws, 'pl>(
+    /// The command runs inside this build's sandbox. Dependencies must be
+    /// fetched beforehand because docs.rs invokes Cargo in offline mode.
+    fn docsrs_command<'pl>(
         &self,
-        build: &Build<'ws>,
+        context: &BuildContext<'_>,
+        target: &str,
+        metadata: &Metadata,
+        limits: &Limits,
+        options: CommandOptions,
+    ) -> Result<Command<'ws, 'pl>>;
+
+    /// Return the host path containing documentation for a target.
+    ///
+    /// Cargo places proc-macro documentation in the host target directory even
+    /// when a target argument is otherwise in use.
+    fn docsrs_output_dir(&self, metadata: &Metadata, target: &str) -> PathBuf;
+}
+
+impl<'ws> DocsRsBuildExt<'ws> for Build<'ws> {
+    fn docsrs_command<'pl>(
+        &self,
+        context: &BuildContext<'_>,
         target: &str,
         metadata: &Metadata,
         limits: &Limits,
@@ -50,10 +74,10 @@ impl<'a> BuildContext<'a> {
         let cargo_args = cargo_args(target, metadata, options);
 
         if !DEFAULT_TARGETS.contains(&target) && !uses_build_std(&cargo_args) {
-            self.toolchain.add_target(self.workspace, target)?;
+            context.toolchain.add_target(context.workspace, target)?;
         }
 
-        let mut command = build
+        let mut command = self
             .cargo()
             .timeout(Some(limits.timeout()))
             .no_output_timeout(None);
@@ -63,6 +87,16 @@ impl<'a> BuildContext<'a> {
         }
 
         Ok(command.args(&cargo_args))
+    }
+
+    fn docsrs_output_dir(&self, metadata: &Metadata, target: &str) -> PathBuf {
+        if metadata.proc_macro {
+            self.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
+        } else {
+            self.host_target_dir()
+                .join(target)
+                .join(DOC_OUTPUT_DIR_NAME)
+        }
     }
 }
 
