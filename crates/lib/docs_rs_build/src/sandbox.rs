@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use docs_rs_build_limits::Limits;
 use rustwide::{
     Build, BuildDirectory, BuildResult, Crate, Toolchain, Workspace,
@@ -5,7 +6,11 @@ use rustwide::{
 };
 use std::ops::RangeInclusive;
 
-use crate::{ReleaseBuildResult, ReleaseContext};
+use crate::{ReleaseBuildResult, ReleaseContext, StepResult};
+use std::path::PathBuf;
+
+const DUMMY_CRATE_NAME: &str = "empty-library";
+const DUMMY_CRATE_VERSION: &str = "1.0.0";
 
 /// CPU restriction applied to the build sandbox.
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +100,31 @@ impl<'a> BuildEnvironment<'a> {
         build_dir
             .build(self.toolchain, krate, sandbox)
             .run(|build| self.release(build, limits)?.build_all_targets())
+    }
+
+    /// Build the shared rustdoc static files for this toolchain.
+    ///
+    /// Essential files are toolchain-wide and are always built from docs.rs's
+    /// dummy `empty-library` crate for the host target.
+    pub fn build_essential_files(
+        &self,
+        limits: Limits,
+    ) -> anyhow::Result<BuildResult<StepResult<PathBuf>>> {
+        let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
+        krate.fetch(self.workspace)?;
+
+        let sandbox = self.sandbox(&limits);
+        let mut build_dir = self.workspace.build_dir(&format!(
+            "essential-files-{DUMMY_CRATE_NAME}-{DUMMY_CRATE_VERSION}"
+        ));
+        let result = build_dir
+            .build(self.toolchain, &krate, sandbox)
+            .run(|build| Ok(self.release(build, limits)?.build_essential_files()));
+
+        krate
+            .purge_from_cache(self.workspace)
+            .context("purging the essential-files dummy crate from rustwide's cache")?;
+        result
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {

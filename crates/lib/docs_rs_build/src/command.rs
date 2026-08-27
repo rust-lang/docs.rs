@@ -288,9 +288,8 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         self.build_html(target, false)
     }
 
-    /// Build HTML documentation and emit shared rustdoc static files.
-    pub fn build_essential_files(&self, target: &str) -> StepResult<PathBuf> {
-        self.build_html(target, true)
+    pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
+        self.build_html(docsrs_metadata::HOST_TARGET, true)
     }
 
     fn build_html(&self, target: &str, emit_static_files: bool) -> StepResult<PathBuf> {
