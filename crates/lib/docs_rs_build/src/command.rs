@@ -1,11 +1,10 @@
-use crate::{
-    ActiveReleaseBuild, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult,
-};
+use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 use anyhow::{Context as _, Result, bail};
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
+use rustwide::Build;
 use rustwide::{
     cmd::Command,
     logging::{self, LogStorage},
@@ -36,7 +35,35 @@ pub struct CommandOptions {
     pub rustdoc_args: Vec<String>,
 }
 
-impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
+/// A prepared release inside an active rustwide sandbox.
+pub struct ReleaseBuild<'build, 'ws> {
+    pub(crate) environment: &'build BuildEnvironment,
+    pub(crate) build: &'build Build<'ws>,
+    pub(crate) metadata: Metadata,
+    pub(crate) limits: &'build Limits,
+    pub(crate) resource_suffix: String,
+}
+
+impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
+    pub(crate) fn new(
+        environment: &'build BuildEnvironment,
+        build: &'build Build<'ws>,
+        limits: &'build Limits,
+    ) -> Result<Self> {
+        let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+        let resource_suffix = environment.resource_suffix()?;
+
+        Ok(Self {
+            environment,
+            build,
+            metadata,
+            limits,
+            resource_suffix,
+        })
+    }
+}
+
+impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
     /// The command runs inside this build's sandbox. Dependencies must be

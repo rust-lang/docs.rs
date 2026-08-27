@@ -11,8 +11,8 @@ mod result;
 mod sandbox;
 mod workspace;
 
-pub use command::{CommandOptions, DOC_OUTPUT_DIR_NAME};
-pub use release::{ActiveReleaseBuild, ReleaseContext};
+pub use command::{CommandOptions, DOC_OUTPUT_DIR_NAME, ReleaseBuild};
+pub use release::ReleaseContext;
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 pub use sandbox::CpuLimit;
 pub use workspace::{BuildEnvironment, DOCS_RS_USER_AGENT, resolve_sandbox_image};
