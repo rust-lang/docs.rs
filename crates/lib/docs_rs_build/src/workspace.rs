@@ -31,6 +31,7 @@ pub struct BuildEnvironment {
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
+    default_limits: Limits,
 }
 
 #[bon]
@@ -48,6 +49,7 @@ impl BuildEnvironment {
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,
+        #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
         let mut builder = WorkspaceBuilder::new(path, DOCS_RS_USER_AGENT)
             .running_inside_docker(running_inside_docker)
@@ -63,6 +65,7 @@ impl BuildEnvironment {
             cpu_limit,
             docker_runtime,
             include_default_targets,
+            default_limits,
         })
     }
 
