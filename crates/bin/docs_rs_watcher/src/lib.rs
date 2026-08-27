@@ -1,10 +1,14 @@
+#![recursion_limit = "256"]
+
 mod config;
 pub mod consistency;
 mod db;
 mod index;
 pub mod index_watcher;
+mod metrics;
 mod rebuilds;
 mod service_metrics;
+mod subscriber;
 #[cfg(test)]
 mod testing;
 
@@ -13,7 +17,9 @@ pub use db::{delete_crate, delete_version};
 pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
-use crate::{index_watcher::get_new_crates, service_metrics::OtelServiceMetrics};
+use crate::{
+    index_watcher::get_new_crates, metrics::WatcherMetrics, service_metrics::OtelServiceMetrics,
+};
 use anyhow::Result;
 use docs_rs_context::Context;
 use docs_rs_utils::start_async_cron;
@@ -21,10 +27,65 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
 
+/// main index-watcher / subscriber loop.
+/// mostly wraps either the git index watcher loop, or the sqs subscriber loop.
+/// Only here so unexpected errors lead to a sentry report & restart instead of
+/// the daemon / watcher just stopping.
+pub async fn watch(config: &Config, context: &Context) {
+    let metrics = WatcherMetrics::new(context.meter_provider());
+
+    // NOTE: for now we don't have a graceful shutdown.
+    // Since we currently always lock the queue & builds before deploys, that's
+    // not a problem.
+    // But I assume with the new AWS infra we need to solve this at some point so we don't loose
+    // events.
+
+    loop {
+        if config.crates_io_events_active() {
+            if let Err(err) = crate::subscriber::run_sqs_subscriber(config, context, &metrics).await
+            {
+                error!(?err, "unexpected error watching SQS, will retry");
+                time::sleep(Duration::from_secs(10)).await;
+            }
+        } else {
+            // intermediate mode:
+            // - still fetch from git for events
+            // - listen so SQS, and log the events so we can test SQS connection, and compare events
+            //
+            // We don't retry on unespected SQS errors yet.
+
+            let registry_watcher = crate::watch_registry(config, context, &metrics);
+            tokio::pin!(registry_watcher);
+
+            let registry_result = tokio::select! {
+                result = &mut registry_watcher => result,
+                sqs_result = crate::subscriber::run_sqs_subscriber(config, context, &metrics) => {
+                    // Unexpected SQS errors stop the test subscriber, but the registry watcher
+                    // remains the authoritative source and must keep running.
+                    if let Err(err) = sqs_result {
+                        error!(?err, "error setting up SQS test subscriber");
+                    }
+                    registry_watcher.await
+                }
+            };
+
+            if let Err(err) = registry_result {
+                // unexpected index watcher errors lead to a report & retry.
+                error!(?err, "unexpected error watching registry, will retry");
+                time::sleep(Duration::from_secs(10)).await;
+            }
+        }
+    }
+}
+
 /// Run the registry watcher
 /// NOTE: this should only be run once, otherwise crates would be added
 /// to the queue multiple times.
-pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
+async fn watch_registry(
+    config: &Config,
+    context: &Context,
+    metrics: &WatcherMetrics,
+) -> Result<()> {
     let mut last_gc = Instant::now();
 
     let queue = context.build_queue()?;
@@ -36,9 +97,10 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config).await {
+            match get_new_crates(context, &index, config, metrics).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
+                    metrics.record_poll_error(crate::metrics::EventSource::Git);
                     error!(?e, "Failed to get new crates");
                 }
             }
