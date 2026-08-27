@@ -49,7 +49,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,cargo-nextest
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

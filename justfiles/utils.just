@@ -27,6 +27,6 @@ _ensure_cargo_installed *packages:
       if command -v cargo-binstall >/dev/null 2>&1; then
         cargo binstall -y "$package"
       else
-        cargo install "$package"
+        cargo install "$package" --locked
       fi
     done
