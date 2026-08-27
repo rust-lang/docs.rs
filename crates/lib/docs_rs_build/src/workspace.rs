@@ -74,21 +74,20 @@ impl BuildEnvironment {
     pub fn release<'release>(
         &'release self,
         krate: &'release Crate,
-        name: &str,
-        version: &str,
-    ) -> ReleaseContext<'release> {
-        ReleaseContext {
+        limits: Limits,
+    ) -> Result<ReleaseContext<'release>> {
+        Ok(ReleaseContext {
             environment: self,
             krate,
-            limits: self.default_limits.clone(),
-            build_dir_name: crate::release::build_dir_name(krate, name, version),
-        }
+            limits,
+        })
     }
 
     /// Build the shared rustdoc static files for this toolchain.
     pub fn build_essential_files(&self) -> Result<BuildResult<StepResult<PathBuf>>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        self.release(&krate, DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION)
+        let limits = Limits::default();
+        self.release(&krate, limits)?
             .run(|build| Ok(build.build_essential_files()))
     }
 
