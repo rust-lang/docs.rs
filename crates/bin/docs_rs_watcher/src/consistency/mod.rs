@@ -2,6 +2,7 @@ use crate::{Config, db::delete, index_watcher::set_yanked};
 use anyhow::{Context as _, Result};
 use docs_rs_build_queue::PRIORITY_CONSISTENCY_CHECK;
 use docs_rs_context::Context;
+use docs_rs_types::KrateName;
 use itertools::Itertools;
 use tracing::{info, warn};
 
@@ -27,7 +28,7 @@ mod index;
 pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<()> {
     info!("Loading data from database...");
     let mut conn = ctx.pool()?.get_async().await?;
-    let db_data = db::load(&mut conn, ctx.config().build_queue()?)
+    let db_data = db::load(&mut conn)
         .await
         .context("Loading crate data from database for consistency check")?;
 
@@ -38,7 +39,45 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
 
     let diff = diff::calculate_diff(db_data.iter(), index_data.iter());
     let result = handle_diff(config, ctx, diff.iter(), dry_run).await?;
+    print_summary(&diff, &result, dry_run);
 
+    Ok(())
+}
+
+/// Check and resolve index inconsistencies for one crate.
+pub async fn run_single_check(
+    config: &Config,
+    ctx: &Context,
+    name: &KrateName,
+    dry_run: bool,
+) -> Result<()> {
+    info!(%name, "Loading crate data from database...");
+    let mut conn = ctx.pool()?.get_async().await?;
+    let db_data = db::load_single(&mut conn, name)
+        .await
+        .context("Loading crate data from database for consistency check")?;
+
+    info!(%name, "Loading crate data from sparse index...");
+    let index_data = index::load_single(name)
+        .await
+        .context("Loading crate data from sparse index for consistency check")?;
+
+    let diff = diff::calculate_diff(db_data.iter(), index_data.iter());
+    let result = handle_diff(config, ctx, diff.iter(), dry_run).await?;
+    print_summary(&diff, &result, dry_run);
+
+    Ok(())
+}
+
+#[derive(Default)]
+struct HandleResult {
+    builds_queued: u32,
+    crates_deleted: u32,
+    releases_deleted: u32,
+    yanks_corrected: u32,
+}
+
+fn print_summary(diff: &[diff::Difference], result: &HandleResult, dry_run: bool) {
     println!("============");
     println!("SUMMARY");
     println!("============");
@@ -63,16 +102,6 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
     println!("crates deleted:   {:4}", result.crates_deleted);
     println!("releases deleted: {:4}", result.releases_deleted);
     println!("yanks corrected:  {:4}", result.yanks_corrected);
-
-    Ok(())
-}
-
-#[derive(Default)]
-struct HandleResult {
-    builds_queued: u32,
-    crates_deleted: u32,
-    releases_deleted: u32,
-    yanks_corrected: u32,
 }
 
 async fn handle_diff<'a, I>(

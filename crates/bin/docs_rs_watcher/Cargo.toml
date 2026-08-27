@@ -25,11 +25,13 @@ docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_types = { path = "../../lib/docs_rs_types" }
+docs_rs_uri = { path = "../../lib/docs_rs_uri" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
 rayon = "1.6.1"
+reqwest = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -44,6 +46,7 @@ docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 pretty_assertions = { workspace = true }
+test-case = { workspace = true }
 
 [lints]
 workspace = true
