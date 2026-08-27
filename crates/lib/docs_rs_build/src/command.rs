@@ -11,6 +11,8 @@ use rustwide::{
     logging::{self, LogStorage},
 };
 use std::{
+    cell::RefCell,
+    collections::HashSet,
     ffi::OsStr,
     fs::{self, File},
     io::{BufRead as _, BufReader},
@@ -58,6 +60,7 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) metadata: Metadata,
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
+    fetched_build_std_targets: RefCell<HashSet<String>>,
 }
 
 #[bon]
@@ -76,6 +79,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             metadata,
             limits,
             resource_suffix,
+            fetched_build_std_targets: RefCell::new(HashSet::new()),
         })
     }
 
@@ -95,7 +99,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             options,
         );
 
-        if !DEFAULT_TARGETS.contains(&target) && !uses_build_std(&cargo_args) {
+        if uses_build_std(&cargo_args) {
+            self.fetch_build_std_dependencies(&[target])?;
+        } else if !DEFAULT_TARGETS.contains(&target) {
             self.environment
                 .configured_toolchain()
                 .add_target(self.environment.workspace(), target)?;
@@ -138,7 +144,24 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
     pub(crate) fn fetch_build_std_dependencies(&self, targets: &[&str]) -> Result<()> {
-        self.build.fetch_build_std_dependencies(targets)
+        let missing_targets: Vec<_> = {
+            let fetched_targets = self.fetched_build_std_targets.borrow();
+            targets
+                .iter()
+                .copied()
+                .filter(|target| !fetched_targets.contains(*target))
+                .collect()
+        };
+
+        if missing_targets.is_empty() {
+            return Ok(());
+        }
+
+        self.build.fetch_build_std_dependencies(&missing_targets)?;
+        self.fetched_build_std_targets
+            .borrow_mut()
+            .extend(missing_targets.into_iter().map(str::to_owned));
+        Ok(())
     }
 
     /// Metadata parsed from the prepared crate source.
