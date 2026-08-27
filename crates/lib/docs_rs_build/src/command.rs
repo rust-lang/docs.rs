@@ -1,3 +1,4 @@
+use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 use anyhow::{Context as _, Result, bail};
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
@@ -15,8 +16,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use tracing::warn;
-
-use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";

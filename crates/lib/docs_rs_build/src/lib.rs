@@ -6,11 +6,13 @@
 //! `docs_rs_builder`, while local and CI frontends can use this crate directly.
 
 mod command;
+mod release;
 mod result;
 mod sandbox;
 mod workspace;
 
 pub use command::{ActiveReleaseBuild, CommandOptions, DOC_OUTPUT_DIR_NAME};
+pub use release::ReleaseContext;
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
-pub use sandbox::{BuildEnvironment, CpuLimit, ReleaseContext};
-pub use workspace::{DOCS_RS_USER_AGENT, WorkspaceConfig};
+pub use sandbox::CpuLimit;
+pub use workspace::{BuildEnvironment, DOCS_RS_USER_AGENT, WorkspaceConfig};
