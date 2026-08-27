@@ -29,6 +29,12 @@ impl<S: State> LimitsBuilder<S> {
     }
 }
 
+impl Default for Limits {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
 impl Limits {
     pub fn from_config(config: &Config) -> Limits {
         Self::builder().load_config(config).build()
