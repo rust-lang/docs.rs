@@ -230,7 +230,7 @@ _build-test-binaries: _ensure_nextest_installed
     set -euo pipefail
 
     export SQLX_OFFLINE=1
-    RUSTC_WRAPPER= cargo nextest run --no-run --workspace --locked
+    cargo nextest run --no-run --workspace --locked
 
 [group('testing')]
 run-tests: _ensure_db_and_s3_are_running _build-test-binaries
@@ -246,7 +246,7 @@ run-tests: _ensure_db_and_s3_are_running _build-test-binaries
     export AWS_SECRET_ACCESS_KEY=secret_key
     export S3_ENDPOINT=http://localhost:9000
 
-    RUSTC_WRAPPER= cargo nextest run --workspace --locked --no-fail-fast
+    cargo nextest run --workspace --locked --no-fail-fast
 
     # run doctests
     cargo test --doc --workspace --locked
@@ -263,4 +263,4 @@ run-builder-tests: _ensure_db_and_s3_are_running _build-test-binaries
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
 
-    RUSTC_WRAPPER= cargo nextest run --locked --run-ignored ignored --test-threads=1
+    cargo nextest run --locked --run-ignored ignored --test-threads=1
