@@ -182,7 +182,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    pub fn build_docs(self) -> Result<ReleaseBuildResult> {
+    pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
         let other_targets: Vec<_> = metadata_targets
@@ -197,7 +197,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let cargo_metadata = self.load_cargo_metadata()?;
 
-        let default_target_result = self.build_target(default_target).is_default(true).run()?;
+        let default_target_result = self
+            .build_target(default_target)
+            .retry_without_lockfile(true)
+            .run()?;
 
         let default_has_docs = default_target_result.successful()
             && cargo_metadata.root().library_name().is_some_and(|name| {
@@ -207,16 +210,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                     .as_ref()
                     .is_some_and(|path| path.join(name).is_dir())
             });
+
         let mut target_results = vec![default_target_result];
 
         if default_has_docs {
             for target in other_targets {
-                target_results.push(self.build_target(target).is_default(false).run()?);
+                target_results.push(self.build_target(target).run()?);
             }
         }
 
         Ok(ReleaseBuildResult {
-            metadata: self.metadata,
+            metadata: self.metadata.clone(),
             cargo_metadata,
             targets: target_results,
         })
@@ -227,11 +231,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_target(
         &self,
         #[builder(start_fn)] target: &str,
-        is_default: Option<bool>,
         #[builder(default = false)] retry_without_lockfile: bool,
     ) -> Result<TargetBuildResult> {
-        let is_default =
-            is_default.unwrap_or_else(|| target == self.metadata_targets().default_target);
+        let is_default = target == self.metadata_targets().default_target;
         let mut target_result = self.build_target_once(target, is_default);
 
         if retry_without_lockfile
