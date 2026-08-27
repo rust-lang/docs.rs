@@ -135,8 +135,9 @@ async fn process_messages(
     messages: Vec<Message>,
 ) {
     let batch_start = Instant::now();
+    let mut error_logged = false;
 
-    for message in messages {
+    for message in &messages {
         handle_message_body(context, config, metrics, message.body.as_deref()).await;
         if let Some(receipt_handle) = message.receipt_handle.as_deref()
             && let Err(err) = client.delete_message(queue_url, receipt_handle).await
@@ -144,16 +145,17 @@ async fn process_messages(
             error!(?err, receipt_handle, "error deleting message from queue");
         }
 
-        if batch_start.elapsed() >= VISIBILITY_TIMEOUT {
+        if !error_logged && batch_start.elapsed() >= VISIBILITY_TIMEOUT {
             // NOTE: When the message is still in the queue ( not deleted here) after
             // the visibility-timeout is reached, SQS will redeliver it, assuming that
             // something went wrong.
             // So in these cases we'll get duplicate messages.
             error!(
-                ?messages,
-                VISIBILITY_TIMEOUT,
+                messages = ?messages,
+                visibility_timetout = VISIBILITY_TIMEOUT.as_secs_f64(),
                 "handling message batch took longer than the visibility timeout!"
             );
+            error_logged = true;
         }
     }
 }

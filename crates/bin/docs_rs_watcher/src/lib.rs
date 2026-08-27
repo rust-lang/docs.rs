@@ -1,5 +1,3 @@
-#![recursion_limit = "256"]
-
 mod config;
 pub mod consistency;
 mod db;
