@@ -192,7 +192,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         if default_has_docs {
             for target in other_targets {
-                target_results.push(self.build_target(target).target(false).run()?);
+                target_results.push(self.build_target(target).is_default(false).run()?);
             }
         }
 
