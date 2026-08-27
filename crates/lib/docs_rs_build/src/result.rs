@@ -42,10 +42,10 @@ pub struct TargetBuildResult {
     pub is_default: bool,
     /// HTML documentation output directory.
     pub documentation: StepResult<PathBuf>,
-    /// Rustdoc JSON file, when requested and produced.
-    pub rustdoc_json: Option<StepResult<PathBuf>>,
-    /// Documentation coverage, when requested.
-    pub coverage: Option<StepResult<Option<DocCoverage>>>,
+    /// Rustdoc JSON build result.
+    pub rustdoc_json: StepResult<PathBuf>,
+    /// Documentation coverage build result.
+    pub coverage: StepResult<Option<DocCoverage>>,
 }
 
 impl TargetBuildResult {

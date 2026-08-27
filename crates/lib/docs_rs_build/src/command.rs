@@ -7,7 +7,6 @@ use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
 use rustwide::{
-    Build,
     cmd::Command,
     logging::{self, LogStorage},
 };
@@ -42,7 +41,11 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
     /// fetched beforehand because docs.rs invokes Cargo in offline mode.
-    pub fn command<'pl>(&self, target: &str, options: CommandOptions) -> Result<Command<'ws, 'pl>> {
+    pub(crate) fn command<'pl>(
+        &self,
+        target: &str,
+        options: CommandOptions,
+    ) -> Result<Command<'ws, 'pl>> {
         let cargo_args = cargo_args(
             target,
             &self.metadata,
@@ -91,7 +94,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     }
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
-    pub fn fetch_build_std_dependencies(&self, targets: &[&str]) -> Result<()> {
+    pub(crate) fn fetch_build_std_dependencies(&self, targets: &[&str]) -> Result<()> {
         self.build.fetch_build_std_dependencies(targets)
     }
 
@@ -103,11 +106,6 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     /// Limits applied to this release.
     pub fn limits(&self) -> &Limits {
         self.limits
-    }
-
-    /// The underlying active rustwide build.
-    pub fn rustwide_build(&self) -> &Build<'ws> {
-        self.build
     }
 
     /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
@@ -171,8 +169,8 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
     fn build_target_inner(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage = Some(self.build_coverage(target));
-        let rustdoc_json = Some(self.build_rustdoc_json(target));
+        let coverage = self.build_coverage(target);
+        let rustdoc_json = self.build_rustdoc_json(target);
         let documentation = self.build_documentation(target);
 
         if documentation.successful() && self.metadata.proc_macro {
