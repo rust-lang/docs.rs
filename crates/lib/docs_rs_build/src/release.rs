@@ -13,6 +13,7 @@ pub struct ReleaseContext<'release> {
     pub(crate) environment: &'release BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Limits,
+    pub(crate) build_dir_name: String,
 }
 
 impl<'release> ReleaseContext<'release> {
@@ -36,10 +37,11 @@ impl<'release> ReleaseContext<'release> {
             environment,
             krate,
             limits,
+            build_dir_name,
         } = self;
         environment.workspace().purge_all_build_dirs()?;
         krate.fetch(environment.workspace())?;
-        let mut build_dir = environment.workspace().build_dir(&build_dir_name(krate));
+        let mut build_dir = environment.workspace().build_dir(&build_dir_name);
         let sandbox = environment.sandbox(&limits);
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
@@ -48,10 +50,28 @@ impl<'release> ReleaseContext<'release> {
     }
 }
 
-fn build_dir_name(krate: &Crate) -> String {
+pub(crate) fn build_dir_name(krate: &Crate, name: &str, version: &str) -> String {
     let mut hasher = DefaultHasher::new();
     krate.to_string().hash(&mut hasher);
-    format!("release-{:016x}", hasher.finish())
+    format!(
+        "{}-{}-{:016x}",
+        safe_path_component(name),
+        safe_path_component(version),
+        hasher.finish()
+    )
+}
+
+fn safe_path_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | '+') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 fn finish_cached_build<T>(workspace: &Workspace, krate: &Crate, result: Result<T>) -> Result<T> {
