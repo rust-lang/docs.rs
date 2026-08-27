@@ -10,31 +10,22 @@ use docs_rs_types::doc_coverage::{self, DocCoverage};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
 use rustwide::Build;
 use rustwide::{
-    cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput},
+    cmd::Command,
     logging::{self, LogStorage},
 };
 use std::{
     cell::RefCell,
     collections::HashSet,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fs::{self, File},
     io::{BufRead as _, BufReader},
     iter,
     path::{Path, PathBuf},
-    time::Duration,
 };
 use tracing::warn;
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
-
-const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
-    "--static-root-path",
-    "/-/rustdoc.static/",
-    "--cap-lints",
-    "warn",
-    "--extern-html-root-takes-precedence",
-];
 
 #[derive(Debug)]
 pub enum Emit {
@@ -90,32 +81,33 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         target: &str,
         options: CommandOptions,
     ) -> Result<DocsRsCommand<'ws, 'static>> {
-        let cargo_args = cargo_args(
-            target,
-            &self.metadata,
-            self.environment.cargo_jobs(),
-            options,
-        );
+        todo!();
+        // let cargo_args = cargo_args(
+        //     target,
+        //     &self.metadata,
+        //     self.environment.cargo_jobs(),
+        //     options,
+        // );
 
-        if uses_build_std(&cargo_args) {
-            self.fetch_build_std_dependencies([target])?;
-        } else if !DEFAULT_TARGETS.contains(&target) {
-            self.environment
-                .configured_toolchain()
-                .add_target(self.environment.workspace(), target)?;
-        }
+        // if uses_build_std(&cargo_args) {
+        //     self.fetch_build_std_dependencies([target])?;
+        // } else if !DEFAULT_TARGETS.contains(&target) {
+        //     self.environment
+        //         .configured_toolchain()
+        //         .add_target(self.environment.workspace(), target)?;
+        // }
 
-        let mut command = self
-            .build
-            .cargo()
-            .timeout(Some(self.limits.timeout()))
-            .no_output_timeout(None);
+        // let mut command = self
+        //     .build
+        //     .cargo()
+        //     .timeout(Some(self.limits.timeout()))
+        //     .no_output_timeout(None);
 
-        for (key, value) in self.metadata.environment_variables() {
-            command = command.env(key, value);
-        }
+        // for (key, value) in self.metadata.environment_variables() {
+        //     command = command.env(key, value);
+        // }
 
-        Ok(DocsRsCommand::new(command.args(&cargo_args)))
+        // Ok(DocsRsCommand::new(command.args(&cargo_args)))
     }
 
     /// Return the host path containing documentation for a target.
@@ -414,40 +406,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         CargoMetadata::load_from_metadata(metadata)
     }
 }
-
-fn cargo_args(
-    target: &str,
-    metadata: &Metadata,
-    cargo_jobs: Option<usize>,
-    mut options: CommandOptions,
-) -> Vec<String> {
-    let mut additional_args = vec![
-        "--offline".into(),
-        "-Zunstable-options".into(),
-        format!(
-            r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
-        ),
-    ];
-
-    if let Some(jobs) = cargo_jobs {
-        additional_args.push(format!("-j{jobs}"));
-    }
-
-    // Cargo puts proc-macro documentation in the host target directory and
-    // does not reliably forward RUSTDOCFLAGS when --target is supplied.
-    if !metadata.proc_macro {
-        additional_args.push("--target".into());
-        additional_args.push(target.into());
-    }
-
-    additional_args.append(&mut options.cargo_args);
-
-    options
-        .rustdoc_args
-        .extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
-    metadata.cargo_args(&additional_args, &options.rustdoc_args)
-}
-
 fn uses_build_std(args: &[String]) -> bool {
     args.iter().enumerate().any(|(index, arg)| {
         arg.starts_with("-Zbuild-std")

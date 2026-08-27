@@ -1,26 +1,15 @@
-use crate::{BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
-use anyhow::{Context as _, Result, bail};
-use bon::bon;
-use docs_rs_build_limits::Limits;
-use docs_rs_cargo_metadata::CargoMetadata;
-use docs_rs_types::doc_coverage::{self, DocCoverage};
+use anyhow::Result;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
-use rustwide::Build;
-use rustwide::{
-    cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput},
-    logging::{self, LogStorage},
-};
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    ffi::{OsStr, OsString},
-    fs::{self, File},
-    io::{BufRead as _, BufReader},
-    iter,
-    path::{Path, PathBuf},
-    time::Duration,
-};
-use tracing::warn;
+use rustwide::cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput};
+use std::{ffi::OsString, path::PathBuf, time::Duration};
+
+const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
+    "--static-root-path",
+    "/-/rustdoc.static/",
+    "--cap-lints",
+    "warn",
+    "--extern-html-root-takes-precedence",
+];
 
 /// Options that vary between invocations of the docs.rs Cargo command.
 #[derive(Clone, Debug, Default)]
@@ -118,4 +107,37 @@ impl<'ws> DocsRsCommand<'ws, 'static> {
     ) -> DocsRsCommand<'ws, 'pl> {
         DocsRsCommand::new(self.inner.process_lines(callback))
     }
+}
+
+fn cargo_args(
+    target: &str,
+    metadata: &Metadata,
+    cargo_jobs: Option<usize>,
+    mut options: CommandOptions,
+) -> Vec<String> {
+    let mut additional_args = vec![
+        "--offline".into(),
+        "-Zunstable-options".into(),
+        format!(
+            r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
+        ),
+    ];
+
+    if let Some(jobs) = cargo_jobs {
+        additional_args.push(format!("-j{jobs}"));
+    }
+
+    // Cargo puts proc-macro documentation in the host target directory and
+    // does not reliably forward RUSTDOCFLAGS when --target is supplied.
+    if !metadata.proc_macro {
+        additional_args.push("--target".into());
+        additional_args.push(target.into());
+    }
+
+    additional_args.append(&mut options.cargo_args);
+
+    options
+        .rustdoc_args
+        .extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
+    metadata.cargo_args(&additional_args, &options.rustdoc_args)
 }
