@@ -102,7 +102,7 @@ impl<'build, 'ws> ActiveReleaseBuild<'build, 'ws> {
 
     /// Limits applied to this release.
     pub fn limits(&self) -> &Limits {
-        &self.limits
+        self.limits
     }
 
     /// The underlying active rustwide build.
