@@ -39,7 +39,7 @@ impl BuildEnvironment {
         on(_, into),
         finish_fn(name = build),
     )]
-    pub fn new(
+    pub fn builder(
         #[builder(start_fn)] path: &Path,
         #[builder(default = Toolchain::dist("nightly"))] toolchain: Toolchain,
         #[builder(default = false)] running_inside_docker: bool,
@@ -66,7 +66,7 @@ impl BuildEnvironment {
         })
     }
 
-    /// Create a release managed by this environment.
+    /// Enter the context of a single crate
     pub fn release<'release>(
         &'release self,
         krate: &'release Crate,
@@ -153,6 +153,7 @@ fn parse_rustc_version(version: &str) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn parses_rustc_resource_version() {
