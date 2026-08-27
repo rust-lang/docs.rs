@@ -5,32 +5,12 @@ use rustwide::cmd::CommandError;
 use std::path::PathBuf;
 
 /// Options controlling the artifacts produced for a release.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ReleaseOptions {
-    /// Add docs.rs's default target set when the crate does not choose targets.
-    pub include_default_targets: bool,
-    /// Generate unstable rustdoc JSON alongside HTML documentation.
-    pub generate_rustdoc_json: bool,
-    /// Collect rustdoc documentation coverage.
-    pub generate_coverage: bool,
     /// Rust compiler version suffix used to share rustdoc static assets.
     ///
     /// When empty, it is detected from the configured toolchain.
     pub resource_suffix: String,
-    /// Emit static files, used by docs.rs's essential-files build.
-    pub emit_static_files: bool,
-}
-
-impl Default for ReleaseOptions {
-    fn default() -> Self {
-        Self {
-            include_default_targets: true,
-            generate_rustdoc_json: true,
-            generate_coverage: true,
-            resource_suffix: String::new(),
-            emit_static_files: false,
-        }
-    }
 }
 
 /// Failure of an individual build step.

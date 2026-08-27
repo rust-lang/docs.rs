@@ -48,6 +48,7 @@ pub struct ReleaseContext<'build, 'env, 'ws> {
     build: &'build Build<'ws>,
     metadata: Metadata,
     limits: Limits,
+    resource_suffix: String,
 }
 
 impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
@@ -55,14 +56,19 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         environment: &'build BuildEnvironment<'env>,
         build: &'build Build<'ws>,
         limits: Limits,
+        mut options: ReleaseOptions,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+        if options.resource_suffix.is_empty() {
+            options.resource_suffix = environment.resource_suffix()?;
+        }
 
         Ok(Self {
             environment,
             build,
             metadata,
             limits,
+            resource_suffix: options.resource_suffix,
         })
     }
 
@@ -137,17 +143,26 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         self.build
     }
 
-    /// Build coverage, rustdoc JSON, and HTML for every selected target.
+    /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
     ///
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    pub fn build(self, mut options: ReleaseOptions) -> Result<ReleaseBuildResult> {
-        if options.resource_suffix.is_empty() {
-            options.resource_suffix = self.environment.resource_suffix()?;
-        }
+    /// Build every target explicitly configured by the crate.
+    ///
+    /// This does not add docs.rs's standard target set when the crate has not
+    /// configured targets in its package metadata.
+    pub fn build_configured_targets(self) -> Result<ReleaseBuildResult> {
+        self.build_targets(false)
+    }
 
-        let selected = self.metadata.targets(options.include_default_targets);
+    /// Build the full target set used by docs.rs.
+    pub fn build_all_targets(self) -> Result<ReleaseBuildResult> {
+        self.build_targets(true)
+    }
+
+    fn build_targets(self, include_default_targets: bool) -> Result<ReleaseBuildResult> {
+        let selected = self.metadata.targets(include_default_targets);
         let default_target = selected.default_target.to_string();
         let other_targets: Vec<_> = selected
             .other_targets
@@ -162,10 +177,10 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         self.fetch_build_std_dependencies(&fetch_targets)?;
         let cargo_metadata = self.load_cargo_metadata()?;
 
-        let mut default = self.build_target(&default_target, true, &options)?;
+        let mut default = self.build_target_inner(&default_target, true)?;
         if !default.successful() && self.build.host_source_dir().join("Cargo.lock").exists() {
             self.retry_without_lockfile()?;
-            default = self.build_target(&default_target, true, &options)?;
+            default = self.build_target_inner(&default_target, true)?;
         }
 
         let has_docs = default.successful()
@@ -180,7 +195,7 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
 
         if has_docs {
             for target in other_targets {
-                targets.push(self.build_target(&target, false, &options)?);
+                targets.push(self.build_target_inner(&target, false)?);
             }
         }
 
@@ -191,21 +206,18 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         })
     }
 
-    fn build_target(
-        &self,
-        target: &str,
-        is_default: bool,
-        options: &ReleaseOptions,
-    ) -> Result<TargetBuildResult> {
+    /// Build coverage, rustdoc JSON, and HTML for one target.
+    pub fn build_target(&self, target: &str) -> Result<TargetBuildResult> {
+        let is_default = target == self.metadata.targets(true).default_target;
+        self.build_target_inner(target, is_default)
+    }
+
+    fn build_target_inner(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage = options
-            .generate_coverage
-            .then(|| self.build_coverage(target));
-        let rustdoc_json = options
-            .generate_rustdoc_json
-            .then(|| self.build_rustdoc_json(target));
-        let documentation = self.build_documentation(target, options);
+        let coverage = Some(self.build_coverage(target));
+        let rustdoc_json = Some(self.build_rustdoc_json(target));
+        let documentation = self.build_documentation(target);
 
         if documentation.successful() && self.metadata.proc_macro {
             debug_assert!(is_default, "proc macros only support their host target");
@@ -220,7 +232,8 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         })
     }
 
-    fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
+    /// Collect documentation coverage for one target.
+    pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
             let rustdoc_args = vec![
@@ -259,7 +272,8 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         })
     }
 
-    fn build_rustdoc_json(&self, target: &str) -> StepResult<PathBuf> {
+    /// Build unstable rustdoc JSON for one target.
+    pub fn build_rustdoc_json(&self, target: &str) -> StepResult<PathBuf> {
         self.capture_step(|| {
             self.command(
                 target,
@@ -275,17 +289,25 @@ impl<'build, 'env, 'ws> ReleaseContext<'build, 'env, 'ws> {
         })
     }
 
-    fn build_documentation(&self, target: &str, options: &ReleaseOptions) -> StepResult<PathBuf> {
+    /// Build HTML documentation without emitting shared static files.
+    pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
+        self.build_html(target, false)
+    }
+
+    /// Build HTML documentation and emit shared rustdoc static files.
+    pub fn build_essential_files(&self, target: &str) -> StepResult<PathBuf> {
+        self.build_html(target, true)
+    }
+
+    fn build_html(&self, target: &str, emit_static_files: bool) -> StepResult<PathBuf> {
         self.capture_step(|| {
-            let emit = if options.emit_static_files {
+            let emit = if emit_static_files {
                 "--emit=html-static-files"
             } else {
                 "--emit=html-non-static-files"
             };
             let mut rustdoc_args = vec![emit.into()];
-            if !options.resource_suffix.is_empty() {
-                rustdoc_args.extend(["--resource-suffix".into(), options.resource_suffix.clone()]);
-            }
+            rustdoc_args.extend(["--resource-suffix".into(), self.resource_suffix.clone()]);
 
             self.command(target, CommandOptions { rustdoc_args })
                 .map_err(BuildStepError::Output)?

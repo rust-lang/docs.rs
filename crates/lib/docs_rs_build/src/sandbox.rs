@@ -80,8 +80,9 @@ impl<'a> BuildEnvironment<'a> {
         &'build self,
         build: &'build Build<'ws>,
         limits: Limits,
+        options: ReleaseOptions,
     ) -> anyhow::Result<ReleaseContext<'build, 'a, 'ws>> {
-        ReleaseContext::new(self, build, limits)
+        ReleaseContext::new(self, build, limits, options)
     }
 
     /// Build all documentation artifacts for a crate release in one sandbox.
@@ -95,7 +96,7 @@ impl<'a> BuildEnvironment<'a> {
         let sandbox = self.sandbox(&limits);
         build_dir
             .build(self.toolchain, krate, sandbox)
-            .run(|build| self.release(build, limits)?.build(options))
+            .run(|build| self.release(build, limits, options)?.build_all_targets())
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
