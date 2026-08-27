@@ -166,8 +166,8 @@ $ just lint
 ```
 
 Linting GitHub Actions workflows requires
-[`actionlint`](https://github.com/rhysd/actionlint/blob/main/docs/install.md). If
-it is not installed, that check is skipped with a warning.
+[`actionlint`](https://github.com/rhysd/actionlint/blob/main/docs/install.md).
+If it is not installed, that check is skipped with a warning.
 
 Run all formatters with:
 

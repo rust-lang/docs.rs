@@ -18,7 +18,9 @@ pub use index::Index;
 pub use rebuilds::queue_rebuilds;
 
 use crate::{
-    index_watcher::get_new_crates, metrics::WatcherMetrics, service_metrics::OtelServiceMetrics,
+    index_watcher::get_new_crates,
+    metrics::{EventSource, WatcherMetrics},
+    service_metrics::OtelServiceMetrics,
 };
 use anyhow::Result;
 use docs_rs_context::Context;
@@ -89,6 +91,7 @@ async fn watch_registry(
     let mut last_gc = Instant::now();
 
     let queue = context.build_queue()?;
+    let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
         if queue.is_locked().await? {
@@ -97,10 +100,10 @@ async fn watch_registry(
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config, metrics).await {
+            match get_new_crates(context, &index, config, &metrics).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
-                    metrics.record_poll_error(crate::metrics::EventSource::Git);
+                    metrics.record_poll_error(EventSource::Git);
                     error!(?e, "Failed to get new crates");
                 }
             }
