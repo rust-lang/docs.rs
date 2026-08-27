@@ -76,11 +76,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
     /// fetched beforehand because docs.rs invokes Cargo in offline mode.
-    pub fn command(
-        &self,
-        target: &str,
-        options: CommandOptions,
-    ) -> Result<DocsRsCommand<'ws, 'static>> {
+    pub fn command(&self, target: &str) -> Result<DocsRsCommand<'ws, 'static>> {
         todo!();
         // let cargo_args = cargo_args(
         //     target,
