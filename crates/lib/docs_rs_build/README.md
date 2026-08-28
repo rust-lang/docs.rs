@@ -38,6 +38,36 @@ missing, which is useful for locally built images. Workspace initialization and
 refresh both purge stale build directories; caches can be removed explicitly
 with `purge_caches`.
 
+## Toolchain lifecycle
+
+Before accepting builds, and periodically in a long-running builder, prepare
+the configured toolchain and collect any regenerated shared rustdoc files:
+
+```rust,no_run
+# use anyhow::Result;
+# use docs_rs_build::BuildEnvironment;
+# use rustwide::Toolchain;
+# use std::path::Path;
+# fn main() -> Result<()> {
+let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
+
+// A service can fetch this selection from its configuration or database.
+environment.set_toolchain(Toolchain::dist("nightly"));
+if let Some(essential_files) = environment.update_toolchain_and_build_essential_files()? {
+    // Inspect or publish essential_files here.
+#   let _ = essential_files;
+}
+# Ok(())
+# }
+```
+
+Preparation installs the toolchain, the docs.rs default targets, and the
+`llvm-tools-preview`, `rustc-dev`, and `rustfmt` components. Non-default targets
+left by individual crate builds are removed before a distribution toolchain is
+updated. When the compiler changes—or on the environment's first preparation—
+caches are purged and the essential-files build is returned to the caller. CI
+toolchains are installed and treated as changed on every preparation.
+
 ## Complete release build
 
 The usual entry point builds coverage, rustdoc JSON, and HTML documentation for

@@ -2,12 +2,16 @@ use crate::{CpuLimit, ReleaseContext, StepResult};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
-use docs_rs_utils::APP_USER_AGENT;
+use docs_rs_utils::{APP_USER_AGENT, retry};
+use docsrs_metadata::DEFAULT_TARGETS;
+use log::warn;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
+    toolchain::ToolchainError,
 };
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -15,6 +19,7 @@ use std::{
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 
 /// Describes how the sandbox image should be resolved whenever the workspace is initialized.
 #[derive(Clone, Debug, Default)]
@@ -76,6 +81,7 @@ pub struct BuildEnvironment {
     workspace_initialized_at: Instant,
     workspace_reinitialization_interval: Duration,
     toolchain: Toolchain,
+    toolchain_prepared: bool,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
@@ -116,6 +122,7 @@ impl BuildEnvironment {
             workspace_initialized_at: Instant::now(),
             workspace_reinitialization_interval,
             toolchain,
+            toolchain_prepared: false,
             cpu_limit,
             docker_runtime,
             include_default_targets,
@@ -147,6 +154,97 @@ impl BuildEnvironment {
     pub fn purge_build_directories(&self) -> Result<()> {
         self.workspace.purge_all_build_dirs()?;
         Ok(())
+    }
+
+    /// Select the toolchain used by subsequent builds.
+    ///
+    /// Changing it marks the new toolchain as unprepared, so the next lifecycle
+    /// update also regenerates toolchain-dependent artifacts.
+    pub fn set_toolchain(&mut self, toolchain: Toolchain) {
+        if self.toolchain != toolchain {
+            self.toolchain = toolchain;
+            self.toolchain_prepared = false;
+        }
+    }
+
+    /// Return the toolchain currently selected for builds.
+    pub fn toolchain(&self) -> &Toolchain {
+        &self.toolchain
+    }
+
+    /// Install or update the configured toolchain and its docs.rs components.
+    ///
+    /// Returns `true` when toolchain-dependent artifacts should be regenerated:
+    /// after a compiler update, for every CI toolchain installation, and on the
+    /// first preparation performed by this environment.
+    pub fn update_toolchain(&mut self) -> Result<bool> {
+        if self.toolchain.as_ci().is_some() {
+            self.toolchain.install(&self.workspace)?;
+            self.toolchain_prepared = true;
+            return Ok(true);
+        }
+
+        // Version detection is allowed to fail when the toolchain is not installed yet.
+        let old_version = self.rustc_version().ok();
+        let mut targets_to_install = DEFAULT_TARGETS
+            .iter()
+            .map(|target| (*target).to_owned())
+            .collect::<HashSet<_>>();
+
+        let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
+            Ok(targets) => targets,
+            Err(error)
+                if matches!(
+                    error.downcast_ref::<ToolchainError>(),
+                    Some(ToolchainError::NotInstalled)
+                ) =>
+            {
+                Vec::new()
+            }
+            Err(error) => return Err(error),
+        };
+
+        // Remove no-longer-managed targets before updating. Otherwise rustup can
+        // refuse an update when one of those targets disappeared upstream.
+        for target in installed_targets {
+            if !targets_to_install.remove(&target) {
+                self.toolchain.remove_target(&self.workspace, &target)?;
+            }
+        }
+
+        self.toolchain.install(&self.workspace)?;
+        for target in targets_to_install {
+            self.toolchain.add_target(&self.workspace, &target)?;
+        }
+        for component in TOOLCHAIN_COMPONENTS {
+            if let Err(error) = self.toolchain.add_component(&self.workspace, component) {
+                // A newly published nightly can temporarily lack a component. Builds
+                // that do not need it should still be allowed to proceed.
+                warn!("failed to install toolchain component {component}: {error}");
+            }
+        }
+
+        let new_version = self.rustc_version()?;
+        let requires_artifact_refresh =
+            !self.toolchain_prepared || old_version.as_ref() != Some(&new_version);
+        self.toolchain_prepared = true;
+        Ok(requires_artifact_refresh)
+    }
+
+    /// Prepare the toolchain and rebuild its shared rustdoc files when necessary.
+    ///
+    /// The returned build result belongs to the caller so it can publish or inspect
+    /// the generated files without coupling this crate to docs.rs storage.
+    pub fn update_toolchain_and_build_essential_files(
+        &mut self,
+    ) -> Result<Option<BuildResult<StepResult<PathBuf>>>> {
+        let requires_artifact_refresh = retry(|| self.update_toolchain(), 3)?;
+        if !requires_artifact_refresh {
+            return Ok(None);
+        }
+
+        retry(|| self.purge_caches(), 3)?;
+        Ok(Some(self.build_essential_files()?))
     }
 
     /// Enter the context of a single release.
