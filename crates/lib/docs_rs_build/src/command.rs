@@ -1,4 +1,4 @@
-use crate::build::ReleaseBuild;
+use crate::{build::ReleaseBuild, utils::args_contain_unstable_feature};
 use anyhow::{Context as _, Result};
 use docsrs_metadata::Metadata;
 use rustwide::cmd::Command;
