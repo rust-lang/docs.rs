@@ -5,16 +5,76 @@ use docs_rs_build_limits::Limits;
 use docs_rs_utils::APP_USER_AGENT;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, DockerRuntime, SandboxBuilder, SandboxImage},
+    cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
 };
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
+const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Describes how the sandbox image should be resolved whenever the workspace is initialized.
+#[derive(Clone, Debug)]
+pub enum SandboxImageSource {
+    /// Let rustwide select and download its default image.
+    RustwideDefault,
+    /// Require an image that is already present locally.
+    Local(String),
+    /// Pull the image from its registry, even if an older version is present locally.
+    Remote(String),
+    /// Prefer an existing local image and pull it only when it is missing.
+    LocalOrRemote(String),
+}
+
+impl SandboxImageSource {
+    fn resolve(&self) -> Result<Option<SandboxImage>> {
+        let image = match self {
+            Self::RustwideDefault => return Ok(None),
+            Self::Local(name) => SandboxImage::local(name)?,
+            Self::Remote(name) => SandboxImage::remote(name)?,
+            Self::LocalOrRemote(name) => match SandboxImage::local(name) {
+                Ok(image) => image,
+                Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(name)?,
+                Err(error) => return Err(error.into()),
+            },
+        };
+        Ok(Some(image))
+    }
+}
+
+#[derive(Clone, Debug)]
+struct WorkspaceConfiguration {
+    path: PathBuf,
+    running_inside_docker: bool,
+    sandbox_image: SandboxImageSource,
+    fast_init: bool,
+}
+
+impl WorkspaceConfiguration {
+    fn initialize(&self) -> Result<Workspace> {
+        let mut builder = WorkspaceBuilder::new(&self.path, APP_USER_AGENT)
+            .running_inside_docker(self.running_inside_docker)
+            .fast_init(self.fast_init);
+
+        if let Some(image) = self.sandbox_image.resolve()? {
+            builder = builder.sandbox_image(image);
+        }
+
+        let workspace = builder.init()?;
+        workspace.purge_all_build_dirs()?;
+        Ok(workspace)
+    }
+}
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 pub struct BuildEnvironment {
     workspace: Workspace,
+    workspace_configuration: WorkspaceConfiguration,
+    workspace_initialized_at: Instant,
+    workspace_reinitialization_interval: Duration,
     toolchain: Toolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
@@ -33,29 +93,60 @@ impl BuildEnvironment {
         #[builder(start_fn)] path: &Path,
         #[builder(default = Toolchain::dist("nightly"))] toolchain: Toolchain,
         #[builder(default = false)] running_inside_docker: bool,
-        mut sandbox_image: Option<SandboxImage>,
+        #[builder(default = SandboxImageSource::RustwideDefault)] sandbox_image: SandboxImageSource,
         #[builder(default = false)] fast_init: bool,
+        #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
+        workspace_reinitialization_interval: Duration,
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,
         #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
-        let mut builder = WorkspaceBuilder::new(path, APP_USER_AGENT)
-            .running_inside_docker(running_inside_docker)
-            .fast_init(fast_init);
-
-        if let Some(image) = sandbox_image.take() {
-            builder = builder.sandbox_image(image);
-        }
+        let workspace_configuration = WorkspaceConfiguration {
+            path: path.to_owned(),
+            running_inside_docker,
+            sandbox_image,
+            fast_init,
+        };
+        let workspace = workspace_configuration.initialize()?;
 
         Ok(Self {
-            workspace: builder.init()?,
+            workspace,
+            workspace_configuration,
+            workspace_initialized_at: Instant::now(),
+            workspace_reinitialization_interval,
             toolchain,
             cpu_limit,
             docker_runtime,
             include_default_targets,
             default_limits,
         })
+    }
+
+    /// Recreate the workspace when its configured refresh interval has elapsed.
+    ///
+    /// Resolving a [`SandboxImageSource::Remote`] pulls the tag again, allowing
+    /// long-running builders to pick up a newly published sandbox image.
+    pub fn refresh_workspace_if_interval_passed(&mut self) -> Result<bool> {
+        if self.workspace_initialized_at.elapsed() < self.workspace_reinitialization_interval {
+            return Ok(false);
+        }
+
+        self.workspace = self.workspace_configuration.initialize()?;
+        self.workspace_initialized_at = Instant::now();
+        Ok(true)
+    }
+
+    /// Remove all cached registry, Git, and toolchain data from the workspace.
+    pub fn purge_caches(&self) -> Result<()> {
+        self.workspace.purge_all_caches()?;
+        Ok(())
+    }
+
+    /// Remove all build directories from the workspace.
+    pub fn purge_build_directories(&self) -> Result<()> {
+        self.workspace.purge_all_build_dirs()?;
+        Ok(())
     }
 
     /// Enter the context of a single release.

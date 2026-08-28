@@ -9,6 +9,35 @@ The crate does not store build results in the docs.rs database or copy artifacts
 to docs.rs storage. A caller can decide what to do with the returned paths,
 logs, coverage, and sandbox statistics.
 
+## Workspace lifecycle
+
+`BuildEnvironment` retains the configuration needed to recreate its rustwide
+workspace. Long-running builders should call
+`refresh_workspace_if_interval_passed` between releases:
+
+```rust,no_run
+# use anyhow::Result;
+# use docs_rs_build::{BuildEnvironment, SandboxImageSource};
+# use std::{path::Path, time::Duration};
+# fn main() -> Result<()> {
+let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+    .sandbox_image(SandboxImageSource::Remote(
+        "docsrs/build-env:latest".into(),
+    ))
+    .workspace_reinitialization_interval(Duration::from_secs(24 * 60 * 60))
+    .build()?;
+
+environment.refresh_workspace_if_interval_passed()?;
+# Ok(())
+# }
+```
+
+`Remote` pulls the configured image on every initialization, including a timed
+refresh. `LocalOrRemote` uses an existing local image and only pulls when it is
+missing, which is useful for locally built images. Workspace initialization and
+refresh both purge stale build directories; caches can be removed explicitly
+with `purge_caches`.
+
 ## Complete release build
 
 The usual entry point builds coverage, rustdoc JSON, and HTML documentation for
@@ -16,13 +45,15 @@ the default target and the additional targets selected by the crate's metadata:
 
 ```rust,no_run
 use anyhow::Result;
-use docs_rs_build::{BuildEnvironment, resolve_sandbox_image};
+use docs_rs_build::{BuildEnvironment, SandboxImageSource};
 use rustwide::Crate;
 use std::path::Path;
 
 fn main() -> Result<()> {
     let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-        .sandbox_image(resolve_sandbox_image("docsrs/build-env:latest")?)
+        .sandbox_image(SandboxImageSource::LocalOrRemote(
+            "docsrs/build-env:latest".into(),
+        ))
         .build()?;
 
     let krate = Crate::crates_io("serde", "1.0.219");
@@ -55,12 +86,12 @@ rustwide build and sandbox:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build::{BuildEnvironment, resolve_sandbox_image};
+# use docs_rs_build::{BuildEnvironment, SandboxImageSource};
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
 # let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-#     .sandbox_image(resolve_sandbox_image("docsrs/build-env:latest")?)
+#     .sandbox_image(SandboxImageSource::LocalOrRemote("docsrs/build-env:latest".into()))
 #     .build()?;
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {

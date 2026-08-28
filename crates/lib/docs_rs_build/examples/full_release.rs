@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use docs_rs_build::{BuildEnvironment, resolve_sandbox_image};
+use docs_rs_build::{BuildEnvironment, SandboxImageSource};
 use rustwide::Crate;
 use std::{env, path::PathBuf};
 
@@ -11,9 +11,10 @@ fn main() -> Result<()> {
     let version = version.to_string_lossy();
 
     let workspace = PathBuf::from("rustwide-workspace");
-    let sandbox_image = resolve_sandbox_image("docsrs/build-env:latest")?;
     let environment = BuildEnvironment::builder(workspace.as_path())
-        .sandbox_image(sandbox_image)
+        .sandbox_image(SandboxImageSource::LocalOrRemote(
+            "docsrs/build-env:latest".into(),
+        ))
         .build()?;
 
     let krate = Crate::crates_io(&name, &version);

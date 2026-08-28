@@ -19,4 +19,4 @@ pub use release::ReleaseContext;
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 pub use sandbox::CpuLimit;
 pub use utils::resolve_sandbox_image;
-pub use workspace::BuildEnvironment;
+pub use workspace::{BuildEnvironment, SandboxImageSource};
