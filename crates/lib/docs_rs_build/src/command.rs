@@ -1,7 +1,6 @@
 use crate::build::ReleaseBuild;
 use anyhow::{Context as _, Result};
 use docsrs_metadata::{DEFAULT_TARGETS, Metadata};
-use itertools::Itertools as _;
 use rustwide::cmd::Command;
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
@@ -93,11 +92,19 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 }
 
-fn uses_build_std<S: AsRef<str> + Clone>(args: impl IntoIterator<Item = S>) -> bool {
-    for (lhs, rhs) in args.into_iter().tuple_windows() {
-        let lhs = lhs.as_ref();
-        let rhs = rhs.as_ref();
-        if lhs.starts_with("-Zbuild-std") || (lhs == "-Z" && rhs == "build-std") {
+fn uses_build_std<S: AsRef<str>>(args: impl IntoIterator<Item = S>) -> bool {
+    let mut args = args.into_iter().map(|arg| arg.as_ref()).peekable();
+
+    while let Some(arg) = args.next() {
+        if arg.starts_with("-Zbuild-std") {
+            return true;
+        }
+
+        if arg == "-Z"
+            && args
+                .peek()
+                .is_some_and(|next| next.starts_with("build-std"))
+        {
             return true;
         }
     }

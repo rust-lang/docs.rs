@@ -2020,7 +2020,6 @@ dependencies = [
  "docs_rs_cargo_metadata",
  "docs_rs_types",
  "docsrs-metadata",
- "itertools 0.15.0",
  "log",
  "rustwide",
  "tempfile",
