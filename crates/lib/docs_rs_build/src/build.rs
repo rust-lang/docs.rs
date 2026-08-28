@@ -49,7 +49,6 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) metadata: Metadata,
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
-    collect_compiler_metrics: bool,
     fetched_build_std_targets: RefCell<HashSet<String>>,
 }
 
@@ -59,7 +58,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         environment: &'build BuildEnvironment,
         build: &'build Build<'ws>,
         limits: &'build Limits,
-        collect_compiler_metrics: bool,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
         let resource_suffix = environment.resource_suffix()?;
@@ -70,7 +68,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             metadata,
             limits,
             resource_suffix,
-            collect_compiler_metrics,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
         })
     }
@@ -335,12 +332,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     fn compiler_metrics_dir(&self) -> Option<PathBuf> {
-        (self.collect_compiler_metrics
-            && self
-                .environment
-                .compiler_metrics_collection_path()
-                .is_some())
-        .then(|| self.build.host_target_dir().join("metrics"))
+        self.environment
+            .compiler_metrics_collection_path()
+            .is_some()
+            .then(|| self.build.host_target_dir().join("metrics"))
     }
 
     fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {

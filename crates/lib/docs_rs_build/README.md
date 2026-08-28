@@ -88,8 +88,8 @@ let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
 # }
 ```
 
-Compiler metrics require an environment-wide destination and explicit opt-in
-for each release:
+Compiler metrics are enabled for all HTML builds when an environment-wide
+destination is configured:
 
 ```rust,no_run
 # use anyhow::Result;
@@ -102,18 +102,15 @@ let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
     .build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
 
-let result = environment
-    .release(&krate)
-    .collect_compiler_metrics(true)
-    .run(|build| build.build_docs())?;
+let result = environment.release(&krate).run(|build| build.build_docs())?;
 # let _ = result;
 # Ok(())
 # }
 ```
 
-For opted-in HTML builds, the library passes rustdoc's unstable metrics
-directory flag and copies the generated files out of rustwide's target
-directory before the release sandbox is cleaned up.
+For HTML builds, the library passes rustdoc's unstable metrics directory flag
+and copies the generated files out of rustwide's target directory before the
+release sandbox is cleaned up.
 
 ## Complete release build
 

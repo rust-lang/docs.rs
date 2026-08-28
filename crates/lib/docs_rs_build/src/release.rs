@@ -12,20 +12,12 @@ pub struct ReleaseContext<'release> {
     pub(crate) environment: &'release BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Option<Limits>,
-    pub(crate) collect_compiler_metrics: bool,
 }
 
 impl<'release> ReleaseContext<'release> {
     /// Override the environment's default limits for this release.
     pub fn limits(mut self, limits: Limits) -> Self {
         self.limits = Some(limits);
-        self
-    }
-
-    /// Collect compiler metrics for this release when the environment has a
-    /// compiler metrics destination configured.
-    pub fn collect_compiler_metrics(mut self, collect: bool) -> Self {
-        self.collect_compiler_metrics = collect;
         self
     }
 
@@ -38,7 +30,6 @@ impl<'release> ReleaseContext<'release> {
             environment,
             krate,
             limits,
-            collect_compiler_metrics,
         } = self;
         let limits = limits
             .as_ref()
@@ -50,14 +41,7 @@ impl<'release> ReleaseContext<'release> {
         let sandbox = environment.sandbox_builder(limits);
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
-            .run(|build| {
-                callback(ReleaseBuild::new(
-                    environment,
-                    build,
-                    limits,
-                    collect_compiler_metrics,
-                )?)
-            })?;
+            .run(|build| callback(ReleaseBuild::new(environment, build, limits)?))?;
         krate.purge_from_cache(environment.workspace())?;
         Ok(result)
     }

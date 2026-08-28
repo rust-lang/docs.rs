@@ -259,7 +259,6 @@ impl BuildEnvironment {
             environment: self,
             krate,
             limits: None,
-            collect_compiler_metrics: false,
         }
     }
 
