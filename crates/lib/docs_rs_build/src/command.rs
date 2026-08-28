@@ -1,6 +1,6 @@
 use crate::build::ReleaseBuild;
 use anyhow::{Context as _, Result};
-use docsrs_metadata::{DEFAULT_TARGETS, Metadata};
+use docsrs_metadata::Metadata;
 use rustwide::cmd::Command;
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
@@ -66,16 +66,12 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
             self.rustdoc_args,
         );
 
+        self.release_build.environment.add_target(&self.target)?;
+
         if uses_build_std(&cargo_args) {
             self.release_build
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
-        } else if !DEFAULT_TARGETS.contains(&self.target.as_ref()) {
-            self.release_build
-                .environment
-                .configured_toolchain()
-                .add_target(self.release_build.environment.workspace(), &self.target)
-                .context("error adding non-default target to toolchain")?;
         }
 
         Ok(self.release_build.build_rustwide_command().args(cargo_args))
