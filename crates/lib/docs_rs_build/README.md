@@ -206,6 +206,9 @@ let result = fetched.run(|build| build.build_docs())?;
 Callers that do not need an intermediate source step can continue using
 `release().run(...)`, which performs the fetch automatically.
 
+See [`examples/extract_sources.rs`](examples/extract_sources.rs) for a runnable
+example that extracts sources before entering build preparation.
+
 `running_inside_docker(true)` is only needed when the calling program itself is
 inside a container, for example a container action using the host Docker socket.
 Leave it at its default (`false`) when invoking the program directly on a host.
