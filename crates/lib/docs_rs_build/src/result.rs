@@ -1,8 +1,40 @@
+use anyhow::{Context as _, Result};
 use docs_rs_cargo_metadata::CargoMetadata;
+use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
 use docs_rs_types::doc_coverage::DocCoverage;
 use docsrs_metadata::Metadata;
 use rustwide::cmd::CommandError;
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
+
+/// A rustdoc JSON artifact produced by a successful JSON build.
+#[derive(Clone, Debug)]
+pub struct RustdocJsonOutput {
+    path: PathBuf,
+}
+
+impl RustdocJsonOutput {
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    /// Path to the generated rustdoc JSON file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Read the format version embedded in the rustdoc JSON file.
+    ///
+    /// Parsing is lazy so callers that only need the artifact do not pay this cost.
+    pub fn format_version(&self) -> Result<RustdocJsonFormatVersion> {
+        let file = File::open(&self.path)
+            .with_context(|| format!("opening rustdoc JSON at {}", self.path.display()))?;
+        read_format_version_from_rustdoc_json(file)
+            .with_context(|| format!("reading format version from {}", self.path.display()))
+    }
+}
 
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
@@ -43,7 +75,7 @@ pub struct TargetBuildResult {
     /// HTML documentation output directory.
     pub documentation: StepResult<PathBuf>,
     /// Rustdoc JSON build result.
-    pub rustdoc_json: StepResult<PathBuf>,
+    pub rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
     pub coverage: StepResult<Option<DocCoverage>>,
 }
@@ -111,6 +143,7 @@ impl ReleaseBuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
         TargetBuildResult {
@@ -149,5 +182,31 @@ mod tests {
 
         std::fs::create_dir(temporary.path().join("example_crate")).unwrap();
         assert!(existing.has_docs("example_crate"));
+    }
+
+    #[test]
+    fn reads_rustdoc_json_format_version_lazily() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("crate.json");
+        std::fs::write(&path, r#"{"format_version":42}"#)?;
+        let output = RustdocJsonOutput::new(path);
+
+        assert_eq!(
+            output.format_version()?,
+            RustdocJsonFormatVersion::Version(42)
+        );
+        Ok(())
+    }
+
+    #[test_case("not JSON"; "malformed json")]
+    #[test_case("{}"; "missing format version")]
+    fn reports_invalid_rustdoc_json_metadata(contents: &str) -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("crate.json");
+        std::fs::write(&path, contents)?;
+        let output = RustdocJsonOutput::new(path);
+
+        assert!(output.format_version().is_err());
+        Ok(())
     }
 }

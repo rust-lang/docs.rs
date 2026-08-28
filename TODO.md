@@ -1,9 +1,5 @@
 # TODO
 
-- Rustdoc JSON metadata:
-  - reading format_version from the generated JSON;
-  - the new crate returns only the JSON path.
-
 - Result information:
   - rustc version;
   - docs.rs version;

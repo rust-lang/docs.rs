@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult,
-    command::PrepareCommand,
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
+    TargetBuildResult, command::PrepareCommand,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
@@ -267,7 +267,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
-    pub fn build_rustdoc_json(&self, target: &str) -> StepResult<PathBuf> {
+    pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
@@ -276,7 +276,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            find_single_output_file(self.output_dir(target), "json").map_err(BuildStepError::Output)
+            find_single_output_file(self.output_dir(target), "json")
+                .map(RustdocJsonOutput::new)
+                .map_err(BuildStepError::Output)
         })
     }
 

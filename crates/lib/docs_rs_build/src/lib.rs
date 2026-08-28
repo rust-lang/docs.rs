@@ -16,7 +16,9 @@ mod workspace;
 pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
 pub use command::PrepareCommand;
 pub use release::ReleaseContext;
-pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
+pub use result::{
+    BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult, TargetBuildResult,
+};
 pub use sandbox::CpuLimit;
 pub use utils::resolve_sandbox_image;
 pub use workspace::{BuildEnvironment, SandboxImageSource};
