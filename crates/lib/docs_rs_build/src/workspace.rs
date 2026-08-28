@@ -3,7 +3,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_utils::{APP_USER_AGENT, retry};
-use docsrs_metadata::DEFAULT_TARGETS;
+use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use log::warn;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
@@ -119,7 +119,7 @@ impl BuildEnvironment {
         };
         let workspace = workspace_configuration.initialize()?;
 
-        Ok(Self {
+        let environment = Self {
             workspace,
             workspace_configuration,
             workspace_initialized_at: Instant::now(),
@@ -131,7 +131,9 @@ impl BuildEnvironment {
             validate_host_resources,
             compiler_metrics_collection_path,
             default_limits,
-        })
+        };
+        environment.ensure_toolchain_ready()?;
+        Ok(environment)
     }
 
     /// Recreate the workspace when its configured refresh interval has elapsed.
@@ -162,11 +164,16 @@ impl BuildEnvironment {
 
     /// Select the toolchain used by subsequent builds.
     ///
-    /// The next call to [`Self::update_toolchain`] installs or updates this selection.
-    pub fn set_toolchain(&mut self, toolchain: Toolchain) {
-        if self.toolchain != toolchain {
-            self.toolchain = toolchain;
+    /// The selected toolchain is made ready before this method returns. The
+    /// result reports whether the toolchain itself had to be installed.
+    pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
+        let selection_changed = self.toolchain != toolchain;
+        self.toolchain = toolchain;
+        let installed = self.ensure_toolchain_ready_without_cache_purge()?;
+        if selection_changed || installed {
+            retry(|| self.purge_caches(), 3)?;
         }
+        Ok(installed)
     }
 
     /// Return the toolchain currently selected for builds.
@@ -216,19 +223,27 @@ impl BuildEnvironment {
     /// Ensure the configured toolchain is ready for docs.rs builds without
     /// checking whether an installed distribution toolchain can be updated.
     ///
-    /// For distribution toolchains this also ensures the docs.rs default
-    /// targets and components are installed. CI toolchains only support their
-    /// platform artifact and are therefore only installed when missing.
+    /// For distribution toolchains this also removes unmanaged targets and
+    /// ensures the docs.rs default targets and components are installed. CI
+    /// toolchains only support their platform artifact and are therefore only
+    /// installed when missing.
     /// Returns whether the toolchain itself was newly installed.
     pub fn ensure_toolchain_ready(&self) -> Result<bool> {
+        let installed = self.ensure_toolchain_ready_without_cache_purge()?;
+        if installed {
+            retry(|| self.purge_caches(), 3)?;
+        }
+        Ok(installed)
+    }
+
+    fn ensure_toolchain_ready_without_cache_purge(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_installed()?;
         if self.toolchain.as_ci().is_some() {
             return Ok(installed);
         }
 
-        for target in DEFAULT_TARGETS {
-            self.toolchain.add_target(&self.workspace, target)?;
-        }
+        let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
+        self.normalize_toolchain_targets(installed_targets)?;
         self.ensure_toolchain_components();
         Ok(installed)
     }
@@ -250,6 +265,7 @@ impl BuildEnvironment {
         let old_version = self.rustc_version().ok();
         let mut targets_to_install = DEFAULT_TARGETS
             .iter()
+            .chain([&HOST_TARGET])
             .map(|target| (*target).to_owned())
             .collect::<HashSet<_>>();
 
@@ -400,6 +416,24 @@ impl BuildEnvironment {
                 warn!("failed to install toolchain component {component}: {error}");
             }
         }
+    }
+
+    fn normalize_toolchain_targets(&self, installed_targets: Vec<String>) -> Result<()> {
+        let mut targets_to_install = DEFAULT_TARGETS
+            .iter()
+            .chain([&HOST_TARGET])
+            .map(|target| (*target).to_owned())
+            .collect::<HashSet<_>>();
+
+        for target in installed_targets {
+            if !targets_to_install.remove(&target) {
+                self.toolchain.remove_target(&self.workspace, &target)?;
+            }
+        }
+        for target in targets_to_install {
+            self.toolchain.add_target(&self.workspace, &target)?;
+        }
+        Ok(())
     }
 }
 

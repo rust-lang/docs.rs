@@ -53,9 +53,8 @@ regenerating and publishing shared rustdoc files:
 let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
 
 // A service can fetch this selection from its configuration or database.
-environment.set_toolchain(Toolchain::dist("nightly"));
+environment.set_toolchain(Toolchain::dist("nightly"))?;
 if environment.update_toolchain()? {
-    environment.purge_caches()?;
     let essential_files = environment.build_essential_files()?;
     // Inspect or publish essential_files.into_inner() here.
 #   let _ = essential_files;
