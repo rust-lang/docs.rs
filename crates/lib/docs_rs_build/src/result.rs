@@ -49,9 +49,20 @@ pub struct TargetBuildResult {
 }
 
 impl TargetBuildResult {
-    /// Whether the primary HTML documentation build succeeded.
+    /// Whether rustdoc produced a documentation output directory.
+    ///
+    /// Cargo can exit successfully without generating documentation for a
+    /// target, so command success alone is not sufficient.
+    pub fn documentation_exists(&self) -> bool {
+        self.documentation
+            .output
+            .as_ref()
+            .is_some_and(|path| path.is_dir())
+    }
+
+    /// Whether the primary HTML documentation build succeeded and produced output.
     pub fn successful(&self) -> bool {
-        self.documentation.successful()
+        self.documentation.successful() && self.documentation_exists()
     }
 }
 
@@ -76,5 +87,44 @@ impl ReleaseBuildResult {
     /// Whether the default HTML documentation build succeeded.
     pub fn successful(&self) -> bool {
         self.default_target().successful()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
+        TargetBuildResult {
+            target: "x86_64-unknown-linux-gnu".into(),
+            is_default: true,
+            documentation: StepResult {
+                output: Some(documentation_path),
+                error: None,
+                log: String::new(),
+            },
+            rustdoc_json: StepResult {
+                output: None,
+                error: None,
+                log: String::new(),
+            },
+            coverage: StepResult {
+                output: None,
+                error: None,
+                log: String::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn successful_target_requires_documentation_directory() {
+        let temporary = tempfile::tempdir().unwrap();
+        let missing = target_result(temporary.path().join("missing"));
+        assert!(!missing.documentation_exists());
+        assert!(!missing.successful());
+
+        let existing = target_result(temporary.path().to_owned());
+        assert!(existing.documentation_exists());
+        assert!(existing.successful());
     }
 }

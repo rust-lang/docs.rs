@@ -4,14 +4,6 @@
   - reading format_version from the generated JSON;
   - the new crate returns only the JSON path.
 
-- Documentation existence semantics:
-  - the old builder verifies that output directories actually exist before
-    marking additional targets successful;
-  - the new TargetBuildResult::successful() only checks whether the HTML command
-    returned an error.
-  - The default-target flow does perform a stronger library-directory check
-    before building additional targets.
-
 - Essential-files semantics:
   - the new crate builds and returns the static-files output directory;
   - it does not fail the outer operation when that StepResult is unsuccessful;
