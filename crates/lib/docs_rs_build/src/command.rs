@@ -1,12 +1,8 @@
 use crate::build::ReleaseBuild;
 use anyhow::{Context as _, Result};
-use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
+use docsrs_metadata::{DEFAULT_TARGETS, Metadata};
 use itertools::Itertools as _;
-use rustwide::{
-    Build,
-    cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput},
-};
-use std::{path::PathBuf, time::Duration};
+use rustwide::cmd::Command;
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--static-root-path",
@@ -121,11 +117,11 @@ fn cargo_args(
         "-Zunstable-options".into(),
         format!(
             r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
-        ).into(),
+        ),
     ];
 
     if let Some(jobs) = cargo_jobs {
-        additional_args.push(format!("-j{jobs}").into());
+        additional_args.push(format!("-j{jobs}"));
     }
 
     // Cargo puts proc-macro documentation in the host target directory and
