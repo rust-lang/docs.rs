@@ -107,6 +107,14 @@ impl BuildEnvironment {
     }
 
     pub(crate) fn resource_suffix(&self) -> Result<String> {
+        Ok(format!("-{}", parse_rustc_version(&self.rustc_version()?)?))
+    }
+
+    pub(crate) fn rustc_version(&self) -> Result<String> {
+        if let Some(ci) = self.toolchain.as_ci() {
+            return Ok(ci_rustc_version(ci.sha()));
+        }
+
         let output = Command::new(self.workspace(), self.toolchain.rustc())
             .arg("--version")
             .log_output(false)
@@ -114,7 +122,7 @@ impl BuildEnvironment {
         let [version] = output.stdout_lines() else {
             bail!("invalid output returned by `rustc --version`");
         };
-        Ok(format!("-{}", parse_rustc_version(version)?))
+        Ok(version.clone())
     }
 
     pub(crate) fn ensure_target_installed(&self, target: impl AsRef<str>) -> Result<()> {
@@ -125,6 +133,10 @@ impl BuildEnvironment {
 
         Ok(())
     }
+}
+
+fn ci_rustc_version(sha: &str) -> String {
+    format!("rustc 1.9999.0-nightly ({sha} 2999-12-29)")
 }
 
 fn parse_rustc_version(version: &str) -> Result<String> {
@@ -157,6 +169,14 @@ mod tests {
         assert_eq!(
             parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)").unwrap(),
             "20160523-1.10.0-nightly-57ef01513"
+        );
+    }
+
+    #[test]
+    fn creates_ci_rustc_resource_version() {
+        assert_eq!(
+            parse_rustc_version(&ci_rustc_version("0123456789abcdef")).unwrap(),
+            "29991229-1.9999.0-nightly-0123456789abcdef"
         );
     }
 }
