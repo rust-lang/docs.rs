@@ -48,7 +48,6 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) build: &'build Build<'ws>,
     pub(crate) metadata: Metadata,
     pub(crate) limits: &'build Limits,
-    rustc_version: String,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
     compiler_metrics: RefCell<Vec<PathBuf>>,
@@ -62,14 +61,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         limits: &'build Limits,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-        let (rustc_version, resource_suffix) = environment.rustc_version_and_resource_suffix()?;
+        let resource_suffix = environment.resource_suffix()?;
 
         Ok(Self {
             environment,
             build,
             metadata,
             limits,
-            rustc_version,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
             compiler_metrics: RefCell::new(Vec::new()),
@@ -195,8 +193,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
 
         Ok(ReleaseBuildResult {
-            rustc_version: self.rustc_version.clone(),
-            docsrs_version: format!("docsrs {}", docs_rs_utils::BUILD_VERSION),
             metadata: self.metadata.clone(),
             cargo_metadata,
             targets: target_results,

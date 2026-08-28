@@ -22,3 +22,6 @@ pub use result::{
 pub use sandbox::CpuLimit;
 pub use utils::resolve_sandbox_image;
 pub use workspace::{BuildEnvironment, SandboxImageSource};
+
+/// Version of docs.rs whose build behavior this crate implements.
+pub const DOCSRS_VERSION: &str = docs_rs_utils::BUILD_VERSION;

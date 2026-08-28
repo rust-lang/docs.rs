@@ -325,13 +325,15 @@ impl BuildEnvironment {
         &self.default_limits
     }
 
-    pub(crate) fn rustc_version_and_resource_suffix(&self) -> Result<(String, String)> {
-        let rustc_version = self.rustc_version()?;
-        let resource_suffix = format!("-{}", parse_rustc_version(&rustc_version)?);
-        Ok((rustc_version, resource_suffix))
+    pub(crate) fn resource_suffix(&self) -> Result<String> {
+        Ok(format!("-{}", parse_rustc_version(&self.rustc_version()?)?))
     }
 
-    pub(crate) fn rustc_version(&self) -> Result<String> {
+    /// Return the version reported by the configured Rust compiler.
+    ///
+    /// CI toolchains use a stable synthetic version because rustup's normal
+    /// `+toolchain` invocation cannot address CI artifacts.
+    pub fn rustc_version(&self) -> Result<String> {
         if let Some(ci) = self.toolchain.as_ci() {
             return Ok(ci_rustc_version(ci.sha()));
         }

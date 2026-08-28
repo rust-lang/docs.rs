@@ -112,10 +112,6 @@ impl TargetBuildResult {
 
 /// Service-independent result of building one crate release.
 pub struct ReleaseBuildResult {
-    /// Output of `rustc --version` for the toolchain used by this build.
-    pub rustc_version: String,
-    /// Version of docs.rs that configured this build.
-    pub docsrs_version: String,
     /// Metadata read from rustwide's prepared source directory.
     pub metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
