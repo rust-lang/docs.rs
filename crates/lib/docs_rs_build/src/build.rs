@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, DocsRsCommand, ReleaseBuildResult, StepResult,
-    TargetBuildResult,
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult,
+    command::PrepareCommand,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
@@ -76,18 +76,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
     /// fetched beforehand because docs.rs invokes Cargo in offline mode.
-    pub fn command(&self, target: &str) -> DocsRsCommand<'ws, 'static> {
-        let mut command = self
-            .build
-            .cargo()
-            .timeout(Some(self.limits.timeout()))
-            .no_output_timeout(None);
-
-        for (key, value) in self.metadata.environment_variables() {
-            command = command.env(key, value);
-        }
-
-        DocsRsCommand::new(command, target)
+    pub fn command<'release_build>(
+        &'release_build self,
+        target: impl Into<String>,
+    ) -> PrepareCommand<'release_build, 'build, 'ws> {
+        PrepareCommand::new(self, target)
     }
 
     /// Return the host path containing documentation for a target.
@@ -242,6 +235,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             let mut coverage = DocCoverage::default();
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
+                .prepare()
+                .map_err(BuildStepError::Output)?
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
@@ -267,6 +262,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.capture_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
+                .prepare()
+                .map_err(BuildStepError::Output)?
                 .run()
                 .map_err(BuildStepError::Command)?;
 
@@ -289,6 +286,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .rustdoc_arg(format!("--emit={}", emit.as_str()))
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
                 .cargo_arg("-Zrustdoc-scrape-examples")
+                .prepare()
+                .map_err(BuildStepError::Output)?
                 .run()
                 .map_err(BuildStepError::Command)?;
 

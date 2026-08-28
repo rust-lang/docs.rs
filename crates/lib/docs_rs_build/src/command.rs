@@ -1,6 +1,10 @@
+use crate::build::ReleaseBuild;
 use anyhow::Result;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
-use rustwide::cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput};
+use rustwide::{
+    Build,
+    cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput},
+};
 use std::{path::PathBuf, time::Duration};
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
@@ -11,11 +15,9 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--extern-html-root-takes-precedence",
 ];
 
-/// A fully prepared docs.rs Cargo command backed by rustwide.
-#[derive(Debug)]
-#[must_use = "call `.run()` or `.run_capture()` to execute the command"]
-pub struct DocsRsCommand<'ws, 'pl> {
-    inner: Command<'ws, 'pl>,
+#[must_use = "call `.prepare()` to create and prepare the rustwide command"]
+pub struct PrepareCommand<'release_build, 'build, 'ws> {
+    release_build: &'release_build ReleaseBuild<'build, 'ws>,
 
     target: String,
 
@@ -26,10 +28,13 @@ pub struct DocsRsCommand<'ws, 'pl> {
     rustdoc_args: Vec<String>,
 }
 
-impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
-    pub(crate) fn new(inner: Command<'ws, 'pl>, target: impl Into<String>) -> Self {
+impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
+    pub(crate) fn new(
+        release_build: &'release_build ReleaseBuild<'build, 'ws>,
+        target: impl Into<String>,
+    ) -> Self {
         Self {
-            inner,
+            release_build,
             target: target.into(),
             cargo_args: Vec::new(),
             rustdoc_args: Vec::new(),
@@ -56,44 +61,7 @@ impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
         self
     }
 
-    // /// Add an environment variable.
-    // pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-    //     self.inner = self.inner.env(key, value);
-    //     self
-    // }
-
-    // /// Override the command's working directory.
-    // pub fn current_directory(mut self, path: impl Into<PathBuf>) -> Self {
-    //     self.inner = self.inner.current_directory(path);
-    //     self
-    // }
-
-    // /// Override the command timeout.
-    // pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
-    //     self.inner = self.inner.timeout(timeout);
-    //     self
-    // }
-
-    // /// Override the command's no-output timeout.
-    // pub fn no_output_timeout(mut self, timeout: Option<Duration>) -> Self {
-    //     self.inner = self.inner.no_output_timeout(timeout);
-    //     self
-    // }
-
-    /// Enable or disable command output logging.
-    pub fn log_output(mut self, enabled: bool) -> Self {
-        self.inner = self.inner.log_output(enabled);
-        self
-    }
-
-    // /// Enable or disable command-line logging.
-    // pub fn log_command(mut self, enabled: bool) -> Self {
-    //     self.inner = self.inner.log_command(enabled);
-    //     self
-    // }
-
-    /// Execute the command.
-    pub fn run(self) -> Result<(), CommandError> {
+    pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
         // if uses_build_std(&cargo_args) {
         //     self.fetch_build_std_dependencies([target])?;
         // } else if !DEFAULT_TARGETS.contains(&target) {
@@ -101,29 +69,19 @@ impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
         //         .configured_toolchain()
         //         .add_target(self.environment.workspace(), target)?;
         // }
-        self.inner.run()
-    }
 
-    /// Execute the command and capture its output.
-    pub fn run_capture(self) -> Result<ProcessOutput, CommandError> {
-        self.inner.run_capture()
-    }
+        let mut command = self
+            .release_build
+            .build
+            .cargo()
+            // FIXME: .timeout(Some(self.limits.timeout()))
+            .no_output_timeout(None);
 
-    // /// Unwrap the prepared rustwide command for APIs not forwarded here.
-    // pub fn into_inner(self) -> Command<'ws, 'pl> {
-    //     self.inner
-    // }
-}
-
-impl<'ws> DocsRsCommand<'ws, 'static> {
-    /// Process each stdout and stderr line while the command runs.
-    pub fn process_lines<'pl>(
-        self,
-        callback: &'pl mut dyn FnMut(&str, &mut ProcessLinesActions),
-    ) -> DocsRsCommand<'ws, 'pl> {
-        todo!();
-        // self.inner = self.inner.process_lines(callback);
-        // self
+        // FIXME: fix
+        // for (key, value) in self.metadata.environment_variables() {
+        //     command = command.env(key, value);
+        // }
+        Ok(command)
     }
 }
 
