@@ -63,7 +63,15 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
-        if uses_build_std(&self.cargo_args) {
+        let cargo_args = cargo_args(
+            &self.target,
+            &self.release_build.metadata,
+            self.release_build.environment.cargo_jobs(),
+            self.cargo_args,
+            self.rustdoc_args,
+        );
+
+        if uses_build_std(&cargo_args) {
             self.release_build
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
