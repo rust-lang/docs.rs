@@ -72,6 +72,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         })
     }
 
+    pub(crate) fn build_rustwide_command<'pl>(&self) -> Command<'ws, 'pl> {
+        let mut command = self
+            .build
+            .cargo()
+            .timeout(Some(self.limits.timeout()))
+            .no_output_timeout(None);
+
+        for (key, value) in self.metadata.environment_variables() {
+            command = command.env(key, value);
+        }
+        command
+    }
+
     /// Prepare the Cargo command used by docs.rs for one documentation target.
     ///
     /// The command runs inside this build's sandbox. Dependencies must be

@@ -78,17 +78,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
                 .context("error adding non-default target to toolchain")?;
         }
 
-        let mut command = self
-            .release_build
-            .build
-            .cargo()
-            .timeout(Some(self.release_build.limits.timeout()))
-            .no_output_timeout(None);
-
-        for (key, value) in self.release_build.metadata.environment_variables() {
-            command = command.env(key, value);
-        }
-        Ok(command.args(cargo_args))
+        Ok(self.release_build.build_rustwide_command().args(cargo_args))
     }
 }
 
