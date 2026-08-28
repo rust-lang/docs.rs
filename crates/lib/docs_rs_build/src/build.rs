@@ -1,13 +1,13 @@
 use crate::{
-    BuildEnvironment, BuildStepError, CommandOptions, DocsRsCommand, ReleaseBuildResult,
-    StepResult, TargetBuildResult,
+    BuildEnvironment, BuildStepError, DocsRsCommand, ReleaseBuildResult, StepResult,
+    TargetBuildResult,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
-use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
+use docsrs_metadata::{BuildTargets, Metadata};
 use rustwide::Build;
 use rustwide::{
     cmd::Command,
@@ -76,34 +76,18 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// The command runs inside this build's sandbox. Dependencies must be
     /// fetched beforehand because docs.rs invokes Cargo in offline mode.
-    pub fn command(&self, target: &str) -> Result<DocsRsCommand<'ws, 'static>> {
-        todo!();
-        // let cargo_args = cargo_args(
-        //     target,
-        //     &self.metadata,
-        //     self.environment.cargo_jobs(),
-        //     options,
-        // );
+    pub fn command(&self, target: &str) -> DocsRsCommand<'ws, 'static> {
+        let mut command = self
+            .build
+            .cargo()
+            .timeout(Some(self.limits.timeout()))
+            .no_output_timeout(None);
 
-        // if uses_build_std(&cargo_args) {
-        //     self.fetch_build_std_dependencies([target])?;
-        // } else if !DEFAULT_TARGETS.contains(&target) {
-        //     self.environment
-        //         .configured_toolchain()
-        //         .add_target(self.environment.workspace(), target)?;
-        // }
+        for (key, value) in self.metadata.environment_variables() {
+            command = command.env(key, value);
+        }
 
-        // let mut command = self
-        //     .build
-        //     .cargo()
-        //     .timeout(Some(self.limits.timeout()))
-        //     .no_output_timeout(None);
-
-        // for (key, value) in self.metadata.environment_variables() {
-        //     command = command.env(key, value);
-        // }
-
-        // Ok(DocsRsCommand::new(command.args(&cargo_args)))
+        DocsRsCommand::new(command, target)
     }
 
     /// Return the host path containing documentation for a target.
@@ -256,23 +240,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
-            let rustdoc_args = vec![
-                "--output-format".into(),
-                "json".into(),
-                "--show-coverage".into(),
-            ];
-
-            self.command(
-                target,
-                CommandOptions {
-                    rustdoc_args,
-                    ..Default::default()
-                },
-            )
-            .map_err(BuildStepError::Output)?
-            .log_output(true)
-            .run()
-            .map_err(BuildStepError::Command)?;
+            self.command(target)
+                .rustdoc_args(["--output-format", "json", "--show-coverage"])
+                .log_output(true)
+                .run()
+                .map_err(BuildStepError::Command)?;
 
             let output_dir = self.output_dir(target);
             if let Ok(path) = find_single_output_file(&output_dir, "json") {
@@ -293,16 +265,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Build unstable rustdoc JSON for one target.
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<PathBuf> {
         self.capture_step(|| {
-            self.command(
-                target,
-                CommandOptions {
-                    rustdoc_args: vec!["--output-format".into(), "json".into()],
-                    ..Default::default()
-                },
-            )
-            .map_err(BuildStepError::Output)?
-            .run()
-            .map_err(BuildStepError::Command)?;
+            self.command(target)
+                .rustdoc_args(["--output-format", "json"])
+                .run()
+                .map_err(BuildStepError::Command)?;
 
             find_single_output_file(self.output_dir(target), "json").map_err(BuildStepError::Output)
         })
@@ -319,23 +285,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
-            let rustdoc_args = vec![
-                format!("--emit={}", emit.as_str()),
-                "--resource-suffix".into(),
-                self.resource_suffix.clone(),
-            ];
-
-            self.command(
-                target,
-                CommandOptions {
-                    rustdoc_args,
-                    ..Default::default()
-                },
-            )
-            .map_err(BuildStepError::Output)?
-            .arg("-Zrustdoc-scrape-examples")
-            .run()
-            .map_err(BuildStepError::Command)?;
+            self.command(target)
+                .rustdoc_arg(format!("--emit={}", emit.as_str()))
+                .rustdoc_args(["--resource-suffix", &self.resource_suffix])
+                .cargo_arg("-Zrustdoc-scrape-examples")
+                .run()
+                .map_err(BuildStepError::Command)?;
 
             Ok(self.output_dir(target))
         })

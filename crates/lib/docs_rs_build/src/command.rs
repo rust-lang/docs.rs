@@ -1,7 +1,7 @@
 use anyhow::Result;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
 use rustwide::cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput};
-use std::{ffi::OsString, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--static-root-path",
@@ -11,65 +11,74 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--extern-html-root-takes-precedence",
 ];
 
-/// Options that vary between invocations of the docs.rs Cargo command.
-#[derive(Clone, Debug, Default)]
-pub struct CommandOptions {
-    /// Extra arguments passed to Cargo before rustdoc's argument separator.
-    pub cargo_args: Vec<String>,
-    /// Extra rustdoc flags, such as the HTML or JSON output mode.
-    pub rustdoc_args: Vec<String>,
-}
-
 /// A fully prepared docs.rs Cargo command backed by rustwide.
 #[derive(Debug)]
 #[must_use = "call `.run()` or `.run_capture()` to execute the command"]
 pub struct DocsRsCommand<'ws, 'pl> {
     inner: Command<'ws, 'pl>,
+
+    target: String,
+
+    /// Extra arguments passed to Cargo before rustdoc's argument separator.
+    cargo_args: Vec<String>,
+
+    /// Extra rustdoc flags, such as the HTML or JSON output mode.
+    rustdoc_args: Vec<String>,
 }
 
 impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
-    pub(crate) fn new(inner: Command<'ws, 'pl>) -> Self {
-        Self { inner }
+    pub(crate) fn new(inner: Command<'ws, 'pl>, target: impl Into<String>) -> Self {
+        Self {
+            inner,
+            target: target.into(),
+            cargo_args: Vec::new(),
+            rustdoc_args: Vec::new(),
+        }
     }
 
-    /// Add a raw argument to the already prepared command.
-    ///
-    /// Prefer [`CommandOptions::cargo_args`] or
-    /// [`CommandOptions::rustdoc_args`] when argument placement matters.
-    pub fn arg(mut self, arg: impl Into<OsString>) -> Self {
-        self.inner = self.inner.arg(arg);
+    pub fn cargo_arg(mut self, arg: impl Into<String>) -> Self {
+        self.cargo_args.push(arg.into());
         self
     }
 
-    /// Add raw arguments to the already prepared command.
-    pub fn args<S: Into<OsString>>(mut self, args: impl IntoIterator<Item = S>) -> Self {
-        self.inner = self.inner.args(args);
+    pub fn cargo_args<S: Into<String>>(mut self, args: impl IntoIterator<Item = S>) -> Self {
+        self.cargo_args.extend(args.into_iter().map(Into::into));
         self
     }
 
-    /// Add an environment variable.
-    pub fn env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
-        self.inner = self.inner.env(key, value);
+    pub fn rustdoc_arg(mut self, arg: impl Into<String>) -> Self {
+        self.rustdoc_args.push(arg.into());
         self
     }
 
-    /// Override the command's working directory.
-    pub fn current_directory(mut self, path: impl Into<PathBuf>) -> Self {
-        self.inner = self.inner.current_directory(path);
+    pub fn rustdoc_args<S: Into<String>>(mut self, args: impl IntoIterator<Item = S>) -> Self {
+        self.rustdoc_args.extend(args.into_iter().map(Into::into));
         self
     }
 
-    /// Override the command timeout.
-    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
-        self.inner = self.inner.timeout(timeout);
-        self
-    }
+    // /// Add an environment variable.
+    // pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+    //     self.inner = self.inner.env(key, value);
+    //     self
+    // }
 
-    /// Override the command's no-output timeout.
-    pub fn no_output_timeout(mut self, timeout: Option<Duration>) -> Self {
-        self.inner = self.inner.no_output_timeout(timeout);
-        self
-    }
+    // /// Override the command's working directory.
+    // pub fn current_directory(mut self, path: impl Into<PathBuf>) -> Self {
+    //     self.inner = self.inner.current_directory(path);
+    //     self
+    // }
+
+    // /// Override the command timeout.
+    // pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
+    //     self.inner = self.inner.timeout(timeout);
+    //     self
+    // }
+
+    // /// Override the command's no-output timeout.
+    // pub fn no_output_timeout(mut self, timeout: Option<Duration>) -> Self {
+    //     self.inner = self.inner.no_output_timeout(timeout);
+    //     self
+    // }
 
     /// Enable or disable command output logging.
     pub fn log_output(mut self, enabled: bool) -> Self {
@@ -77,14 +86,21 @@ impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
         self
     }
 
-    /// Enable or disable command-line logging.
-    pub fn log_command(mut self, enabled: bool) -> Self {
-        self.inner = self.inner.log_command(enabled);
-        self
-    }
+    // /// Enable or disable command-line logging.
+    // pub fn log_command(mut self, enabled: bool) -> Self {
+    //     self.inner = self.inner.log_command(enabled);
+    //     self
+    // }
 
     /// Execute the command.
     pub fn run(self) -> Result<(), CommandError> {
+        // if uses_build_std(&cargo_args) {
+        //     self.fetch_build_std_dependencies([target])?;
+        // } else if !DEFAULT_TARGETS.contains(&target) {
+        //     self.environment
+        //         .configured_toolchain()
+        //         .add_target(self.environment.workspace(), target)?;
+        // }
         self.inner.run()
     }
 
@@ -93,10 +109,10 @@ impl<'ws, 'pl> DocsRsCommand<'ws, 'pl> {
         self.inner.run_capture()
     }
 
-    /// Unwrap the prepared rustwide command for APIs not forwarded here.
-    pub fn into_inner(self) -> Command<'ws, 'pl> {
-        self.inner
-    }
+    // /// Unwrap the prepared rustwide command for APIs not forwarded here.
+    // pub fn into_inner(self) -> Command<'ws, 'pl> {
+    //     self.inner
+    // }
 }
 
 impl<'ws> DocsRsCommand<'ws, 'static> {
@@ -105,7 +121,9 @@ impl<'ws> DocsRsCommand<'ws, 'static> {
         self,
         callback: &'pl mut dyn FnMut(&str, &mut ProcessLinesActions),
     ) -> DocsRsCommand<'ws, 'pl> {
-        DocsRsCommand::new(self.inner.process_lines(callback))
+        todo!();
+        // self.inner = self.inner.process_lines(callback);
+        // self
     }
 }
 
@@ -113,18 +131,19 @@ fn cargo_args(
     target: &str,
     metadata: &Metadata,
     cargo_jobs: Option<usize>,
-    mut options: CommandOptions,
+    cargo_args: Vec<String>,
+    mut rustdoc_args: Vec<String>,
 ) -> Vec<String> {
-    let mut additional_args = vec![
+    let mut additional_args: Vec<String> = vec![
         "--offline".into(),
         "-Zunstable-options".into(),
         format!(
             r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
-        ),
+        ).into(),
     ];
 
     if let Some(jobs) = cargo_jobs {
-        additional_args.push(format!("-j{jobs}"));
+        additional_args.push(format!("-j{jobs}").into());
     }
 
     // Cargo puts proc-macro documentation in the host target directory and
@@ -134,10 +153,8 @@ fn cargo_args(
         additional_args.push(target.into());
     }
 
-    additional_args.append(&mut options.cargo_args);
+    additional_args.extend(cargo_args);
 
-    options
-        .rustdoc_args
-        .extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
-    metadata.cargo_args(&additional_args, &options.rustdoc_args)
+    rustdoc_args.extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
+    metadata.cargo_args(&additional_args, &rustdoc_args)
 }
