@@ -325,8 +325,10 @@ impl BuildEnvironment {
         &self.default_limits
     }
 
-    pub(crate) fn resource_suffix(&self) -> Result<String> {
-        Ok(format!("-{}", parse_rustc_version(&self.rustc_version()?)?))
+    pub(crate) fn rustc_version_and_resource_suffix(&self) -> Result<(String, String)> {
+        let rustc_version = self.rustc_version()?;
+        let resource_suffix = format!("-{}", parse_rustc_version(&rustc_version)?);
+        Ok((rustc_version, resource_suffix))
     }
 
     pub(crate) fn rustc_version(&self) -> Result<String> {

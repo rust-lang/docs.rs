@@ -1,12 +1,5 @@
 # TODO
 
-- Result information:
-  - rustc version;
-  - docs.rs version;
-  - an explicit has_docs result;
-  - JSON format version;
-  - optional compiler metrics paths.
-
 Intentionally service-specific pieces that should probably stay in the binary:
 
 - Database build/release initialization and completion.

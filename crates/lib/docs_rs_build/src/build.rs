@@ -48,8 +48,10 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) build: &'build Build<'ws>,
     pub(crate) metadata: Metadata,
     pub(crate) limits: &'build Limits,
+    rustc_version: String,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
+    compiler_metrics: RefCell<Vec<PathBuf>>,
 }
 
 #[bon]
@@ -60,15 +62,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         limits: &'build Limits,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-        let resource_suffix = environment.resource_suffix()?;
+        let (rustc_version, resource_suffix) = environment.rustc_version_and_resource_suffix()?;
 
         Ok(Self {
             environment,
             build,
             metadata,
             limits,
+            rustc_version,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
+            compiler_metrics: RefCell::new(Vec::new()),
         })
     }
 
@@ -191,6 +195,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
 
         Ok(ReleaseBuildResult {
+            rustc_version: self.rustc_version.clone(),
+            docsrs_version: format!("docsrs {}", docs_rs_utils::BUILD_VERSION),
             metadata: self.metadata.clone(),
             cargo_metadata,
             targets: target_results,
@@ -219,11 +225,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
+        self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
         let coverage_result = self.build_coverage(target);
         let rustdoc_json_result = self.build_rustdoc_json(target);
         let documentation_result = self.build_documentation(target);
+        let compiler_metrics = self.compiler_metrics.take();
 
         if documentation_result.successful() && self.metadata.proc_macro {
             debug_assert!(is_default, "proc macros only support their host target");
@@ -235,6 +243,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             documentation: documentation_result,
             rustdoc_json: rustdoc_json_result,
             coverage: coverage_result,
+            compiler_metrics,
         }
     }
 
@@ -330,7 +339,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 metrics_dir,
                 self.environment.compiler_metrics_collection_path(),
             ) {
-                copy_directory_contents(&source, destination)?;
+                let copied_metrics = copy_directory_contents(&source, destination)?;
+                self.compiler_metrics.borrow_mut().extend(copied_metrics);
                 fs::remove_dir_all(source).map_err(anyhow::Error::from)?;
             }
 
@@ -409,19 +419,21 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 }
 
-fn copy_directory_contents(source: &Path, destination: &Path) -> Result<()> {
+fn copy_directory_contents(source: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
     fs::create_dir_all(destination)?;
+    let mut copied = Vec::new();
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         if source_path.is_dir() {
-            copy_directory_contents(&source_path, &destination_path)?;
+            copied.extend(copy_directory_contents(&source_path, &destination_path)?);
         } else {
-            fs::copy(source_path, destination_path)?;
+            fs::copy(source_path, &destination_path)?;
+            copied.push(destination_path);
         }
     }
-    Ok(())
+    Ok(copied)
 }
 
 fn essential_files_directory(documentation_output: &Path) -> Result<PathBuf> {
@@ -505,6 +517,25 @@ mod tests {
         let static_files = directory.path().join("static.files");
         fs::create_dir(&static_files)?;
         assert_eq!(essential_files_directory(directory.path())?, static_files);
+        Ok(())
+    }
+
+    #[test]
+    fn reports_copied_compiler_metrics_paths() -> Result<()> {
+        let source = tempfile::tempdir()?;
+        let destination = tempfile::tempdir()?;
+        fs::create_dir(source.path().join("nested"))?;
+        fs::write(source.path().join("crate-1.json"), "{}")?;
+        fs::write(source.path().join("nested/crate-2.json"), "{}")?;
+
+        let mut copied = copy_directory_contents(source.path(), destination.path())?;
+        copied.sort();
+        let mut expected = vec![
+            destination.path().join("crate-1.json"),
+            destination.path().join("nested/crate-2.json"),
+        ];
+        expected.sort();
+        assert_eq!(copied, expected);
         Ok(())
     }
 }

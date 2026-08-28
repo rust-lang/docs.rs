@@ -78,6 +78,8 @@ pub struct TargetBuildResult {
     pub rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
     pub coverage: StepResult<Option<DocCoverage>>,
+    /// Compiler metrics files copied out of this target's HTML build.
+    pub compiler_metrics: Vec<PathBuf>,
 }
 
 impl TargetBuildResult {
@@ -110,6 +112,10 @@ impl TargetBuildResult {
 
 /// Service-independent result of building one crate release.
 pub struct ReleaseBuildResult {
+    /// Output of `rustc --version` for the toolchain used by this build.
+    pub rustc_version: String,
+    /// Version of docs.rs that configured this build.
+    pub docsrs_version: String,
     /// Metadata read from rustwide's prepared source directory.
     pub metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
@@ -164,6 +170,7 @@ mod tests {
                 error: None,
                 log: String::new(),
             },
+            compiler_metrics: Vec::new(),
         }
     }
 
