@@ -2,7 +2,7 @@ use crate::{CpuLimit, ReleaseContext};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
-use docs_rs_utils::APP_USER_AGENT;
+use docs_rs_utils::{APP_USER_AGENT, retry};
 use docsrs_metadata::DEFAULT_TARGETS;
 use log::warn;
 use rustwide::{
@@ -174,7 +174,8 @@ impl BuildEnvironment {
         &self.toolchain
     }
 
-    /// Install or update the configured toolchain and its docs.rs components.
+    /// Install or update the configured toolchain and its docs.rs components,
+    /// purging incompatible workspace caches when the compiler changes.
     ///
     /// Returns `true` when the compiler version changed. CI toolchains return
     /// `true` whenever they are installed because their existing version cannot
@@ -182,6 +183,7 @@ impl BuildEnvironment {
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(&self.workspace)?;
+            retry(|| self.purge_caches(), 3)?;
             return Ok(true);
         }
 
@@ -226,7 +228,11 @@ impl BuildEnvironment {
         }
 
         let new_version = self.rustc_version()?;
-        Ok(old_version.as_ref() != Some(&new_version))
+        let changed = old_version.as_ref() != Some(&new_version);
+        if changed {
+            retry(|| self.purge_caches(), 3)?;
+        }
+        Ok(changed)
     }
 
     /// Enter the context of a single release.

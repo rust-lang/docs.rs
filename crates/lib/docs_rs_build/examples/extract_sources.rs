@@ -25,7 +25,6 @@ fn main() -> Result<()> {
         ))
         .build()?;
     if environment.update_toolchain()? {
-        environment.purge_caches()?;
         let essential_files = environment.build_essential_files()?.into_inner();
         println!("essential files: {}", essential_files.display());
     }
