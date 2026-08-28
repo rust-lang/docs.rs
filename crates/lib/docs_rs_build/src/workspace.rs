@@ -17,9 +17,9 @@ const DUMMY_CRATE_VERSION: &str = "1.0.0";
 const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Describes how the sandbox image should be resolved whenever the workspace is initialized.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum SandboxImageSource {
-    /// Let rustwide select and download its default image.
+    #[default]
     RustwideDefault,
     /// Require an image that is already present locally.
     Local(String),
@@ -93,7 +93,7 @@ impl BuildEnvironment {
         #[builder(start_fn)] path: &Path,
         #[builder(default = Toolchain::dist("nightly"))] toolchain: Toolchain,
         #[builder(default = false)] running_inside_docker: bool,
-        #[builder(default = SandboxImageSource::RustwideDefault)] sandbox_image: SandboxImageSource,
+        #[builder(default)] sandbox_image: SandboxImageSource,
         #[builder(default = false)] fast_init: bool,
         #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
         workspace_reinitialization_interval: Duration,
