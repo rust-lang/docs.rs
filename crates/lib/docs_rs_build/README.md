@@ -40,8 +40,9 @@ with `purge_caches`.
 
 ## Toolchain lifecycle
 
-Before accepting builds, and periodically in a long-running builder, prepare
-the configured toolchain and collect any regenerated shared rustdoc files:
+Before accepting builds, and periodically in a long-running builder, update the
+configured toolchain. The caller decides whether a compiler change requires
+regenerating and publishing shared rustdoc files:
 
 ```rust,no_run
 # use anyhow::Result;
@@ -53,8 +54,10 @@ let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"
 
 // A service can fetch this selection from its configuration or database.
 environment.set_toolchain(Toolchain::dist("nightly"));
-if let Some(essential_files) = environment.update_toolchain_and_build_essential_files()? {
-    // Inspect or publish essential_files here.
+if environment.update_toolchain()? {
+    environment.purge_caches()?;
+    let essential_files = environment.build_essential_files()?;
+    // Inspect or publish essential_files.into_inner() here.
 #   let _ = essential_files;
 }
 # Ok(())
@@ -64,9 +67,13 @@ if let Some(essential_files) = environment.update_toolchain_and_build_essential_
 Preparation installs the toolchain, the docs.rs default targets, and the
 `llvm-tools-preview`, `rustc-dev`, and `rustfmt` components. Non-default targets
 left by individual crate builds are removed before a distribution toolchain is
-updated. When the compiler changes—or on the environment's first preparation—
-caches are purged and the essential-files build is returned to the caller. CI
-toolchains are installed and treated as changed on every preparation.
+updated. CI toolchains are installed and treated as changed on every update.
+
+A durable service should additionally compare `rustc_version()` with the
+version of the essential files it last published. That ensures generation and
+publication are retried after a failure even when the installed compiler no
+longer changes on the next update check. The published version should only be
+recorded after publication succeeds.
 
 ## Host resources and compiler metrics
 

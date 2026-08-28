@@ -2,7 +2,7 @@ use crate::{CpuLimit, ReleaseContext};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
-use docs_rs_utils::{APP_USER_AGENT, retry};
+use docs_rs_utils::APP_USER_AGENT;
 use docsrs_metadata::DEFAULT_TARGETS;
 use log::warn;
 use rustwide::{
@@ -81,7 +81,6 @@ pub struct BuildEnvironment {
     workspace_initialized_at: Instant,
     workspace_reinitialization_interval: Duration,
     toolchain: Toolchain,
-    toolchain_prepared: bool,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
@@ -126,7 +125,6 @@ impl BuildEnvironment {
             workspace_initialized_at: Instant::now(),
             workspace_reinitialization_interval,
             toolchain,
-            toolchain_prepared: false,
             cpu_limit,
             docker_runtime,
             include_default_targets,
@@ -164,12 +162,10 @@ impl BuildEnvironment {
 
     /// Select the toolchain used by subsequent builds.
     ///
-    /// Changing it marks the new toolchain as unprepared, so the next lifecycle
-    /// update also regenerates toolchain-dependent artifacts.
+    /// The next call to [`Self::update_toolchain`] installs or updates this selection.
     pub fn set_toolchain(&mut self, toolchain: Toolchain) {
         if self.toolchain != toolchain {
             self.toolchain = toolchain;
-            self.toolchain_prepared = false;
         }
     }
 
@@ -180,13 +176,12 @@ impl BuildEnvironment {
 
     /// Install or update the configured toolchain and its docs.rs components.
     ///
-    /// Returns `true` when toolchain-dependent artifacts should be regenerated:
-    /// after a compiler update, for every CI toolchain installation, and on the
-    /// first preparation performed by this environment.
+    /// Returns `true` when the compiler version changed. CI toolchains return
+    /// `true` whenever they are installed because their existing version cannot
+    /// be detected through rustup reliably.
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(&self.workspace)?;
-            self.toolchain_prepared = true;
             return Ok(true);
         }
 
@@ -231,26 +226,7 @@ impl BuildEnvironment {
         }
 
         let new_version = self.rustc_version()?;
-        let requires_artifact_refresh =
-            !self.toolchain_prepared || old_version.as_ref() != Some(&new_version);
-        self.toolchain_prepared = true;
-        Ok(requires_artifact_refresh)
-    }
-
-    /// Prepare the toolchain and rebuild its shared rustdoc files when necessary.
-    ///
-    /// The returned build result belongs to the caller so it can publish or inspect
-    /// the generated files without coupling this crate to docs.rs storage.
-    pub fn update_toolchain_and_build_essential_files(
-        &mut self,
-    ) -> Result<Option<BuildResult<PathBuf>>> {
-        let requires_artifact_refresh = retry(|| self.update_toolchain(), 3)?;
-        if !requires_artifact_refresh {
-            return Ok(None);
-        }
-
-        retry(|| self.purge_caches(), 3)?;
-        Ok(Some(self.build_essential_files()?))
+        Ok(old_version.as_ref() != Some(&new_version))
     }
 
     /// Enter the context of a single release.
