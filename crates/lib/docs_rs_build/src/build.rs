@@ -356,15 +356,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         CargoMetadata::load_from_metadata(metadata)
     }
 }
-fn uses_build_std(args: &[String]) -> bool {
-    args.iter().enumerate().any(|(index, arg)| {
-        arg.starts_with("-Zbuild-std")
-            || (arg == "-Z"
-                && args
-                    .get(index + 1)
-                    .is_some_and(|next| next.starts_with("build-std")))
-    })
-}
 
 fn find_single_output_file(
     directory: impl AsRef<Path>,
@@ -403,13 +394,6 @@ fn find_single_output_file(
 mod tests {
     use super::*;
     use std::ffi::OsStr;
-
-    #[test]
-    fn recognizes_build_std_spellings() {
-        assert!(uses_build_std(&["-Zbuild-std=core".into()]));
-        assert!(uses_build_std(&["-Z".into(), "build-std".into()]));
-        assert!(!uses_build_std(&["-Zunstable-options".into()]));
-    }
 
     #[test]
     fn finds_exactly_one_output_file() -> Result<()> {

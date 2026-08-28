@@ -1,6 +1,7 @@
 use crate::build::ReleaseBuild;
 use anyhow::Result;
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
+use itertools::Itertools as _;
 use rustwide::{
     Build,
     cmd::{Command, CommandError, ProcessLinesActions, ProcessOutput},
@@ -85,6 +86,18 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 }
 
+fn uses_build_std<S: AsRef<str> + Clone>(args: impl IntoIterator<Item = S>) -> bool {
+    for (lhs, rhs) in args.into_iter().tuple_windows() {
+        let lhs = lhs.as_ref();
+        let rhs = rhs.as_ref();
+        if lhs.starts_with("-Zbuild-std") || (lhs == "-Z" && rhs == "build-std") {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn cargo_args(
     target: &str,
     metadata: &Metadata,
@@ -115,4 +128,16 @@ fn cargo_args(
 
     rustdoc_args.extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
     metadata.cargo_args(&additional_args, &rustdoc_args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_build_std_spellings() {
+        assert!(uses_build_std(["-Zbuild-std=core"]));
+        assert!(uses_build_std(["-Z", "build-std"]));
+        assert!(!uses_build_std(["-Zunstable-options"]));
+    }
 }

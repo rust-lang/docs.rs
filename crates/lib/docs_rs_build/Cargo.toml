@@ -13,6 +13,7 @@ docs_rs_build_limits = { path = "../docs_rs_build_limits" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_types = { path = "../docs_rs_types" }
 docsrs-metadata = { path = "../metadata" }
+itertools = { workspace = true }
 log = "0.4"
 rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 thiserror = { workspace = true }
