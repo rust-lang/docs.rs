@@ -1,15 +1,5 @@
 # TODO
 
-- Host resource validation:
-  - the old builder checks available host memory before starting a build;
-  - the new crate applies the sandbox limit but does not verify that the host
-    can satisfy it.
-
-- Compiler metrics collection:
-  - injecting -Zmetrics-dir;
-  - creating and copying the metrics directory;
-  - the collect_metrics build option.
-
 - Rustdoc JSON metadata:
   - reading format_version from the generated JSON;
   - the new crate returns only the JSON path.
