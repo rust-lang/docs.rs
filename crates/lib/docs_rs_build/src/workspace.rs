@@ -244,7 +244,7 @@ impl BuildEnvironment {
         }
 
         let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
-        self.ensure_required_toolchain_targets(installed_targets)?;
+        self.ensure_required_toolchain_targets(&installed_targets)?;
         self.ensure_toolchain_components();
         Ok(installed)
     }
@@ -264,12 +264,6 @@ impl BuildEnvironment {
 
         // Version detection is allowed to fail when the toolchain is not installed yet.
         let old_version = self.rustc_version().ok();
-        let mut targets_to_install = DEFAULT_TARGETS
-            .iter()
-            .chain([&HOST_TARGET])
-            .map(|target| (*target).to_owned())
-            .collect::<HashSet<_>>();
-
         let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
             Ok(targets) => targets,
             Err(error)
@@ -285,16 +279,10 @@ impl BuildEnvironment {
 
         // Remove no-longer-managed targets before updating. Otherwise rustup can
         // refuse an update when one of those targets disappeared upstream.
-        for target in installed_targets {
-            if !targets_to_install.remove(&target) {
-                self.toolchain.remove_target(&self.workspace, &target)?;
-            }
-        }
+        self.remove_unmanaged_toolchain_targets(&installed_targets)?;
 
         self.toolchain.install(&self.workspace)?;
-        for target in targets_to_install {
-            self.toolchain.add_target(&self.workspace, &target)?;
-        }
+        self.ensure_required_toolchain_targets(&installed_targets)?;
         self.ensure_toolchain_components();
 
         let new_version = self.rustc_version()?;
@@ -419,15 +407,29 @@ impl BuildEnvironment {
         }
     }
 
-    fn ensure_required_toolchain_targets(&self, installed_targets: Vec<String>) -> Result<()> {
-        let mut targets_to_install = DEFAULT_TARGETS
+    fn managed_toolchain_targets() -> HashSet<String> {
+        DEFAULT_TARGETS
             .iter()
             .chain([&HOST_TARGET])
             .map(|target| (*target).to_owned())
-            .collect::<HashSet<_>>();
+            .collect()
+    }
+
+    fn remove_unmanaged_toolchain_targets(&self, installed_targets: &[String]) -> Result<()> {
+        let managed_targets = Self::managed_toolchain_targets();
+        for target in installed_targets {
+            if !managed_targets.contains(target) {
+                self.toolchain.remove_target(&self.workspace, target)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_required_toolchain_targets(&self, installed_targets: &[String]) -> Result<()> {
+        let mut targets_to_install = Self::managed_toolchain_targets();
 
         for target in installed_targets {
-            targets_to_install.remove(&target);
+            targets_to_install.remove(target);
         }
         for target in targets_to_install {
             self.toolchain.add_target(&self.workspace, &target)?;
