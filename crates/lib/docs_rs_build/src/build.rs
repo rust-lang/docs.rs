@@ -177,14 +177,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .retry_without_lockfile(true)
             .run()?;
 
-        let default_has_docs = default_target_result.successful()
-            && cargo_metadata.root().library_name().is_some_and(|name| {
-                default_target_result
-                    .documentation
-                    .output
-                    .as_ref()
-                    .is_some_and(|path| path.join(name).is_dir())
-            });
+        let default_has_docs = cargo_metadata
+            .root()
+            .library_name()
+            .is_some_and(|name| default_target_result.has_docs(&name));
 
         let mut target_results = vec![default_target_result];
 

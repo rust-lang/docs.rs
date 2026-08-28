@@ -64,6 +64,16 @@ impl TargetBuildResult {
     pub fn successful(&self) -> bool {
         self.documentation.successful() && self.documentation_exists()
     }
+
+    /// Whether this target produced documentation for the crate's library target.
+    pub fn has_docs(&self, library_name: &str) -> bool {
+        self.successful()
+            && self
+                .documentation
+                .output
+                .as_ref()
+                .is_some_and(|path| path.join(library_name).is_dir())
+    }
 }
 
 /// Service-independent result of building one crate release.
@@ -87,6 +97,14 @@ impl ReleaseBuildResult {
     /// Whether the default HTML documentation build succeeded.
     pub fn successful(&self) -> bool {
         self.default_target().successful()
+    }
+
+    /// Whether the default target produced documentation for this crate's library target.
+    pub fn has_docs(&self) -> bool {
+        self.cargo_metadata
+            .root()
+            .library_name()
+            .is_some_and(|name| self.default_target().has_docs(&name))
     }
 }
 
@@ -122,9 +140,14 @@ mod tests {
         let missing = target_result(temporary.path().join("missing"));
         assert!(!missing.documentation_exists());
         assert!(!missing.successful());
+        assert!(!missing.has_docs("example_crate"));
 
         let existing = target_result(temporary.path().to_owned());
         assert!(existing.documentation_exists());
         assert!(existing.successful());
+        assert!(!existing.has_docs("example_crate"));
+
+        std::fs::create_dir(temporary.path().join("example_crate")).unwrap();
+        assert!(existing.has_docs("example_crate"));
     }
 }
