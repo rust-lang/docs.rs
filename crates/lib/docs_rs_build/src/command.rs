@@ -66,7 +66,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
             self.rustdoc_args,
         );
 
-        if uses_build_std(&cargo_args) {
+        if args_contain_unstable_feature(&cargo_args, "build-std") {
             self.release_build
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
@@ -78,30 +78,6 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
 
         Ok(self.release_build.build_rustwide_command().args(cargo_args))
     }
-}
-
-fn uses_build_std<S>(cargo_args: impl IntoIterator<Item = S>) -> bool
-where
-    S: AsRef<str>,
-{
-    let mut cargo_args = cargo_args.into_iter().peekable();
-
-    while let Some(arg) = cargo_args.next() {
-        let arg = arg.as_ref();
-        if arg.starts_with("-Zbuild-std") {
-            return true;
-        }
-
-        if arg == "-Z"
-            && cargo_args
-                .peek()
-                .is_some_and(|next| next.as_ref().starts_with("build-std"))
-        {
-            return true;
-        }
-    }
-
-    false
 }
 
 fn cargo_args(
@@ -134,20 +110,4 @@ fn cargo_args(
 
     rustdoc_args.extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
     metadata.cargo_args(&additional_args, &rustdoc_args)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recognizes_build_std_spellings() {
-        assert!(uses_build_std(["-Zbuild-std=core"]));
-        assert!(uses_build_std(["-Z", "build-std"]));
-        assert!(!uses_build_std(["-Zunstable-options"]));
-
-        let owned = vec!["-Z".to_string(), "build-std=core".to_string()];
-        assert!(uses_build_std(&owned));
-        assert!(uses_build_std(owned));
-    }
 }

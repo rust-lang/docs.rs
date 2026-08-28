@@ -10,6 +10,7 @@ mod command;
 mod release;
 mod result;
 mod sandbox;
+mod utils;
 mod workspace;
 
 pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
