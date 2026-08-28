@@ -66,12 +66,14 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
             self.rustdoc_args,
         );
 
-        self.release_build.environment.add_target(&self.target)?;
-
         if uses_build_std(&cargo_args) {
             self.release_build
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
+        } else {
+            self.release_build
+                .environment
+                .ensure_target_installed(&self.target)?;
         }
 
         Ok(self.release_build.build_rustwide_command().args(cargo_args))

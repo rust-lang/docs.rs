@@ -2,7 +2,6 @@ use crate::{CpuLimit, ReleaseContext, StepResult};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
-use docsrs_metadata::DEFAULT_TARGETS;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
@@ -130,13 +129,12 @@ impl BuildEnvironment {
         Ok(format!("-{}", parse_rustc_version(version)?))
     }
 
-    pub(crate) fn add_target(&self, target: impl AsRef<str>) -> Result<()> {
+    pub(crate) fn ensure_target_installed(&self, target: impl AsRef<str>) -> Result<()> {
         let target = target.as_ref();
-        if !DEFAULT_TARGETS.contains(&target) {
-            self.configured_toolchain()
-                .add_target(self.workspace(), target)
-                .context("error adding non-default target to toolchain")?;
-        }
+        self.configured_toolchain()
+            .add_target(self.workspace(), target)
+            .context("error adding non-default target to toolchain")?;
+
         Ok(())
     }
 }
