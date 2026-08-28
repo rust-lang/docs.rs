@@ -174,6 +174,65 @@ impl BuildEnvironment {
         &self.toolchain
     }
 
+    /// Check whether the configured toolchain is installed in this workspace.
+    ///
+    /// This only inspects local rustup state and does not check whether a newer
+    /// version of a distribution toolchain is available.
+    pub fn is_toolchain_installed(&self) -> Result<bool> {
+        if self.toolchain.as_dist().is_some() {
+            return match self.toolchain.installed_targets(&self.workspace) {
+                Ok(_) => Ok(true),
+                Err(error)
+                    if matches!(
+                        error.downcast_ref::<ToolchainError>(),
+                        Some(ToolchainError::NotInstalled)
+                    ) =>
+                {
+                    Ok(false)
+                }
+                Err(error) => Err(error),
+            };
+        }
+
+        Ok(self
+            .workspace
+            .installed_toolchains()?
+            .contains(&self.toolchain))
+    }
+
+    /// Install the configured toolchain when it is not already present.
+    ///
+    /// Returns whether an installation was performed. An existing distribution
+    /// toolchain is not checked for updates.
+    pub fn ensure_toolchain_installed(&self) -> Result<bool> {
+        if self.is_toolchain_installed()? {
+            return Ok(false);
+        }
+
+        self.toolchain.install(&self.workspace)?;
+        Ok(true)
+    }
+
+    /// Ensure the configured toolchain is ready for docs.rs builds without
+    /// checking whether an installed distribution toolchain can be updated.
+    ///
+    /// For distribution toolchains this also ensures the docs.rs default
+    /// targets and components are installed. CI toolchains only support their
+    /// platform artifact and are therefore only installed when missing.
+    /// Returns whether the toolchain itself was newly installed.
+    pub fn ensure_toolchain_ready(&self) -> Result<bool> {
+        let installed = self.ensure_toolchain_installed()?;
+        if self.toolchain.as_ci().is_some() {
+            return Ok(installed);
+        }
+
+        for target in DEFAULT_TARGETS {
+            self.toolchain.add_target(&self.workspace, target)?;
+        }
+        self.ensure_toolchain_components();
+        Ok(installed)
+    }
+
     /// Install or update the configured toolchain and its docs.rs components,
     /// purging incompatible workspace caches when the compiler changes.
     ///
@@ -219,13 +278,7 @@ impl BuildEnvironment {
         for target in targets_to_install {
             self.toolchain.add_target(&self.workspace, &target)?;
         }
-        for component in TOOLCHAIN_COMPONENTS {
-            if let Err(error) = self.toolchain.add_component(&self.workspace, component) {
-                // A newly published nightly can temporarily lack a component. Builds
-                // that do not need it should still be allowed to proceed.
-                warn!("failed to install toolchain component {component}: {error}");
-            }
-        }
+        self.ensure_toolchain_components();
 
         let new_version = self.rustc_version()?;
         let changed = old_version.as_ref() != Some(&new_version);
@@ -337,6 +390,16 @@ impl BuildEnvironment {
             .context("error adding non-default target to toolchain")?;
 
         Ok(())
+    }
+
+    fn ensure_toolchain_components(&self) {
+        for component in TOOLCHAIN_COMPONENTS {
+            if let Err(error) = self.toolchain.add_component(&self.workspace, component) {
+                // A newly published nightly can temporarily lack a component. Builds
+                // that do not need it should still be allowed to proceed.
+                warn!("failed to install toolchain component {component}: {error}");
+            }
+        }
     }
 }
 
