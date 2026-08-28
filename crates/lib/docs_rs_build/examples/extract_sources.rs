@@ -19,11 +19,16 @@ fn main() -> Result<()> {
     let version = version.to_string_lossy();
     fs::create_dir_all(&source_directory)?;
 
-    let environment = BuildEnvironment::builder(PathBuf::from("rustwide-workspace").as_path())
+    let mut environment = BuildEnvironment::builder(PathBuf::from("rustwide-workspace").as_path())
         .sandbox_image(SandboxImageSource::LocalOrRemote(
             "docsrs/build-env:latest".into(),
         ))
         .build()?;
+    if environment.update_toolchain()? {
+        environment.purge_caches()?;
+        let essential_files = environment.build_essential_files()?.into_inner();
+        println!("essential files: {}", essential_files.display());
+    }
 
     let krate = Crate::crates_io(&name, &version);
     let result = environment
