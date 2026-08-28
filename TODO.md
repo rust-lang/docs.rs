@@ -4,13 +4,6 @@
   - reading format_version from the generated JSON;
   - the new crate returns only the JSON path.
 
-- Essential-files semantics:
-  - the new crate builds and returns the static-files output directory;
-  - it does not fail the outer operation when that StepResult is unsuccessful;
-  - it does not normalize the static.files subdirectory. Storage/uploading
-    should remain outside, but identifying the actual static-files directory
-    could belong in the library.
-
 - Result information:
   - rustc version;
   - docs.rs version;

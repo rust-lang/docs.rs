@@ -285,8 +285,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
-    pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
-        self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
+    pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
+        let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
+        if let Some(error) = result.error {
+            bail!(
+                "failed to build shared rustdoc static files: {error}\n{}",
+                result.log
+            );
+        }
+
+        let output = result
+            .output
+            .context("essential-files build succeeded without an output directory")?;
+        essential_files_directory(&output)
     }
 
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
@@ -411,6 +422,17 @@ fn copy_directory_contents(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+fn essential_files_directory(documentation_output: &Path) -> Result<PathBuf> {
+    let static_files = documentation_output.join("static.files");
+    if !static_files.is_dir() {
+        bail!(
+            "essential-files build did not produce {}",
+            static_files.display()
+        );
+    }
+    Ok(static_files)
+}
+
 fn find_single_output_file(
     directory: impl AsRef<Path>,
     extension: impl AsRef<OsStr>,
@@ -470,6 +492,17 @@ mod tests {
 
         let error = find_single_output_file(directory.path(), "json").unwrap_err();
         assert!(error.to_string().contains("found 2 instead of exactly one"));
+        Ok(())
+    }
+
+    #[test]
+    fn requires_static_files_directory_for_essential_files() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        assert!(essential_files_directory(directory.path()).is_err());
+
+        let static_files = directory.path().join("static.files");
+        fs::create_dir(&static_files)?;
+        assert_eq!(essential_files_directory(directory.path())?, static_files);
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::{CpuLimit, ReleaseContext, StepResult};
+use crate::{CpuLimit, ReleaseContext};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
@@ -243,7 +243,7 @@ impl BuildEnvironment {
     /// the generated files without coupling this crate to docs.rs storage.
     pub fn update_toolchain_and_build_essential_files(
         &mut self,
-    ) -> Result<Option<BuildResult<StepResult<PathBuf>>>> {
+    ) -> Result<Option<BuildResult<PathBuf>>> {
         let requires_artifact_refresh = retry(|| self.update_toolchain(), 3)?;
         if !requires_artifact_refresh {
             return Ok(None);
@@ -263,10 +263,10 @@ impl BuildEnvironment {
     }
 
     /// Build the shared rustdoc static files for this toolchain.
-    pub fn build_essential_files(&self) -> Result<BuildResult<StepResult<PathBuf>>> {
+    pub fn build_essential_files(&self) -> Result<BuildResult<PathBuf>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
-            .run(|build| Ok(build.build_essential_files()))
+            .run(|build| build.build_essential_files())
     }
 
     pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {
