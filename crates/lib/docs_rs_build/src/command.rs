@@ -92,20 +92,20 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 }
 
-fn uses_build_std<S>(args: impl IntoIterator<Item = S>) -> bool
+fn uses_build_std<S>(cargo_args: impl IntoIterator<Item = S>) -> bool
 where
     S: AsRef<str>,
 {
-    let mut args = args.into_iter().peekable();
+    let mut cargo_args = cargo_args.into_iter().peekable();
 
-    while let Some(arg) = args.next() {
+    while let Some(arg) = cargo_args.next() {
         let arg = arg.as_ref();
         if arg.starts_with("-Zbuild-std") {
             return true;
         }
 
         if arg == "-Z"
-            && args
+            && cargo_args
                 .peek()
                 .is_some_and(|next| next.as_ref().starts_with("build-std"))
         {
