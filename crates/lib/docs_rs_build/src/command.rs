@@ -89,7 +89,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         for (key, value) in self.release_build.metadata.environment_variables() {
             command = command.env(key, value);
         }
-        Ok(command)
+        Ok(command.args(cargo_args))
     }
 }
 
