@@ -1,5 +1,7 @@
 # TODO
 
+- [ ] clean up toolchain management logic from AI draft
+
 - [ ] can the workspace do the toolchain refresh, and workspace reinit on its
       own? so a user of the library doesn't have to remember that?
 
