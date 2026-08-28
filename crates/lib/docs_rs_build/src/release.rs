@@ -5,6 +5,7 @@ use rustwide::{BuildResult, Crate};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
+    path::Path,
 };
 
 /// A crate release whose build lifecycle is managed by docs.rs.
@@ -21,6 +22,55 @@ impl<'release> ReleaseContext<'release> {
         self
     }
 
+    /// Fetch this release into rustwide's crate cache.
+    ///
+    /// The returned phase allows callers to archive the fetched sources before
+    /// metadata parsing or sandbox preparation can fail.
+    pub fn fetch(self) -> Result<FetchedRelease<'release>> {
+        let Self {
+            environment,
+            krate,
+            limits,
+        } = self;
+        let effective_limits = limits
+            .as_ref()
+            .unwrap_or_else(|| environment.default_limits());
+        environment.validate_host_resources(effective_limits)?;
+        krate.fetch(environment.workspace())?;
+
+        Ok(FetchedRelease {
+            environment,
+            krate,
+            limits,
+        })
+    }
+
+    /// Fetch the release and run selected build operations in one reusable sandbox.
+    pub fn run<R>(
+        self,
+        callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
+    ) -> Result<BuildResult<R>> {
+        self.fetch()?.run(callback)
+    }
+}
+
+/// A crate release fetched into rustwide's cache but not yet prepared for building.
+pub struct FetchedRelease<'release> {
+    environment: &'release BuildEnvironment,
+    krate: &'release Crate,
+    limits: Option<Limits>,
+}
+
+impl FetchedRelease<'_> {
+    /// Copy the fetched crate sources into a caller-owned directory.
+    ///
+    /// This is intended for source archiving before the build sandbox is entered.
+    pub fn copy_source_to(&self, destination: impl AsRef<Path>) -> Result<()> {
+        self.krate
+            .copy_source_to(self.environment.workspace(), destination.as_ref())?;
+        Ok(())
+    }
+
     /// Run selected build operations in one reusable sandbox.
     pub fn run<R>(
         self,
@@ -34,9 +84,7 @@ impl<'release> ReleaseContext<'release> {
         let limits = limits
             .as_ref()
             .unwrap_or_else(|| environment.default_limits());
-        environment.validate_host_resources(limits)?;
         environment.workspace().purge_all_build_dirs()?;
-        krate.fetch(environment.workspace())?;
         let mut build_dir = environment.workspace().build_dir(&build_dir_name(krate));
         let sandbox = environment.sandbox_builder(limits);
         let result = build_dir

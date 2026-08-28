@@ -181,6 +181,31 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
+## Archiving sources before a build
+
+`ReleaseContext::fetch` exposes an intermediate phase for callers that need to
+archive sources before metadata parsing or sandbox preparation:
+
+```rust,no_run
+# use anyhow::Result;
+# use docs_rs_build::BuildEnvironment;
+# use rustwide::Crate;
+# use std::path::Path;
+# fn main() -> Result<()> {
+# let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
+let krate = Crate::crates_io("serde", "1.0.219");
+let fetched = environment.release(&krate).fetch()?;
+fetched.copy_source_to("./source-archive-input")?;
+
+let result = fetched.run(|build| build.build_docs())?;
+# let _ = result;
+# Ok(())
+# }
+```
+
+Callers that do not need an intermediate source step can continue using
+`release().run(...)`, which performs the fetch automatically.
+
 `running_inside_docker(true)` is only needed when the calling program itself is
 inside a container, for example a container action using the host Docker socket.
 Leave it at its default (`false`) when invoking the program directly on a host.

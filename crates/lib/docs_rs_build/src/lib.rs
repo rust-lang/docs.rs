@@ -15,7 +15,7 @@ mod workspace;
 
 pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
 pub use command::PrepareCommand;
-pub use release::ReleaseContext;
+pub use release::{FetchedRelease, ReleaseContext};
 pub use result::{
     BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult, TargetBuildResult,
 };
