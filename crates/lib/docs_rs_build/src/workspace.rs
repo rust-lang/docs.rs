@@ -223,10 +223,11 @@ impl BuildEnvironment {
     /// Ensure the configured toolchain is ready for docs.rs builds without
     /// checking whether an installed distribution toolchain can be updated.
     ///
-    /// For distribution toolchains this also removes unmanaged targets and
-    /// ensures the docs.rs default targets and components are installed. CI
-    /// toolchains only support their platform artifact and are therefore only
-    /// installed when missing.
+    /// For distribution toolchains this also ensures the docs.rs default
+    /// targets and components are installed. Targets not managed by docs.rs are
+    /// left untouched; they are only cleaned up immediately before an explicit
+    /// toolchain update. CI toolchains only support their platform artifact and
+    /// are therefore only installed when missing.
     /// Returns whether the toolchain itself was newly installed.
     pub fn ensure_toolchain_ready(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_ready_without_cache_purge()?;
@@ -243,7 +244,7 @@ impl BuildEnvironment {
         }
 
         let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
-        self.normalize_toolchain_targets(installed_targets)?;
+        self.ensure_required_toolchain_targets(installed_targets)?;
         self.ensure_toolchain_components();
         Ok(installed)
     }
@@ -418,7 +419,7 @@ impl BuildEnvironment {
         }
     }
 
-    fn normalize_toolchain_targets(&self, installed_targets: Vec<String>) -> Result<()> {
+    fn ensure_required_toolchain_targets(&self, installed_targets: Vec<String>) -> Result<()> {
         let mut targets_to_install = DEFAULT_TARGETS
             .iter()
             .chain([&HOST_TARGET])
@@ -426,9 +427,7 @@ impl BuildEnvironment {
             .collect::<HashSet<_>>();
 
         for target in installed_targets {
-            if !targets_to_install.remove(&target) {
-                self.toolchain.remove_target(&self.workspace, &target)?;
-            }
+            targets_to_install.remove(&target);
         }
         for target in targets_to_install {
             self.toolchain.add_target(&self.workspace, &target)?;
