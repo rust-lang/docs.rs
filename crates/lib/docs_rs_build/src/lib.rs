@@ -18,4 +18,5 @@ pub use command::PrepareCommand;
 pub use release::ReleaseContext;
 pub use result::{BuildStepError, ReleaseBuildResult, StepResult, TargetBuildResult};
 pub use sandbox::CpuLimit;
-pub use workspace::{BuildEnvironment, DOCS_RS_USER_AGENT, resolve_sandbox_image};
+pub use utils::resolve_sandbox_image;
+pub use workspace::BuildEnvironment;

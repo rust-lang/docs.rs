@@ -2,27 +2,15 @@ use crate::{CpuLimit, ReleaseContext, StepResult};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
+use docs_rs_utils::APP_USER_AGENT;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
+    cmd::{Command, DockerRuntime, SandboxBuilder, SandboxImage},
 };
 use std::path::{Path, PathBuf};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
-
-/// User agent used when the docs.rs build environment accesses remote services.
-pub const DOCS_RS_USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-
-/// Resolve a sandbox image name, preferring an existing local image and
-/// falling back to a remote image that rustwide will pull when needed.
-pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
-    match SandboxImage::local(name) {
-        Ok(image) => Ok(image),
-        Err(CommandError::SandboxImageMissing(_)) => Ok(SandboxImage::remote(name)?),
-        Err(error) => Err(error.into()),
-    }
-}
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 pub struct BuildEnvironment {
@@ -52,7 +40,7 @@ impl BuildEnvironment {
         #[builder(default = false)] include_default_targets: bool,
         #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
-        let mut builder = WorkspaceBuilder::new(path, DOCS_RS_USER_AGENT)
+        let mut builder = WorkspaceBuilder::new(path, APP_USER_AGENT)
             .running_inside_docker(running_inside_docker)
             .fast_init(fast_init);
 

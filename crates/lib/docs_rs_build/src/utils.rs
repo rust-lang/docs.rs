@@ -1,3 +1,6 @@
+use anyhow::Result;
+use rustwide::cmd::{CommandError, SandboxImage};
+
 pub(crate) fn args_contain_unstable_feature<S>(
     cargo_args: impl IntoIterator<Item = S>,
     feature: &str,
@@ -35,35 +38,35 @@ fn unstable_feature_matches(value: &str, feature: &str) -> bool {
             .is_some_and(|suffix| suffix.starts_with('='))
 }
 
+/// Resolve a sandbox image name, preferring an existing local image and
+/// falling back to a remote image that rustwide will pull when needed.
+pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
+    match SandboxImage::local(name) {
+        Ok(image) => Ok(image),
+        Err(CommandError::SandboxImageMissing(_)) => Ok(SandboxImage::remote(name)?),
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
-    #[test]
-    fn recognizes_build_std_spellings() {
-        assert!(args_contain_unstable_feature(
-            ["-Zbuild-std=core"],
-            "build-std"
-        ));
-        assert!(args_contain_unstable_feature(
-            ["-Z", "build-std"],
-            "build-std"
-        ));
-        assert!(args_contain_unstable_feature(
-            ["-Z", "build-std=core,alloc"],
-            "build-std"
-        ));
-        assert!(!args_contain_unstable_feature(
-            ["-Zunstable-options"],
-            "build-std"
-        ));
-        assert!(!args_contain_unstable_feature(
-            ["-Zbuild-stdlib"],
-            "build-std"
-        ));
-
-        let owned = vec!["-Z".to_string(), "build-std=core".to_string()];
-        assert!(args_contain_unstable_feature(&owned, "build-std"));
-        assert!(args_contain_unstable_feature(owned, "build-std"));
+    #[test_case(&[], "build-std" => false; "empty arguments")]
+    #[test_case(&["-Zbuild-std"], "build-std" => true; "joined flag")]
+    #[test_case(&["-Zbuild-std=core,alloc"], "build-std" => true; "joined flag with value")]
+    #[test_case(&["-Z", "build-std"], "build-std" => true; "split flag")]
+    #[test_case(&["-Z", "build-std=core,alloc"], "build-std" => true; "split flag with value")]
+    #[test_case(&["rustdoc", "-Zbuild-std", "--lib"], "build-std" => true; "among other arguments")]
+    #[test_case(&["build-std"], "build-std" => false; "missing z prefix")]
+    #[test_case(&["-Z"], "build-std" => false; "z without feature")]
+    #[test_case(&["-Zunstable-options"], "build-std" => false; "different feature")]
+    #[test_case(&["-Zbuild-stdlib"], "build-std" => false; "feature name prefix")]
+    #[test_case(&["-Zbuild-std-extra"], "build-std" => false; "feature name with suffix")]
+    #[test_case(&["-Z", "build-stdlib"], "build-std" => false; "split feature name prefix")]
+    #[test_case(&["-Zunstable-options"], "unstable-options" => true; "generic feature name")]
+    fn detects_unstable_feature(args: &[&str], feature: &str) -> bool {
+        args_contain_unstable_feature(args.iter().copied(), feature)
     }
 }

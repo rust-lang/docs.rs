@@ -12,6 +12,7 @@ bon = { workspace = true }
 docs_rs_build_limits = { path = "../docs_rs_build_limits" }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_utils = { path = "../docs_rs_utils" }
 docsrs-metadata = { path = "../metadata" }
 log = "0.4"
 rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
@@ -20,6 +21,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+test-case = { workspace = true }
 
 [lints]
 workspace = true
