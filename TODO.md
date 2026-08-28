@@ -1,5 +1,11 @@
 # TODO
 
+- [ ] can the workspace do the toolchain refresh, and workspace reinit on its
+      own? so a user of the library doesn't have to remember that?
+
+- `builder.reinitialize_workspace_if_interval_passed`
+- `builder.update_toolchain_and_add_essential_files`
+
 ## Library gaps that affect migration
 
 1. Source access and source archiving
