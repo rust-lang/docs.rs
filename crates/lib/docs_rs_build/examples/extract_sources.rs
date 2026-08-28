@@ -17,6 +17,7 @@ fn main() -> Result<()> {
     );
     let name = name.to_string_lossy();
     let version = version.to_string_lossy();
+    fs::create_dir_all(&source_directory)?;
 
     let environment = BuildEnvironment::builder(PathBuf::from("rustwide-workspace").as_path())
         .sandbox_image(SandboxImageSource::LocalOrRemote(
@@ -25,14 +26,16 @@ fn main() -> Result<()> {
         .build()?;
 
     let krate = Crate::crates_io(&name, &version);
-    let fetched = environment.release(&krate).fetch()?;
-
-    fs::create_dir_all(&source_directory)?;
-    fetched.copy_source_to(&source_directory)?;
-    println!("extracted sources to {}", source_directory.display());
-
-    // Sandbox and build preparation only start after the source copy is complete.
-    let result = fetched.run(|build| build.build_docs())?;
+    let result = environment
+        .release(&krate)
+        .fetch()?
+        .try_inspect(|fetched| {
+            fetched.copy_source_to(&source_directory)?;
+            println!("extracted sources to {}", source_directory.display());
+            Ok(())
+        })?
+        // Sandbox and build preparation only start after the source copy is complete.
+        .run(|build| build.build_docs())?;
     println!(
         "documentation succeeded: {}",
         result.into_inner().successful()

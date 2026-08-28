@@ -62,6 +62,15 @@ pub struct FetchedRelease<'release> {
 }
 
 impl FetchedRelease<'_> {
+    /// Run a fallible side operation while retaining this fetched release.
+    ///
+    /// This is useful for source archiving in a fluent lifecycle chain before
+    /// [`Self::run`] enters build preparation.
+    pub fn try_inspect(self, callback: impl FnOnce(&Self) -> Result<()>) -> Result<Self> {
+        callback(&self)?;
+        Ok(self)
+    }
+
     /// Copy the fetched crate sources into a caller-owned directory.
     ///
     /// This is intended for source archiving before the build sandbox is entered.
