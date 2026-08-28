@@ -1,5 +1,5 @@
 use crate::build::ReleaseBuild;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, Metadata};
 use itertools::Itertools as _;
 use rustwide::{
@@ -63,25 +63,28 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
-        // if uses_build_std(&cargo_args) {
-        //     self.fetch_build_std_dependencies([target])?;
-        // } else if !DEFAULT_TARGETS.contains(&target) {
-        //     self.environment
-        //         .configured_toolchain()
-        //         .add_target(self.environment.workspace(), target)?;
-        // }
+        if uses_build_std(&self.cargo_args) {
+            self.release_build
+                .fetch_build_std_dependencies([self.target.as_ref()])
+                .context("error fetching build_std dependencies")?;
+        } else if !DEFAULT_TARGETS.contains(&self.target.as_ref()) {
+            self.release_build
+                .environment
+                .configured_toolchain()
+                .add_target(self.release_build.environment.workspace(), &self.target)
+                .context("error adding non-default target to toolchain")?;
+        }
 
         let mut command = self
             .release_build
             .build
             .cargo()
-            // FIXME: .timeout(Some(self.limits.timeout()))
+            .timeout(Some(self.release_build.limits.timeout()))
             .no_output_timeout(None);
 
-        // FIXME: fix
-        // for (key, value) in self.metadata.environment_variables() {
-        //     command = command.env(key, value);
-        // }
+        for (key, value) in self.release_build.metadata.environment_variables() {
+            command = command.env(key, value);
+        }
         Ok(command)
     }
 }
