@@ -2023,6 +2023,7 @@ dependencies = [
  "docsrs-metadata",
  "log",
  "rustwide",
+ "sysinfo",
  "tempfile",
  "test-case",
  "thiserror",

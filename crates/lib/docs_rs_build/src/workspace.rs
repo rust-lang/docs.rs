@@ -85,6 +85,8 @@ pub struct BuildEnvironment {
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
+    validate_host_resources: bool,
+    compiler_metrics_collection_path: Option<PathBuf>,
     // default limits on the builder host.
     default_limits: Limits,
 }
@@ -106,6 +108,8 @@ impl BuildEnvironment {
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,
+        #[builder(default = true)] validate_host_resources: bool,
+        compiler_metrics_collection_path: Option<PathBuf>,
         #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
         let workspace_configuration = WorkspaceConfiguration {
@@ -126,6 +130,8 @@ impl BuildEnvironment {
             cpu_limit,
             docker_runtime,
             include_default_targets,
+            validate_host_resources,
+            compiler_metrics_collection_path,
             default_limits,
         })
     }
@@ -253,6 +259,7 @@ impl BuildEnvironment {
             environment: self,
             krate,
             limits: None,
+            collect_compiler_metrics: false,
         }
     }
 
@@ -289,6 +296,30 @@ impl BuildEnvironment {
 
     pub(crate) fn includes_default_targets(&self) -> bool {
         self.include_default_targets
+    }
+
+    pub(crate) fn validate_host_resources(&self, limits: &Limits) -> Result<()> {
+        if !self.validate_host_resources {
+            return Ok(());
+        }
+
+        let system = sysinfo::System::new_with_specifics(
+            sysinfo::RefreshKind::nothing()
+                .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
+        );
+        let available = system.available_memory();
+        if limits.memory() as u64 > available {
+            bail!(
+                "not enough host memory for build: needed {} MiB, have {} MiB",
+                limits.memory() / 1024 / 1024,
+                available / 1024 / 1024,
+            );
+        }
+        Ok(())
+    }
+
+    pub(crate) fn compiler_metrics_collection_path(&self) -> Option<&Path> {
+        self.compiler_metrics_collection_path.as_deref()
     }
 
     pub(crate) fn default_limits(&self) -> &Limits {

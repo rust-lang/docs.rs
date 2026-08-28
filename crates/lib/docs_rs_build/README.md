@@ -68,6 +68,53 @@ updated. When the compiler changesâ€”or on the environment's first preparationâ€
 caches are purged and the essential-files build is returned to the caller. CI
 toolchains are installed and treated as changed on every preparation.
 
+## Host resources and compiler metrics
+
+Before fetching a release, the environment verifies that the host's currently
+available memory can satisfy the release's effective sandbox limit. This check
+is enabled by default and can be disabled when the caller intentionally wants
+the sandbox or host runtime to enforce the limit:
+
+```rust,no_run
+# use anyhow::Result;
+# use docs_rs_build::BuildEnvironment;
+# use std::path::Path;
+# fn main() -> Result<()> {
+let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+    .validate_host_resources(false)
+    .build()?;
+# let _ = environment;
+# Ok(())
+# }
+```
+
+Compiler metrics require an environment-wide destination and explicit opt-in
+for each release:
+
+```rust,no_run
+# use anyhow::Result;
+# use docs_rs_build::BuildEnvironment;
+# use rustwide::Crate;
+# use std::path::Path;
+# fn main() -> Result<()> {
+let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+    .compiler_metrics_collection_path("./compiler-metrics")
+    .build()?;
+let krate = Crate::crates_io("serde", "1.0.219");
+
+let result = environment
+    .release(&krate)
+    .collect_compiler_metrics(true)
+    .run(|build| build.build_docs())?;
+# let _ = result;
+# Ok(())
+# }
+```
+
+For opted-in HTML builds, the library passes rustdoc's unstable metrics
+directory flag and copies the generated files out of rustwide's target
+directory before the release sandbox is cleaned up.
+
 ## Complete release build
 
 The usual entry point builds coverage, rustdoc JSON, and HTML documentation for

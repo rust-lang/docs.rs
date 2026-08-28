@@ -49,6 +49,7 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) metadata: Metadata,
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
+    collect_compiler_metrics: bool,
     fetched_build_std_targets: RefCell<HashSet<String>>,
 }
 
@@ -58,6 +59,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         environment: &'build BuildEnvironment,
         build: &'build Build<'ws>,
         limits: &'build Limits,
+        collect_compiler_metrics: bool,
     ) -> Result<Self> {
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
         let resource_suffix = environment.resource_suffix()?;
@@ -68,6 +70,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             metadata,
             limits,
             resource_suffix,
+            collect_compiler_metrics,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
         })
     }
@@ -295,17 +298,49 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
-            self.command(target)
+            let metrics_dir = self.compiler_metrics_dir();
+            if let Some(metrics_dir) = &metrics_dir {
+                fs::create_dir_all(metrics_dir).map_err(anyhow::Error::from)?;
+            }
+
+            let mut command = self
+                .command(target)
                 .rustdoc_arg(format!("--emit={}", emit.as_str()))
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
-                .cargo_arg("-Zrustdoc-scrape-examples")
+                .cargo_arg("-Zrustdoc-scrape-examples");
+            if metrics_dir.is_some() {
+                command = command.cargo_args([
+                    "--config".to_owned(),
+                    "build.rustdocflags=['-Zmetrics-dir=/opt/rustwide/target/metrics']".to_owned(),
+                ]);
+            }
+            let command_result = command
                 .prepare()
                 .map_err(BuildStepError::Output)?
                 .run()
-                .map_err(BuildStepError::Command)?;
+                .map_err(BuildStepError::Command);
+
+            if let (Some(source), Some(destination)) = (
+                metrics_dir,
+                self.environment.compiler_metrics_collection_path(),
+            ) {
+                copy_directory_contents(&source, destination)?;
+                fs::remove_dir_all(source).map_err(anyhow::Error::from)?;
+            }
+
+            command_result?;
 
             Ok(self.output_dir(target))
         })
+    }
+
+    fn compiler_metrics_dir(&self) -> Option<PathBuf> {
+        (self.collect_compiler_metrics
+            && self
+                .environment
+                .compiler_metrics_collection_path()
+                .is_some())
+        .then(|| self.build.host_target_dir().join("metrics"))
     }
 
     fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
@@ -368,6 +403,21 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         CargoMetadata::load_from_metadata(metadata)
     }
+}
+
+fn copy_directory_contents(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_directory_contents(&source_path, &destination_path)?;
+        } else {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
 }
 
 fn find_single_output_file(
