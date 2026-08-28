@@ -92,14 +92,14 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
     }
 }
 
-fn uses_build_std<'a, S>(args: impl IntoIterator<Item = &'a S>) -> bool
+fn uses_build_std<S>(args: impl IntoIterator<Item = S>) -> bool
 where
-    S: AsRef<str> + ?Sized + 'a,
+    S: AsRef<str>,
 {
     let mut args = args.into_iter().peekable();
 
     while let Some(arg) = args.next() {
-        let arg = S::as_ref(arg);
+        let arg = arg.as_ref();
         if arg.starts_with("-Zbuild-std") {
             return true;
         }
@@ -107,7 +107,7 @@ where
         if arg == "-Z"
             && args
                 .peek()
-                .is_some_and(|next| S::as_ref(*next).starts_with("build-std"))
+                .is_some_and(|next| next.as_ref().starts_with("build-std"))
         {
             return true;
         }
@@ -157,5 +157,9 @@ mod tests {
         assert!(uses_build_std(["-Zbuild-std=core"]));
         assert!(uses_build_std(["-Z", "build-std"]));
         assert!(!uses_build_std(["-Zunstable-options"]));
+
+        let owned = vec!["-Z".to_string(), "build-std=core".to_string()];
+        assert!(uses_build_std(&owned));
+        assert!(uses_build_std(owned));
     }
 }
