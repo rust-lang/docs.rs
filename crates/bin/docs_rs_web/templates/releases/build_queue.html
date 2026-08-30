@@ -106,7 +106,7 @@ centered
                 </p>
                 {%- if !expand_rebuild_queue -%}
                     {% let rebuild_queue_len = rebuild_queue.len() %}
-                    <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
+                    <p>There are currently {{ rebuild_queue_len | pluralize("is", "are") }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
                     <p><a href="?expand=1">Show</a></p>
                 {%- endif -%}
             </div>
