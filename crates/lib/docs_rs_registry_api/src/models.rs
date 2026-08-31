@@ -12,7 +12,6 @@ pub struct CrateData {
 pub struct ReleaseData {
     pub release_time: DateTime<Utc>,
     pub yanked: bool,
-    pub downloads: i32,
 }
 
 impl Default for ReleaseData {
@@ -20,7 +19,6 @@ impl Default for ReleaseData {
         ReleaseData {
             release_time: Utc::now(),
             yanked: false,
-            downloads: 0,
         }
     }
 }

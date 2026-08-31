@@ -1,0 +1,2 @@
+ALTER TABLE releases
+ADD COLUMN downloads INTEGER;
