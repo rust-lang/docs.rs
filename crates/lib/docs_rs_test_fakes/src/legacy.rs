@@ -149,7 +149,6 @@ impl<'a> FakeRelease<'a> {
             registry_release_data: ReleaseData {
                 release_time: Utc::now(),
                 yanked: false,
-                downloads: 0,
             },
             has_docs: true,
             has_examples: false,

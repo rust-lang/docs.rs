@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                        c.name as \"name!\",\n                        r.version as \"version!\",\n                        r.rustdoc_status,\n                        cov.total_items\n                    FROM\n                        crates as c\n                        INNER JOIN releases AS r ON c.id = r.crate_id\n                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rustdoc_status",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "rustdoc_status"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "total_items",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "doc_coverage",
+            "name": "total_items"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "bf14d517c7547f3bf564b0cafd985aafa70cdd81877373bdfab344d86e3884e9"
+}
