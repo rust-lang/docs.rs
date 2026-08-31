@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2" 
+resolver = "2"
 
 members = ["crates/bin/*", "crates/lib/*", "integration_tests"]
 
@@ -38,7 +38,7 @@ chrono = { version = "0.4.11", default-features = false, features = ["clock", "s
 clap = { version = "4.0.22", features = ["derive"] }
 futures-util = "0.3.5"
 http = "1.0.0"
-itertools = "0.15.0" 
+itertools = "0.15.0"
 mime = "0.3.16"
 mockito = "1.0.2"
 num_cpus = "1.15.0"
@@ -46,6 +46,7 @@ opentelemetry = "0.32.0"
 opentelemetry-otlp = { version = "0.32.0", features = ["grpc-tonic", "metrics"] }
 opentelemetry-resource-detectors = "0.12.0"
 opentelemetry_sdk = { version = "0.32.0", features = ["rt-tokio"] }
+percent-encoding = "2.2.0"
 postcard = { version = "1.1.3", default-features = false, features = ["use-std"] }
 pretty_assertions = "1.4.0"
 rand = "0.10"
@@ -75,7 +76,7 @@ dbg_macro = "warn"
 todo = "warn"
 
 [profile.dev]
-# recommendation coming from 
+# recommendation coming from
 # https://doc.rust-lang.org/nightly/cargo/guide/build-performance.html#reduce-amount-of-generated-debug-information
 # for our normal dev work, line-tables are good enough to see line numbers in backtraces.
 debug = "line-tables-only"
@@ -84,7 +85,7 @@ debug = "line-tables-only"
 split-debuginfo = "unpacked"
 
 [profile.dev.build-override]
-# optimize proc macros & build scripts, make them execute faster 
+# optimize proc macros & build scripts, make them execute faster
 # https://corrode.dev/blog/tips-for-faster-rust-compile-times/#avoid-procedural-macro-crates
 opt-level = 3
 

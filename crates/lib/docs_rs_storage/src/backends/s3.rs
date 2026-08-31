@@ -16,7 +16,10 @@ use aws_sdk_s3::{
     config::{Region, retry::RetryConfig},
     error::{ProvideErrorMetadata, SdkError},
     primitives::{ByteStream, Length},
-    types::{ChecksumAlgorithm, CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier},
+    types::{
+        ChecksumAlgorithm, CompletedMultipartUpload, CompletedPart, Delete, EncodingType,
+        ObjectIdentifier,
+    },
 };
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use base64::{Engine as _, engine::general_purpose::STANDARD as b64};
@@ -26,6 +29,7 @@ use docs_rs_types::CompressionAlgorithm;
 use docs_rs_utils::{retry_backoff, spawn_blocking};
 use futures_util::stream::{self, BoxStream, StreamExt, TryStreamExt};
 use mime::Mime;
+use percent_encoding::percent_decode_str;
 use std::path::Path;
 use tokio::{fs, time};
 use tracing::{error, warn};
@@ -530,6 +534,10 @@ impl StorageBackendMethods for S3Backend {
                     .list_objects_v2()
                     .bucket(&self.bucket)
                     .prefix(prefix)
+                    // Without URL encoding, object keys containing characters
+                    // forbidden by XML 1.0 cannot be represented faithfully in
+                    // the ListObjects response.
+                    .encoding_type(EncodingType::Url)
                     .set_continuation_token(continuation_token)
                     .send()
                     .await?;
@@ -537,7 +545,10 @@ impl StorageBackendMethods for S3Backend {
                 if let Some(contents) = list.contents {
                     for obj in contents {
                         if let Some(key) = obj.key() {
-                            yield key.to_owned();
+                            yield percent_decode_str(key)
+                                .decode_utf8()
+                                .with_context(|| format!("S3 returned a non-UTF-8 object key: {key:?}"))?
+                                .into_owned();
                         }
                     }
                 }
@@ -562,7 +573,27 @@ impl StorageBackendMethods for S3Backend {
 
 impl S3Backend {
     async fn delete_batch_with_retry(&self, keys: Vec<String>) -> Result<(), Error> {
-        let mut remaining = keys;
+        let (mut remaining, xml_incompatible_keys): (Vec<_>, Vec<_>) =
+            keys.into_iter().partition(|key| is_xml_1_0_compatible(key));
+
+        // DeleteObjects puts keys in an XML 1.0 request body. S3 object keys can
+        // contain characters which XML 1.0 cannot represent (for example ESC),
+        // causing the whole request to fail with MalformedXML. Delete those keys
+        // individually instead, since DeleteObject encodes the key in the URI.
+        for key in xml_incompatible_keys {
+            self.client
+                .delete_object()
+                .bucket(&self.bucket)
+                .key(&key)
+                .send()
+                .await
+                .with_context(|| format!("failed to delete file from s3: {key:?}"))?;
+        }
+
+        if remaining.is_empty() {
+            return Ok(());
+        }
+
         for attempt in 1.. {
             // Request-level failures are retried by the AWS SDK. We only retry
             // per-object failures returned in a successful `DeleteObjects`
@@ -640,5 +671,26 @@ impl S3Backend {
             .set_objects(Some(objects))
             .build()
             .context("could not build delete request")
+    }
+}
+
+/// Whether a string can be represented as character data in an XML 1.0 document.
+fn is_xml_1_0_compatible(value: &str) -> bool {
+    value
+        .chars()
+        .all(|c| matches!(c, '\u{9}' | '\u{a}' | '\u{d}' | '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_xml_1_0_compatible;
+
+    #[test]
+    fn detects_xml_1_0_incompatible_characters() {
+        assert!(is_xml_1_0_compatible("sources/crate/1.0.0/lib.rs"));
+        assert!(is_xml_1_0_compatible("tabs\tand\nnewlines\r"));
+        assert!(is_xml_1_0_compatible("unicode-é-🦀"));
+        assert!(!is_xml_1_0_compatible("null-\0"));
+        assert!(!is_xml_1_0_compatible("escape-\u{1b}"));
     }
 }
