@@ -2406,6 +2406,7 @@ dependencies = [
  "mime",
  "moka",
  "opentelemetry",
+ "percent-encoding",
  "rand 0.10.2",
  "sqlx",
  "strum",
