@@ -119,7 +119,7 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.9.5
+          deno-version: 2.9.6
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
