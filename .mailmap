@@ -1,0 +1,24 @@
+#
+# This list is used by git-shortlog to aggregate contributions.  It is
+# necessary when either the author's full name is not always written
+# the same way, and/or the same author contributes from different
+# email addresses.
+#
+
+Camelid <camelidcamel@gmail.com>
+Camelid <camelidcamel@gmail.com> <37223377+camelid@users.noreply.github.com>
+Chase Wilson <me@chasewilson.dev>
+Chase Wilson <me@chasewilson.dev> <contact@chasewilson.dev>
+Chase Wilson <me@chasewilson.dev> <buckshot1233@gmail.com>
+Denis Cornehl <denis@cornehl.org>
+Denis Cornehl <denis@cornehl.org> <denis.cornehl@gmail.com>
+Guillaume Gomez <contact@guillaume-gomez.fr>
+Guillaume Gomez <contact@guillaume-gomez.fr> <guillaume1.gomez@gmail.com>
+Guillaume Gomez <contact@guillaume-gomez.fr> <ggomez@ggo.ifr.lan>
+Guillaume Gomez <contact@guillaume-gomez.fr> <guillaume.gomez@huawei.com>
+Joshua Nelson <github@jyn.dev>
+Joshua Nelson <github@jyn.dev> <jyn514@gmail.com>
+Joshua Nelson <github@jyn.dev> <joshua@yottadb.com>
+Joshua Nelson <github@jyn.dev> <jnelson@cloudflare.com>
+QuietMisdreavus <grey@quietmisdreavus.net>
+QuietMisdreavus <grey@quietmisdreavus.net> <QuietMisdreavus@users.noreply.github.com>
