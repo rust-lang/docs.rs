@@ -215,15 +215,8 @@ impl BuildEnvironment {
         })
     }
 
-    /// Remove all cached registry, Git, and toolchain data from the workspace.
-    pub fn purge_caches(&self) -> Result<()> {
+    fn purge_caches(&self) -> Result<()> {
         retry(|| self.workspace().purge_all_caches(), 3)?;
-        Ok(())
-    }
-
-    /// Remove all build directories from the workspace.
-    pub fn purge_build_directories(&self) -> Result<()> {
-        self.workspace().purge_all_build_dirs()?;
         Ok(())
     }
 
@@ -249,11 +242,7 @@ impl BuildEnvironment {
         &self.toolchain
     }
 
-    /// Check whether the configured toolchain is installed in this workspace.
-    ///
-    /// This only inspects local rustup state and does not check whether a newer
-    /// version of a distribution toolchain is available.
-    pub fn is_toolchain_installed(&self) -> Result<bool> {
+    fn is_toolchain_installed(&self) -> Result<bool> {
         if self.toolchain.as_dist().is_some() {
             return match self.toolchain.installed_targets(self.workspace()) {
                 Ok(_) => Ok(true),
@@ -275,11 +264,7 @@ impl BuildEnvironment {
             .contains(&self.toolchain))
     }
 
-    /// Install the configured toolchain when it is not already present.
-    ///
-    /// Returns whether an installation was performed. An existing distribution
-    /// toolchain is not checked for updates.
-    pub fn ensure_toolchain_installed(&self) -> Result<bool> {
+    fn ensure_toolchain_installed(&self) -> Result<bool> {
         if self.is_toolchain_installed()? {
             return Ok(false);
         }
@@ -306,13 +291,11 @@ impl BuildEnvironment {
         Ok(installed)
     }
 
-    /// Install or update the configured toolchain and its docs.rs components,
-    /// purging incompatible workspace caches when the compiler changes.
-    ///
-    /// Returns `true` when the compiler version changed. CI toolchains return
-    /// `true` whenever they are installed because their existing version cannot
-    /// be detected through rustup reliably.
-    pub fn update_toolchain(&mut self) -> Result<bool> {
+    // Install or update the configured toolchain and its docs.rs components,
+    // purging incompatible workspace caches when the compiler changes. CI
+    // toolchains always report a change because their existing version cannot
+    // be detected through rustup reliably.
+    fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(self.workspace())?;
             self.purge_caches()?;
