@@ -90,8 +90,32 @@ permissions:
 jobs:
   docs-rs:
     runs-on: ubuntu-latest
+    env:
+      DOCSRS_IMAGE: ghcr.io/rust-lang/crates-build-env/linux
+      DOCSRS_IMAGE_ARCHIVE: ${{ runner.temp }}/docs-rs-image.tar.zst
     steps:
       - uses: actions/checkout@v7
+      - name: Cache the rustwide workspace
+        uses: actions/cache@v5
+        with:
+          path: target/docsrs-build
+          key: docs-rs-build-v1-${{ runner.os }}-${{ runner.arch }}
+      - name: Restore the docs.rs Docker image archive
+        id: docsrs-image-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.DOCSRS_IMAGE_ARCHIVE }}
+          # Bump this version when the mutable `linux` image should be refreshed.
+          key: docs-rs-image-v1-${{ runner.os }}-${{ runner.arch }}
+      - name: Load the cached docs.rs Docker image
+        if: steps.docsrs-image-cache.outputs.cache-hit == 'true'
+        run: zstd --decompress --stdout "$DOCSRS_IMAGE_ARCHIVE" | docker load
+      - name: Pull and archive the docs.rs Docker image
+        if: steps.docsrs-image-cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull "$DOCSRS_IMAGE"
+          docker save "$DOCSRS_IMAGE" |
+            zstd --threads=0 -3 --output "$DOCSRS_IMAGE_ARCHIVE"
       - name: Install docs.rs build runner
         run: cargo install docs_rs_build --locked
       - name: Build documentation as docs.rs
@@ -99,7 +123,17 @@ jobs:
 ```
 
 Omit `--package` for a repository whose root manifest is the package being
-built.
+built. The cached `target/docsrs-build` directory preserves rustwide's rustup
+installation, toolchains, Cargo cache, and other workspace state between CI
+runs. The cache version only needs to be changed if the workspace layout becomes
+incompatible.
+
+The Docker image is stored as a compressed `docker save` archive because
+GitHub-hosted runners start each job with a fresh Docker daemon. On a cache hit,
+`docker load` makes the image available before `docs_rs_build` initializes its
+workspace. GitHub Actions caches are immutable, while the `linux` image tag is
+mutable, so increment `docs-rs-image-v1` whenever the workflow should fetch a
+new image. A pinned image tag or digest can instead be included in the cache key.
 
 ## Sandbox image
 
@@ -126,10 +160,12 @@ A custom image and its resolution policy can be selected with `--image` and
 
 ### Caching the image in CI
 
-The example workflow intentionally does not use `actions/cache` for the Docker
-image. GitHub-hosted runners have a fresh Docker daemon for each job, and
-saving then restoring a multi-gigabyte image generally transfers roughly the
-same data while adding cache storage and `docker save`/`docker load` overhead.
+The example workflow uses `actions/cache` to preserve a compressed image
+archive and loads it into the fresh Docker daemon at the start of the job. This
+can avoid repeatedly pulling the image, but the full image remains a large
+cache entry. Restoring it can transfer roughly the same amount of data as an
+image pull while adding `docker save`/`docker load` overhead and consuming the
+repository's cache allowance. Measure both approaches for your workload.
 
 For frequent builds, prefer one of these approaches:
 
