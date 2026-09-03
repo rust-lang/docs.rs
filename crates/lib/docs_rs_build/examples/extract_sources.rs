@@ -24,7 +24,8 @@ fn main() -> Result<()> {
             "docsrs/build-env:latest".into(),
         ))
         .build()?;
-    if environment.update_toolchain()? {
+    let maintenance = environment.perform_maintenance()?;
+    if maintenance.toolchain_updated {
         let essential_files = environment.build_essential_files()?.into_inner();
         println!("essential files: {}", essential_files.display());
     }

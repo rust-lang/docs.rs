@@ -74,6 +74,16 @@ impl WorkspaceConfiguration {
     }
 }
 
+/// Changes made by [`BuildEnvironment::perform_maintenance`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+pub struct MaintenanceResult {
+    /// Whether the rustwide workspace was recreated.
+    pub workspace_refreshed: bool,
+    /// Whether the configured compiler changed.
+    pub toolchain_updated: bool,
+}
+
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 pub struct BuildEnvironment {
     workspace: Workspace,
@@ -136,11 +146,25 @@ impl BuildEnvironment {
         Ok(environment)
     }
 
-    /// Recreate the workspace when its configured refresh interval has elapsed.
+    /// Perform the maintenance required before starting the next release build.
     ///
-    /// Resolving a [`SandboxImageSource::Remote`] pulls the tag again, allowing
-    /// long-running builders to pick up a newly published sandbox image.
-    pub fn refresh_workspace_if_interval_passed(&mut self) -> Result<bool> {
+    /// The workspace is refreshed only when its configured interval has
+    /// elapsed. The toolchain is checked for updates on every call, preserving
+    /// the maintenance cadence of the docs.rs builder.
+    pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
+        let workspace_refreshed = self.refresh_workspace_if_interval_passed()?;
+        let toolchain_updated = self.update_toolchain()?;
+
+        Ok(MaintenanceResult {
+            workspace_refreshed,
+            toolchain_updated,
+        })
+    }
+
+    // Recreate the workspace when its configured refresh interval has elapsed.
+    // Resolving a `SandboxImageSource::Remote` pulls the tag again, allowing
+    // long-running builders to pick up a newly published sandbox image.
+    fn refresh_workspace_if_interval_passed(&mut self) -> Result<bool> {
         if self.workspace_initialized_at.elapsed() < self.workspace_reinitialization_interval {
             return Ok(false);
         }
