@@ -1,8 +1,9 @@
 use std::str::FromStr as _;
-use tracing_subscriber::{EnvFilter, filter::Directive};
+use tracing_subscriber::{EnvFilter, filter::Directive, fmt};
 
 pub fn init() {
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .event_format(fmt::format().compact())
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(Directive::from_str("docs_rs=info").unwrap())
