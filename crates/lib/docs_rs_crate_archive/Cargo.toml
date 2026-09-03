@@ -1,0 +1,22 @@
+[package]
+name = "docs_rs_crate_archive"
+version = "0.1.0"
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[features]
+testing = ["dep:docs_rs_types"]
+
+[dependencies]
+anyhow = { workspace = true }
+docs_rs_types = { path = "../docs_rs_types", optional = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+docs_rs_types = { path = "../docs_rs_types" }
+
+[lints]
+workspace = true

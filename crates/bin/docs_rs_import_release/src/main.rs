@@ -1,5 +1,4 @@
 pub(crate) mod common;
-pub(crate) mod crates_io;
 mod import;
 mod rustdoc;
 pub(crate) mod rustdoc_status;
