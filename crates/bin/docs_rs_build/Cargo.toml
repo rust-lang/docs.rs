@@ -16,7 +16,12 @@ docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive" }
 docs_rs_rustwide = { path = "../../lib/docs_rs_rustwide" }
 humantime = "2.4.0"
 parse-size = "1.1.0"
-rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+# rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+rustwide = {
+    path = "/home/syphar/src/rust-lang/rustwide-less-tracing-fields",
+    default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"]
+}
+
 tempfile = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }

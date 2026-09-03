@@ -2040,7 +2040,7 @@ dependencies = [
  "docs_rs_rustwide",
  "humantime",
  "parse-size",
- "rustwide",
+ "rustwide 0.26.0",
  "tempfile",
  "toml",
  "tracing",
@@ -2125,7 +2125,7 @@ dependencies = [
  "opentelemetry",
  "pretty_assertions",
  "regex",
- "rustwide",
+ "rustwide 0.26.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sqlx",
  "tempfile",
  "thiserror",
@@ -2441,7 +2441,7 @@ dependencies = [
  "docs_rs_utils",
  "docsrs-metadata",
  "log",
- "rustwide",
+ "rustwide 0.26.0",
  "serde_json",
  "sysinfo",
  "tempfile",
@@ -6971,6 +6971,33 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "rustwide"
+version = "0.26.0"
+dependencies = [
+ "anyhow",
+ "attohttpc",
+ "base64 0.23.1",
+ "flate2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "log",
+ "nix 0.30.1",
+ "percent-encoding",
+ "remove_dir_all",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tracing",
+ "walkdir",
+ "windows-sys 0.52.0",
+]
 
 [[package]]
 name = "rustwide"
