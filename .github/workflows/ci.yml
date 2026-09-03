@@ -20,9 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c  # v4.3.0
         with:
-          tool: just,sqlx-cli,fd-find
+          version: 2026.9.1
+          install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -44,9 +45,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c  # v4.3.0
         with:
-          tool: just
+          version: 2026.9.1
+          install_args: --jobs=1 just
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -90,13 +92,10 @@ jobs:
       - name: Expose GitHub cache credentials
         uses: crazy-max/ghaction-github-runtime@v4
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c  # v4.3.0
         with:
-          tool: just,sqlx-cli
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
+          version: 2026.9.1
+          install_args: --jobs=1 just node cargo:sqlx-cli
 
       - name: Run end-to-end GUI tests
         env:
@@ -120,18 +119,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c  # v4.3.0
         with:
-          tool: just,fd-find,cargo-machete,cargo-udeps,cargo-sort@2.1.3
-
-      - name: Install actionlint
-        run: |
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: 2.9.6
+          version: 2026.9.1
+          install_args: >-
+            --jobs=1 just actionlint deno fd cargo:cargo-machete
+            cargo:cargo-udeps cargo:cargo-sort
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

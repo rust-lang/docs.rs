@@ -27,6 +27,7 @@ crate builds in isolated containers.
 Install:
 
 - Rust and Cargo;
+- [mise](https://mise.jdx.dev/);
 - Docker with the Compose plugin;
 - Git;
 - GCC and G++;
@@ -44,8 +45,13 @@ $ git clone https://github.com/rust-lang/docs.rs.git docs.rs
 $ cd docs.rs
 $ cp .env.sample .env
 $ mkdir -p ignored/cratesfyi-prefix/crates.io-index
+$ mise install
 $ SQLX_OFFLINE=1 cargo build
 ```
+
+`mise install` installs the project’s `just`, Node, Deno, and Cargo development
+tools. Enable mise in your shell to make them available automatically, or run
+commands through `mise x -- <command>`.
 
 Start PostgreSQL and the local S3 service, then initialize the database:
 
@@ -201,9 +207,8 @@ Run the complete lint suite with:
 $ just lint
 ```
 
-Linting GitHub Actions workflows requires
-[`actionlint`](https://github.com/rhysd/actionlint/blob/main/docs/install.md).
-If it is not installed, that check is skipped with a warning.
+`mise install` provides [`actionlint`](https://github.com/rhysd/actionlint),
+which `just lint` uses to validate GitHub Actions workflows.
 
 Run all formatters with:
 

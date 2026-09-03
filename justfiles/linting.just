@@ -102,7 +102,13 @@ lint-rust:
 
 # Run the standard local and CI lint suite.
 [group('linting')]
-lint: lint-rust lint-actions lint-js lint-dependencies-machete
+lint: lint-rust lint-actions lint-js lint-dependencies-machete lint-mise-lock
+
+# Verify that mise.lock matches the tools pinned in mise.toml.
+[group('linting')]
+lint-mise-lock:
+    mise lock --upgrade --jobs=1
+    git diff --exit-code -- mise.lock
 
 # Validate GitHub Actions workflows with actionlint when installed.
 [group('linting')]
@@ -112,7 +118,7 @@ lint-actions:
 
 # Format workspace Cargo.toml files with cargo-sort.
 [group('linting')]
-format-cargo-toml *args: (_ensure_cargo_installed "cargo-sort")
+format-cargo-toml *args:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -130,7 +136,7 @@ format-cargo-toml *args: (_ensure_cargo_installed "cargo-sort")
 
 # Check workspace manifests for unused dependencies with cargo-machete.
 [group('linting')]
-lint-dependencies-machete: (_ensure_cargo_installed "cargo-machete")
+lint-dependencies-machete:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -147,7 +153,7 @@ lint-dependencies-machete: (_ensure_cargo_installed "cargo-machete")
 
 # Run the slower nightly unused-dependency checks with cargo-udeps.
 [group('linting')]
-lint-dependencies-udeps: (_ensure_cargo_installed "cargo-udeps")
+lint-dependencies-udeps:
     #!/usr/bin/env bash
     set -euo pipefail
 
