@@ -12,6 +12,7 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 docs_rs_build = { version = "0.6.0", path = "../../lib/docs_rs_build" }
 docs_rs_build_limits = { version = "0.0.0", path = "../../lib/docs_rs_build_limits", default-features = false }
+parse-size = "1.1.0"
 rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 tracing = { workspace = true }
 tracing-log = "0.2.0"

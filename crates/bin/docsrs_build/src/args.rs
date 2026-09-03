@@ -186,31 +186,8 @@ pub(crate) enum ColorChoice {
 }
 
 fn parse_byte_size(value: &str) -> Result<usize, String> {
-    parse_byte_size_inner(value).map_err(|error| error.to_string())
-}
-
-fn parse_byte_size_inner(value: &str) -> Result<usize> {
-    let split_at = value
-        .find(|character: char| !character.is_ascii_digit())
-        .unwrap_or(value.len());
-    let (number, suffix) = value.split_at(split_at);
-    if number.is_empty() {
-        bail!("byte size must start with an integer");
-    }
-    let number: usize = number.parse()?;
-    let multiplier = match suffix.to_ascii_lowercase().as_str() {
-        "" | "b" => 1,
-        "kib" => 1024,
-        "mib" => 1024 * 1024,
-        "gib" => 1024 * 1024 * 1024,
-        "kb" => 1000,
-        "mb" => 1000 * 1000,
-        "gb" => 1000 * 1000 * 1000,
-        _ => bail!("unsupported byte-size suffix `{suffix}`"),
-    };
-    number
-        .checked_mul(multiplier)
-        .ok_or_else(|| anyhow!("byte size is too large"))
+    let bytes = parse_size::parse_size(value).map_err(|error| error.to_string())?;
+    usize::try_from(bytes).map_err(|_| "byte size does not fit usize".into())
 }
 
 fn parse_duration(value: &str) -> Result<Duration, String> {
@@ -313,7 +290,7 @@ mod tests {
     #[test]
     fn invalid_ranges_and_units_are_rejected() {
         assert!(parse_cpu_cores_inner("5-2").is_err());
-        assert!(parse_byte_size_inner("3watts").is_err());
+        assert!(parse_byte_size("3watts").is_err());
         assert!(parse_duration_inner("1day").is_err());
         assert!(parse_cpu_quota("0").is_err());
         assert!(parse_cpu_quota("NaN").is_err());
