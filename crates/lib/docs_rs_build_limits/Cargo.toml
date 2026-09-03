@@ -5,9 +5,7 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-database = [
-    "dep:sqlx",
-]
+database = ["dep:sqlx"]
 default = ["database"]
 
 [dependencies]
