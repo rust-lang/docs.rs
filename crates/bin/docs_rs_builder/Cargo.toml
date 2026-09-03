@@ -10,6 +10,7 @@ edition.workspace = true
 anyhow = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
+docs_rs_build = { path = "../../lib/docs_rs_build" }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }

@@ -1,3 +1,4 @@
+use docs_rs_build::BuildStepError;
 use docs_rs_types::BuildError;
 use rustwide::cmd::CommandError;
 
@@ -15,6 +16,15 @@ impl From<anyhow::Error> for RustwideBuildError {
         match value.downcast::<CommandError>() {
             Ok(err) => RustwideBuildError::CommandError(err),
             Err(err) => RustwideBuildError::Other(err),
+        }
+    }
+}
+
+impl From<BuildStepError> for RustwideBuildError {
+    fn from(value: BuildStepError) -> Self {
+        match value {
+            BuildStepError::Command(error) => Self::CommandError(error),
+            BuildStepError::Output(error) => Self::Other(error),
         }
     }
 }

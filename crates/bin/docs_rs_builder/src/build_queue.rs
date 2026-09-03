@@ -82,14 +82,11 @@ pub(crate) fn build_next_queue_package(
 
         processed = true;
 
-        if let Err(err) = retry(|| builder.reinitialize_workspace_if_interval_passed(), 3) {
-            error!(?err, "Reinitialize workspace failed after retries");
-            queue.lock()?;
-            return Err(err);
-        }
-
-        if let Err(err) = builder.update_toolchain_and_add_essential_files() {
-            error!(?err, "Updating toolchain failed, locking queue");
+        if let Err(err) = retry(|| builder.perform_maintenance(), 3) {
+            error!(
+                ?err,
+                "Builder maintenance failed after retries, locking queue"
+            );
             queue.lock()?;
             return Err(err);
         }

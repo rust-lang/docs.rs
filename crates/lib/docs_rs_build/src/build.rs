@@ -446,23 +446,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip(self), fields(source_dir = %self.build.host_source_dir().display()))]
     fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
-        debug!("loading Cargo metadata");
-        let output = Command::new(
-            self.environment.workspace(),
-            self.environment.configured_toolchain().cargo(),
-        )
-        .args(["metadata", "--format-version", "1"])
-        .current_directory(self.build.host_source_dir())
-        .log_output(false)
-        .run_capture()?;
-
-        let [metadata] = output.stdout_lines() else {
-            bail!("invalid output returned by `cargo metadata`");
-        };
-
-        let metadata = CargoMetadata::load_from_metadata(metadata)?;
-        debug!("Cargo metadata loaded");
-        Ok(metadata)
+        self.environment
+            .load_cargo_metadata(self.build.host_source_dir())
     }
 }
 
