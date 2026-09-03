@@ -85,7 +85,7 @@ where
 
                             // NOTE: `yanked` and `release_time` come both from the
                             // crates.io sparse index, or historically from the crates.io API.
-                            // We might have releases were both fields are empty because of an
+                            // We might have releases where both fields are empty because of an
                             // error, or because the release build is still in progress.
                             // So there might be cases where `release_time` was empty because
                             // it was empty on the index (unlikely), or we might have cases
