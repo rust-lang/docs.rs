@@ -19,6 +19,7 @@ use std::{
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const DEFAULT_TOOLCHAIN_UPDATE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 
 /// Describes how the sandbox image should be resolved whenever the workspace is initialized.
@@ -120,6 +121,8 @@ pub struct MaintenanceResult {
 pub struct BuildEnvironment {
     workspace: ManagedWorkspace,
     toolchain: Toolchain,
+    toolchain_update_interval: Duration,
+    toolchain_last_update_check: Option<Instant>,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
@@ -143,6 +146,7 @@ impl BuildEnvironment {
         #[builder(default = false)] fast_init: bool,
         #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
         workspace_reinitialization_interval: Duration,
+        #[builder(default = DEFAULT_TOOLCHAIN_UPDATE_INTERVAL)] toolchain_update_interval: Duration,
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,
@@ -162,6 +166,8 @@ impl BuildEnvironment {
         let environment = Self {
             workspace,
             toolchain,
+            toolchain_update_interval,
+            toolchain_last_update_check: None,
             cpu_limit,
             docker_runtime,
             include_default_targets,
@@ -175,15 +181,22 @@ impl BuildEnvironment {
 
     /// Perform the maintenance required before starting the next release build.
     ///
-    /// The workspace is refreshed only when its configured interval has
-    /// elapsed. The toolchain is checked for updates on every call, preserving
-    /// the maintenance cadence of the docs.rs builder.
+    /// The workspace is refreshed and the toolchain is checked for updates only
+    /// when their independently configured intervals have elapsed. The first
+    /// maintenance call always checks for a toolchain update.
     pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
         let workspace_refreshed = self.workspace.refresh_if_due()?;
         if workspace_refreshed {
             self.ensure_toolchain_ready()?;
         }
-        let toolchain_updated = self.update_toolchain()?;
+        let toolchain_update_due = self
+            .toolchain_last_update_check
+            .is_none_or(|last_check| last_check.elapsed() >= self.toolchain_update_interval);
+        let toolchain_updated = if toolchain_update_due {
+            self.update_toolchain()?
+        } else {
+            false
+        };
 
         Ok(MaintenanceResult {
             workspace_refreshed,
@@ -210,6 +223,9 @@ impl BuildEnvironment {
     pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
         let selection_changed = self.toolchain != toolchain;
         self.toolchain = toolchain;
+        if selection_changed {
+            self.toolchain_last_update_check = None;
+        }
         let installed = self.ensure_toolchain_ready()?;
         if selection_changed && !installed {
             self.purge_caches()?;
@@ -289,6 +305,7 @@ impl BuildEnvironment {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(self.workspace())?;
             self.purge_caches()?;
+            self.toolchain_last_update_check = Some(Instant::now());
             return Ok(true);
         }
 
@@ -324,6 +341,7 @@ impl BuildEnvironment {
         if changed {
             self.purge_caches()?;
         }
+        self.toolchain_last_update_check = Some(Instant::now());
         Ok(changed)
     }
 
