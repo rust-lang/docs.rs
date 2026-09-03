@@ -296,8 +296,7 @@ impl BuildEnvironment {
         self.remove_unmanaged_toolchain_targets(&installed_targets)?;
 
         self.toolchain.install(&self.workspace)?;
-        self.ensure_required_toolchain_targets(&installed_targets)?;
-        self.ensure_toolchain_components();
+        self.ensure_toolchain_ready()?;
 
         let new_version = self.rustc_version()?;
         let changed = old_version.as_ref() != Some(&new_version);
