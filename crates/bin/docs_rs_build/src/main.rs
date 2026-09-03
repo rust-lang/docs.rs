@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result, bail};
 use args::Args;
 use clap::Parser as _;
 use docs_rs_rustwide::BuildEnvironment;
-use package::PackagedCrate;
 use rustwide::Crate;
 use std::{path::Path, process::ExitCode};
 use tracing::info;
@@ -37,7 +36,7 @@ fn run(args: &Args) -> Result<bool> {
         .crate_path
         .canonicalize()
         .with_context(|| format!("resolving crate path {}", args.crate_path.display()))?;
-    let packaged = PackagedCrate::create(&crate_path, args.package.as_deref())?;
+    let packaged = package::create(&crate_path, args.package.as_deref())?;
     ensure_docker_available()?;
 
     let workspace_path = absolute_path(&args.workspace_path())?;
@@ -60,7 +59,7 @@ fn run(args: &Args) -> Result<bool> {
     }
 
     info!("starting docs.rs build");
-    let krate = Crate::local(packaged.source_dir());
+    let krate = Crate::local(packaged.path());
     let build = environment
         .release(&krate)
         .run(|release| release.build_docs())
