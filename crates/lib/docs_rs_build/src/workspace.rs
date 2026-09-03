@@ -184,6 +184,17 @@ impl BuildEnvironment {
     /// The workspace is refreshed and the toolchain is checked for updates only
     /// when their independently configured intervals have elapsed. The first
     /// maintenance call always checks for a toolchain update.
+    ///
+    /// Long-running, sequential builders should call this method regularly
+    /// between release builds, typically after each completed build or before
+    /// dequeuing the next one. Calling it that often is inexpensive when
+    /// neither interval has elapsed. One-shot local builds may skip maintenance:
+    /// constructing the environment already ensures that its configured
+    /// toolchain, targets, and components are ready.
+    ///
+    /// When [`MaintenanceResult::toolchain_updated`] is `true`, callers that
+    /// publish rustdoc's shared static files should rebuild and publish them
+    /// before processing the next release.
     pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
         let workspace_refreshed = self.workspace.refresh_if_due()?;
         if workspace_refreshed {
