@@ -7,13 +7,16 @@ use crate::{
     },
 };
 use anyhow::Context as _;
+use docs_rs_crate_archive::{SourceDir, unpack_crate_archive};
 use docs_rs_types::{KrateName, Version};
-use docs_rs_utils::APP_USER_AGENT;
+use docs_rs_utils::{APP_USER_AGENT, spawn_blocking};
+use futures_util::StreamExt as _;
 use reqwest::header::ACCEPT;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{fmt, io, path::Path};
+use std::{ffi::OsStr, fmt, io, path::Path};
+use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
 use tracing::instrument;
 use url::Url;
 
@@ -164,6 +167,52 @@ impl RegistryApi {
                 ))
             })
             .map_err(Into::into)
+    }
+
+    /// Download and unpack the source archive for a crate version.
+    ///
+    /// The returned directory and all extracted files are deleted when [`SourceDir`] is dropped.
+    #[instrument(skip(self))]
+    pub async fn download_and_extract_source(
+        &self,
+        name: &KrateName,
+        version: &Version,
+    ) -> Result<SourceDir> {
+        let response = self
+            .client
+            .get(self.download_url(name, version)?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let mut archive =
+            tokio::fs::File::from_std(spawn_blocking(|| Ok(tempfile::tempfile()?)).await?);
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            archive
+                .write_all(&chunk?)
+                .await
+                .map_err(anyhow::Error::from)?;
+        }
+        archive.sync_all().await.map_err(anyhow::Error::from)?;
+        archive
+            .seek(io::SeekFrom::Start(0))
+            .await
+            .map_err(anyhow::Error::from)?;
+        let archive = archive.into_std().await;
+
+        let source_dir = spawn_blocking(move || unpack_crate_archive(archive)).await?;
+
+        let expected_root = format!("{name}-{version}");
+        if source_dir.path().file_name() != Some(OsStr::new(&expected_root)) {
+            return Err(anyhow::anyhow!(
+                "broken crate archive, missing source directory {:?}",
+                source_dir.path()
+            )
+            .into());
+        }
+
+        Ok(source_dir)
     }
 
     /// Fetch all published versions of a crate from the sparse index.
@@ -365,10 +414,12 @@ mod tests {
     };
     use chrono::{DateTime, Utc};
     use crates_index::IndexConfig;
+    use docs_rs_crate_archive::testing::create_source_tarball;
     use docs_rs_types::testing::{KRATE, V1, V2};
     use reqwest::{StatusCode, header::CONTENT_TYPE};
     use serde::Serialize;
     use test_case::test_case;
+    use tokio::fs;
 
     const CHECKSUM: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -901,6 +952,28 @@ mod tests {
                 .to_string()
                 .ends_with("/crates/krate/1.0.0/download")
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_download_and_extract_source() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        let root = tempfile::tempdir()?;
+        fs::write(
+            root.path().join("Cargo.toml"),
+            "[package]\nname = \"krate\"\n",
+        )
+        .await?;
+        let archive = spawn_blocking(move || create_source_tarball(&KRATE, &V1, &root)).await?;
+        env.mock_download(&KRATE, &V1, archive).await;
+
+        let source_dir = env.api().download_and_extract_source(&KRATE, &V1).await?;
+        assert_eq!(
+            fs::read_to_string(source_dir.path().join("Cargo.toml")).await?,
+            "[package]\nname = \"krate\"\n"
+        );
+        env.assert_mocks().await;
 
         Ok(())
     }
