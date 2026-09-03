@@ -37,23 +37,14 @@ fn run(args: &Args) -> Result<bool> {
         .canonicalize()
         .with_context(|| format!("resolving crate path {}", args.crate_path.display()))?;
     let workspace_path = absolute_path(&args.workspace_path())?;
-    let compiler_metrics = args
-        .compiler_metrics
-        .as_ref()
-        .map(|path| absolute_path(path))
-        .transpose()?;
-
     info!(crate_path = %crate_path.display(), workspace = %workspace_path.display(), "initializing docs.rs build environment");
     let mut environment = BuildEnvironment::builder(workspace_path.as_path())
         .toolchain(args.toolchain())
         .running_inside_docker(args.running_inside_docker())
         .sandbox_image(args.sandbox_image())
-        .fast_init(args.fast_init())
         .maybe_cpu_limit(args.cpu_limit())
         .docker_runtime(args.docker_runtime())
         .include_default_targets(args.include_default_targets())
-        .validate_host_resources(args.validate_host_resources())
-        .maybe_compiler_metrics_collection_path(compiler_metrics)
         .default_limits(args.limits())
         .build()
         .context("initializing the docs.rs build environment")?;

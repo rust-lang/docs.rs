@@ -52,21 +52,9 @@ pub(crate) struct Args {
     #[arg(long)]
     inside_docker: bool,
 
-    /// Skip rustwide's slower workspace initialization checks.
-    #[arg(long)]
-    fast_init: bool,
-
     /// Do not add docs.rs's default target list when crate metadata has no targets.
     #[arg(long)]
     no_default_targets: bool,
-
-    /// Do not validate available host memory before building.
-    #[arg(long)]
-    no_host_resource_check: bool,
-
-    /// Copy compiler metrics into this directory.
-    #[arg(long, value_name = "PATH")]
-    pub(crate) compiler_metrics: Option<PathBuf>,
 
     /// Do not check for a newer version of the selected dist toolchain.
     #[arg(long)]
@@ -167,10 +155,6 @@ impl Args {
         !self.no_default_targets
     }
 
-    pub(crate) fn validate_host_resources(&self) -> bool {
-        !self.no_host_resource_check
-    }
-
     pub(crate) fn limits(&self) -> Limits {
         Limits::builder()
             .memory(self.memory)
@@ -183,10 +167,6 @@ impl Args {
 
     pub(crate) fn running_inside_docker(&self) -> bool {
         self.inside_docker
-    }
-
-    pub(crate) fn fast_init(&self) -> bool {
-        self.fast_init
     }
 }
 
