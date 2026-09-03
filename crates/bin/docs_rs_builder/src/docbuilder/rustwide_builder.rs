@@ -313,12 +313,8 @@ impl RustwideBuilder {
         let source_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let fetched = self
-            .environment
-            .release(&krate)
-            .limits(limits)
-            .fetch()?
-            .try_inspect(|fetched| fetched.copy_source_to(source_dir.path()))?;
+        let fetched = self.environment.release(&krate).limits(limits).fetch()?;
+        fetched.copy_source_to(source_dir.path())?;
 
         let source_stats = self.runtime.block_on(
             self.storage
@@ -326,7 +322,9 @@ impl RustwideBuilder {
         )?;
         algs.insert(source_stats.alg);
 
+        // run the actual doc-build (coverage, json, html, for all configured targets)
         let build = fetched.run(|build| build.build_docs())?;
+
         let memory_peak = build.statistics().memory_peak_bytes();
         let mut release = build.into_inner();
         let successful = release.successful();
