@@ -27,7 +27,7 @@ impl TestEnvironment {
 
 pub fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../bin/docs_rs_builder/tests/crates")
+        .join("tests/fixtures")
         .join(name)
 }
 

@@ -2014,7 +2014,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_1"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/incorrect_lockfile_0_1",
+                ))?
                 .successful
         );
 
@@ -2039,7 +2041,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_2"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/incorrect_lockfile_0_2",
+                ))?
                 .successful
         );
 
@@ -2074,7 +2078,7 @@ mod tests {
         // added. Will fail when we try to build.
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
-        let test_crate = Path::new("tests/crates/simple-build-failure/");
+        let test_crate = Path::new("../../lib/docs_rs_build/tests/fixtures/simple-build-failure/");
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2183,7 +2187,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(&PathBuf::from(&format!("tests/crates/{krate}")))?
+                .build_local_package(&PathBuf::from(&format!(
+                    "../../lib/docs_rs_build/tests/fixtures/{krate}"
+                )))?
                 .successful
         );
 
@@ -2213,7 +2219,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/build-std",
+                ))?
                 .successful
         );
         Ok(())
@@ -2229,7 +2237,9 @@ mod tests {
         builder.reinitialize_workspace_if_interval_passed()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/build-std",
+                ))?
                 .successful
         );
         Ok(())
@@ -2249,14 +2259,18 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/build-std",
+                ))?
                 .successful
         );
         sleep(Duration::from_secs(1));
         builder.reinitialize_workspace_if_interval_passed()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/build-std",
+                ))?
                 .successful
         );
         Ok(())
@@ -2322,7 +2336,9 @@ mod tests {
 
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/additional-targets"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/additional-targets",
+                ))?
                 .successful
         );
 
@@ -2371,7 +2387,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/hello-world",
+                ))?
                 .successful
         );
 
@@ -2389,7 +2407,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/hello-world"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/hello-world",
+                ))?
                 .successful
         );
 
@@ -2411,7 +2431,9 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_local_package(Path::new("tests/crates/with-examples"))?
+                .build_local_package(Path::new(
+                    "../../lib/docs_rs_build/tests/fixtures/with-examples",
+                ))?
                 .successful
         );
 
