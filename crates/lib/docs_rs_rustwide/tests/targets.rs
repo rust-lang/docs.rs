@@ -7,7 +7,7 @@ use support::{TestEnvironment, build_local};
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_metadata_and_default_targets() -> Result<()> {
-    let mut test = TestEnvironment::new()?;
+    let mut test = TestEnvironment::with_default_targets()?;
     let release = build_local(&mut test.environment, "additional-targets")?.into_inner();
     let targets: Vec<_> = release
         .targets
@@ -23,7 +23,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
 fn cross_compiles_non_host_default_target() -> Result<()> {
-    let mut test = TestEnvironment::new()?;
+    let mut test = TestEnvironment::with_default_targets()?;
     if test.environment.toolchain().as_ci().is_some() {
         return Ok(());
     }

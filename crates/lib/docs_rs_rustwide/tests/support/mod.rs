@@ -33,12 +33,21 @@ pub struct TestEnvironment {
 
 impl TestEnvironment {
     pub fn new() -> Result<Self> {
+        Self::new_inner(false)
+    }
+
+    pub fn with_default_targets() -> Result<Self> {
+        Self::new_inner(true)
+    }
+
+    fn new_inner(include_default_targets: bool) -> Result<Self> {
         init_logging();
         let workspace = test_workspace()?;
         let environment = BuildEnvironment::builder(workspace.path())
             .fast_init(true)
             .validate_host_resources(false)
             .sandbox_image(test_sandbox_image())
+            .include_default_targets(include_default_targets)
             .build()?;
         Ok(Self {
             _workspace: workspace,
