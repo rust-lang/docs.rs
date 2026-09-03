@@ -2148,7 +2148,6 @@ dependencies = [
  "sqlx",
  "sysinfo",
  "tempfile",
- "test-case",
  "thiserror",
  "tokio",
  "toml",
