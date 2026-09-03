@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use docs_rs_logging::MessageOnlyLogTracer;
 use docs_rs_rustwide::BuildEnvironment;
 pub use docs_rs_rustwide::testing::{TestWorkspace, test_sandbox_image};
 use rustwide::{BuildResult, Crate};
@@ -9,7 +10,6 @@ use std::{
     sync::Once,
 };
 use tracing::level_filters::LevelFilter;
-use tracing_log::LogTracer;
 
 static INIT_LOGGING: Once = Once::new();
 
@@ -20,7 +20,7 @@ pub fn init_logging() {
             .with_test_writer()
             .try_init()
             .expect("failed to initialize test tracing");
-        rustwide::logging::init_with(LogTracer::new());
+        rustwide::logging::init_with(MessageOnlyLogTracer);
     });
 }
 

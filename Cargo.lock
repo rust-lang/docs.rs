@@ -2131,7 +2131,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "tracing-log",
 ]
 
 [[package]]
@@ -2437,6 +2436,7 @@ dependencies = [
  "bon",
  "docs_rs_build_limits",
  "docs_rs_cargo_metadata",
+ "docs_rs_logging",
  "docs_rs_rustdoc_json",
  "docs_rs_types",
  "docs_rs_utils",
@@ -2449,7 +2449,6 @@ dependencies = [
  "test-case",
  "thiserror",
  "tracing",
- "tracing-log",
  "tracing-subscriber",
 ]
 

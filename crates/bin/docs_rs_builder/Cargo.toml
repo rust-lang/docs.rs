@@ -18,7 +18,7 @@ docs_rs_context = { path = "../../lib/docs_rs_context" }
 docs_rs_database = { path = "../../lib/docs_rs_database" }
 docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly" }
-docs_rs_logging = { path = "../../lib/docs_rs_logging" }
+docs_rs_logging = { path = "../../lib/docs_rs_logging", features = ["log"] }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
@@ -38,7 +38,6 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-log = { workspace = true }
 
 [dev-dependencies]
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue", features = ["testing"] }
