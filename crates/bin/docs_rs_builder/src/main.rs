@@ -54,7 +54,8 @@ impl CommandLine {
                 .await?
                 .with_maybe_cdn()?
                 .with_build_queue()?
-                .with_registry_api()?
+                .with_registry_api()
+                .await?
                 .with_repository_stats()?
                 .with_build_limits()?
                 .build()

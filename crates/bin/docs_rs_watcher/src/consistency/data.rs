@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -14,4 +15,5 @@ pub(super) type Releases = Vec<Release>;
 pub(super) struct Release {
     pub(super) version: Version,
     pub(super) yanked: Option<bool>,
+    pub(super) release_time: Option<DateTime<Utc>>,
 }

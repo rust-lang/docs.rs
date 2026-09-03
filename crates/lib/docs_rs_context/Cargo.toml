@@ -11,6 +11,7 @@ testing = [
     "docs_rs_database/testing",
     "docs_rs_fastly/testing",
     "docs_rs_logging/testing",
+    "docs_rs_registry_api/testing",
     "docs_rs_storage/testing",
 ]
 

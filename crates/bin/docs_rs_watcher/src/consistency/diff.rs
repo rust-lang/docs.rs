@@ -1,4 +1,5 @@
 use super::data::Crate;
+use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
 use itertools::{
     EitherOrBoth::{Both, Left, Right},
@@ -13,6 +14,7 @@ pub(super) enum Difference {
     ReleaseNotInIndex(KrateName, Version),
     ReleaseNotInDb(KrateName, Version),
     ReleaseYank(KrateName, Version, bool),
+    ReleaseTime(KrateName, Version, DateTime<Utc>),
 }
 
 impl Display for Difference {
@@ -34,6 +36,12 @@ impl Display for Difference {
                 write!(
                     f,
                     "release yanked difference, index yanked:{yanked}, release: {name} {version}",
+                )?;
+            }
+            Difference::ReleaseTime(name, version, release_time) => {
+                write!(
+                    f,
+                    "release time difference, index release time: {release_time}, release: {name} {version}",
                 )?;
             }
         }
@@ -74,6 +82,26 @@ where
                                     index_yanked,
                                 ));
                             }
+
+                            // NOTE: `yanked` and `release_time` come both from the
+                            // crates.io sparse index, or historically from the crates.io API.
+                            // We might have releases where both fields are empty because of an
+                            // error, or because the release build is still in progress.
+                            // So there might be cases where `release_time` was empty because
+                            // it was empty on the index (unlikely), or we might have cases
+                            // where the releases is still in progress.
+                            // Since `yanked` is mandatory on the sparse index, we can use that
+                            // as an indicator that `release_time` can be overwritten.
+                            if db_release.yanked.is_some()
+                                && let Some(index_release_time) = index_release.release_time
+                                && db_release.release_time != Some(index_release_time)
+                            {
+                                result.push(Difference::ReleaseTime(
+                                    db_crate.name.clone(),
+                                    db_release.version.clone(),
+                                    index_release_time,
+                                ));
+                            }
                         }
                         Left(db_release) => result.push(Difference::ReleaseNotInIndex(
                             db_crate.name.clone(),
@@ -105,6 +133,7 @@ where
 mod tests {
     use super::super::data::Release;
     use super::*;
+    use chrono::DateTime;
     use docs_rs_types::testing::{KRATE, V2, V3};
     use std::iter;
 
@@ -134,10 +163,12 @@ mod tests {
                 Release {
                     version: V2,
                     yanked: Some(false),
+                    release_time: None,
                 },
                 Release {
                     version: V3,
                     yanked: Some(true),
+                    release_time: None,
                 },
             ],
         }];
@@ -156,10 +187,12 @@ mod tests {
                 Release {
                     version: V2,
                     yanked: Some(true),
+                    release_time: None,
                 },
                 Release {
                     version: V3,
                     yanked: Some(true),
+                    release_time: None,
                 },
             ],
         }];
@@ -169,10 +202,12 @@ mod tests {
                 Release {
                     version: V2,
                     yanked: Some(false),
+                    release_time: None,
                 },
                 Release {
                     version: V3,
                     yanked: Some(true),
+                    release_time: None,
                 },
             ],
         }];
@@ -190,6 +225,7 @@ mod tests {
             releases: vec![Release {
                 version: V2,
                 yanked: None,
+                release_time: None,
             }],
         }];
         let index_releases = [Crate {
@@ -197,6 +233,55 @@ mod tests {
             releases: vec![Release {
                 version: V2,
                 yanked: Some(false),
+                release_time: Some("2024-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
+            }],
+        }];
+
+        assert!(calculate_diff(db_releases.iter(), index_releases.iter()).is_empty());
+    }
+
+    #[test]
+    fn test_release_time_diff() {
+        let db_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: Some("2024-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
+            }],
+        }];
+        let expected = "2024-01-02T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let index_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: Some(expected),
+            }],
+        }];
+
+        assert_eq!(
+            calculate_diff(db_releases.iter(), index_releases.iter()),
+            vec![Difference::ReleaseTime(KRATE, V2, expected)]
+        );
+    }
+
+    #[test]
+    fn test_missing_index_release_time_does_not_clear_database_value() {
+        let db_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: Some("2024-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
+            }],
+        }];
+        let index_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: None,
             }],
         }];
 

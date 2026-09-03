@@ -1520,13 +1520,14 @@ dependencies = [
 
 [[package]]
 name = "crates-index"
-version = "3.14.0"
+version = "3.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed2cb0f9440838694b31ff3787148d329e02f03c16ff96c28790261563e82174"
+checksum = "8759756200ee0abc6f62374c5205af1528d3b0a851c83667a69f76de1e19836f"
 dependencies = [
  "gix 0.83.0",
  "hex",
  "home",
+ "http 1.5.0",
  "memchr",
  "rayon",
  "rustc-hash",
@@ -2372,10 +2373,12 @@ dependencies = [
  "anyhow",
  "bon",
  "chrono",
+ "crates-index",
  "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_types",
  "docs_rs_utils",
+ "http 1.5.0",
  "mime",
  "mockito",
  "reqwest",
@@ -2383,7 +2386,11 @@ dependencies = [
  "reqwest-retry",
  "serde",
  "serde_json",
+ "serde_urlencoded",
+ "serde_with",
  "sqlx",
+ "strum",
+ "tempfile",
  "test-case",
  "thiserror",
  "tokio",
@@ -2562,6 +2569,7 @@ name = "docs_rs_watcher"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "crates-index",
  "crates-index-diff",
@@ -2574,21 +2582,19 @@ dependencies = [
  "docs_rs_fastly",
  "docs_rs_logging",
  "docs_rs_opentelemetry",
+ "docs_rs_registry_api",
  "docs_rs_repository_stats",
  "docs_rs_rustdoc_json",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",
- "docs_rs_uri",
  "docs_rs_utils",
  "futures-util",
  "itertools 0.15.0",
  "opentelemetry",
  "pretty_assertions",
  "rayon",
- "reqwest",
  "sqlx",
- "test-case",
  "tokio",
  "tracing",
 ]
@@ -2637,7 +2643,6 @@ dependencies = [
  "lol_html",
  "md5",
  "mime",
- "mockito",
  "num_cpus",
  "opentelemetry",
  "opentelemetry_sdk",
@@ -2651,6 +2656,7 @@ dependencies = [
  "serde_json",
  "slug",
  "sqlx",
+ "strum",
  "syntect",
  "tempfile",
  "test-case",

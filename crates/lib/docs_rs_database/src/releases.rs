@@ -50,6 +50,10 @@ pub async fn finish_release(
     let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
 
+    // NOTE: we're still inserting dummy data in case of empty release-data fields
+    // or missing release data.
+    let registry_data = registry_data.clone().for_database();
+
     let result = sqlx::query!(
         r#"UPDATE releases
            SET release_time = $2,
@@ -656,6 +660,7 @@ mod test {
         name: &KrateName,
         version: &Version,
         keywords: KL,
+        registry_data: &ReleaseData,
     ) -> Result<ReleaseId>
     where
         K: Into<String>,
@@ -689,7 +694,7 @@ mod test {
             tempdir.path(),
             DEFAULT_TARGET,
             vec![DEFAULT_TARGET.to_string()],
-            &ReleaseData::default(),
+            registry_data,
             true,
             false,
             iter::empty(),
@@ -699,6 +704,59 @@ mod test {
         .await?;
 
         Ok(release_id)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_finish_release_uses_dummy_release_time() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            iter::empty::<String>(),
+            &ReleaseData::dummy(),
+        )
+        .await?;
+        let release_time = sqlx::query_scalar!(
+            "SELECT release_time FROM releases WHERE id = $1",
+            release_id.0,
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        assert!(release_time.is_some());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_finish_release_uses_dummy_release_time_when_missing() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            iter::empty::<String>(),
+            &ReleaseData {
+                release_time: None,
+                yanked: false,
+            },
+        )
+        .await?;
+        let release_time = sqlx::query_scalar!(
+            "SELECT release_time FROM releases WHERE id = $1",
+            release_id.0,
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        assert!(release_time.is_some());
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -901,8 +959,14 @@ mod test {
 
         let mut conn = db.async_conn().await?;
 
-        let release_id =
-            fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 1", "kw 2"]).await?;
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 1", "kw 2"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         let kw_r = sqlx::query!(
             r#"SELECT
@@ -941,10 +1005,24 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         // same version so we have the same release
-        fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -955,10 +1033,23 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        fake_release_with_keywords(&mut conn, &KRATE, &V1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
-        let release_id =
-            fake_release_with_keywords(&mut conn, &KRATE, &V1, ["kw 1", "kw 2"]).await?;
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V1,
+            ["kw 1", "kw 2"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         let mut conn = db.async_conn().await?;
         let kw_r = sqlx::query!(
@@ -1462,7 +1553,7 @@ mod test {
             tempdir.path(),
             DEFAULT_TARGET,
             vec![DEFAULT_TARGET.to_string()],
-            &ReleaseData::default(),
+            &ReleaseData::dummy(),
             true,
             false,
             iter::empty(),

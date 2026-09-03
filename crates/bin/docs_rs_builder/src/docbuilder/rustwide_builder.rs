@@ -22,6 +22,7 @@ use docs_rs_database::{
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_registry_api::RegistryApi;
+use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_storage::{
@@ -410,11 +411,9 @@ impl RustwideBuilder {
                     error!(%name, %version, ?err, "could not fetch releases-data");
                     None
                 }
+                .unwrap_or_else(ReleaseData::dummy),
             }
-        } else {
-            None
-        }
-        .unwrap_or_default();
+        };
 
         let cargo_metadata = release.cargo_metadata.root();
         let repository = self.get_repo(cargo_metadata)?;
@@ -635,12 +634,11 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
 mod tests {
     use super::*;
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
-    use docs_rs_utils::block_on_async_with_conn;
-    // use crate::test::{AxumRouterTestExt, TestEnvironment};
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
         BuildStatus, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version, testing::V0_1,
     };
+    use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;
     use pretty_assertions::assert_eq;
     use std::{collections::BTreeMap, iter, sync::LazyLock};
@@ -975,7 +973,7 @@ mod tests {
                     "x86_64-pc-windows-msvc".into(),
                     "x86_64-unknown-linux-gnu".into(),
                 ],
-                &ReleaseData::default(),
+                &ReleaseData::dummy(),
                 true,
                 false,
                 iter::once(CompressionAlgorithm::Deflate),

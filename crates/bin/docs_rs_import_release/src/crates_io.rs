@@ -1,6 +1,7 @@
 use crate::common::download_to_temp_file;
 use anyhow::{Result, bail};
 use async_tar::Archive;
+use docs_rs_registry_api::RegistryApi;
 use docs_rs_storage::compression::wrap_reader_for_decompression;
 use docs_rs_types::{CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
@@ -21,14 +22,12 @@ impl AsRef<Path> for SourceDir {
 }
 
 pub(crate) async fn download_and_extract_source(
+    registry: &RegistryApi,
     name: &KrateName,
     version: &Version,
 ) -> Result<SourceDir> {
     debug!("downloading source");
-    let crate_archive = download_to_temp_file(format!(
-        "https://static.crates.io/crates/{name}/{name}-{version}.crate"
-    ))
-    .await?;
+    let crate_archive = download_to_temp_file(registry.download_url(name, version)?).await?;
 
     let temp_dir = spawn_blocking(|| Ok(tempfile::tempdir()?)).await?;
 
