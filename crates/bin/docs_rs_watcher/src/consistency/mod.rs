@@ -1,8 +1,9 @@
 use crate::{Config, db::delete, index_watcher::set_yanked};
 use anyhow::{Context as _, Result};
+use chrono::{DateTime, Utc};
 use docs_rs_build_queue::PRIORITY_CONSISTENCY_CHECK;
 use docs_rs_context::Context;
-use docs_rs_types::KrateName;
+use docs_rs_types::{KrateName, Version};
 use itertools::Itertools;
 use tracing::{info, warn};
 
@@ -57,8 +58,10 @@ pub async fn run_single_check(
         .await
         .context("Loading crate data from database for consistency check")?;
 
+    let registry_api = ctx.registry_api()?;
+
     info!(%name, "Loading crate data from sparse index...");
-    let index_data = index::load_single(name)
+    let index_data = index::load_single(registry_api, name)
         .await
         .context("Loading crate data from sparse index for consistency check")?;
 
@@ -75,6 +78,7 @@ struct HandleResult {
     crates_deleted: u32,
     releases_deleted: u32,
     yanks_corrected: u32,
+    release_times_corrected: u32,
 }
 
 fn print_summary(diff: &[diff::Difference], result: &HandleResult, dry_run: bool) {
@@ -88,6 +92,7 @@ fn print_summary(diff: &[diff::Difference], result: &HandleResult, dry_run: bool
         diff::Difference::ReleaseNotInIndex(_, _) => "ReleaseNotInIndex",
         diff::Difference::ReleaseNotInDb(_, _) => "ReleaseNotInDb",
         diff::Difference::ReleaseYank(_, _, _) => "ReleaseYank",
+        diff::Difference::ReleaseTime(_, _, _) => "ReleaseTime",
     }) {
         println!("{key:17} => {count:4}");
     }
@@ -102,6 +107,10 @@ fn print_summary(diff: &[diff::Difference], result: &HandleResult, dry_run: bool
     println!("crates deleted:   {:4}", result.crates_deleted);
     println!("releases deleted: {:4}", result.releases_deleted);
     println!("yanks corrected:  {:4}", result.yanks_corrected);
+    println!(
+        "release times corrected: {:4}",
+        result.release_times_corrected
+    );
 }
 
 async fn handle_diff<'a, I>(
@@ -170,10 +179,41 @@ where
                 }
                 result.yanks_corrected += 1;
             }
+            diff::Difference::ReleaseTime(name, version, release_time) => {
+                if !dry_run
+                    && let Err(err) =
+                        set_release_time(&mut conn, name, version, *release_time).await
+                {
+                    warn!(?difference, ?err, "error handling ReleaseTime");
+                }
+                result.release_times_corrected += 1;
+            }
         }
     }
 
     Ok(result)
+}
+
+async fn set_release_time(
+    conn: &mut sqlx::PgConnection,
+    name: &KrateName,
+    version: &Version,
+    release_time: DateTime<Utc>,
+) -> Result<()> {
+    sqlx::query!(
+        r#"UPDATE releases
+           SET release_time = $3
+           FROM crates
+           WHERE crates.id = releases.crate_id
+             AND crates.name = $1
+             AND releases.version = $2"#,
+        name as _,
+        version as _,
+        release_time,
+    )
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -181,6 +221,7 @@ mod tests {
     use super::diff::Difference;
     use super::*;
     use crate::testing::TestEnvironment;
+    use chrono::DateTime;
     use docs_rs_types::{
         Version,
         testing::{KRATE, V1, V2},
@@ -302,6 +343,36 @@ mod tests {
         assert_eq!(
             single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
             vec![false]
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_wrong_release_time() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let original = "2024-01-01T00:00:00Z".parse::<DateTime<Utc>>()?;
+        let expected = "2024-01-02T00:00:00Z".parse::<DateTime<Utc>>()?;
+        env.fake_release()
+            .await
+            .name("krate")
+            .version(V1)
+            .release_time(original)
+            .create()
+            .await?;
+
+        let diff = [Difference::ReleaseTime(KRATE, V1, expected)];
+
+        handle_diff(env.config(), &env, diff.iter(), true).await?;
+        assert_eq!(
+            single_row::<DateTime<Utc>>(&env, "SELECT release_time FROM releases").await?,
+            vec![original]
+        );
+
+        handle_diff(env.config(), &env, diff.iter(), false).await?;
+        assert_eq!(
+            single_row::<DateTime<Utc>>(&env, "SELECT release_time FROM releases").await?,
+            vec![expected]
         );
 
         Ok(())

@@ -80,7 +80,8 @@ impl CommandLine {
             .await?
             .with_build_queue()?
             .with_repository_stats()?
-            .with_registry_api()?
+            .with_registry_api()
+            .await?
             .with_maybe_cdn()?
             .build()?;
 

@@ -30,11 +30,7 @@ impl<C: AppConfig> BlockingTestEnvironment<C> {
     }
 
     #[builder(finish_fn = build)]
-    pub fn builder(
-        config: Option<C>,
-        registry_api_config: Option<docs_rs_registry_api::Config>,
-        storage_config: Option<StorageConfig>,
-    ) -> Result<Self> {
+    pub fn builder(config: Option<C>, storage_config: Option<StorageConfig>) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -44,7 +40,6 @@ impl<C: AppConfig> BlockingTestEnvironment<C> {
             inner: runtime.block_on(
                 TestEnvironment::builder()
                     .maybe_config(config)
-                    .maybe_registry_api_config(registry_api_config)
                     .maybe_storage_config(storage_config)
                     .build(),
             )?,

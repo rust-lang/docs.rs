@@ -46,7 +46,8 @@ impl CommandLine {
             .await?
             .with_storage()
             .await?
-            .with_registry_api()?
+            .with_registry_api()
+            .await?
             .with_repository_stats()?
             .build()?;
 

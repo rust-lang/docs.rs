@@ -8,12 +8,14 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection) -> Result<Crates> {
         r#"SELECT
             name as "name!: KrateName",
             version as "version!: Version",
-            yanked
+            yanked,
+            release_time
          FROM (
              SELECT
                  crates.name,
                  releases.version,
-                 releases.yanked
+                 releases.yanked,
+                 releases.release_time
              FROM crates
              INNER JOIN releases ON releases.crate_id = crates.id
              UNION ALL
@@ -22,7 +24,8 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection) -> Result<Crates> {
              SELECT
                  queue.name,
                  queue.version,
-                 NULL as yanked
+                 NULL as yanked,
+                 NULL as release_time
              FROM queue
              LEFT OUTER JOIN crates ON crates.name = queue.name
              LEFT OUTER JOIN releases ON (
@@ -46,6 +49,7 @@ pub(super) async fn load(conn: &mut sqlx::PgConnection) -> Result<Crates> {
             .map(|row| Release {
                 version: row.version.clone(),
                 yanked: row.yanked,
+                release_time: row.release_time,
             })
             .collect();
 
@@ -65,14 +69,14 @@ pub(super) async fn load_single(
     name: &KrateName,
 ) -> Result<Option<Crate>> {
     let rows = sqlx::query!(
-        r#"SELECT version as "version!: Version", yanked
+        r#"SELECT version as "version!: Version", yanked, release_time
            FROM (
-               SELECT releases.version, releases.yanked
+               SELECT releases.version, releases.yanked, releases.release_time
                FROM crates
                INNER JOIN releases ON releases.crate_id = crates.id
                WHERE crates.name = $1
                UNION ALL
-               SELECT queue.version, NULL as yanked
+               SELECT queue.version, NULL as yanked, NULL as release_time
                FROM queue
                LEFT OUTER JOIN crates ON crates.name = queue.name
                LEFT OUTER JOIN releases ON (
@@ -96,6 +100,7 @@ pub(super) async fn load_single(
         .map(|row| Release {
             version: row.version,
             yanked: row.yanked,
+            release_time: row.release_time,
         })
         .collect();
     releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
@@ -111,6 +116,7 @@ mod tests {
     use crate::testing::TestEnvironment;
 
     use super::*;
+    use chrono::{DateTime, Utc};
     use docs_rs_types::{
         KrateName,
         testing::{KRATE, V1, V2, V3},
@@ -122,12 +128,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let release_time = "2024-01-01T00:00:00Z".parse::<DateTime<Utc>>()?;
 
         env.build_queue()?.add_crate(&QUEUED, &V1, 0).await?;
         env.fake_release()
             .await
             .name("krate")
             .version(V2)
+            .release_time(release_time)
             .create()
             .await?;
         env.fake_release()
@@ -135,6 +143,7 @@ mod tests {
             .name("krate")
             .version(V3)
             .yanked(true)
+            .release_time(release_time)
             .create()
             .await?;
 
@@ -157,6 +166,7 @@ mod tests {
             .name("krate")
             .version(V0_9_3)
             .yanked(false)
+            .release_time(release_time)
             .create()
             .await?;
         env.fake_release()
@@ -164,6 +174,7 @@ mod tests {
             .name("krate")
             .version(V0_10_3)
             .yanked(false)
+            .release_time(release_time)
             .create()
             .await?;
 
@@ -179,18 +190,22 @@ mod tests {
                         Release {
                             version: V0_9_3,
                             yanked: Some(false),
+                            release_time: Some(release_time),
                         },
                         Release {
                             version: V0_10_3,
                             yanked: Some(false),
+                            release_time: Some(release_time),
                         },
                         Release {
                             version: V2,
                             yanked: Some(false),
+                            release_time: Some(release_time),
                         },
                         Release {
                             version: V3,
                             yanked: Some(true),
+                            release_time: Some(release_time),
                         }
                     ]
                 },
@@ -199,6 +214,7 @@ mod tests {
                     releases: vec![Release {
                         version: V1,
                         yanked: None,
+                        release_time: None,
                     }]
                 },
             ]
@@ -209,11 +225,13 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_single() -> Result<()> {
         let env = TestEnvironment::new().await?;
+        let release_time = "2024-01-01T00:00:00Z".parse::<DateTime<Utc>>()?;
 
         env.fake_release()
             .await
             .name(KRATE)
             .version(V1)
+            .release_time(release_time)
             .create()
             .await?;
         env.fake_release()
@@ -233,10 +251,12 @@ mod tests {
                     Release {
                         version: V1,
                         yanked: Some(false),
+                        release_time: Some(release_time),
                     },
                     Release {
                         version: V2,
                         yanked: None,
+                        release_time: None,
                     },
                 ],
             }

@@ -20,13 +20,11 @@
         <label for="nav-sort">
             {{ crate::icons::IconList.render_solid(false, false, "") }}
         </label>
-        {% set search_sort_by_val = search_sort_by.as_deref().unwrap_or_default() %}
+        {% set search_sort_by_val = search_sort_by.unwrap_or_default().to_string() %}
         <select form="nav-search-form" name="sort" id="nav-sort" aria-label="Find crate by the sort by select-box" tabindex="-1">
-            <option value="relevance" {%- if search_sort_by_val == "relevance" %} selected="selected" {%- endif %}>Relevance</option>
-            <option value="downloads" {%- if search_sort_by_val == "downloads" %} selected="selected" {%- endif %}>All-Time Downloads</option>
-            <option value="recent-downloads" {%- if search_sort_by_val == "recent-downloads" %} selected="selected" {%- endif %}>Recent Downloads</option>
-            <option value="recent-updates" {%- if search_sort_by_val == "recent-updates" %} selected="selected" {%- endif %}>Recent Updates</option>
-            <option value="new" {%- if search_sort_by_val == "new" %} selected="selected" {%- endif %}>Newly Added</option>
+            {%- for s in registry_api::SearchSort::iter() %}
+                <option value="{{ s.id() }}" {%- if search_sort_by_val == s.id() %} selected="selected" {%- endif %}>{{ s.label() }}</option>
+            {%- endfor %}
         </select>
     </div>
 </div>
