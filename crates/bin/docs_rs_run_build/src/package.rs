@@ -23,7 +23,9 @@ impl PackagedCrate {
         let temporary = tempfile::tempdir().context("creating temporary packaging directory")?;
         let cargo_target = temporary.path().join("cargo-target");
         let manifest_path = manifest_dir.join("Cargo.toml");
-        require_package_for_virtual_workspace(&manifest_path, package)?;
+        if package.is_none() {
+            require_package_for_virtual_workspace(&manifest_path)?;
+        }
 
         info!("creating the crate archive with cargo package");
         let mut command = Command::new("cargo");
@@ -70,14 +72,7 @@ impl PackagedCrate {
     }
 }
 
-fn require_package_for_virtual_workspace(
-    manifest_path: &Path,
-    package: Option<&str>,
-) -> Result<()> {
-    if package.is_some() {
-        return Ok(());
-    }
-
+fn require_package_for_virtual_workspace(manifest_path: &Path) -> Result<()> {
     let contents = fs::read_to_string(manifest_path)
         .with_context(|| format!("reading manifest {}", manifest_path.display()))?;
     let manifest: toml::Value = toml::from_str(&contents)
