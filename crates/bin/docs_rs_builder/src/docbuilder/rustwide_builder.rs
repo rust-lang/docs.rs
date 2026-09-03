@@ -209,10 +209,10 @@ impl RustwideBuilder {
     pub fn add_essential_files(&mut self) -> Result<()> {
         let rustc_version = self.environment.rustc_version()?;
         info!("building a dummy crate to get essential files");
-        let static_files = self.environment.build_essential_files()?.into_inner();
+        let rustdoc_static_dir = self.environment.build_essential_files()?.into_inner();
         self.runtime.block_on(
             self.storage
-                .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &static_files),
+                .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &rustdoc_static_dir),
         )?;
         self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
