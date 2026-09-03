@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 use docs_rs_rustwide::{BuildEnvironment, CpuLimit};
 use rustwide::Crate;
 use std::fs;
-use support::{TestEnvironment, build_local, fixture, test_sandbox_image};
+use support::{TestEnvironment, build_local, fixture, test_sandbox_image, test_workspace};
 use test_case::test_case;
 
 #[test]
@@ -137,7 +137,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn collects_compiler_metrics() -> Result<()> {
-    let workspace = tempfile::tempdir()?;
+    let workspace = test_workspace()?;
     let metrics = tempfile::tempdir()?;
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
@@ -157,7 +157,7 @@ fn collects_compiler_metrics() -> Result<()> {
 #[test_case(CpuLimit::Cores(1..=2))]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
-    let workspace = tempfile::tempdir()?;
+    let workspace = test_workspace()?;
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
