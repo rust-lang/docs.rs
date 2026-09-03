@@ -291,11 +291,15 @@ impl BuildEnvironment {
         Ok(installed)
     }
 
-    // Install or update the configured toolchain and its docs.rs components,
-    // purging incompatible workspace caches when the compiler changes. CI
-    // toolchains always report a change because their existing version cannot
-    // be detected through rustup reliably.
-    fn update_toolchain(&mut self) -> Result<bool> {
+    /// Immediately install or update the configured toolchain, bypassing the
+    /// update interval used by [`Self::perform_maintenance`].
+    ///
+    /// This also ensures the docs.rs targets and components are ready and
+    /// purges incompatible workspace caches when the compiler changes. A
+    /// successful call resets the maintenance interval. CI toolchains always
+    /// report a change because their existing version cannot be detected
+    /// through rustup reliably.
+    pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(self.workspace())?;
             self.purge_caches()?;
