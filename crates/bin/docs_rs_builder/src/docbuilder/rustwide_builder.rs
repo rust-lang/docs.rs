@@ -43,10 +43,6 @@ use std::{
 };
 use tracing::{debug, error, info, info_span, instrument, warn};
 
-static DUMMY_CRATE_NAME: LazyLock<KrateName> = LazyLock::new(|| "empty-library".parse().unwrap());
-#[cfg(test)]
-const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
-
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
     let name: String = get_config(conn, ConfigName::Toolchain)
         .await?
@@ -85,15 +81,14 @@ pub struct RustwideBuilder {
 impl RustwideBuilder {
     pub fn init(config: Arc<Config>, context: &Context) -> Result<Self> {
         let runtime: Handle = context.runtime().clone().into();
+
         let toolchain = runtime.block_on(async {
             let mut conn = context.pool()?.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
 
-        let default_limits = runtime.block_on(async {
-            let mut conn = context.pool()?.get_async().await?;
-            Limits::for_crate(&config.build_limits, &mut conn, &DUMMY_CRATE_NAME).await
-        })?;
+        let default_limits = Limits::from_config(&config.build_limits);
+
         let cpu_limit = config
             .build_cpu_cores
             .as_ref()
@@ -103,11 +98,13 @@ impl RustwideBuilder {
                     .build_cpu_limit
                     .map(|limit| CpuLimit::Quota(limit as f32))
             });
+
         let sandbox_image = config
             .docker_image
             .as_ref()
             .map(|image| SandboxImageSource::LocalOrRemote(image.clone()))
             .unwrap_or_default();
+
         let environment = BuildEnvironment::builder(config.rustwide_workspace.as_path())
             .toolchain(toolchain)
             .running_inside_docker(config.inside_docker)
@@ -647,6 +644,10 @@ mod tests {
     use docsrs_metadata::DEFAULT_TARGETS;
     use pretty_assertions::assert_eq;
     use std::{collections::BTreeMap, iter};
+
+    static DUMMY_CRATE_NAME: LazyLock<KrateName> =
+        LazyLock::new(|| "empty-library".parse().unwrap());
+    const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
 
     #[test]
     #[ignore]

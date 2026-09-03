@@ -2651,6 +2651,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "docsrs-build"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "docs_rs_build",
+ "docs_rs_build_limits",
+ "rustwide",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "docsrs-metadata"
 version = "0.1.0"
 dependencies = [
