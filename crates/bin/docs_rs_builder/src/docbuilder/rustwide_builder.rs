@@ -643,7 +643,7 @@ mod tests {
     };
     use docsrs_metadata::DEFAULT_TARGETS;
     use pretty_assertions::assert_eq;
-    use std::{collections::BTreeMap, iter};
+    use std::{collections::BTreeMap, iter, sync::LazyLock};
 
     static DUMMY_CRATE_NAME: LazyLock<KrateName> =
         LazyLock::new(|| "empty-library".parse().unwrap());
