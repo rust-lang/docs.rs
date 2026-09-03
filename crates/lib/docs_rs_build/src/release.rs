@@ -71,8 +71,11 @@ impl FetchedRelease<'_> {
     ///
     /// This is useful for source archiving in a fluent lifecycle chain before
     /// [`Self::run`] enters build preparation.
+    #[instrument(skip(self, callback), fields(krate = %self.krate))]
     pub fn try_inspect(self, callback: impl FnOnce(&Self) -> Result<()>) -> Result<Self> {
+        debug!("running fetched-release inspection");
         callback(&self)?;
+        debug!("fetched-release inspection completed");
         Ok(self)
     }
 
