@@ -99,7 +99,7 @@ async fn import_test_release_inner(
     build_id: BuildId,
 ) -> Result<()> {
     info!("download & inspect source from crates.io...");
-    let source_dir = download_and_extract_source(name, version).await?;
+    let source_dir = download_and_extract_source(registry_api, name, version).await?;
 
     let cargo_metadata = spawn_blocking({
         let source_dir = source_dir.source_path.clone();

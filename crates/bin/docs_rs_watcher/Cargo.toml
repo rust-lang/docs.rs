@@ -8,9 +8,10 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 # NOTE: on the new infra, switch back from `git-https-reqwest` to `git-https` (curl) once the curl version is new enough
-crates-index = { version = "3.0.0", default-features = false, features = ["git", "git-https-reqwest", "git-performance", "parallel"] }
+crates-index = { workspace = true, default-features = false, features = ["git", "git-https-reqwest", "git-performance", "parallel", "sparse"] }
 # NOTE: on the new infra, switch back from `http-reqwest` to `http-curl` once the curl version is new enough
 crates-index-diff = { version = "31.0.0", default-features = false, features = ["http-reqwest", "max-performance", "semver"] }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
@@ -22,16 +23,15 @@ docs_rs_env_vars = { path = "../../lib/docs_rs_env_vars" }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly" }
 docs_rs_logging = { path = "../../lib/docs_rs_logging" }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../../lib/docs_rs_repository_stats" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_types = { path = "../../lib/docs_rs_types" }
-docs_rs_uri = { path = "../../lib/docs_rs_uri" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 opentelemetry = { workspace = true }
 rayon = "1.6.1"
-reqwest = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -46,7 +46,6 @@ docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 pretty_assertions = { workspace = true }
-test-case = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            name as \"name!: KrateName\",\n            version as \"version!: Version\",\n            yanked,\n            release_time\n         FROM (\n             SELECT\n                 crates.name,\n                 releases.version,\n                 releases.yanked,\n                 releases.release_time\n             FROM crates\n             INNER JOIN releases ON releases.crate_id = crates.id\n             UNION ALL\n             -- crates & releases that are already queued\n             -- don't have to be requeued.\n             SELECT\n                 queue.name,\n                 queue.version,\n                 NULL as yanked,\n                 NULL as release_time\n             FROM queue\n             LEFT OUTER JOIN crates ON crates.name = queue.name\n             LEFT OUTER JOIN releases ON (\n                 releases.crate_id = crates.id AND\n                 releases.version = queue.version\n             )\n             WHERE (\n                 crates.id IS NULL OR\n                 releases.id IS NULL\n             )\n         ) AS inp\n         ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!: KrateName",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "version!: Version",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "yanked",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "release_time",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "7e2d11c856c7e152b714d67008251ada808cd686be2c5adc2470b4b5fec6da8a"
+}

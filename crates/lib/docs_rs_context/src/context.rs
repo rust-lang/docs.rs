@@ -240,12 +240,12 @@ impl<S: State> ContextBuilder<S> {
         self.registry_api_internal(registry_api)
     }
 
-    pub fn with_registry_api(self) -> Result<ContextBuilder<SetRegistryApi<S>>>
+    pub async fn with_registry_api(self) -> Result<ContextBuilder<SetRegistryApi<S>>>
     where
         S::RegistryApi: IsUnset,
     {
         let config = docs_rs_registry_api::Config::from_environment()?;
-        let api = RegistryApi::from_config(&config)?;
+        let api = RegistryApi::from_config(&config).await?;
 
         Ok(self.registry_api(config.into(), api.into()))
     }

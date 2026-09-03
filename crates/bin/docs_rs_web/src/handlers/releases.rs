@@ -32,8 +32,8 @@ use std::{
     str,
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 use tracing::{error, trace, warn};
-use url::form_urlencoded;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -144,8 +144,8 @@ pub(crate) enum ReleaseStatus {
 
 struct SearchResult {
     pub results: Vec<ReleaseStatus>,
-    pub prev_page: Option<String>,
-    pub next_page: Option<String>,
+    pub prev_page: Option<registry_api::SearchCursor>,
+    pub next_page: Option<registry_api::SearchCursor>,
 }
 
 /// Get the search results for a crate search query
@@ -154,10 +154,9 @@ struct SearchResult {
 async fn get_search_results(
     conn: &mut sqlx::PgConnection,
     registry: &RegistryApi,
-    query_params: &str,
-    query: &str,
+    cursor: registry_api::SearchCursor,
 ) -> Result<SearchResult, registry_api::Error> {
-    let registry_api::Search { crates, meta } = registry.search(query_params).await?;
+    let registry_api::Search { crates, meta } = registry.search(&cursor).await?;
 
     let names = Arc::new(
         crates
@@ -229,7 +228,8 @@ async fn get_search_results(
     // extend with the release/build information from docs.rs
     // Crates that are not on docs.rs yet will not be returned.
     let mut results = Vec::new();
-    if let Ok(krate) = query.parse::<KrateName>()
+    if let Some(query) = cursor.query()
+        && let Ok(krate) = query.parse::<KrateName>()
         && let Some(desc) = super::rustdoc::DOC_RUST_LANG_ORG_REDIRECTS.get(&krate)
     {
         results.push(ReleaseStatus::External(desc));
@@ -247,8 +247,8 @@ async fn get_search_results(
 
     Ok(SearchResult {
         results,
-        prev_page: meta.prev_page,
-        next_page: meta.next_page,
+        prev_page: meta.prev_page().cloned(),
+        next_page: meta.next_page().cloned(),
     })
 }
 
@@ -435,7 +435,7 @@ pub(crate) struct Search {
     pub(crate) message: Option<String>,
     pub(crate) releases: Vec<ReleaseStatus>,
     pub(crate) search_query: Option<String>,
-    pub(crate) search_sort_by: Option<String>,
+    pub(crate) search_sort_by: Option<registry_api::SearchSort>,
     pub(crate) previous_page_link: Option<String>,
     pub(crate) next_page_link: Option<String>,
     /// This should always be `ReleaseType::Search`
@@ -529,10 +529,18 @@ pub(crate) async fn search_handler(
         .get("query")
         .map(|q| q.to_string())
         .unwrap_or_else(|| "".to_string());
+
     let mut sort_by = query_params
         .get("sort")
-        .map(|q| q.to_string())
-        .unwrap_or_else(|| "relevance".to_string());
+        .and_then(|sort| {
+            sort.parse()
+                .inspect_err(|err| {
+                    warn!(%sort, ?err, "invalid search sort from user");
+                })
+                .ok()
+        })
+        .unwrap_or_default();
+
     // check if I am feeling lucky button pressed and redirect user to crate page
     // if there is a match. Also check for paths to items within crates.
     if query_params.remove("i-am-feeling-lucky").is_some() || query.contains("::") {
@@ -584,39 +592,57 @@ pub(crate) async fn search_handler(
     }
 
     let search_result = if let Some(paginate) = query_params.get("paginate") {
-        let decoded = b64.decode(paginate.as_bytes()).map_err(|e| {
-            warn!("error when decoding pagination base64 string \"{paginate}\": {e:?}");
+        let decoded = b64.decode(paginate.as_bytes()).map_err(|err| {
+            warn!(
+                paginate,
+                ?err,
+                "error when decoding pagination base64 string"
+            );
             AxumNope::NoResults
         })?;
         let query_params = String::from_utf8_lossy(&decoded);
-        let query_params = query_params.strip_prefix('?').ok_or_else(|| {
+        let search_cursor: registry_api::SearchCursor = query_params.parse().map_err(|err| {
             // sometimes we see plain bytes being passed to `paginate`.
             // In these cases we just return `NoResults` and don't call
             // the crates.io API.
             // The whole point of the `paginate` design is that we don't
             // know anything about the pagination args and crates.io can
             // change them as they wish, so we cannot do any more checks here.
-            warn!("didn't get query args in `paginate` arguments for search: \"{query_params}\"");
+            warn!(
+                %query_params,
+                ?err,
+                "didn't get query args in `paginate` arguments for search"
+            );
             AxumNope::NoResults
         })?;
 
-        for (k, v) in form_urlencoded::parse(query_params.as_bytes()) {
-            match &*k {
-                "q" => query = v.to_string(),
-                "sort" => sort_by = v.to_string(),
-                _ => {}
-            }
+        if let Some(new_query) = search_cursor.query() {
+            query = new_query.into();
         }
 
-        get_search_results(&mut conn, &registry, query_params, "").await
-    } else if !query.is_empty() {
-        let query_params: String = form_urlencoded::Serializer::new(String::new())
-            .append_pair("q", &query)
-            .append_pair("sort", &sort_by)
-            .append_pair("per_page", &RELEASES_IN_RELEASES.to_string())
-            .finish();
+        if let Some(new_sort_by) = search_cursor
+            .sort_by()
+            .inspect_err(|err| {
+                error!(
+                    cursor = %search_cursor.as_params(),
+                    ?err,
+                    "unknown search-ordering from crates.io"
+                )
+            })
+            .ok()
+            .flatten()
+        {
+            sort_by = new_sort_by;
+        }
 
-        get_search_results(&mut conn, &registry, &query_params, &query).await
+        get_search_results(&mut conn, &registry, search_cursor).await
+    } else if !query.is_empty() {
+        let search_query = registry_api::SearchQuery::builder(&query)
+            .sort_by(sort_by)
+            .per_page(RELEASES_IN_RELEASES as u32)
+            .build();
+
+        get_search_results(&mut conn, &registry, search_query.into()).await
     } else {
         return Err(AxumNope::NoResults);
     };
@@ -634,12 +660,18 @@ pub(crate) async fn search_handler(
                 releases: search_result.results,
                 search_query: Some(query),
                 search_sort_by: Some(sort_by),
-                next_page_link: search_result
-                    .next_page
-                    .map(|params| format!("/releases/search?paginate={}", b64.encode(params))),
-                previous_page_link: search_result
-                    .prev_page
-                    .map(|params| format!("/releases/search?paginate={}", b64.encode(params))),
+                next_page_link: search_result.next_page.map(|params| {
+                    format!(
+                        "/releases/search?paginate={}",
+                        b64.encode(params.as_params())
+                    )
+                }),
+                previous_page_link: search_result.prev_page.map(|params| {
+                    format!(
+                        "/releases/search?paginate={}",
+                        b64.encode(params.as_params())
+                    )
+                }),
                 ..Default::default()
             }
             .into_response())
@@ -837,16 +869,14 @@ mod tests {
     use docs_rs_database::releases::{
         finish_build, initialize_build, initialize_crate, initialize_release,
     };
-    use docs_rs_registry_api::{CrateOwner, OwnerKind};
+    use docs_rs_registry_api::{CrateOwner, OwnerKind, SearchQuery, testing::TestRegistry};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
         BuildStatus, SimpleBuildError,
         testing::{BAR, BAZ, FOO, V0_1, V1, V2, V3},
     };
     use kuchikiki::traits::TendrilSink;
-    use mockito::Matcher;
     use reqwest::StatusCode;
-    use serde_json::json;
     use std::collections::HashSet;
     use std::str::FromStr;
     use test_case::test_case;
@@ -1088,16 +1118,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn search_result_can_retrieve_sort_by_from_pagination() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -1106,35 +1127,28 @@ mod tests {
             .create()
             .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-                Matcher::UrlEncoded("page".into(), "2".into()),
-                Matcher::UrlEncoded("sort".into(), "recent-updates".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                    ],
-                    "meta": {
-                        "next_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=2",
-                        "prev_page": "?q=some_random_crate&sort=recent-updates&per_page=30&page=1",
-                    }
-                })
-                .to_string(),
-            )
-            .create_async()
+        let cursor = registry_api::SearchCursor::builder()
+            .query("some_random_crate")
+            .per_page(30)
+            .page(2)
+            .sort_by(registry_api::SearchSort::RecentUpdates)
+            .build();
+
+        let next_page_cursor = cursor.clone().adapt().page(2).build();
+        let prev_page_cursor = cursor.clone().adapt().page(1).build();
+
+        env.test_registry()
+            .mock_search(cursor.clone())
+            .crate_names(["some_random_crate"])
+            .next_page(next_page_cursor.clone())
+            .prev_page(prev_page_cursor)
+            .create()
             .await;
 
         // click the "Next Page" Button, the "Sort by" SelectBox should keep the same option.
         let next_page_url = format!(
             "/releases/search?paginate={}",
-            b64.encode("?q=some_random_crate&sort=recent-updates&per_page=30&page=2"),
+            b64.encode(next_page_cursor.as_params()),
         );
         let response = web.get(&next_page_url).await?;
         assert!(response.status().is_success());
@@ -1155,16 +1169,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn search_result_passes_cratesio_pagination_links() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -1173,27 +1178,28 @@ mod tests {
             .create()
             .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                    ],
-                    "meta": {
-                        "next_page": "?some=parameters&that=cratesio&might=return",
-                        "prev_page": "?and=the&parameters=for&the=previouspage",
-                    }
-                })
-                .to_string(),
-            )
-            .create_async()
+        let search_cursor = registry_api::SearchCursor::builder()
+            .query("some_random_crate")
+            .per_page(30)
+            .build();
+        let next_page = registry_api::SearchCursor::builder()
+            .custom_arg("some", "parameters")
+            .custom_arg("that", "cratesio")
+            .custom_arg("might", "return")
+            .build();
+
+        let prev_page = registry_api::SearchCursor::builder()
+            .custom_arg("and", "the")
+            .custom_arg("parameters", "for")
+            .custom_arg("the", "previouspage")
+            .build();
+
+        env.test_registry()
+            .mock_search(search_cursor)
+            .crate_names(["some_random_crate"])
+            .next_page(next_page.clone())
+            .prev_page(prev_page.clone())
+            .create()
             .await;
 
         let response = web.get("/releases/search?query=some_random_crate").await?;
@@ -1216,14 +1222,14 @@ mod tests {
             other_search_links[0],
             format!(
                 "/releases/search?paginate={}",
-                b64.encode("?and=the&parameters=for&the=previouspage"),
+                b64.encode(prev_page.as_params()),
             )
         );
         assert_eq!(
             other_search_links[1],
             format!(
                 "/releases/search?paginate={}",
-                b64.encode("?some=parameters&that=cratesio&might=return")
+                b64.encode(next_page.as_params()),
             )
         );
 
@@ -1253,33 +1259,36 @@ mod tests {
     async fn crates_io_errors_are_correctly_returned_and_we_dont_try_parsing(
         status: StatusCode,
     ) -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
+        let env = TestEnvironment::new().await?;
 
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .crates_io_api_call_retries(0)
-                    .build(),
-            )
-            .build()
-            .await?;
+        let query = registry_api::SearchQuery::builder("doesnt_matter_here")
+            .per_page(30)
+            .build();
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "doesnt_matter_here".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-            ]))
-            .with_status(status.as_u16() as usize)
-            .create_async()
-            .await;
+        if status.is_client_error() {
+            env.test_registry()
+                .mock_search_error(query)
+                .client_error(status)
+                .api_error_messages(["error 1", "error 2"])
+                .create()
+                .await;
+        } else if status.is_server_error() {
+            env.test_registry()
+                .mock_search_error(query)
+                .server_error(status)
+                .error_text("some server error")
+                .create()
+                .await;
+        } else {
+            panic!("not an error");
+        }
 
         let response = env
             .web_app()
             .await
             .get("/releases/search?query=doesnt_matter_here")
             .await?;
+
         assert_eq!(response.status(), status);
 
         assert!(response.text().await?.contains(&format!("{status}")));
@@ -1288,16 +1297,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn search_encoded_pagination_passed_to_cratesio() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -1306,33 +1306,21 @@ mod tests {
             .create()
             .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("some".into(), "dummy".into()),
-                Matcher::UrlEncoded("pagination".into(), "parameters".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                    ],
-                    "meta": {
-                        "next_page": null,
-                        "prev_page": null,
-                    }
-                })
-                .to_string(),
-            )
-            .create_async()
+        let search_cursor = registry_api::SearchCursor::builder()
+            .custom_arg("some", "dummy")
+            .custom_arg("pagination", "parameters")
+            .build();
+
+        env.test_registry()
+            .mock_search(search_cursor.clone())
+            .crate_names(["some_random_crate"])
+            .create()
             .await;
 
         let links = get_release_links(
             &format!(
                 "/releases/search?paginate={}",
-                b64.encode("?some=dummy&pagination=parameters")
+                b64.encode(search_cursor.as_params())
             ),
             &web,
         )
@@ -1345,16 +1333,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn search_lucky_with_unknown_crate() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -1363,28 +1342,15 @@ mod tests {
             .create()
             .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "some_random_".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                        { "name": "some_other_crate" },
-                    ],
-                    "meta": {
-                        "next_page": null,
-                        "prev_page": null,
-                    }
-                })
-                .to_string(),
+        env.test_registry()
+            .mock_search(
+                registry_api::SearchCursor::builder()
+                    .query("some_random_")
+                    .per_page(30)
+                    .build(),
             )
-            .create_async()
+            .crate_names(["some_random_crate", "some_other_crate"])
+            .create()
             .await;
 
         // when clicking "I'm feeling lucky" and the query doesn't match any crate,
@@ -1402,16 +1368,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn search() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -1466,32 +1423,17 @@ mod tests {
         )
         .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                        { "name": "some_other_crate" },
-                        { "name": "and_another_one" },
-                        { "name": "yet_another_crate" },
-                        { "name": "in_progress" },
-                        { "name": "failed_hard" }
-                    ],
-                    "meta": {
-                        "next_page": null,
-                        "prev_page": null,
-                    }
-                })
-                .to_string(),
-            )
-            .create_async()
+        env.test_registry()
+            .mock_search(registry_api::SearchQuery::from("some_random_crate"))
+            .crate_names([
+                "some_random_crate",
+                "some_other_crate",
+                "and_another_one",
+                "yet_another_crate",
+                "in_progress",
+                "failed_hard",
+            ])
+            .create()
             .await;
 
         let links = get_release_links("/releases/search?query=some_random_crate", &web).await?;
@@ -2188,16 +2130,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn crates_not_on_docsrs() -> Result<()> {
-        let mut crates_io = mockito::Server::new_async().await;
-
-        let env = TestEnvironment::builder()
-            .registry_api_config(
-                docs_rs_registry_api::Config::builder()
-                    .registry_api_host(crates_io.url().parse().unwrap())
-                    .build(),
-            )
-            .build()
-            .await?;
+        let env = TestEnvironment::new().await?;
 
         let web = env.web_app().await;
         env.fake_release()
@@ -2206,29 +2139,14 @@ mod tests {
             .create()
             .await?;
 
-        let _m = crates_io
-            .mock("GET", "/api/v1/crates")
-            .match_query(Matcher::AllOf(vec![
-                Matcher::UrlEncoded("q".into(), "some_random_crate".into()),
-                Matcher::UrlEncoded("per_page".into(), "30".into()),
-            ]))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(
-                json!({
-                    "crates": [
-                        { "name": "some_random_crate" },
-                        { "name": "some_random_crate2" },
-                        { "name": "some_random_crate3" },
-                    ],
-                    "meta": {
-                        "next_page": "null",
-                        "prev_page": "null",
-                    }
-                })
-                .to_string(),
-            )
-            .create_async()
+        env.test_registry()
+            .mock_search(registry_api::SearchQuery::from("some_random_crate"))
+            .crate_names([
+                "some_random_crate",
+                "some_random_crate2",
+                "some_random_crate3",
+            ])
+            .create()
             .await;
 
         let response = web.get("/releases/search?query=some_random_crate").await?;
@@ -2314,10 +2232,21 @@ mod tests {
     fn test_search_std() {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
+            let registry = env.test_registry();
 
-            async fn inner(web: &axum::Router, krate: &str) -> Result<(), anyhow::Error> {
+            async fn inner(
+                registry: &TestRegistry,
+                web: &axum::Router,
+                krate: &str,
+            ) -> Result<(), anyhow::Error> {
+                registry
+                    .mock_search(SearchQuery::from(krate))
+                    .crate_names(["other"])
+                    .create()
+                    .await;
+
                 let full = kuchikiki::parse_html().one(
-                    web.get(&format!("/releases/search?query={krate}"))
+                    web.assert_success(&format!("/releases/search?query={krate}"))
                         .await?
                         .text()
                         .await?,
@@ -2354,8 +2283,8 @@ mod tests {
                 Ok(())
             }
 
-            inner(&web, "std").await?;
-            inner(&web, "libstd").await?;
+            inner(registry, &web, "std").await?;
+            inner(registry, &web, "libstd").await?;
 
             Ok(())
         });

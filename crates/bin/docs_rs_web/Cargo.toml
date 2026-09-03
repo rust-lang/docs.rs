@@ -59,6 +59,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slug = { workspace = true }
 sqlx = { workspace = true }
+strum = { workspace = true }
 syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -82,13 +83,13 @@ docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 http-body-util = "0.1.0"
 indoc = "2.0.0"
 kuchikiki = "0.8"
-mockito = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
 reqwest = { workspace = true }
