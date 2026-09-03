@@ -34,7 +34,7 @@ const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 /// * is currently only tested for newer releases, since there are some hacks in place.
 /// * to find the needed rustdoc-static files, we have to scan all the HTML files for certain paths.
 ///   For bigger releases this might take some time.
-/// * we assume when the normal target build is successfull, we also have a valid rustdoc json file,
+/// * we assume when the normal target build is successful, we also have a valid rustdoc json file,
 ///   and we'll ignore any rustdoc JSON files related to failed targets.
 /// * build logs are fake, but are created.
 ///
@@ -147,7 +147,7 @@ async fn import_test_release_inner(
         .await?
     };
 
-    info!("find successfull build targets...");
+    info!("find successful build targets...");
     let (default_target, all_targets) = {
         let build_targets = docsrs_metadata.targets_for_host(true, DEFAULT_TARGET);
         (

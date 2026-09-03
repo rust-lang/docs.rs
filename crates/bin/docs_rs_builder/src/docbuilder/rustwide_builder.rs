@@ -349,7 +349,7 @@ impl RustwideBuilder {
             //
             // Fixing it here also means the startup of the actual build-server including its
             // metrics collection endpoints don't be delayed. Generally should doesn't be
-            // a differene how much time is needed on a fresh build-server, between picking the
+            // a difference in how much time is needed on a fresh build-server, between picking the
             // release up from the queue, and actually starting to build the release. In the old
             // solution, the entrypoint would do the toolchain-update & add-essential files
             // before even starting the build-server, now we're roughly doing the same thing
@@ -817,7 +817,7 @@ impl RustwideBuilder {
                 let cargo_metadata = res.cargo_metadata.root();
                 let repository = self.get_repo(cargo_metadata)?;
 
-                // when we have an unsuccessful build, but the release was already successfullly
+                // when we have an unsuccessful build, but the release was already successfully
                 // built in the past, don't touch the release record so the docs stay intact.
                 // This mainly happens with manually triggered or automated rebuilds.
                 // The `release_build_status` table is already updated with the information from
@@ -1192,8 +1192,8 @@ impl RustwideBuilder {
             limits,
         ) {
             // FIXME: this is temporary. Theoretically all `Err` things coming out
-            // of the method should be retryable, so we could juse use `?` here.
-            // But since this is new, I want to be carful and first see what kind of
+            // of the method should be retryable, so we could just use `?` here.
+            // But since this is new, I want to be careful and first see what kind of
             // errors we are seeing here.
             error!(
                 ?err,

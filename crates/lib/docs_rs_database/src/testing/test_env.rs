@@ -19,7 +19,7 @@ impl TestDatabase {
         // test to create a fresh instance of the database to run within.
         //
         // TODO: potential performance improvements
-        // * optionall use "DROP SCHEMA CASCADE" instead of rolling back migrations. But CI should
+        // * optionally use "DROP SCHEMA CASCADE" instead of rolling back migrations. But CI should
         //   still do it?
         // * use postgres template database? migrate once, just copy the template for each test?
         let schema = format!("docs_rs_test_schema_{}", rand::random::<u64>());

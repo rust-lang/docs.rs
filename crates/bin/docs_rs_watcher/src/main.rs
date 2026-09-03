@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     rename_all = "kebab-case",
 )]
 enum CommandLine {
-    /// Run a regsitry euild-server
+    /// Run a registry build-server
     Start {
         /// Enable or disable the repository stats updater
         #[arg(long = "repository-stats-updater", default_value = "true")]
