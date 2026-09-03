@@ -49,6 +49,7 @@ pub(crate) fn init(verbosity: u8, color: ColorChoice) -> Result<()> {
     };
 
     tracing_subscriber::fmt()
+        .compact()
         .with_max_level(level)
         .with_target(verbosity > 0)
         .with_ansi(ansi)
