@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use clap::{ArgAction, Parser, ValueEnum};
 use docs_rs_build::{CpuLimit, SandboxImageSource};
 use docs_rs_build_limits::Limits;
@@ -191,29 +191,7 @@ fn parse_byte_size(value: &str) -> Result<usize, String> {
 }
 
 fn parse_duration(value: &str) -> Result<Duration, String> {
-    parse_duration_inner(value).map_err(|error| error.to_string())
-}
-
-fn parse_duration_inner(value: &str) -> Result<Duration> {
-    let split_at = value
-        .find(|character: char| !character.is_ascii_digit())
-        .unwrap_or(value.len());
-    let (number, suffix) = value.split_at(split_at);
-    if number.is_empty() {
-        bail!("duration must start with an integer");
-    }
-    let number: u64 = number.parse()?;
-    let seconds = match suffix {
-        "" | "s" => number,
-        "m" => number
-            .checked_mul(60)
-            .ok_or_else(|| anyhow!("duration is too large"))?,
-        "h" => number
-            .checked_mul(60 * 60)
-            .ok_or_else(|| anyhow!("duration is too large"))?,
-        _ => bail!("unsupported duration suffix `{suffix}`; use s, m, or h"),
-    };
-    Ok(Duration::from_secs(seconds))
+    humantime::parse_duration(value).map_err(|error| error.to_string())
 }
 
 fn parse_cpu_cores(value: &str) -> Result<RangeInclusive<usize>, String> {
@@ -292,7 +270,7 @@ mod tests {
     fn invalid_ranges_and_units_are_rejected() {
         assert!(parse_cpu_cores_inner("5-2").is_err());
         assert!(parse_byte_size("3watts").is_err());
-        assert!(parse_duration_inner("1day").is_err());
+        assert!(parse_duration("eventually").is_err());
         assert!(parse_cpu_quota("0").is_err());
         assert!(parse_cpu_quota("NaN").is_err());
     }
