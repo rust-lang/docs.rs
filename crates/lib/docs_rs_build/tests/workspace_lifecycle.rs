@@ -3,7 +3,7 @@ mod support;
 use anyhow::Result;
 use docs_rs_build::BuildEnvironment;
 use std::time::Duration;
-use support::{build_local, fixture};
+use support::{build_local, fixture, test_sandbox_image};
 
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
@@ -12,6 +12,7 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
+        .sandbox_image(test_sandbox_image())
         .workspace_reinitialization_interval(Duration::ZERO)
         .build()?;
 
@@ -32,6 +33,7 @@ fn refreshes_workspace_after_interval() -> Result<()> {
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
+        .sandbox_image(test_sandbox_image())
         .workspace_reinitialization_interval(Duration::from_secs(1))
         .build()?;
 
@@ -58,6 +60,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
         let environment = BuildEnvironment::builder(workspace.path())
             .fast_init(true)
             .validate_host_resources(false)
+            .sandbox_image(test_sandbox_image())
             .build()?;
         environment.rustc_version()?
     };
@@ -65,6 +68,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
+        .sandbox_image(test_sandbox_image())
         .build()?;
     let fixture = fixture("hello-world");
     let krate = rustwide::Crate::local(&fixture);

@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 use docs_rs_build::{BuildEnvironment, CpuLimit};
 use rustwide::Crate;
 use std::fs;
-use support::{TestEnvironment, build_local, fixture};
+use support::{TestEnvironment, build_local, fixture, test_sandbox_image};
 use test_case::test_case;
 
 #[test]
@@ -142,6 +142,7 @@ fn collects_compiler_metrics() -> Result<()> {
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
+        .sandbox_image(test_sandbox_image())
         .compiler_metrics_collection_path(metrics.path())
         .build()?;
 
@@ -160,6 +161,7 @@ fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
     let mut environment = BuildEnvironment::builder(workspace.path())
         .fast_init(true)
         .validate_host_resources(false)
+        .sandbox_image(test_sandbox_image())
         .cpu_limit(cpu_limit)
         .build()?;
     assert!(

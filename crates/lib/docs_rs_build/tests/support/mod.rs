@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use docs_rs_build::BuildEnvironment;
+use docs_rs_build::{BuildEnvironment, SandboxImageSource};
 use rustwide::{BuildResult, Crate};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+
+const TEST_SANDBOX_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
 
 pub struct TestEnvironment {
     _workspace: TempDir,
@@ -17,12 +19,17 @@ impl TestEnvironment {
         let environment = BuildEnvironment::builder(workspace.path())
             .fast_init(true)
             .validate_host_resources(false)
+            .sandbox_image(test_sandbox_image())
             .build()?;
         Ok(Self {
             _workspace: workspace,
             environment,
         })
     }
+}
+
+pub fn test_sandbox_image() -> SandboxImageSource {
+    SandboxImageSource::LocalOrRemote(TEST_SANDBOX_IMAGE.into())
 }
 
 pub fn fixture(name: &str) -> PathBuf {
