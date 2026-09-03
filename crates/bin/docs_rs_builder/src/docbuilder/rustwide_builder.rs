@@ -373,8 +373,7 @@ impl RustwideBuilder {
         let build_error = release
             .targets
             .first_mut()
-            .and_then(|target| target.documentation.error.take())
-            .map(RustwideBuildError::from);
+            .and_then(|target| target.documentation.error.take());
         let rustc_version = self.environment.rustc_version()?;
         let docsrs_version = format!("docsrs {BUILDER_VERSION}");
         let mut async_conn = self.runtime.block_on(self.db.get_async())?;

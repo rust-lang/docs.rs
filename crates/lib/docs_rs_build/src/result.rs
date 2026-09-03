@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
-use docs_rs_types::doc_coverage::DocCoverage;
+use docs_rs_types::{BuildError, doc_coverage::DocCoverage};
 use docsrs_metadata::Metadata;
 use rustwide::cmd::CommandError;
 use std::{
@@ -50,6 +50,28 @@ pub enum BuildStepError {
     /// The command completed but its output could not be processed.
     #[error(transparent)]
     Output(#[from] anyhow::Error),
+}
+
+impl BuildError for BuildStepError {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Command(error) => match error {
+                CommandError::NoOutputFor(_) => "NoOutputFor",
+                CommandError::Timeout(_) => "Timeout",
+                CommandError::ExecutionFailed { .. } => "ExecutionFailed",
+                CommandError::KillAfterTimeoutFailed(_) => "KillAfterTimeoutFailed",
+                CommandError::SandboxOOM => "SandboxOOM",
+                CommandError::SandboxImagePullFailed(_) => "SandboxImagePullFailed",
+                CommandError::SandboxImageMissing(_) => "SandboxImageMissing",
+                CommandError::SandboxContainerCreate(_) => "SandboxContainerCreate",
+                CommandError::WorkspaceNotMountedCorrectly => "WorkspaceNotMountedCorrectly",
+                CommandError::InvalidDockerInspectOutput(_) => "InvalidDockerInspectOutput",
+                CommandError::IO(_) => "IO",
+                _ => "UnknownCommandError",
+            },
+            Self::Output(_) => "Other",
+        }
+    }
 }
 
 /// Output and captured log of one non-fatal release build step.
@@ -151,6 +173,13 @@ impl ReleaseBuildResult {
 mod tests {
     use super::*;
     use test_case::test_case;
+
+    #[test_case(BuildStepError::Command(CommandError::Timeout(1)), "Timeout"; "timeout")]
+    #[test_case(BuildStepError::Command(CommandError::SandboxOOM), "SandboxOOM"; "sandbox oom")]
+    #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid output")), "Other"; "output processing")]
+    fn classifies_build_step_errors(error: BuildStepError, expected: &str) {
+        assert_eq!(error.kind(), expected);
+    }
 
     fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
         TargetBuildResult {
