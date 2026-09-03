@@ -58,7 +58,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         self
     }
 
-    #[instrument(skip(self), fields(target = %self.target))]
+    #[instrument(skip_all, fields(target = %self.target))]
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
         debug!(
             cargo_arg_count = self.cargo_args.len(),

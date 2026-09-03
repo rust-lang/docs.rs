@@ -56,7 +56,7 @@ pub struct ReleaseBuild<'build, 'ws> {
 #[bon]
 impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     #[instrument(
-        skip(environment, build, limits),
+        skip_all,
         fields(source_dir = %build.host_source_dir().display())
     )]
     pub(crate) fn new(
@@ -127,7 +127,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
-    #[instrument(skip(self, targets))]
+    #[instrument(skip_all)]
     pub(crate) fn fetch_build_std_dependencies<'a>(
         &self,
         targets: impl IntoIterator<Item = &'a str>,
@@ -169,7 +169,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    #[instrument(skip(self), fields(crate_name, crate_version))]
+    #[instrument(skip_all, fields(crate_name, crate_version))]
     pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
@@ -249,7 +249,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(target_result)
     }
 
-    #[instrument(skip(self, target))]
+    #[instrument(skip_all)]
     fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
         self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
@@ -283,7 +283,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Collect documentation coverage for one target.
-    #[instrument(skip(self), fields(target = %target))]
+    #[instrument(skip_all, fields(target = %target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
@@ -312,7 +312,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
-    #[instrument(skip(self), fields(target = %target))]
+    #[instrument(skip_all, fields(target = %target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_step(|| {
             self.command(target)
@@ -329,12 +329,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build HTML documentation without emitting shared static files.
-    #[instrument(skip(self, target))]
+    #[instrument(skip_all)]
     pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
         let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
         if let Some(error) = result.error {
@@ -350,7 +350,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         essential_files_directory(&output)
     }
 
-    #[instrument(skip(self), fields(target = %target, emit = emit.as_str()))]
+    #[instrument(skip_all, fields(target = %target, emit = emit.as_str()))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
             let metrics_dir = self.compiler_metrics_dir();
@@ -421,7 +421,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
     }
 
-    #[instrument(skip(self), fields(source_dir = %self.build.host_source_dir().display()))]
+    #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> Result<()> {
         let source_dir = self.build.host_source_dir();
         debug!("removing invalid lockfile");
@@ -451,7 +451,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(())
     }
 
-    #[instrument(skip(self), fields(source_dir = %self.build.host_source_dir().display()))]
+    #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
         self.environment
             .load_cargo_metadata(self.build.host_source_dir())

@@ -41,7 +41,7 @@ fn unstable_feature_matches(value: &str, feature: &str) -> bool {
 
 /// Resolve a sandbox image name, preferring an existing local image and
 /// falling back to a remote image that rustwide will pull when needed.
-#[instrument(fields(image = name))]
+#[instrument(skip_all, fields(image = name))]
 pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
     match SandboxImage::local(name) {
         Ok(image) => {
