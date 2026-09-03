@@ -30,12 +30,12 @@ pub(crate) enum PageKind {
 /// Extractor for rustdoc parameters from a request.
 ///
 /// Among other things, centralizes
-/// * how we parse & interpret rustdoc related URL alements
-/// * how we generate rustdoc related URLs shown in interefaces.
+/// * how we parse & interpret rustdoc related URL elements
+/// * how we generate rustdoc related URLs shown in interfaces.
 /// * if there is one, where to find the related file in the rustdoc build output.
 ///
 /// All of these have more or less detail depending on how much metadata we have here.
-/// Maintains some additional fields containing "fixed" things, whos quality
+/// Maintains some additional fields containing "fixed" things, whose quality
 /// gets better the more metadata we provide.
 #[derive(Clone, PartialEq, Serialize)]
 pub(crate) struct RustdocParams {
@@ -117,7 +117,7 @@ where
 
     /// extract rustdoc parameters from request parts.
     ///
-    /// For now, we're using specificially named path parameters, most are optional:
+    /// For now, we're using specifically named path parameters, most are optional:
     /// * `{name}` (mandatory) => crate name
     /// * `{version}` (optional) => request version
     /// * `{target}` (optional) => doc target
@@ -387,7 +387,7 @@ impl RustdocParams {
     pub(crate) fn with_doc_target(self, doc_target: impl Into<String>) -> Self {
         self.with_maybe_doc_target(Some(doc_target))
     }
-    /// set the "doc taget" parameter.
+    /// set the "doc target" parameter.
     /// Might not be a target, depending on how it's generated.
     pub(crate) fn with_maybe_doc_target(self, doc_target: Option<impl Into<String>>) -> Self {
         self.update(|mut params| {
@@ -421,7 +421,7 @@ impl RustdocParams {
     }
 
     /// check if we have a target component in the path, that matches the default
-    /// target. This affects the geneated storage path, since default target docs are at the root,
+    /// target. This affects the generated storage path, since default target docs are at the root,
     /// and the other target docs are in subfolders named after the target.
     pub(crate) fn target_is_default(&self) -> bool {
         self.default_target
@@ -1412,13 +1412,13 @@ mod tests {
         &format!("/{UNKNOWN_TARGET}/"),
         Some(UNKNOWN_TARGET), Some("something/file.html"),
         None, &format!("{UNKNOWN_TARGET}/something/file.html");
-        "unknown target, with path, trailling slash is kept"
+        "unknown target, with path, trailing slash is kept"
     )]
     #[test_case(
         &format!("/{UNKNOWN_TARGET}/"),
         Some(UNKNOWN_TARGET), None,
         None, &format!("{UNKNOWN_TARGET}/");
-        "unknown target, no path, trailling slash is kept"
+        "unknown target, no path, trailing slash is kept"
     )]
     fn test_with_fixed_target_and_path(
         original_uri: &str,

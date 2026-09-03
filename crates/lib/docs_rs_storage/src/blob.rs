@@ -124,7 +124,7 @@ impl StreamingBlob {
         // This is because we want a failure here in this method when the data is corrupted,
         // so we can directly act on that, and users don't have any errors when they just
         // stream the data.
-        // This won't _comsume_ the bytes. The user of this StreamingBlob will still be able
+        // This won't _consume_ the bytes. The user of this StreamingBlob will still be able
         // to stream the whole content.
         //
         // This doesn't work 100% of the time. We might get other i/o error here,

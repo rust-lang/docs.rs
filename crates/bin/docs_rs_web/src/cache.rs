@@ -20,7 +20,7 @@ pub const SURROGATE_KEY_ALL: SurrogateKey = SurrogateKey::from_static("all");
 /// invalidated everything we deploy a new version of docs.rs.
 pub const SURROGATE_KEY_DOCSRS_STATIC: SurrogateKey = SurrogateKey::from_static("docs-rs-static");
 
-/// cache poicy for static assets like rustdoc files or build assets.
+/// cache policy for static assets like rustdoc files or build assets.
 pub const STATIC_ASSET_CACHE_POLICY: CachePolicy = CachePolicy::ForeverInCdnAndBrowser;
 
 #[derive(Debug, Clone, PartialEq)]

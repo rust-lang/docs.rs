@@ -121,7 +121,7 @@ impl BuildSubcommand {
                         .context("Building documentation failed")?;
                 } else {
                     if maybe_env::<String>("REGISTRY_URL")?.is_some() {
-                        bail!("we temporarily don't support custom registries in this commmand.");
+                        bail!("we temporarily don't support custom registries in this command.");
                     }
 
                     builder

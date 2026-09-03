@@ -29,7 +29,7 @@ pub async fn update_repository_stats(
     Ok(())
 }
 
-/// rewite the crate-count on each repository.
+/// rewrite the crate-count on each repository.
 ///
 /// At the time of writing (2026-02-08, 100k repositories), takes ~10s
 pub async fn rewrite_repository_stats(conn: &mut sqlx::PgConnection) -> Result<()> {
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_overriden_build_priorities() -> Result<()> {
+    async fn test_get_overridden_build_priorities() -> Result<()> {
         let env = test_env().await?;
         let mut conn = env.db.async_conn().await?;
 
