@@ -48,10 +48,6 @@ pub(crate) struct Args {
     #[arg(long, value_enum, default_value_t)]
     docker_runtime: DockerRuntimeArg,
 
-    /// The process itself runs in Docker and has access to the host Docker daemon.
-    #[arg(long)]
-    inside_docker: bool,
-
     /// Do not add docs.rs's default target list when crate metadata has no targets.
     #[arg(long)]
     no_default_targets: bool,
@@ -163,10 +159,6 @@ impl Args {
             .networking(self.network)
             .max_log_size(self.max_captured_log_size)
             .build()
-    }
-
-    pub(crate) fn running_inside_docker(&self) -> bool {
-        self.inside_docker
     }
 }
 

@@ -40,7 +40,6 @@ fn run(args: &Args) -> Result<bool> {
     info!(crate_path = %crate_path.display(), workspace = %workspace_path.display(), "initializing docs.rs build environment");
     let mut environment = BuildEnvironment::builder(workspace_path.as_path())
         .toolchain(args.toolchain())
-        .running_inside_docker(args.running_inside_docker())
         .sandbox_image(args.sandbox_image())
         .maybe_cpu_limit(args.cpu_limit())
         .docker_runtime(args.docker_runtime())
