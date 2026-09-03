@@ -129,7 +129,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn retrieve_overrides() -> Result<()> {
+    async fn retrieve_overrides() -> anyhow::Result<()> {
         let db = db().await?;
         let mut conn = db.async_conn().await?;
 

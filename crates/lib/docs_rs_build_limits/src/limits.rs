@@ -173,7 +173,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn config_default_memory_limit() -> Result<()> {
+    async fn config_default_memory_limit() -> anyhow::Result<()> {
         let db = db().await?;
 
         let cfg = Config {
@@ -189,7 +189,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn overrides_dont_lower_memory_limit() -> Result<()> {
+    async fn overrides_dont_lower_memory_limit() -> anyhow::Result<()> {
         let db = db().await?;
         let mut conn = db.async_conn().await?;
 
