@@ -147,6 +147,7 @@ impl BuildEnvironment {
 
         self.workspace = self.workspace_configuration.initialize()?;
         self.workspace_initialized_at = Instant::now();
+        self.ensure_toolchain_ready()?;
         Ok(true)
     }
 
@@ -220,16 +221,10 @@ impl BuildEnvironment {
         Ok(true)
     }
 
-    /// Ensure the configured toolchain is ready for docs.rs builds without
-    /// checking whether an installed distribution toolchain can be updated.
-    ///
-    /// For distribution toolchains this also ensures the docs.rs default
-    /// targets and components are installed. Targets not managed by docs.rs are
-    /// left untouched; they are only cleaned up immediately before an explicit
-    /// toolchain update. CI toolchains only support their platform artifact and
-    /// are therefore only installed when missing.
-    /// Returns whether the toolchain itself was newly installed.
-    pub fn ensure_toolchain_ready(&self) -> Result<bool> {
+    // Establish the toolchain invariant for this environment without checking
+    // whether an installed distribution toolchain can be updated. Unmanaged
+    // targets are preserved here and only cleaned up by `update_toolchain`.
+    fn ensure_toolchain_ready(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_ready_without_cache_purge()?;
         if installed {
             retry(|| self.purge_caches(), 3)?;
