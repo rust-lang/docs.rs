@@ -1,5 +1,7 @@
-use crate::{config::Config, overrides::Overrides};
-use anyhow::Result;
+use crate::config::Config;
+#[cfg(feature = "database")]
+use crate::overrides::Overrides;
+#[cfg(feature = "database")]
 use docs_rs_types::KrateName;
 use serde::Serialize;
 use std::time::Duration;
@@ -40,11 +42,12 @@ impl Limits {
         Self::builder().load_config(config).build()
     }
 
+    #[cfg(feature = "database")]
     pub async fn for_crate(
         config: &Config,
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
 
         Ok(Self::builder()

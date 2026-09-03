@@ -9,7 +9,7 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bon = { workspace = true }
-docs_rs_build_limits = { path = "../docs_rs_build_limits" }
+docs_rs_build_limits = { path = "../docs_rs_build_limits", default-features = false }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_rustdoc_json = { path = "../docs_rs_rustdoc_json" }
 docs_rs_types = { path = "../docs_rs_types" }
