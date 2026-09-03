@@ -13,6 +13,7 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits", default-features = false }
 docs_rs_rustwide = { path = "../../lib/docs_rs_rustwide" }
+docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive" }
 flate2 = { workspace = true }
 humantime = "2.4.0"
 parse-size = "1.1.0"

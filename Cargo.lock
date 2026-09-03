@@ -2036,6 +2036,7 @@ dependencies = [
  "anyhow",
  "clap",
  "docs_rs_build_limits",
+ "docs_rs_crate_archive",
  "docs_rs_rustwide",
  "flate2",
  "humantime",
