@@ -177,7 +177,7 @@ impl BuildEnvironment {
 
     /// Remove all cached registry, Git, and toolchain data from the workspace.
     pub fn purge_caches(&self) -> Result<()> {
-        self.workspace.purge_all_caches()?;
+        retry(|| self.workspace.purge_all_caches(), 3)?;
         Ok(())
     }
 
@@ -196,7 +196,7 @@ impl BuildEnvironment {
         self.toolchain = toolchain;
         let installed = self.ensure_toolchain_ready_without_cache_purge()?;
         if selection_changed || installed {
-            retry(|| self.purge_caches(), 3)?;
+            self.purge_caches()?;
         }
         Ok(installed)
     }
@@ -251,7 +251,7 @@ impl BuildEnvironment {
     fn ensure_toolchain_ready(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_ready_without_cache_purge()?;
         if installed {
-            retry(|| self.purge_caches(), 3)?;
+            self.purge_caches()?;
         }
         Ok(installed)
     }
@@ -277,7 +277,7 @@ impl BuildEnvironment {
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             self.toolchain.install(&self.workspace)?;
-            retry(|| self.purge_caches(), 3)?;
+            self.purge_caches()?;
             return Ok(true);
         }
 
@@ -307,7 +307,7 @@ impl BuildEnvironment {
         let new_version = self.rustc_version()?;
         let changed = old_version.as_ref() != Some(&new_version);
         if changed {
-            retry(|| self.purge_caches(), 3)?;
+            self.purge_caches()?;
         }
         Ok(changed)
     }
