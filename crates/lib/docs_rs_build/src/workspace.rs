@@ -347,7 +347,14 @@ impl BuildEnvironment {
     }
 
     /// Enter the context of a single release.
-    pub fn release<'release>(&'release self, krate: &'release Crate) -> ReleaseContext<'release> {
+    ///
+    /// The returned context retains exclusive access to this environment for
+    /// its full fetch and build lifecycle. This prevents maintenance or another
+    /// release from concurrently modifying the shared rustwide workspace.
+    pub fn release<'release>(
+        &'release mut self,
+        krate: &'release Crate,
+    ) -> ReleaseContext<'release> {
         ReleaseContext {
             environment: self,
             krate,
@@ -356,7 +363,10 @@ impl BuildEnvironment {
     }
 
     /// Build the shared rustdoc static files for this toolchain.
-    pub fn build_essential_files(&self) -> Result<BuildResult<PathBuf>> {
+    ///
+    /// Like a release build, this requires exclusive access to the shared
+    /// rustwide workspace.
+    pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
             .run(|build| build.build_essential_files())

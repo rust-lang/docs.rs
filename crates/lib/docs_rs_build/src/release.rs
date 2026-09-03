@@ -10,7 +10,7 @@ use std::{
 
 /// A crate release whose build lifecycle is managed by docs.rs.
 pub struct ReleaseContext<'release> {
-    pub(crate) environment: &'release BuildEnvironment,
+    pub(crate) environment: &'release mut BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Option<Limits>,
 }
@@ -56,7 +56,7 @@ impl<'release> ReleaseContext<'release> {
 
 /// A crate release fetched into rustwide's cache but not yet prepared for building.
 pub struct FetchedRelease<'release> {
-    environment: &'release BuildEnvironment,
+    environment: &'release mut BuildEnvironment,
     krate: &'release Crate,
     limits: Option<Limits>,
 }
