@@ -22,7 +22,7 @@ use std::{
     iter,
     path::{Path, PathBuf},
 };
-use tracing::{debug, instrument, warn};
+use tracing::{Span, debug, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -169,7 +169,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(crate_name, crate_version))]
     pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
@@ -190,6 +190,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         )?;
 
         let cargo_metadata = self.load_cargo_metadata()?;
+        let root_package = cargo_metadata.root();
+        Span::current().record("crate_name", root_package.name.as_str());
+        Span::current().record(
+            "crate_version",
+            tracing::field::display(&root_package.version),
+        );
 
         let default_target_result = self
             .build_target(default_target)
@@ -243,7 +249,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(target_result)
     }
 
-    #[instrument(skip(self), fields(target, is_default))]
+    #[instrument(skip(self, target))]
     fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
         self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
@@ -258,6 +264,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
 
         debug!(
+            target,
             coverage_successful = coverage_result.successful(),
             rustdoc_json_successful = rustdoc_json_result.successful(),
             documentation_successful = documentation_result.successful(),
@@ -276,7 +283,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Collect documentation coverage for one target.
-    #[instrument(skip(self), fields(target))]
+    #[instrument(skip(self), fields(target = %target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
@@ -305,7 +312,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
-    #[instrument(skip(self), fields(target))]
+    #[instrument(skip(self), fields(target = %target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_step(|| {
             self.command(target)
@@ -322,7 +329,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build HTML documentation without emitting shared static files.
-    #[instrument(skip(self), fields(target))]
+    #[instrument(skip(self, target))]
     pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
@@ -343,7 +350,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         essential_files_directory(&output)
     }
 
-    #[instrument(skip(self), fields(target, emit = emit.as_str()))]
+    #[instrument(skip(self), fields(target = %target, emit = emit.as_str()))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
             let metrics_dir = self.compiler_metrics_dir();

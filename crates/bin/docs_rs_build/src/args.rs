@@ -97,10 +97,6 @@ pub(crate) struct Args {
     /// Increase diagnostic verbosity. Repeat for trace-level output.
     #[arg(short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
-
-    /// When to emit ANSI colors.
-    #[arg(long, value_enum, default_value_t)]
-    pub(crate) color: ColorChoice,
 }
 
 impl Args {
@@ -179,14 +175,6 @@ enum DockerRuntimeArg {
     #[default]
     Default,
     Runsc,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-pub(crate) enum ColorChoice {
-    Always,
-    Never,
-    #[default]
-    Auto,
 }
 
 fn parse_byte_size(value: &str) -> Result<usize, String> {

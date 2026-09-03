@@ -17,7 +17,7 @@ use tracing::info;
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    if let Err(error) = logging::init(args.verbose, args.color) {
+    if let Err(error) = logging::init(args.verbose) {
         println!("error: {error:#}");
         return ExitCode::FAILURE;
     }

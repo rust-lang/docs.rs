@@ -1,7 +1,6 @@
-use crate::args::ColorChoice;
 use anyhow::{Result, anyhow};
 use log::{Level, Log, Metadata, Record};
-use std::io::{IsTerminal as _, stdout};
+use std::io::stdout;
 use tracing::level_filters::LevelFilter;
 
 /// Forwards `log` records as tracing events without `tracing-log`'s additional
@@ -36,23 +35,18 @@ impl Log for MessageOnlyLogTracer {
     fn flush(&self) {}
 }
 
-pub(crate) fn init(verbosity: u8, color: ColorChoice) -> Result<()> {
+pub(crate) fn init(verbosity: u8) -> Result<()> {
     let level = match verbosity {
         0 => LevelFilter::INFO,
         1 => LevelFilter::DEBUG,
         _ => LevelFilter::TRACE,
-    };
-    let ansi = match color {
-        ColorChoice::Always => true,
-        ColorChoice::Never => false,
-        ColorChoice::Auto => stdout().is_terminal(),
     };
 
     tracing_subscriber::fmt()
         .compact()
         .with_max_level(level)
         .with_target(verbosity > 0)
-        .with_ansi(ansi)
+        .with_ansi(true)
         .with_writer(stdout)
         .try_init()
         .map_err(|error| anyhow!("initializing tracing output: {error}"))?;
