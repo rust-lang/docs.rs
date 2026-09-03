@@ -3,10 +3,7 @@ use anyhow::Result;
 use docs_rs_types::{KrateName, Version};
 use itertools::Itertools;
 
-pub(super) async fn load(
-    conn: &mut sqlx::PgConnection,
-    build_queue_config: &docs_rs_build_queue::Config,
-) -> Result<Crates> {
+pub(super) async fn load(conn: &mut sqlx::PgConnection) -> Result<Crates> {
     let rows = sqlx::query!(
         r#"SELECT
             name as "name!: KrateName",
@@ -32,13 +29,12 @@ pub(super) async fn load(
                  releases.crate_id = crates.id AND
                  releases.version = queue.version
              )
-             WHERE queue.attempt < $1 AND (
+             WHERE (
                  crates.id IS NULL OR
                  releases.id IS NULL
              )
          ) AS inp
          ORDER BY name"#,
-        build_queue_config.build_attempts as i32,
     )
     .fetch_all(conn)
     .await?;
@@ -62,6 +58,52 @@ pub(super) async fn load(
     }
 
     Ok(crates)
+}
+
+pub(super) async fn load_single(
+    conn: &mut sqlx::PgConnection,
+    name: &KrateName,
+) -> Result<Option<Crate>> {
+    let rows = sqlx::query!(
+        r#"SELECT version as "version!: Version", yanked
+           FROM (
+               SELECT releases.version, releases.yanked
+               FROM crates
+               INNER JOIN releases ON releases.crate_id = crates.id
+               WHERE crates.name = $1
+               UNION ALL
+               SELECT queue.version, NULL as yanked
+               FROM queue
+               LEFT OUTER JOIN crates ON crates.name = queue.name
+               LEFT OUTER JOIN releases ON (
+                   releases.crate_id = crates.id AND
+                   releases.version = queue.version
+               )
+               WHERE queue.name = $1
+                 AND (crates.id IS NULL OR releases.id IS NULL)
+           ) AS inp"#,
+        name as _,
+    )
+    .fetch_all(conn)
+    .await?;
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let mut releases: Releases = rows
+        .into_iter()
+        .map(|row| Release {
+            version: row.version,
+            yanked: row.yanked,
+        })
+        .collect();
+    releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
+
+    Ok(Some(Crate {
+        name: name.clone(),
+        releases,
+    }))
 }
 
 #[cfg(test)]
@@ -126,7 +168,7 @@ mod tests {
             .await?;
 
         let mut conn = env.async_conn().await?;
-        let result = load(&mut conn, env.context().config().build_queue()?).await?;
+        let result = load(&mut conn).await?;
 
         assert_eq!(
             result,
@@ -161,6 +203,45 @@ mod tests {
                 },
             ]
         );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_single() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V1)
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name("other")
+            .version(V1)
+            .create()
+            .await?;
+        env.build_queue()?.add_crate(&KRATE, &V2, 0).await?;
+
+        let mut conn = env.async_conn().await?;
+        assert_eq!(
+            load_single(&mut conn, &KRATE).await?.unwrap(),
+            Crate {
+                name: KRATE,
+                releases: vec![
+                    Release {
+                        version: V1,
+                        yanked: Some(false),
+                    },
+                    Release {
+                        version: V2,
+                        yanked: None,
+                    },
+                ],
+            }
+        );
+
         Ok(())
     }
 }

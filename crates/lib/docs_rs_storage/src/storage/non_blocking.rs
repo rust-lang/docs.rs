@@ -1000,10 +1000,11 @@ mod backend_tests {
                 "foo/bar.txt",
                 "foo/bar/baz.txt",
                 "foo/bar/foobar.txt",
+                "foo/bar/\u{1b}",
                 "bar.txt",
             ],
             &["foo.txt", "foo/bar.txt", "bar.txt"],
-            &["foo/bar/baz.txt", "foo/bar/foobar.txt"],
+            &["foo/bar/baz.txt", "foo/bar/foobar.txt", "foo/bar/\u{1b}"],
         )
         .await
     }

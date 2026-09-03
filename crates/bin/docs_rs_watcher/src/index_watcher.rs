@@ -2,18 +2,57 @@ use crate::{
     Config,
     db::{delete_crate, delete_version},
     index::Index,
+    metrics::{EventSource, WatcherMetrics},
 };
 use anyhow::{Context as _, Result};
 use crates_index_diff::Change;
 use docs_rs_build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use docs_rs_context::Context;
+use docs_rs_crates_io::events::ChangeKind;
 use docs_rs_database::{
     crate_details::update_latest_version_id,
     service_config::{ConfigName, get_config, set_config},
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
-use tracing::{debug, error, info, warn};
+use std::time::Instant;
+use tracing::{debug, error, info, instrument, warn};
+
+trait ChangeExt {
+    fn name(&self) -> &str;
+    fn version(&self) -> Option<&str>;
+    fn kind(&self) -> ChangeKind;
+    fn first_crate_version(&self) -> &crates_index_diff::CrateVersion;
+}
+
+impl ChangeExt for Change {
+    fn first_crate_version(&self) -> &crates_index_diff::CrateVersion {
+        self.versions().first().expect("always exists")
+    }
+
+    fn name(&self) -> &str {
+        self.first_crate_version().name.as_str()
+    }
+
+    fn version(&self) -> Option<&str> {
+        if let Change::CrateDeleted { .. } = self {
+            None
+        } else {
+            Some(self.first_crate_version().version.as_str())
+        }
+    }
+
+    fn kind(&self) -> ChangeKind {
+        match *self {
+            Change::Added(_) => ChangeKind::Added,
+            Change::Yanked(_) => ChangeKind::Yanked,
+            Change::CrateDeleted { .. } => ChangeKind::CrateDeleted,
+            Change::VersionDeleted(_) => ChangeKind::VersionDeleted,
+            Change::Unyanked(_) => ChangeKind::Unyanked,
+            Change::AddedAndYanked(_) => ChangeKind::AddedAndYanked,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct CrateVersion {
@@ -94,6 +133,7 @@ pub(crate) async fn get_new_crates(
     context: &Context,
     index: &Index,
     config: &Config,
+    metrics: &WatcherMetrics,
 ) -> Result<usize> {
     let mut conn = context.pool()?.get_async().await?;
 
@@ -115,7 +155,10 @@ pub(crate) async fn get_new_crates(
 
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
-    let crates_added = process_changes(context, &changes, config).await;
+    metrics.record_events_received(EventSource::Git, changes.len());
+    // NOTE: `Box::pin` to type-erase this future, otherwise we'll run into `recursion_limit`
+    // errors.
+    let crates_added = Box::pin(process_changes(context, &changes, config, metrics)).await;
 
     if let Err(err) = context.build_queue()?.reevaluate_priorities().await {
         error!(?err, "error reevaluating queued release priorities");
@@ -129,32 +172,66 @@ pub(crate) async fn get_new_crates(
     Ok(crates_added)
 }
 
-async fn process_changes(context: &Context, changes: &Vec<Change>, config: &Config) -> usize {
+async fn process_changes(
+    context: &Context,
+    changes: &Vec<Change>,
+    config: &Config,
+    metrics: &WatcherMetrics,
+) -> usize {
     let mut crates_added = 0;
 
     for change in changes {
-        match process_change(context, change, config).await {
+        let start = Instant::now();
+        let crate_name = change.name();
+        let crate_version = change.version();
+        let change_type = change.kind();
+
+        // Start temporarily loging all changes, as preparation for the SQS event migration.
+        debug!(
+            target: "docs_rs_watcher::index_event",
+            source = %EventSource::Git,
+            %change_type,
+            crate_name,
+            crate_version,
+            "crates.io index event"
+        );
+
+        let success = match process_change(context, change, config).await {
             Ok(added) => {
+                metrics.record_change_applied(EventSource::Git, change_type);
                 if added {
                     crates_added += 1;
                 }
+                true
             }
             Err(err) => {
                 error!(?change, ?err, "failed to process change");
+                false
             }
-        }
+        };
+        metrics.record_event_processing_time(
+            EventSource::Git,
+            Some(change_type),
+            success,
+            start.elapsed(),
+        );
     }
     crates_added
 }
 
 /// Process a crate change, returning whether the change was a crate addition or not.
+#[instrument(skip_all, fields(name, version))]
 async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
-    let crate_version: CrateVersion = change
-        .versions()
-        .first()
-        .expect("always exists")
-        .clone()
-        .try_into()?;
+    // 1: use the `CrateVersion` from `crates-index-diff`.
+    let crate_version = change.first_crate_version();
+
+    // record name & version on the tracing span for performance instrumentation.
+    tracing::Span::current()
+        .record("name", crate_version.name.as_str())
+        .record("version", crate_version.version.as_str());
+
+    // 2: now, convert to our own internal `CrateVersion.`
+    let crate_version: CrateVersion = crate_version.clone().try_into()?;
 
     match change {
         Change::Added(_release) => process_version_added(context, &crate_version).await?,
@@ -177,6 +254,7 @@ async fn process_change(context: &Context, change: &Change, config: &Config) -> 
 }
 
 /// Processes crate changes, whether they got yanked or unyanked.
+#[instrument(skip_all)]
 async fn process_version_yank_status(context: &Context, release: &CrateVersion) -> Result<()> {
     // FIXME: delay yanks of crates that have not yet finished building
     // https://github.com/rust-lang/docs.rs/issues/1934
@@ -185,6 +263,7 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
     Ok(())
 }
 
+#[instrument(skip_all)]
 async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let build_queue = context.build_queue()?;
 
@@ -217,6 +296,7 @@ async fn process_version_added(context: &Context, release: &CrateVersion) -> Res
     Ok(())
 }
 
+#[instrument(skip_all)]
 async fn process_version_deleted(
     context: &Context,
     config: &Config,
@@ -251,6 +331,7 @@ async fn process_version_deleted(
     Ok(())
 }
 
+#[instrument(skip_all)]
 async fn process_crate_deleted(
     context: &Context,
     config: &Config,
@@ -270,6 +351,7 @@ async fn process_crate_deleted(
     context.build_queue()?.remove_crate_from_queue(krate).await
 }
 
+#[instrument(skip_all, fields(name=%name, version=%version, yanked=%yanked))]
 pub(crate) async fn set_yanked(
     context: &Context,
     name: &KrateName,
@@ -518,6 +600,7 @@ mod tests {
             version: V2,
             ..Default::default()
         };
+        let metrics = WatcherMetrics::new(&env.context().meter_provider);
         let added = process_changes(
             &env,
             &vec![
@@ -531,6 +614,7 @@ mod tests {
                 Change::VersionDeleted(non_existing_version.into()),
             ],
             env.config(),
+            &metrics,
         )
         .await;
 

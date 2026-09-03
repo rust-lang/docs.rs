@@ -126,8 +126,6 @@ impl RegistryApi {
             created_at: DateTime<Utc>,
             #[serde(default)]
             yanked: bool,
-            #[serde(default)]
-            downloads: i32,
         }
 
         let response: Response = match self.request(&url).await {
@@ -147,7 +145,6 @@ impl RegistryApi {
         Ok(Some(ReleaseData {
             release_time: version.created_at,
             yanked: version.yanked,
-            downloads: version.downloads,
         }))
     }
 
@@ -430,13 +427,11 @@ mod tests {
                         "num": V1.to_string(),
                         "created_at": "2024-01-01T00:00:00Z",
                         "yanked": false,
-                        "downloads": 42
                     },
                     {
                         "num": V2.to_string(),
                         "created_at": "2024-01-02T00:00:00Z",
                         "yanked": true,
-                        "downloads": 100
                     }
                 ]
             }),
@@ -452,7 +447,6 @@ mod tests {
                     .unwrap()
                     .with_timezone(&Utc),
                 yanked: false,
-                downloads: 42,
             }
         );
 
@@ -487,7 +481,6 @@ mod tests {
                             "num": V1.to_string(),
                             "created_at": "2024-01-01T00:00:00Z",
                             "yanked": false,
-                            "downloads": 42
                         }
                     ]
                 }),
