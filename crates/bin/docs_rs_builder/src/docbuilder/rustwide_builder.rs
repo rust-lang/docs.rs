@@ -147,13 +147,6 @@ impl RustwideBuilder {
         self.publish_essential_files_if_needed(maintenance.toolchain_updated)
     }
 
-    // Retained temporarily for callers and tests while the builder lifecycle is
-    // migrated to `perform_maintenance`.
-    #[instrument(skip(self))]
-    pub fn reinitialize_workspace_if_interval_passed(&mut self) -> Result<()> {
-        self.perform_maintenance()
-    }
-
     /// Force a toolchain update and publish new shared rustdoc files when needed.
     #[instrument(skip_all)]
     pub fn update_toolchain_and_add_essential_files(&mut self) -> Result<()> {
