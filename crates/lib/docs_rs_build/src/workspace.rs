@@ -194,8 +194,8 @@ impl BuildEnvironment {
     pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
         let selection_changed = self.toolchain != toolchain;
         self.toolchain = toolchain;
-        let installed = self.ensure_toolchain_ready_without_cache_purge()?;
-        if selection_changed || installed {
+        let installed = self.ensure_toolchain_ready()?;
+        if selection_changed && !installed {
             self.purge_caches()?;
         }
         Ok(installed)
@@ -249,22 +249,17 @@ impl BuildEnvironment {
     // whether an installed distribution toolchain can be updated. Unmanaged
     // targets are preserved here and only cleaned up by `update_toolchain`.
     fn ensure_toolchain_ready(&self) -> Result<bool> {
-        let installed = self.ensure_toolchain_ready_without_cache_purge()?;
+        let installed = self.ensure_toolchain_installed()?;
+
+        if self.toolchain.as_ci().is_none() {
+            let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
+            self.ensure_required_toolchain_targets(&installed_targets)?;
+            self.ensure_toolchain_components();
+        }
+
         if installed {
             self.purge_caches()?;
         }
-        Ok(installed)
-    }
-
-    fn ensure_toolchain_ready_without_cache_purge(&self) -> Result<bool> {
-        let installed = self.ensure_toolchain_installed()?;
-        if self.toolchain.as_ci().is_some() {
-            return Ok(installed);
-        }
-
-        let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
-        self.ensure_required_toolchain_targets(&installed_targets)?;
-        self.ensure_toolchain_components();
         Ok(installed)
     }
 
