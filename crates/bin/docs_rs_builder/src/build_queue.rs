@@ -91,12 +91,7 @@ pub(crate) fn build_next_queue_package(
             return Err(err);
         }
 
-        builder.build_package(
-            &krate.name,
-            &krate.version,
-            PackageKind::CratesIo,
-            krate.attempt == 0,
-        )
+        builder.build_package(&krate.name, &krate.version, PackageKind::CratesIo)
     })?;
 
     Ok(processed)

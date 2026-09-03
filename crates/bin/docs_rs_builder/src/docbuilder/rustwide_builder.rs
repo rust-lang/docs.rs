@@ -233,7 +233,6 @@ impl RustwideBuilder {
                 .context("invalid crate name in package")?,
             &package.version,
             PackageKind::Local(path),
-            false,
         )
     }
 
@@ -243,7 +242,6 @@ impl RustwideBuilder {
         name: &KrateName,
         version: &Version,
         kind: PackageKind<'_>,
-        collect_metrics: bool,
     ) -> Result<BuildPackageSummary> {
         let (crate_id, release_id, build_id) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
@@ -253,15 +251,7 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(
-            name,
-            version,
-            kind,
-            crate_id,
-            release_id,
-            build_id,
-            collect_metrics,
-        ) {
+        match self.build_package_inner(name, version, kind, crate_id, release_id, build_id) {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -294,9 +284,6 @@ impl RustwideBuilder {
         crate_id: CrateId,
         release_id: ReleaseId,
         build_id: BuildId,
-        // Compiler metrics are now an environment-level setting and are
-        // collected for every release when a destination is configured.
-        _collect_metrics: bool,
     ) -> Result<bool> {
         info!("building package {} {}", name, version);
 
@@ -668,7 +655,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
@@ -877,7 +864,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(&crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
@@ -1006,7 +993,7 @@ mod tests {
         assert!(
             // not successful build
             !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(&crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
@@ -1064,7 +1051,7 @@ mod tests {
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
-        let summary = builder.build_package(&crate_, &version, PackageKind::CratesIo, false)?;
+        let summary = builder.build_package(&crate_, &version, PackageKind::CratesIo)?;
 
         assert!(!summary.successful);
         assert!(summary.should_reattempt);
