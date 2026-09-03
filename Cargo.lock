@@ -2039,12 +2039,12 @@ dependencies = [
  "docs_rs_crate_archive",
  "docs_rs_rustwide",
  "humantime",
+ "log",
  "parse-size",
  "rustwide 0.26.0",
  "tempfile",
  "toml",
  "tracing",
- "tracing-log",
  "tracing-subscriber",
 ]
 

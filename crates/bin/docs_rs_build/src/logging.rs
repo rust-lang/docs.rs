@@ -1,8 +1,40 @@
 use crate::args::ColorChoice;
 use anyhow::{Result, anyhow};
+use log::{Level, Log, Metadata, Record};
 use std::io::{IsTerminal as _, stdout};
 use tracing::level_filters::LevelFilter;
-use tracing_log::LogTracer;
+
+/// Forwards `log` records as tracing events without `tracing-log`'s additional
+/// `log.target`, `log.module_path`, `log.file`, and `log.line` fields.
+struct MessageOnlyLogTracer;
+
+impl Log for MessageOnlyLogTracer {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+        match metadata.level() {
+            Level::Error => tracing::enabled!(target: "rustwide", tracing::Level::ERROR),
+            Level::Warn => tracing::enabled!(target: "rustwide", tracing::Level::WARN),
+            Level::Info => tracing::enabled!(target: "rustwide", tracing::Level::INFO),
+            Level::Debug => tracing::enabled!(target: "rustwide", tracing::Level::DEBUG),
+            Level::Trace => tracing::enabled!(target: "rustwide", tracing::Level::TRACE),
+        }
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        match record.level() {
+            Level::Error => tracing::error!(target: "rustwide", "{}", record.args()),
+            Level::Warn => tracing::warn!(target: "rustwide", "{}", record.args()),
+            Level::Info => tracing::info!(target: "rustwide", "{}", record.args()),
+            Level::Debug => tracing::debug!(target: "rustwide", "{}", record.args()),
+            Level::Trace => tracing::trace!(target: "rustwide", "{}", record.args()),
+        }
+    }
+
+    fn flush(&self) {}
+}
 
 pub(crate) fn init(verbosity: u8, color: ColorChoice) -> Result<()> {
     let level = match verbosity {
@@ -26,6 +58,6 @@ pub(crate) fn init(verbosity: u8, color: ColorChoice) -> Result<()> {
 
     // Rustwide captures every build record in its StepResult and also forwards
     // it through this logger, which gives local and CI users live output.
-    rustwide::logging::init_with(LogTracer::new());
+    rustwide::logging::init_with(MessageOnlyLogTracer);
     Ok(())
 }

@@ -15,6 +15,7 @@ docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits", default-featur
 docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive" }
 docs_rs_rustwide = { path = "../../lib/docs_rs_rustwide" }
 humantime = "2.4.0"
+log = "0.4"
 parse-size = "1.1.0"
 # rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 rustwide = {
@@ -25,7 +26,6 @@ rustwide = {
 tempfile = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-log = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt"] }
 
 [lints]
