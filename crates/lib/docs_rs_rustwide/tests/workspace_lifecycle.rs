@@ -3,7 +3,7 @@ mod support;
 use anyhow::Result;
 use docs_rs_rustwide::BuildEnvironment;
 use std::time::Duration;
-use support::{build_local, fixture, test_sandbox_image};
+use support::{build_local, fixture, init_logging, test_sandbox_image};
 
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
@@ -55,6 +55,7 @@ fn refreshes_workspace_after_interval() -> Result<()> {
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn recreated_environment_uses_existing_toolchain() -> Result<()> {
+    init_logging();
     let workspace = tempfile::tempdir()?;
     let old_version = {
         let environment = BuildEnvironment::builder(workspace.path())

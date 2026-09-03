@@ -2456,6 +2456,8 @@ dependencies = [
  "test-case",
  "thiserror",
  "tracing",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]
