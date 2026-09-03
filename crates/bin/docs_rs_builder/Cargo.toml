@@ -29,18 +29,14 @@ docs_rs_types = { path = "../../lib/docs_rs_types" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 docsrs-metadata = { path = "../../lib/metadata" }
 futures-util = { workspace = true }
-log = "0.4"
 num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 regex = { workspace = true }
 rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
-serde_json = { workspace = true }
 sqlx = { workspace = true }
-sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 tracing = { workspace = true }
 tracing-log = { workspace = true }
 
