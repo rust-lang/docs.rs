@@ -415,21 +415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-tar"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6affe71e5b6180fb5eaf9e8127a243694baf6ae1120c199227167302f56c14b"
-dependencies = [
- "filetime",
- "futures-core",
- "libc",
- "redox_syscall 0.7.5",
- "tokio",
- "tokio-stream",
- "xattr",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2189,6 +2174,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_crate_archive"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "docs_rs_types",
+ "flate2",
+ "tar",
+ "tempfile",
+]
+
+[[package]]
 name = "docs_rs_crates_io"
 version = "0.1.0"
 dependencies = [
@@ -2285,7 +2281,6 @@ name = "docs_rs_import_release"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "async-tar",
  "clap",
  "docs_rs_cargo_metadata",
  "docs_rs_context",
@@ -2369,9 +2364,11 @@ dependencies = [
  "chrono",
  "crates-index",
  "docs_rs_config",
+ "docs_rs_crate_archive",
  "docs_rs_env_vars",
  "docs_rs_types",
  "docs_rs_utils",
+ "futures-util",
  "http 1.5.0",
  "mime",
  "mockito",
@@ -6026,7 +6023,7 @@ checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall 0.5.18",
+ "redox_syscall",
  "smallvec",
  "windows-link",
 ]
@@ -6677,15 +6674,6 @@ name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
-dependencies = [
- "bitflags 2.13.1",
-]
-
-[[package]]
-name = "redox_syscall"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4666a1a60d8412eab19d94f6d13dcc9cea0a5ef4fdf6a5db306537413c661b1b"
 dependencies = [
  "bitflags 2.13.1",
 ]

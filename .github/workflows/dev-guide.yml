@@ -18,10 +18,13 @@ jobs:
       - name: Install Rust
         run: rustup update stable && rustup default stable
 
-      - name: Install mdbook
-        uses: taiki-e/install-action@v2
+      - name: Install development tools
+        uses: jdx/mise-action@v4
         with:
-          tool: just,mdbook,mdbook-linkcheck2
+          version: 2026.8.15
+          install_args: >-
+            --jobs=1 just cargo:mdbook cargo:mdbook-linkcheck2
+            cargo:mdbook-mermaid
 
       - run:
           just book-test  # also runs the build

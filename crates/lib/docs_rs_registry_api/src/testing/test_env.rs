@@ -156,6 +156,26 @@ impl TestRegistry {
         inner.mocks.push(index_mock);
     }
 
+    /// Mock downloading a crate archive from the URL advertised by the sparse index.
+    pub async fn mock_download(
+        &self,
+        krate: &KrateName,
+        version: &docs_rs_types::Version,
+        archive: Vec<u8>,
+    ) {
+        let url = self.api.download_url(krate, version).unwrap();
+
+        let mut inner = self.inner.lock().await;
+        let mock = inner
+            .download_server
+            .mock("GET", url.path())
+            .with_status(StatusCode::OK.as_u16().into())
+            .with_body(archive)
+            .create_async()
+            .await;
+        inner.mocks.push(mock);
+    }
+
     /// Create a custom mock for a registry API `GET` request.
     ///
     /// `path` may include a query string, whose URL-encoded pairs are matched independently of

@@ -10,6 +10,7 @@ pub mod testing;
 
 pub use api::RegistryApi;
 pub use config::Config;
+pub use docs_rs_crate_archive::SourceDir;
 pub use error::Error;
 pub use models::{
     CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor, SearchQuery, SearchSort,

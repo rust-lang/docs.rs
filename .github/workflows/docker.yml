@@ -15,9 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2
+      - uses: jdx/mise-action@v4
         with:
-          tool: just
+          version: 2026.8.15
+          install_args: --jobs=1 just
 
       - name: setup docker buildx
         uses: docker/setup-buildx-action@v4
