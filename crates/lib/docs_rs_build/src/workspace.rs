@@ -56,6 +56,7 @@ struct WorkspaceConfiguration {
     running_inside_docker: bool,
     sandbox_image: SandboxImageSource,
     fast_init: bool,
+    reinitialization_interval: Duration,
 }
 
 impl WorkspaceConfiguration {
@@ -74,6 +75,37 @@ impl WorkspaceConfiguration {
     }
 }
 
+struct ManagedWorkspace {
+    workspace: Workspace,
+    configuration: WorkspaceConfiguration,
+    initialized_at: Instant,
+}
+
+impl ManagedWorkspace {
+    fn new(configuration: WorkspaceConfiguration) -> Result<Self> {
+        let workspace = configuration.initialize()?;
+        Ok(Self {
+            workspace,
+            configuration,
+            initialized_at: Instant::now(),
+        })
+    }
+
+    fn refresh_if_due(&mut self) -> Result<bool> {
+        if self.initialized_at.elapsed() < self.configuration.reinitialization_interval {
+            return Ok(false);
+        }
+
+        self.workspace = self.configuration.initialize()?;
+        self.initialized_at = Instant::now();
+        Ok(true)
+    }
+
+    fn get(&self) -> &Workspace {
+        &self.workspace
+    }
+}
+
 /// Changes made by [`BuildEnvironment::perform_maintenance`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use]
@@ -86,10 +118,7 @@ pub struct MaintenanceResult {
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 pub struct BuildEnvironment {
-    workspace: Workspace,
-    workspace_configuration: WorkspaceConfiguration,
-    workspace_initialized_at: Instant,
-    workspace_reinitialization_interval: Duration,
+    workspace: ManagedWorkspace,
     toolchain: Toolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
@@ -126,14 +155,12 @@ impl BuildEnvironment {
             running_inside_docker,
             sandbox_image,
             fast_init,
+            reinitialization_interval: workspace_reinitialization_interval,
         };
-        let workspace = workspace_configuration.initialize()?;
+        let workspace = ManagedWorkspace::new(workspace_configuration)?;
 
         let environment = Self {
             workspace,
-            workspace_configuration,
-            workspace_initialized_at: Instant::now(),
-            workspace_reinitialization_interval,
             toolchain,
             cpu_limit,
             docker_runtime,
@@ -152,7 +179,10 @@ impl BuildEnvironment {
     /// elapsed. The toolchain is checked for updates on every call, preserving
     /// the maintenance cadence of the docs.rs builder.
     pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
-        let workspace_refreshed = self.refresh_workspace_if_interval_passed()?;
+        let workspace_refreshed = self.workspace.refresh_if_due()?;
+        if workspace_refreshed {
+            self.ensure_toolchain_ready()?;
+        }
         let toolchain_updated = self.update_toolchain()?;
 
         Ok(MaintenanceResult {
@@ -161,29 +191,15 @@ impl BuildEnvironment {
         })
     }
 
-    // Recreate the workspace when its configured refresh interval has elapsed.
-    // Resolving a `SandboxImageSource::Remote` pulls the tag again, allowing
-    // long-running builders to pick up a newly published sandbox image.
-    fn refresh_workspace_if_interval_passed(&mut self) -> Result<bool> {
-        if self.workspace_initialized_at.elapsed() < self.workspace_reinitialization_interval {
-            return Ok(false);
-        }
-
-        self.workspace = self.workspace_configuration.initialize()?;
-        self.workspace_initialized_at = Instant::now();
-        self.ensure_toolchain_ready()?;
-        Ok(true)
-    }
-
     /// Remove all cached registry, Git, and toolchain data from the workspace.
     pub fn purge_caches(&self) -> Result<()> {
-        retry(|| self.workspace.purge_all_caches(), 3)?;
+        retry(|| self.workspace().purge_all_caches(), 3)?;
         Ok(())
     }
 
     /// Remove all build directories from the workspace.
     pub fn purge_build_directories(&self) -> Result<()> {
-        self.workspace.purge_all_build_dirs()?;
+        self.workspace().purge_all_build_dirs()?;
         Ok(())
     }
 
@@ -212,7 +228,7 @@ impl BuildEnvironment {
     /// version of a distribution toolchain is available.
     pub fn is_toolchain_installed(&self) -> Result<bool> {
         if self.toolchain.as_dist().is_some() {
-            return match self.toolchain.installed_targets(&self.workspace) {
+            return match self.toolchain.installed_targets(self.workspace()) {
                 Ok(_) => Ok(true),
                 Err(error)
                     if matches!(
@@ -227,7 +243,7 @@ impl BuildEnvironment {
         }
 
         Ok(self
-            .workspace
+            .workspace()
             .installed_toolchains()?
             .contains(&self.toolchain))
     }
@@ -241,7 +257,7 @@ impl BuildEnvironment {
             return Ok(false);
         }
 
-        self.toolchain.install(&self.workspace)?;
+        self.toolchain.install(self.workspace())?;
         Ok(true)
     }
 
@@ -252,7 +268,7 @@ impl BuildEnvironment {
         let installed = self.ensure_toolchain_installed()?;
 
         if self.toolchain.as_ci().is_none() {
-            let installed_targets = self.toolchain.installed_targets(&self.workspace)?;
+            let installed_targets = self.toolchain.installed_targets(self.workspace())?;
             self.ensure_required_toolchain_targets(&installed_targets)?;
             self.ensure_toolchain_components();
         }
@@ -271,14 +287,14 @@ impl BuildEnvironment {
     /// be detected through rustup reliably.
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
-            self.toolchain.install(&self.workspace)?;
+            self.toolchain.install(self.workspace())?;
             self.purge_caches()?;
             return Ok(true);
         }
 
         // Version detection is allowed to fail when the toolchain is not installed yet.
         let old_version = self.rustc_version().ok();
-        let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
+        let installed_targets = match self.toolchain.installed_targets(self.workspace()) {
             Ok(targets) => targets,
             Err(error)
                 if matches!(
@@ -296,11 +312,11 @@ impl BuildEnvironment {
         let managed_targets = Self::managed_toolchain_targets();
         for target in &installed_targets {
             if !managed_targets.contains(target) {
-                self.toolchain.remove_target(&self.workspace, target)?;
+                self.toolchain.remove_target(self.workspace(), target)?;
             }
         }
 
-        self.toolchain.install(&self.workspace)?;
+        self.toolchain.install(self.workspace())?;
         self.ensure_toolchain_ready()?;
 
         let new_version = self.rustc_version()?;
@@ -340,7 +356,7 @@ impl BuildEnvironment {
     }
 
     pub(crate) fn workspace(&self) -> &Workspace {
-        &self.workspace
+        self.workspace.get()
     }
 
     pub(crate) fn configured_toolchain(&self) -> &Toolchain {
@@ -417,7 +433,7 @@ impl BuildEnvironment {
 
     fn ensure_toolchain_components(&self) {
         for component in TOOLCHAIN_COMPONENTS {
-            if let Err(error) = self.toolchain.add_component(&self.workspace, component) {
+            if let Err(error) = self.toolchain.add_component(self.workspace(), component) {
                 // A newly published nightly can temporarily lack a component. Builds
                 // that do not need it should still be allowed to proceed.
                 warn!("failed to install toolchain component {component}: {error}");
@@ -440,7 +456,7 @@ impl BuildEnvironment {
             targets_to_install.remove(target);
         }
         for target in targets_to_install {
-            self.toolchain.add_target(&self.workspace, &target)?;
+            self.toolchain.add_target(self.workspace(), &target)?;
         }
         Ok(())
     }
