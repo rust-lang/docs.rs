@@ -33,8 +33,10 @@ pub fn init_from_environment() -> anyhow::Result<Guard> {
 
 pub fn init_with_config(config: &Config) -> anyhow::Result<Guard> {
     let log_formatter = match config.format {
+        LogFormat::Full => tracing_subscriber::fmt::layer().boxed(),
+        LogFormat::Compact => tracing_subscriber::fmt::layer().compact().boxed(),
+        LogFormat::Pretty => tracing_subscriber::fmt::layer().pretty().boxed(),
         LogFormat::Json => tracing_subscriber::fmt::layer().json().boxed(),
-        LogFormat::Pretty => tracing_subscriber::fmt::layer().boxed(),
     };
 
     let tracing_registry = tracing_subscriber::registry()
