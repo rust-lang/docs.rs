@@ -293,7 +293,12 @@ impl BuildEnvironment {
 
         // Remove no-longer-managed targets before updating. Otherwise rustup can
         // refuse an update when one of those targets disappeared upstream.
-        self.remove_unmanaged_toolchain_targets(&installed_targets)?;
+        let managed_targets = Self::managed_toolchain_targets();
+        for target in &installed_targets {
+            if !managed_targets.contains(target) {
+                self.toolchain.remove_target(&self.workspace, target)?;
+            }
+        }
 
         self.toolchain.install(&self.workspace)?;
         self.ensure_toolchain_ready()?;
@@ -426,16 +431,6 @@ impl BuildEnvironment {
             .chain([&HOST_TARGET])
             .map(|target| (*target).to_owned())
             .collect()
-    }
-
-    fn remove_unmanaged_toolchain_targets(&self, installed_targets: &[String]) -> Result<()> {
-        let managed_targets = Self::managed_toolchain_targets();
-        for target in installed_targets {
-            if !managed_targets.contains(target) {
-                self.toolchain.remove_target(&self.workspace, target)?;
-            }
-        }
-        Ok(())
     }
 
     fn ensure_required_toolchain_targets(&self, installed_targets: &[String]) -> Result<()> {
