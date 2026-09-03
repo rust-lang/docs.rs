@@ -124,7 +124,7 @@ jobs:
           version: 2026.9.1
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
-            cargo:cargo-udeps cargo:cargo-sort
+            cargo:cargo-udeps cargo:cargo-sort hadolint
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

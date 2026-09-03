@@ -102,7 +102,7 @@ lint-rust:
 
 # Run the standard local and CI lint suite.
 [group('linting')]
-lint: lint-rust lint-actions lint-js lint-dependencies-machete lint-mise-lock
+lint: lint-rust lint-actions lint-docker lint-js lint-dependencies-machete lint-mise-lock
 
 # Verify that mise.lock matches the tools pinned in mise.toml.
 [group('linting')]
@@ -113,8 +113,16 @@ lint-mise-lock:
 # Validate GitHub Actions workflows with actionlint when installed.
 [group('linting')]
 lint-actions:
-    @command -v actionlint >/dev/null || { echo "warning: actionlint not installed, skipping"; exit 0; }
     actionlint -ignore SC2086
+
+# validate Dockerfiles
+[group('testing')]
+lint-docker:
+    fd \
+      --type file \
+      --threads 1 \
+      '^(Dockerfile.*)$' ./dockerfiles/ \
+      --exec hadolint {}
 
 # Format workspace Cargo.toml files with cargo-sort.
 [group('linting')]
