@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rustwide::cmd::{CommandError, SandboxImage};
+use tracing::{debug, instrument};
 
 pub(crate) fn args_contain_unstable_feature<S>(
     cargo_args: impl IntoIterator<Item = S>,
@@ -40,10 +41,17 @@ fn unstable_feature_matches(value: &str, feature: &str) -> bool {
 
 /// Resolve a sandbox image name, preferring an existing local image and
 /// falling back to a remote image that rustwide will pull when needed.
+#[instrument(fields(image = name))]
 pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
     match SandboxImage::local(name) {
-        Ok(image) => Ok(image),
-        Err(CommandError::SandboxImageMissing(_)) => Ok(SandboxImage::remote(name)?),
+        Ok(image) => {
+            debug!("using local sandbox image");
+            Ok(image)
+        }
+        Err(CommandError::SandboxImageMissing(_)) => {
+            debug!("local sandbox image is missing; resolving remote image");
+            Ok(SandboxImage::remote(name)?)
+        }
         Err(error) => Err(error.into()),
     }
 }

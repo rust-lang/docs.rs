@@ -22,7 +22,7 @@ use std::{
     iter,
     path::{Path, PathBuf},
 };
-use tracing::warn;
+use tracing::{debug, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
 pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -55,13 +55,19 @@ pub struct ReleaseBuild<'build, 'ws> {
 
 #[bon]
 impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
+    #[instrument(
+        skip(environment, build, limits),
+        fields(source_dir = %build.host_source_dir().display())
+    )]
     pub(crate) fn new(
         environment: &'build BuildEnvironment,
         build: &'build Build<'ws>,
         limits: &'build Limits,
     ) -> Result<Self> {
+        debug!("reading docs.rs metadata");
         let metadata = Metadata::from_crate_root(build.host_source_dir())?;
         let resource_suffix = environment.resource_suffix()?;
+        debug!(resource_suffix, "release build prepared");
 
         Ok(Self {
             environment,
@@ -121,6 +127,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Fetch dependencies needed by `-Zbuild-std` before offline commands run.
+    #[instrument(skip(self, targets))]
     pub(crate) fn fetch_build_std_dependencies<'a>(
         &self,
         targets: impl IntoIterator<Item = &'a str>,
@@ -134,13 +141,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         };
 
         if missing_targets.is_empty() {
+            debug!("build-std dependencies are already fetched");
             return Ok(());
         }
 
+        debug!(?missing_targets, "fetching build-std dependencies");
         self.build.fetch_build_std_dependencies(&missing_targets)?;
         self.fetched_build_std_targets
             .borrow_mut()
             .extend(missing_targets.into_iter().map(str::to_owned));
+        debug!("build-std dependencies fetched");
         Ok(())
     }
 
@@ -159,6 +169,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All commands execute through the same rustwide build and reusable
     /// sandbox. Coverage and JSON failures are returned with their individual
     /// steps and do not prevent the primary HTML build from running.
+    #[instrument(skip(self))]
     pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
@@ -167,6 +178,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .into_iter()
             .take(self.limits.targets())
             .collect();
+
+        debug!(
+            default_target,
+            ?other_targets,
+            "selected documentation targets"
+        );
 
         self.fetch_build_std_dependencies(
             iter::once(default_target).chain(other_targets.iter().copied()),
@@ -190,6 +207,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             for target in other_targets {
                 target_results.push(self.build_target(target).run()?);
             }
+        } else {
+            debug!("default target produced no library documentation; skipping other targets");
         }
 
         Ok(ReleaseBuildResult {
@@ -213,6 +232,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             && !target_result.successful()
             && self.build.host_source_dir().join("Cargo.lock").exists()
         {
+            debug!(
+                target,
+                "target build failed; retrying with a regenerated lockfile"
+            );
             self.regenerate_lockfile()?;
             target_result = self.build_target_once(target, is_default);
         }
@@ -220,6 +243,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(target_result)
     }
 
+    #[instrument(skip(self), fields(target, is_default))]
     fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
         self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
@@ -233,6 +257,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             debug_assert!(is_default, "proc macros only support their host target");
         }
 
+        debug!(
+            coverage_successful = coverage_result.successful(),
+            rustdoc_json_successful = rustdoc_json_result.successful(),
+            documentation_successful = documentation_result.successful(),
+            compiler_metrics_count = compiler_metrics.len(),
+            "target build completed"
+        );
+
         TargetBuildResult {
             target: target.into(),
             is_default,
@@ -244,6 +276,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Collect documentation coverage for one target.
+    #[instrument(skip(self), fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
@@ -272,6 +305,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
+    #[instrument(skip(self), fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_step(|| {
             self.command(target)
@@ -288,10 +322,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build HTML documentation without emitting shared static files.
+    #[instrument(skip(self), fields(target))]
     pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
+    #[instrument(skip(self))]
     pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
         let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
         if let Some(error) = result.error {
@@ -307,6 +343,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         essential_files_directory(&output)
     }
 
+    #[instrument(skip(self), fields(target, emit = emit.as_str()))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
             let metrics_dir = self.compiler_metrics_dir();
@@ -336,6 +373,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 self.environment.compiler_metrics_collection_path(),
             ) {
                 let copied_metrics = copy_directory_contents(&source, destination)?;
+                debug!(
+                    count = copied_metrics.len(),
+                    destination = %destination.display(),
+                    "compiler metrics collected"
+                );
                 self.compiler_metrics.borrow_mut().extend(copied_metrics);
                 fs::remove_dir_all(source).map_err(anyhow::Error::from)?;
             }
@@ -372,10 +414,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
     }
 
+    #[instrument(skip(self), fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> Result<()> {
         let source_dir = self.build.host_source_dir();
+        debug!("removing invalid lockfile");
         fs::remove_file(source_dir.join("Cargo.lock"))?;
 
+        debug!("generating replacement lockfile");
         Command::new(
             self.environment.workspace(),
             self.environment.configured_toolchain().cargo(),
@@ -385,6 +430,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         .run_capture()
         .context("generating a replacement lockfile")?;
 
+        debug!("fetching dependencies for replacement lockfile");
         Command::new(
             self.environment.workspace(),
             self.environment.configured_toolchain().cargo(),
@@ -394,10 +440,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         .run_capture()
         .context("fetching dependencies for the replacement lockfile")?;
 
+        debug!("replacement lockfile is ready");
         Ok(())
     }
 
+    #[instrument(skip(self), fields(source_dir = %self.build.host_source_dir().display()))]
     fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
+        debug!("loading Cargo metadata");
         let output = Command::new(
             self.environment.workspace(),
             self.environment.configured_toolchain().cargo(),
@@ -411,7 +460,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             bail!("invalid output returned by `cargo metadata`");
         };
 
-        CargoMetadata::load_from_metadata(metadata)
+        let metadata = CargoMetadata::load_from_metadata(metadata)?;
+        debug!("Cargo metadata loaded");
+        Ok(metadata)
     }
 }
 

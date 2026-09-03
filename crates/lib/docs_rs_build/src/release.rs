@@ -7,6 +7,7 @@ use std::{
     hash::{Hash, Hasher},
     path::Path,
 };
+use tracing::{debug, instrument};
 
 /// A crate release whose build lifecycle is managed by docs.rs.
 pub struct ReleaseContext<'release> {
@@ -26,6 +27,7 @@ impl<'release> ReleaseContext<'release> {
     ///
     /// The returned phase allows callers to archive the fetched sources before
     /// metadata parsing or sandbox preparation can fail.
+    #[instrument(skip(self), fields(krate = %self.krate))]
     pub fn fetch(self) -> Result<FetchedRelease<'release>> {
         let Self {
             environment,
@@ -35,8 +37,11 @@ impl<'release> ReleaseContext<'release> {
         let effective_limits = limits
             .as_ref()
             .unwrap_or_else(|| environment.default_limits());
+        debug!("validating host resources");
         environment.validate_host_resources(effective_limits)?;
+        debug!("fetching crate source");
         krate.fetch(environment.workspace())?;
+        debug!("crate source fetched");
 
         Ok(FetchedRelease {
             environment,
@@ -74,13 +79,20 @@ impl FetchedRelease<'_> {
     /// Copy the fetched crate sources into a caller-owned directory.
     ///
     /// This is intended for source archiving before the build sandbox is entered.
+    #[instrument(
+        skip(self, destination),
+        fields(krate = %self.krate, destination = %destination.as_ref().display())
+    )]
     pub fn copy_source_to(&self, destination: impl AsRef<Path>) -> Result<()> {
+        debug!("copying fetched crate source");
         self.krate
             .copy_source_to(self.environment.workspace(), destination.as_ref())?;
+        debug!("fetched crate source copied");
         Ok(())
     }
 
     /// Run selected build operations in one reusable sandbox.
+    #[instrument(skip(self, callback), fields(krate = %self.krate))]
     pub fn run<R>(
         self,
         callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
@@ -93,13 +105,19 @@ impl FetchedRelease<'_> {
         let limits = limits
             .as_ref()
             .unwrap_or_else(|| environment.default_limits());
+        debug!("purging stale release build directories");
         environment.workspace().purge_all_build_dirs()?;
-        let mut build_dir = environment.workspace().build_dir(&build_dir_name(krate));
+        let build_dir_name = build_dir_name(krate);
+        debug!(build_dir_name, "preparing release build directory");
+        let mut build_dir = environment.workspace().build_dir(&build_dir_name);
         let sandbox = environment.sandbox_builder(limits);
+        debug!("starting release sandbox");
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
             .run(|build| callback(ReleaseBuild::new(environment, build, limits)?))?;
+        debug!("release sandbox completed; purging crate source cache");
         krate.purge_from_cache(environment.workspace())?;
+        debug!("release build completed");
         Ok(result)
     }
 }

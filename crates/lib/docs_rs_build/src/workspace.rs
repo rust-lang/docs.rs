@@ -4,7 +4,6 @@ use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_utils::{APP_USER_AGENT, retry};
 use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
-use log::warn;
 use rustwide::{
     BuildResult, Crate, Toolchain, Workspace, WorkspaceBuilder,
     cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
@@ -15,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+use tracing::{debug, instrument, warn};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
@@ -36,6 +36,7 @@ pub enum SandboxImageSource {
 }
 
 impl SandboxImageSource {
+    #[instrument(skip(self), fields(source = ?self))]
     fn resolve(&self) -> Result<Option<SandboxImage>> {
         let image = match self {
             Self::RustwideDefault => return Ok(None),
@@ -61,7 +62,17 @@ struct WorkspaceConfiguration {
 }
 
 impl WorkspaceConfiguration {
+    #[instrument(
+        skip(self),
+        fields(
+            path = %self.path.display(),
+            running_inside_docker = self.running_inside_docker,
+            fast_init = self.fast_init,
+            sandbox_image = ?self.sandbox_image,
+        )
+    )]
     fn initialize(&self) -> Result<Workspace> {
+        debug!("initializing rustwide workspace");
         let mut builder = WorkspaceBuilder::new(&self.path, APP_USER_AGENT)
             .running_inside_docker(self.running_inside_docker)
             .fast_init(self.fast_init);
@@ -72,6 +83,7 @@ impl WorkspaceConfiguration {
 
         let workspace = builder.init()?;
         workspace.purge_all_build_dirs()?;
+        debug!("rustwide workspace initialized");
         Ok(workspace)
     }
 }
@@ -83,6 +95,7 @@ struct ManagedWorkspace {
 }
 
 impl ManagedWorkspace {
+    #[instrument(skip(configuration), fields(path = %configuration.path.display()))]
     fn new(configuration: WorkspaceConfiguration) -> Result<Self> {
         let workspace = configuration.initialize()?;
         Ok(Self {
@@ -92,13 +105,24 @@ impl ManagedWorkspace {
         })
     }
 
+    #[instrument(
+        skip(self),
+        fields(
+            path = %self.configuration.path.display(),
+            interval = ?self.configuration.reinitialization_interval,
+        )
+    )]
     fn refresh_if_due(&mut self) -> Result<bool> {
-        if self.initialized_at.elapsed() < self.configuration.reinitialization_interval {
+        let elapsed = self.initialized_at.elapsed();
+        if elapsed < self.configuration.reinitialization_interval {
+            debug!(?elapsed, "workspace refresh is not due");
             return Ok(false);
         }
 
+        debug!(?elapsed, "refreshing rustwide workspace");
         self.workspace = self.configuration.initialize()?;
         self.initialized_at = Instant::now();
+        debug!("rustwide workspace refreshed");
         Ok(true)
     }
 
@@ -198,19 +222,28 @@ impl BuildEnvironment {
     /// When [`MaintenanceResult::toolchain_updated`] is `true`, callers that
     /// publish rustdoc's shared static files should rebuild and publish them
     /// before processing the next release.
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
         let workspace_refreshed = self.workspace.refresh_if_due()?;
         if workspace_refreshed {
+            debug!("ensuring toolchain readiness after workspace refresh");
             self.ensure_toolchain_ready()?;
         }
         let toolchain_update_due = self
             .toolchain_last_update_check
             .is_none_or(|last_check| last_check.elapsed() >= self.toolchain_update_interval);
         let toolchain_updated = if toolchain_update_due {
+            debug!("toolchain update check is due");
             self.update_toolchain()?
         } else {
+            debug!("toolchain update check is not due");
             false
         };
+
+        debug!(
+            workspace_refreshed,
+            toolchain_updated, "maintenance complete"
+        );
 
         Ok(MaintenanceResult {
             workspace_refreshed,
@@ -218,8 +251,11 @@ impl BuildEnvironment {
         })
     }
 
+    #[instrument(skip(self))]
     fn purge_caches(&self) -> Result<()> {
+        debug!("purging rustwide caches");
         retry(|| self.workspace().purge_all_caches(), 3)?;
+        debug!("rustwide caches purged");
         Ok(())
     }
 
@@ -227,6 +263,10 @@ impl BuildEnvironment {
     ///
     /// The selected toolchain is made ready before this method returns. The
     /// result reports whether the toolchain itself had to be installed.
+    #[instrument(
+        skip(self, toolchain),
+        fields(old_toolchain = %self.toolchain, new_toolchain = %toolchain)
+    )]
     pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
         let selection_changed = self.toolchain != toolchain;
         self.toolchain = toolchain;
@@ -237,6 +277,7 @@ impl BuildEnvironment {
         if selection_changed && !installed {
             self.purge_caches()?;
         }
+        debug!(selection_changed, installed, "toolchain selection ready");
         Ok(installed)
     }
 
@@ -267,18 +308,23 @@ impl BuildEnvironment {
             .contains(&self.toolchain))
     }
 
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     fn ensure_toolchain_installed(&self) -> Result<bool> {
         if self.is_toolchain_installed()? {
+            debug!("toolchain is already installed");
             return Ok(false);
         }
 
+        debug!("installing toolchain");
         self.toolchain.install(self.workspace())?;
+        debug!("toolchain installed");
         Ok(true)
     }
 
     // Establish the toolchain invariant for this environment without checking
     // whether an installed distribution toolchain can be updated. Unmanaged
     // targets are preserved here and only cleaned up by `update_toolchain`.
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     fn ensure_toolchain_ready(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_installed()?;
 
@@ -291,6 +337,7 @@ impl BuildEnvironment {
         if installed {
             self.purge_caches()?;
         }
+        debug!(installed, "toolchain is ready");
         Ok(installed)
     }
 
@@ -302,8 +349,10 @@ impl BuildEnvironment {
     /// successful call resets the maintenance interval. CI toolchains always
     /// report a change because their existing version cannot be detected
     /// through rustup reliably.
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
+            debug!("reinstalling CI toolchain");
             self.toolchain.install(self.workspace())?;
             self.purge_caches()?;
             self.toolchain_last_update_check = Some(Instant::now());
@@ -330,15 +379,18 @@ impl BuildEnvironment {
         let managed_targets = Self::managed_toolchain_targets();
         for target in &installed_targets {
             if !managed_targets.contains(target) {
+                debug!(target, "removing unmanaged target before toolchain update");
                 self.toolchain.remove_target(self.workspace(), target)?;
             }
         }
 
+        debug!(old_version, "installing or updating toolchain");
         self.toolchain.install(self.workspace())?;
         self.ensure_toolchain_ready()?;
 
         let new_version = self.rustc_version()?;
         let changed = old_version.as_ref() != Some(&new_version);
+        debug!(changed, new_version, "toolchain update complete");
         if changed {
             self.purge_caches()?;
         }
@@ -366,6 +418,7 @@ impl BuildEnvironment {
     ///
     /// Like a release build, this requires exclusive access to the shared
     /// rustwide workspace.
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
@@ -436,11 +489,15 @@ impl BuildEnvironment {
     ///
     /// CI toolchains use a stable synthetic version because rustup's normal
     /// `+toolchain` invocation cannot address CI artifacts.
+    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
     pub fn rustc_version(&self) -> Result<String> {
         if let Some(ci) = self.toolchain.as_ci() {
-            return Ok(ci_rustc_version(ci.sha()));
+            let version = ci_rustc_version(ci.sha());
+            debug!(version, "using synthetic CI rustc version");
+            return Ok(version);
         }
 
+        debug!("detecting rustc version");
         let output = Command::new(self.workspace(), self.toolchain.rustc())
             .arg("--version")
             .log_output(false)
@@ -448,11 +505,14 @@ impl BuildEnvironment {
         let [version] = output.stdout_lines() else {
             bail!("invalid output returned by `rustc --version`");
         };
+        debug!(version, "detected rustc version");
         Ok(version.clone())
     }
 
+    #[instrument(skip(self), fields(toolchain = %self.toolchain, target = %target.as_ref()))]
     pub(crate) fn ensure_target_installed(&self, target: impl AsRef<str>) -> Result<()> {
         let target = target.as_ref();
+        debug!("ensuring target is installed");
         self.configured_toolchain()
             .add_target(self.workspace(), target)
             .context("error adding non-default target to toolchain")?;
@@ -462,6 +522,7 @@ impl BuildEnvironment {
 
     fn ensure_toolchain_components(&self) {
         for component in TOOLCHAIN_COMPONENTS {
+            debug!(component, "ensuring toolchain component is installed");
             if let Err(error) = self.toolchain.add_component(self.workspace(), component) {
                 // A newly published nightly can temporarily lack a component. Builds
                 // that do not need it should still be allowed to proceed.
@@ -485,6 +546,7 @@ impl BuildEnvironment {
             targets_to_install.remove(target);
         }
         for target in targets_to_install {
+            debug!(target, "installing required toolchain target");
             self.toolchain.add_target(self.workspace(), &target)?;
         }
         Ok(())

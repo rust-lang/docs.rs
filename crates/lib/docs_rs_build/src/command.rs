@@ -2,6 +2,7 @@ use crate::{build::ReleaseBuild, utils::args_contain_unstable_feature};
 use anyhow::{Context as _, Result};
 use docsrs_metadata::Metadata;
 use rustwide::cmd::Command;
+use tracing::{debug, instrument};
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--static-root-path",
@@ -57,7 +58,13 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         self
     }
 
+    #[instrument(skip(self), fields(target = %self.target))]
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
+        debug!(
+            cargo_arg_count = self.cargo_args.len(),
+            rustdoc_arg_count = self.rustdoc_args.len(),
+            "preparing Cargo command"
+        );
         let cargo_args = cargo_args(
             &self.target,
             &self.release_build.metadata,
@@ -66,16 +73,24 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
             self.rustdoc_args,
         );
 
-        if args_contain_unstable_feature(&cargo_args, "build-std") {
+        let uses_build_std = args_contain_unstable_feature(&cargo_args, "build-std");
+        if uses_build_std {
+            debug!("fetching build-std dependencies for command");
             self.release_build
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
         } else {
+            debug!("ensuring command target is installed");
             self.release_build
                 .environment
                 .ensure_target_installed(&self.target)?;
         }
 
+        debug!(
+            uses_build_std,
+            argument_count = cargo_args.len(),
+            "Cargo command prepared"
+        );
         Ok(self.release_build.build_rustwide_command().args(cargo_args))
     }
 }

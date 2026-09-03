@@ -8,6 +8,7 @@ use std::{
     fs::File,
     path::{Path, PathBuf},
 };
+use tracing::{debug, instrument};
 
 /// A rustdoc JSON artifact produced by a successful JSON build.
 #[derive(Clone, Debug)]
@@ -28,11 +29,15 @@ impl RustdocJsonOutput {
     /// Read the format version embedded in the rustdoc JSON file.
     ///
     /// Parsing is lazy so callers that only need the artifact do not pay this cost.
+    #[instrument(skip(self), fields(path = %self.path.display()))]
     pub fn format_version(&self) -> Result<RustdocJsonFormatVersion> {
+        debug!("reading rustdoc JSON format version");
         let file = File::open(&self.path)
             .with_context(|| format!("opening rustdoc JSON at {}", self.path.display()))?;
-        read_format_version_from_rustdoc_json(file)
-            .with_context(|| format!("reading format version from {}", self.path.display()))
+        let version = read_format_version_from_rustdoc_json(file)
+            .with_context(|| format!("reading format version from {}", self.path.display()))?;
+        debug!(?version, "read rustdoc JSON format version");
+        Ok(version)
     }
 }
 
