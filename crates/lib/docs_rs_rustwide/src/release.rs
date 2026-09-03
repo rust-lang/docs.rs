@@ -7,7 +7,7 @@ use std::{
     hash::{Hash, Hasher},
     path::Path,
 };
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 /// A crate release whose build lifecycle is managed by docs.rs.
 pub struct ReleaseContext<'release> {
@@ -27,7 +27,7 @@ impl<'release> ReleaseContext<'release> {
     ///
     /// The returned phase allows callers to archive the fetched sources before
     /// metadata parsing or sandbox preparation can fail.
-    #[instrument(skip(self), fields(krate = %self.krate))]
+    #[instrument(skip_all)]
     pub fn fetch(self) -> Result<FetchedRelease<'release>> {
         let Self {
             environment,
@@ -39,7 +39,7 @@ impl<'release> ReleaseContext<'release> {
             .unwrap_or_else(|| environment.default_limits());
         debug!("validating host resources");
         environment.validate_host_resources(effective_limits)?;
-        debug!("fetching crate source");
+        info!(%self.krate, "fetching crate source");
         krate.fetch(environment.workspace())?;
         debug!("crate source fetched");
 
@@ -71,7 +71,7 @@ impl FetchedRelease<'_> {
     ///
     /// This is useful for source archiving in a fluent lifecycle chain before
     /// [`Self::run`] enters build preparation.
-    #[instrument(skip(self, callback), fields(krate = %self.krate))]
+    #[instrument(skip_all)]
     pub fn try_inspect(self, callback: impl FnOnce(&Self) -> Result<()>) -> Result<Self> {
         debug!("running fetched-release inspection");
         callback(&self)?;
@@ -82,12 +82,14 @@ impl FetchedRelease<'_> {
     /// Copy the fetched crate sources into a caller-owned directory.
     ///
     /// This is intended for source archiving before the build sandbox is entered.
-    #[instrument(
-        skip(self, destination),
-        fields(krate = %self.krate, destination = %destination.as_ref().display())
-    )]
+    #[instrument(skip_all)]
     pub fn copy_source_to(&self, destination: impl AsRef<Path>) -> Result<()> {
-        debug!("copying fetched crate source");
+        info!(
+            krate = %self.krate,
+            destination = %destination.as_ref().display(),
+            "copying fetched crate source"
+        );
+
         self.krate
             .copy_source_to(self.environment.workspace(), destination.as_ref())?;
         debug!("fetched crate source copied");
@@ -95,7 +97,7 @@ impl FetchedRelease<'_> {
     }
 
     /// Run selected build operations in one reusable sandbox.
-    #[instrument(skip(self, callback), fields(krate = %self.krate))]
+    #[instrument(skip_all)]
     pub fn run<R>(
         self,
         callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,

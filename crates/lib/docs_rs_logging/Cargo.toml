@@ -5,6 +5,7 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
+log = ["dep:log"]
 testing = ["docs_rs_config/testing"]
 
 [dependencies]
@@ -12,6 +13,7 @@ anyhow = { workspace = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_utils = { path = "../docs_rs_utils" }
+log = { version = "0.4", optional = true }
 sentry = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "env-filter", "fmt", "json", "tracing-log"] }

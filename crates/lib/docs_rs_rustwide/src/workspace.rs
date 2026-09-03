@@ -248,7 +248,7 @@ impl BuildEnvironment {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     fn purge_caches(&self) -> Result<()> {
         debug!("purging rustwide caches");
         retry(|| self.workspace().purge_all_caches(), 3)?;
