@@ -84,6 +84,7 @@ pub fn test_workspace() -> Result<TestWorkspace> {
         .create(true)
         .read(true)
         .write(true)
+        .truncate(true)
         .open(PathBuf::from(lock_path))?;
     tracing::debug!(workspace = %path.display(), "waiting for test workspace lock");
     lock.lock()?;
