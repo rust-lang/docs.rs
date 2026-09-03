@@ -12,9 +12,13 @@ const SMALL_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
 #[derive(Debug, Parser)]
 #[command(version, max_term_width = 100)]
 pub(crate) struct Args {
-    /// Path to the crate to build.
+    /// Path to the crate or workspace containing the package to build.
     #[arg(default_value = ".", value_name = "CRATE_PATH")]
     pub(crate) crate_path: PathBuf,
+
+    /// Package to build when the manifest belongs to a workspace.
+    #[arg(short, long, value_name = "SPEC")]
+    pub(crate) package: Option<String>,
 
     /// Directory used for rustwide caches and build state.
     #[arg(long, value_name = "PATH")]
@@ -230,6 +234,7 @@ mod tests {
     fn defaults_match_docs_rs() {
         let args = Args::try_parse_from(["docs_rs_run_build"]).unwrap();
         assert_eq!(args.crate_path, PathBuf::from("."));
+        assert_eq!(args.package, None);
         assert_eq!(
             args.workspace_path(),
             PathBuf::from("./target/docsrs-build")

@@ -1,11 +1,13 @@
 mod args;
 mod logging;
+mod package;
 mod report;
 
 use anyhow::{Context as _, Result, bail};
 use args::Args;
 use clap::Parser as _;
 use docs_rs_build::BuildEnvironment;
+use package::PackagedCrate;
 use rustwide::Crate;
 use std::{path::Path, process::ExitCode};
 use tracing::info;
@@ -30,12 +32,14 @@ fn main() -> ExitCode {
 fn run(args: &Args) -> Result<bool> {
     ensure_supported_host()?;
     ensure_crate_path(&args.crate_path)?;
-    ensure_docker_available()?;
 
     let crate_path = args
         .crate_path
         .canonicalize()
         .with_context(|| format!("resolving crate path {}", args.crate_path.display()))?;
+    let packaged = PackagedCrate::create(&crate_path, args.package.as_deref())?;
+    ensure_docker_available()?;
+
     let workspace_path = absolute_path(&args.workspace_path())?;
     info!(crate_path = %crate_path.display(), workspace = %workspace_path.display(), "initializing docs.rs build environment");
     let mut environment = BuildEnvironment::builder(workspace_path.as_path())
@@ -56,7 +60,7 @@ fn run(args: &Args) -> Result<bool> {
     }
 
     info!("starting docs.rs build");
-    let krate = Crate::local(&crate_path);
+    let krate = Crate::local(packaged.source_dir());
     let build = environment
         .release(&krate)
         .run(|release| release.build_docs())
