@@ -184,6 +184,9 @@ impl BuildEnvironment {
     /// The workspace is refreshed and the toolchain is checked for updates only
     /// when their independently configured intervals have elapsed. The first
     /// maintenance call always checks for a toolchain update.
+    /// Refreshing a workspace configured with [`SandboxImageSource::Remote`]
+    /// resolves and pulls the image again, allowing a long-running builder to
+    /// pick up newly published versions of the same remote image tag.
     ///
     /// Long-running, sequential builders should call this method regularly
     /// between release builds, typically after each completed build or before
