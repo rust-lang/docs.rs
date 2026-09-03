@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn defaults_match_docs_rs() {
-        let args = Args::try_parse_from(["docsrs-build"]).unwrap();
+        let args = Args::try_parse_from(["docs_rs_run_build"]).unwrap();
         assert_eq!(args.crate_path, PathBuf::from("."));
         assert_eq!(
             args.workspace_path(),
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn parses_human_readable_limits() {
         let args = Args::try_parse_from([
-            "docsrs-build",
+            "docs_rs_run_build",
             "--memory",
             "512MiB",
             "--timeout",
@@ -283,7 +283,8 @@ mod tests {
     #[test]
     fn conflicting_image_options_are_rejected() {
         assert!(
-            Args::try_parse_from(["docsrs-build", "--small-image", "--image", "custom"]).is_err()
+            Args::try_parse_from(["docs_rs_run_build", "--small-image", "--image", "custom",])
+                .is_err()
         );
     }
 

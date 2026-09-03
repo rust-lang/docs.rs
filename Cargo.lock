@@ -2420,6 +2420,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_run_build"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "docs_rs_build",
+ "docs_rs_build_limits",
+ "parse-size",
+ "rustwide",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "docs_rs_rustdoc_json"
 version = "0.0.0"
 dependencies = [
@@ -2648,21 +2663,6 @@ dependencies = [
  "tracing-futures",
  "url",
  "walkdir",
-]
-
-[[package]]
-name = "docsrs-build"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "clap",
- "docs_rs_build",
- "docs_rs_build_limits",
- "parse-size",
- "rustwide",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

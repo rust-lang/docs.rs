@@ -1,5 +1,5 @@
 [package]
-name = "docsrs-build"
+name = "docs_rs_run_build"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
