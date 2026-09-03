@@ -1,8 +1,6 @@
-_ensure_mdbook_installed: (_ensure_cargo_installed "mdbook") (_ensure_cargo_installed "mdbook-linkcheck2") (_ensure_cargo_installed "mdbook-mermaid")
-
 # Generate CLI help pages and build the developer guide.
 [group('book')]
-book-build *args: _ensure_mdbook_installed
+book-build *args:
     #!/usr/bin/env bash
     set -euo pipefail
 

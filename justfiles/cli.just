@@ -56,7 +56,7 @@ web *args: _ensure_db_migrated
 
 # Watch web and shared-library sources, restarting the host web server on changes.
 [group('development')]
-web-watch: _ensure_db_migrated (_ensure_cargo_installed "cargo-watch")
+web-watch: _ensure_db_migrated
     cargo watch \
       --watch .cargo \
       --watch Cargo.lock \
