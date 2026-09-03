@@ -63,7 +63,6 @@ serde_with = "3.4.0"
 slug = "0.1.1"
 sqlx = { version = "0.9", features = ["chrono", "postgres", "runtime-tokio", "sqlite"] }
 strum = { version = "0.28.0", features = ["derive"] }
-tar = "0.4.46"
 tempfile = "3.1.0"
 test-case = "3.0.0"
 thiserror = "2.0.3"
