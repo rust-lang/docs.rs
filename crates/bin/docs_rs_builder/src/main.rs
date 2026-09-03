@@ -134,7 +134,6 @@ impl BuildSubcommand {
                             // registry_url
                             //     .map(|s| PackageKind::Registry(s.as_str()))
                             //     .unwrap_or(PackageKind::CratesIo
-                            true,
                         )
                         .context("Building documentation failed")?;
                 }

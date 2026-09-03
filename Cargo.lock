@@ -2030,10 +2030,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_build"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "docs_rs_build_limits",
+ "docs_rs_crate_archive",
+ "docs_rs_logging",
+ "docs_rs_rustwide",
+ "humantime",
+ "parse-size",
+ "rustwide 0.26.0",
+ "tempfile",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "docs_rs_build_limits"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bon",
  "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
@@ -2095,27 +2115,22 @@ dependencies = [
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
  "docs_rs_rustdoc_json",
+ "docs_rs_rustwide",
  "docs_rs_storage",
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
  "futures-util",
- "log",
  "num_cpus",
  "opentelemetry",
  "pretty_assertions",
  "regex",
- "rustwide",
- "serde_json",
+ "rustwide 0.26.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sqlx",
- "sysinfo",
  "tempfile",
- "test-case",
  "thiserror",
  "tokio",
- "toml",
  "tracing",
- "tracing-log",
 ]
 
 [[package]]
@@ -2309,6 +2324,7 @@ dependencies = [
  "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_utils",
+ "log",
  "sentry",
  "tracing",
  "tracing-subscriber",
@@ -2410,6 +2426,30 @@ dependencies = [
  "serde_json",
  "strum",
  "test-case",
+]
+
+[[package]]
+name = "docs_rs_rustwide"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_build_limits",
+ "docs_rs_cargo_metadata",
+ "docs_rs_logging",
+ "docs_rs_rustdoc_json",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "docsrs-metadata",
+ "log",
+ "rustwide 0.26.0",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4657,6 +4697,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
+name = "humantime"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15cdd26707701c53297e2fa6afb323d55fbc1d0810c3aec078ae3ef0424c3c15"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5982,6 +6028,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "parse-size"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487f2ccd1e17ce8c1bfab3a65c89525af41cfad4c8659021a1e9a2aacd73b89b"
+
+[[package]]
 name = "pem-rfc7468"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6919,6 +6971,33 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "rustwide"
+version = "0.26.0"
+dependencies = [
+ "anyhow",
+ "attohttpc",
+ "base64 0.23.1",
+ "flate2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "log",
+ "nix 0.30.1",
+ "percent-encoding",
+ "remove_dir_all",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tracing",
+ "walkdir",
+ "windows-sys 0.52.0",
+]
 
 [[package]]
 name = "rustwide"
@@ -8359,17 +8438,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-log"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
-dependencies = [
- "log",
- "once_cell",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-serde"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8395,7 +8463,6 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-core",
- "tracing-log",
  "tracing-serde",
 ]
 

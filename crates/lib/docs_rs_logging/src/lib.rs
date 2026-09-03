@@ -1,10 +1,14 @@
 mod config;
 pub mod log_format;
+#[cfg(feature = "log")]
+mod log_tracer;
 #[cfg(feature = "testing")]
 pub mod testing;
 
 pub use config::Config;
 pub use log_format::LogFormat;
+#[cfg(feature = "log")]
+pub use log_tracer::MessageOnlyLogTracer;
 
 use docs_rs_config::AppConfig as _;
 use sentry::{

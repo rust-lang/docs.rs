@@ -15,7 +15,7 @@ exclude = [
     ".workspace",
     "crates/bin/docs_rs_builder/.rustwide-docker",
     "crates/bin/docs_rs_builder/.workspace",
-    "crates/bin/docs_rs_builder/tests/crates",
+    "crates/lib/docs_rs_rustwide/tests/fixtures",
     "ignored",
 ]
 
@@ -37,7 +37,7 @@ bytes = "1.11.0"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4.0.22", features = ["derive"] }
 crates-index = { version = "3.14.1", default-features = false }
-flate2 = "1.1.5"
+flate2 = "1.1.1"
 futures-util = "0.3.5"
 http = "1.0.0"
 itertools = "0.15.0"
@@ -63,7 +63,6 @@ serde_with = "3.4.0"
 slug = "0.1.1"
 sqlx = { version = "0.9", features = ["chrono", "postgres", "runtime-tokio", "sqlite"] }
 strum = { version = "0.28.0", features = ["derive"] }
-tar = "0.4.46"
 tempfile = "3.1.0"
 test-case = "3.0.0"
 thiserror = "2.0.3"

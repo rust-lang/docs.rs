@@ -1,17 +1,12 @@
 use crate::{
-    Config,
-    docbuilder::{
-        build_error::RustwideBuildError,
-        rustwide_ext::{RustwideBuildExt as _, find_single_file_in_doc_output_dir},
-    },
-    metrics::BuilderMetrics,
+    Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics,
     utils::copy::copy_dir_all,
 };
-use anyhow::{Context as _, Error, Result, anyhow, bail};
+use anyhow::{Context as _, Error, Result};
 use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
-use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
+use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
@@ -25,45 +20,29 @@ use docs_rs_database::{
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
-use docs_rs_rustdoc_json::{
-    RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion,
-    read_format_version_from_rustdoc_json,
+use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
+use docs_rs_rustwide::{
+    BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
+    TargetBuildResult,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
-    doc_coverage::{self, DocCoverage},
 };
-use docs_rs_utils::{
-    Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, rustc_version::parse_rustc_version,
-    spawn_blocking,
-};
-use docsrs_metadata::{BuildTargets, DEFAULT_TARGETS, HOST_TARGET, Metadata};
+use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, spawn_blocking};
 use futures_util::future::try_join_all;
 use regex::Regex;
-use rustwide::{
-    Build, Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, CommandError, SandboxBuilder, SandboxImage},
-    logging::{self, LogStorage},
-    toolchain::ToolchainError,
-};
+use rustwide::{Crate, Toolchain};
 use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    fs::{self, File},
-    io::{BufRead as _, BufReader},
+    collections::HashSet,
+    fs::File,
+    io::BufReader,
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock},
-    time::Instant,
+    sync::Arc,
 };
 use tracing::{debug, error, info, info_span, instrument, warn};
-
-const USER_AGENT: &str = "docs.rs builder (https://github.com/rust-lang/docs.rs)";
-const COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
-static DUMMY_CRATE_NAME: LazyLock<KrateName> = LazyLock::new(|| "empty-library".parse().unwrap());
-const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
 
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
     let name: String = get_config(conn, ConfigName::Toolchain)
@@ -82,43 +61,6 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-#[instrument(skip(config))]
-fn build_workspace(config: &Config) -> Result<Workspace> {
-    let mut builder = WorkspaceBuilder::new(&config.rustwide_workspace, USER_AGENT)
-        .running_inside_docker(config.inside_docker);
-    if let Some(custom_image) = &config.docker_image {
-        let image = match SandboxImage::local(custom_image) {
-            Ok(i) => i,
-            Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(custom_image)?,
-            Err(err) => return Err(err.into()),
-        };
-        builder = builder.sandbox_image(image);
-    }
-    if cfg!(test) {
-        builder = builder.fast_init(true);
-    }
-
-    let workspace = builder.init()?;
-    workspace.purge_all_build_dirs()?;
-    Ok(workspace)
-}
-
-fn load_metadata_from_rustwide(
-    workspace: &Workspace,
-    toolchain: &Toolchain,
-    source_dir: &Path,
-) -> Result<CargoMetadata> {
-    let res = Command::new(workspace, toolchain.cargo())
-        .args(["metadata", "--format-version", "1"])
-        .current_directory(source_dir)
-        .log_output(false)
-        .run_capture()?;
-    let [metadata] = res.stdout_lines() else {
-        bail!("invalid output returned by `cargo metadata`")
-    };
-    CargoMetadata::load_from_metadata(metadata)
-}
-
 #[derive(Debug)]
 pub enum PackageKind<'a> {
     Local(&'a Path),
@@ -126,8 +68,7 @@ pub enum PackageKind<'a> {
 }
 
 pub struct RustwideBuilder {
-    workspace: Workspace,
-    toolchain: Toolchain,
+    environment: BuildEnvironment,
     runtime: Handle,
     config: Arc<Config>,
     db: Pool,
@@ -135,21 +76,52 @@ pub struct RustwideBuilder {
     storage: Arc<AsyncStorage>,
     registry_api: Arc<RegistryApi>,
     repository_stats: Arc<RepositoryStatsUpdater>,
-    workspace_initialize_time: Instant,
     pub(crate) builder_metrics: Arc<BuilderMetrics>,
 }
 
 impl RustwideBuilder {
     pub fn init(config: Arc<Config>, context: &Context) -> Result<Self> {
         let runtime: Handle = context.runtime().clone().into();
+
         let toolchain = runtime.block_on(async {
             let mut conn = context.pool()?.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
 
+        let default_limits = Limits::from_config(&config.build_limits);
+
+        let cpu_limit = config
+            .build_cpu_cores
+            .as_ref()
+            .map(|cores| CpuLimit::Cores(cores.0.clone()))
+            .or_else(|| {
+                config
+                    .build_cpu_limit
+                    .map(|limit| CpuLimit::Quota(limit as f32))
+            });
+
+        let sandbox_image = config
+            .docker_image
+            .as_ref()
+            .map(|image| SandboxImageSource::LocalOrRemote(image.clone()))
+            .unwrap_or_default();
+
+        let environment = BuildEnvironment::builder(config.rustwide_workspace.as_path())
+            .toolchain(toolchain)
+            .running_inside_docker(config.inside_docker)
+            .sandbox_image(sandbox_image)
+            .fast_init(cfg!(test))
+            .workspace_reinitialization_interval(config.build_workspace_reinitialization_interval)
+            .maybe_cpu_limit(cpu_limit)
+            .docker_runtime(config.docker_runtime)
+            .include_default_targets(config.include_default_targets)
+            .validate_host_resources(!config.disable_memory_limit)
+            .maybe_compiler_metrics_collection_path(config.compiler_metrics_collection_path.clone())
+            .default_limits(default_limits)
+            .build()?;
+
         Ok(RustwideBuilder {
-            workspace: build_workspace(&config)?,
-            toolchain,
+            environment,
             config: config.clone(),
             db: context.pool()?.clone(),
             runtime,
@@ -157,251 +129,69 @@ impl RustwideBuilder {
             storage: context.storage()?.clone(),
             registry_api: context.registry_api()?.clone(),
             repository_stats: context.repository_stats()?.clone(),
-            workspace_initialize_time: Instant::now(),
             builder_metrics: BuilderMetrics::new(context.meter_provider()).into(),
         })
     }
 
+    /// Perform interval-based workspace and toolchain maintenance.
+    ///
+    /// This is the entry point used by the long-running build queue. When a
+    /// compiler update is detected, its shared rustdoc files are published
+    /// before another release is built.
     #[instrument(skip(self))]
-    pub fn reinitialize_workspace_if_interval_passed(&mut self) -> Result<()> {
-        let interval = self.config.build_workspace_reinitialization_interval;
-        if self.workspace_initialize_time.elapsed() >= interval {
-            info!("start reinitialize workspace again");
-            self.workspace = build_workspace(&self.config)?;
-            self.workspace_initialize_time = Instant::now();
-        }
-
-        Ok(())
+    pub fn perform_maintenance(&mut self) -> Result<()> {
+        self.sync_configured_toolchain()?;
+        let maintenance = self.environment.perform_maintenance()?;
+        self.publish_essential_files_if_needed(maintenance.toolchain_updated)
     }
 
-    #[instrument(skip(self))]
-    fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
-        let builder = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
-            .enable_networking(limits.networking())
-            .docker_runtime(self.config.docker_runtime);
-
-        if let Some(cores) = &self.config.build_cpu_cores {
-            builder.cpuset_cpus(Some(cores.0.clone()))
-        } else if let Some(limit) = &self.config.build_cpu_limit {
-            builder.cpu_limit(Some(*limit as f32))
-        } else {
-            builder
-        }
-    }
-
-    #[instrument(skip_all)]
-    pub fn purge_caches(&self) -> Result<()> {
-        self.workspace.purge_all_caches()?;
-        Ok(())
-    }
-
+    /// Force a toolchain update and publish new shared rustdoc files when needed.
     #[instrument(skip_all)]
     pub fn update_toolchain_and_add_essential_files(&mut self) -> Result<()> {
-        info!("try updating the toolchain");
-        let updated = retry(
-            || {
-                self.update_toolchain()
-                    .context("downloading new toolchain failed")
-            },
-            3,
-        )?;
+        self.sync_configured_toolchain()?;
+        let updated = retry(|| self.environment.update_toolchain(), 3)
+            .context("downloading new toolchain failed")?;
 
         debug!(updated, "toolchain update check complete");
-
-        if updated {
-            // toolchain has changed, purge caches
-            retry(
-                || {
-                    self.purge_caches()
-                        .context("purging rustwide caches failed")
-                },
-                3,
-            )?;
-
-            self.add_essential_files()
-                .context("adding essential files failed")?;
-        }
-
-        Ok(())
+        self.publish_essential_files_if_needed(updated)
     }
 
-    #[instrument(skip_all)]
-    fn update_toolchain(&mut self) -> Result<bool> {
-        self.toolchain = self.runtime.block_on(async {
+    fn sync_configured_toolchain(&mut self) -> Result<()> {
+        let toolchain = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
             get_configured_toolchain(&mut conn).await
         })?;
-        debug!(
-            configured_toolchain = self.toolchain.to_string(),
-            "configured toolchain"
-        );
-
-        // For CI builds, a lot of the normal update_toolchain things don't apply.
-        // CI builds are only for one platform (https://forge.rust-lang.org/infra/docs/rustc-ci.html#try-builds)
-        // so we only try installing for the current platform. If that's not a match,
-        // for instance if we're running on macOS or Windows, this will error.
-        // Also, detecting the rustc version relies on calling rustc through rustup with the
-        // +channel argument, but the +channel argument doesn't work for CI builds. So
-        // we fake the rustc version and install from scratch every time since we can't detect
-        // the already-installed rustc version.
-        if self.toolchain.as_ci().is_some() {
-            self.toolchain.install(&self.workspace)?;
-            self.add_essential_files()?;
-            return Ok(true);
+        if self.environment.toolchain() != &toolchain {
+            self.environment.set_toolchain(toolchain)?;
         }
-
-        // Ignore errors if detection fails.
-        let old_version = self.detect_rustc_version().ok();
-
-        let mut targets_to_install = DEFAULT_TARGETS
-            .iter()
-            .map(|&t| t.to_string()) // &str has a specialized ToString impl, while &&str goes through Display
-            .collect::<HashSet<_>>();
-
-        let installed_targets = match self.toolchain.installed_targets(&self.workspace) {
-            Ok(targets) => targets,
-            Err(err) => {
-                if let Some(&ToolchainError::NotInstalled) = err.downcast_ref::<ToolchainError>() {
-                    Vec::new()
-                } else {
-                    return Err(err);
-                }
-            }
-        };
-
-        // The extra targets are intentionally removed *before* trying to update.
-        //
-        // If a target is installed locally and it goes missing the next update, rustup will block
-        // the update to avoid leaving the system in a broken state. This is not a behavior we want
-        // though when we also remove the target from the list managed by docs.rs: we want that
-        // target gone, and we don't care if it's missing in the next update.
-        //
-        // Removing it beforehand works fine, and prevents rustup from blocking the update later in
-        // the method.
-        //
-        // Note that this means that non tier-one targets will be uninstalled on every update,
-        // and will not be reinstalled until explicitly requested by a crate.
-        for target in installed_targets {
-            if !targets_to_install.remove(&target) {
-                self.toolchain.remove_target(&self.workspace, &target)?;
-            }
-        }
-
-        self.toolchain.install(&self.workspace)?;
-
-        for target in &targets_to_install {
-            self.toolchain.add_target(&self.workspace, target)?;
-        }
-        // NOTE: rustup will automatically refuse to update the toolchain
-        // if `rustfmt` is not available in the newer version
-        // NOTE: this ignores the error so that you can still run a build without rustfmt.
-        // This should only happen if you run a build for the first time when rustfmt isn't available.
-        for component in COMPONENTS {
-            if let Err(err) = self.toolchain.add_component(&self.workspace, component) {
-                warn!("failed to install {component}: {err}");
-                info!("continuing anyway, since this must be the first build");
-            }
-        }
-
-        let new_version = self.rustc_version()?;
-        debug!(new_version, "detected new rustc version");
-        let mut has_changed = old_version.as_ref() != Some(&new_version);
-
-        if !has_changed {
-            // This fixes an edge-case on a fresh build server.
-            //
-            // It seems like on the fresh server, there _is_ a recent nightly toolchain
-            // installed. In this case, this method will just install necessary components and
-            // doc-targets/platforms.
-            //
-            // But: *for this local old toolchain, we never ran `add_essential_files`*, because it
-            // was not installed by us.
-            //
-            // Now the culprit: even through we "fix" the previously installed nightly toolchain
-            // with the needed components & targets, we return "updated = false", since the
-            // version number didn't change.
-            //
-            // As a result, `BuildQueue::update_toolchain` will not call `add_essential_files`,
-            // which then means we don't have the toolchain-shared static files on our S3 bucket.
-            //
-            // The workaround specifically for `add_essential_files` is the following:
-            //
-            // After `add_essential_files` is finished, it sets `ConfigName::RustcVersion` in the
-            // config database to the rustc version it uploaded the essential files for.
-            //
-            // This means, if `ConfigName::RustcVersion` is empty, or different from the current new
-            // version, we can set `updated = true` too.
-            //
-            // I feel like there are more edge-cases, but for now this is OK.
-            //
-            // Alternative would have been to run `build update-toolchain --only-first-time`
-            // in a newly created `ENTRYPOINT` script for the build-server. This is how it was
-            // done in the previous (one-dockerfile-and-process-for-everything) approach.
-            // The `entrypoint.sh` script did call `add-essential-files --only-first-time`.
-            //
-            // Problem with that approach: this approach postpones the boot process of the
-            // build-server, where docker and later the infra will try to check with a HTTP
-            // endpoint to see if the build server is ready.
-            //
-            // So I leaned to towards a more self-contained solution which doesn't need docker
-            // at all, and also would work if you run the build-server directly on your machine.
-            //
-            // Fixing it here also means the startup of the actual build-server including its
-            // metrics collection endpoints don't be delayed. Generally should doesn't be
-            // a differene how much time is needed on a fresh build-server, between picking the
-            // release up from the queue, and actually starting to build the release. In the old
-            // solution, the entrypoint would do the toolchain-update & add-essential files
-            // before even starting the build-server, now we're roughly doing the same thing
-            // inside the main builder loop.
-
-            let rustc_version = self.runtime.block_on({
-                let pool = self.db.clone();
-                async move {
-                    let mut conn = pool
-                        .get_async()
-                        .await
-                        .context("failed to get a database connection")?;
-
-                    get_config::<String>(&mut conn, ConfigName::RustcVersion).await
-                }
-            })?;
-
-            has_changed = rustc_version.is_none() || rustc_version != Some(new_version);
-        }
-
-        Ok(has_changed)
+        Ok(())
     }
 
-    fn rustc_version(&self) -> Result<String> {
-        let version = self
-            .toolchain
-            .as_ci()
-            .map(|ci| {
-                // Detecting the rustc version relies on calling rustc through rustup with the
-                // +channel argument, but the +channel argument doesn't work for CI builds. So
-                // we fake the rustc version.
-                Ok(format!("rustc 1.9999.0-nightly ({} 2999-12-29)", ci.sha()))
-            })
-            .unwrap_or_else(|| self.detect_rustc_version())?;
-        Ok(version)
+    fn publish_essential_files_if_needed(&mut self, toolchain_updated: bool) -> Result<()> {
+        let rustc_version = self.environment.rustc_version()?;
+        let published_version = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            get_config::<String>(&mut conn, ConfigName::RustcVersion).await
+        })?;
+
+        if toolchain_updated || published_version.as_ref() != Some(&rustc_version) {
+            debug!(
+                toolchain_updated,
+                ?published_version,
+                rustc_version,
+                "publishing essential files"
+            );
+            self.add_essential_files()
+                .context("adding essential files after toolchain maintenance")?;
+        }
+        Ok(())
     }
 
-    /// Return a string containing the output of `rustc --version`. Only valid
-    /// for dist toolchains. Will error if run with a CI toolchain.
-    fn detect_rustc_version(&self) -> Result<String> {
-        info!("detecting rustc's version...");
-        let res = Command::new(&self.workspace, self.toolchain.rustc())
-            .arg("--version")
-            .log_output(false)
-            .run_capture()?;
-        let mut iter = res.stdout_lines().iter();
-        if let (Some(line), None) = (iter.next(), iter.next()) {
-            info!("found rustc {}", line);
-            Ok(line.clone())
-        } else {
-            Err(anyhow!("invalid output returned by `rustc --version`",))
-        }
+    // Retained for the existing integration tests while they transition to the
+    // public lifecycle method above.
+    #[cfg(test)]
+    fn update_toolchain(&mut self) -> Result<bool> {
+        self.environment.update_toolchain()
     }
 
     #[instrument(skip(self))]
@@ -417,90 +207,24 @@ impl RustwideBuilder {
     }
 
     pub fn add_essential_files(&mut self) -> Result<()> {
-        let rustc_version = self.rustc_version()?;
-        let parsed_rustc_version = parse_rustc_version(&rustc_version)?;
-
+        let rustc_version = self.environment.rustc_version()?;
         info!("building a dummy crate to get essential files");
-
-        let limits = self.get_limits(&DUMMY_CRATE_NAME)?;
-
-        // FIXME: for now, purge all build dirs before each build.
-        // Currently we have some error situations where the build directory wouldn't be deleted
-        // after the build failed:
-        // https://github.com/rust-lang/docs.rs/issues/820
-        // This should be solved in a better way, likely refactoring the whole builder structure,
-        // but for now we chose this simple way to prevent that the build directory remains can
-        // fill up disk space.
-        // This also prevents having multiple builders using the same rustwide workspace,
-        // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        self.workspace.purge_all_build_dirs()?;
-
-        let mut build_dir = self
-            .workspace
-            .build_dir(&format!("essential-files-{parsed_rustc_version}"));
-
-        // This is an empty library crate that is supposed to always build.
-        let krate = Crate::crates_io(DUMMY_CRATE_NAME.as_str(), &DUMMY_CRATE_VERSION.to_string());
-        krate.fetch(&self.workspace)?;
-
-        build_dir
-            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
-            .run(|build| {
-                let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-
-                let res = self.execute_build(
-                    BuildId(0),
-                    &DUMMY_CRATE_NAME,
-                    &DUMMY_CRATE_VERSION,
-                    HOST_TARGET,
-                    true,
-                    build,
-                    &limits,
-                    &metadata,
-                    true,
-                    false,
-                )?;
-                if !res.successful() {
-                    bail!("failed to build dummy crate for {}", rustc_version);
-                }
-
-                info!("copying essential files for {}", rustc_version);
-                assert!(!metadata.proc_macro);
-                let dest = tempfile::Builder::new()
-                    .prefix("essential-files")
-                    .tempdir()?;
-                copy_dir_all(res.doc_output_dir, &dest)?;
-
-                // One https://github.com/rust-lang/rust/pull/101702 lands, static files will be
-                // put in their own directory, "static.files". To make sure those files are
-                // available at --static-root-path, we add files from that subdirectory, if present.
-                let static_files = dest.as_ref().join("static.files");
-                if static_files.try_exists()? {
-                    self.runtime.block_on(
-                        self.storage
-                            .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &static_files),
-                    )?;
-                } else {
-                    self.runtime
-                        .block_on(self.storage.store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &dest))?;
-                }
-
-                self.runtime.block_on(async {
-                    let mut conn = self.db.get_async().await?;
-                    set_config(&mut conn, ConfigName::RustcVersion, rustc_version).await
-                })?;
-                Ok(())
-            })?;
-
-        krate.purge_from_cache(&self.workspace)?;
+        let rustdoc_static_dir = self.environment.build_essential_files()?.into_inner();
+        self.runtime.block_on(
+            self.storage
+                .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &rustdoc_static_dir),
+        )?;
+        self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            set_config(&mut conn, ConfigName::RustcVersion, rustc_version).await
+        })?;
         Ok(())
     }
 
     pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = load_metadata_from_rustwide(&self.workspace, &self.toolchain, path)
-            .map_err(|err| {
-                err.context(format!("failed to load local package {}", path.display()))
-            })?;
+        let metadata = self.environment.load_cargo_metadata(path).map_err(|err| {
+            err.context(format!("failed to load local package {}", path.display()))
+        })?;
         let package = metadata.root();
         self.build_package(
             &package
@@ -509,7 +233,6 @@ impl RustwideBuilder {
                 .context("invalid crate name in package")?,
             &package.version,
             PackageKind::Local(path),
-            false,
         )
     }
 
@@ -519,7 +242,6 @@ impl RustwideBuilder {
         name: &KrateName,
         version: &Version,
         kind: PackageKind<'_>,
-        collect_metrics: bool,
     ) -> Result<BuildPackageSummary> {
         let (crate_id, release_id, build_id) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
@@ -529,15 +251,7 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(
-            name,
-            version,
-            kind,
-            crate_id,
-            release_id,
-            build_id,
-            collect_metrics,
-        ) {
+        match self.build_package_inner(name, version, kind, crate_id, release_id, build_id) {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -570,7 +284,6 @@ impl RustwideBuilder {
         crate_id: CrateId,
         release_id: ReleaseId,
         build_id: BuildId,
-        collect_metrics: bool,
     ) -> Result<bool> {
         info!("building package {} {}", name, version);
 
@@ -588,432 +301,242 @@ impl RustwideBuilder {
         }
 
         let limits = self.get_limits(name)?;
-        if !self.config.disable_memory_limit {
-            let info = sysinfo::System::new_with_specifics(
-                sysinfo::RefreshKind::nothing()
-                    .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
-            );
-            let available = info.available_memory();
-            if limits.memory() as u64 > available {
-                bail!(
-                    "not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
-                    name,
-                    version,
-                    limits.memory() / 1024 / 1024,
-                    available / 1024 / 1024
-                );
-            } else {
-                debug!(
-                    "had enough memory: {} MiB <= {} MiB",
-                    limits.memory() / 1024 / 1024,
-                    available / 1024 / 1024
-                );
-            }
-        }
-
-        // FIXME: for now, purge all build dirs before each build.
-        // Currently we have some error situations where the build directory wouldn't be deleted
-        // after the build failed:
-        // https://github.com/rust-lang/docs.rs/issues/820
-        // This should be solved in a better way, likely refactoring the whole builder structure,
-        // but for now we chose this simple way to prevent that the build directory remains can
-        // fill up disk space.
-        // This also prevents having multiple builders using the same rustwide workspace,
-        // which we don't do. Currently our separate builders use a separate rustwide workspace.
-        info_span!("purge_all_build_dirs").in_scope(|| self.workspace.purge_all_build_dirs())?;
-
-        let mut build_dir = self.workspace.build_dir(&format!("{name}-{version}"));
-
         let is_local = matches!(kind, PackageKind::Local(_));
-        let krate = {
-            let _span = info_span!("krate.fetch").entered();
-
-            let version = version.to_string();
-            let krate = match kind {
-                PackageKind::Local(path) => Crate::local(path),
-                PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version),
-            };
-            krate.fetch(&self.workspace)?;
-            krate
+        let version_string = version.to_string();
+        let krate = match kind {
+            PackageKind::Local(path) => Crate::local(path),
+            PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version_string),
         };
 
-        fs::create_dir_all(&self.config.temp_dir)?;
+        std::fs::create_dir_all(&self.config.temp_dir)?;
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
+        let source_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let source_stats = {
-            let _span = info_span!("adding sources into database").entered();
-            debug!("adding sources into database");
-            let temp_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
+        let fetched = self.environment.release(&krate).limits(limits).fetch()?;
+        fetched.copy_source_to(source_dir.path())?;
 
-            krate.copy_source_to(&self.workspace, temp_dir.path())?;
+        let source_stats = self.runtime.block_on(
+            self.storage
+                .store_all_in_archive(&source_archive_path(name, version), &source_dir),
+        )?;
+        algs.insert(source_stats.alg);
 
-            let stats = self.runtime.block_on(
-                self.storage
-                    .store_all_in_archive(&source_archive_path(name, version), &temp_dir),
-            )?;
+        // run the actual doc-build (coverage, json, html, for all configured targets)
+        let build = fetched.run(|build| build.build_docs())?;
 
-            fs::remove_dir_all(temp_dir.path())?;
+        let memory_peak = build.statistics().memory_peak_bytes();
+        let mut release = build.into_inner();
+        let successful = release.successful();
+        let has_docs = release.has_docs();
+        let default_target = release.default_target().target.clone();
 
-            algs.insert(stats.alg);
-            stats
+        let mut successful_targets = Vec::new();
+        let documentation_size = if has_docs {
+            for target in &release.targets {
+                if target.successful() {
+                    copy_target_docs(target, local_storage.path())?;
+                    successful_targets.push(target.target.clone());
+                }
+            }
+
+            let doc_stats = self.runtime.block_on(self.storage.store_all_in_archive(
+                &rustdoc_archive_path(name, version),
+                local_storage.path(),
+            ))?;
+            self.builder_metrics
+                .documentation_size
+                .record(doc_stats.original_size, &[]);
+            algs.insert(doc_stats.alg);
+            Some(doc_stats.original_size)
+        } else {
+            None
         };
 
-        let successful = build_dir
-            .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
-            .run(|build| {
-                // NOTE: rustwide will run `copy_source_to` again when preparing the call to this
-                // closure.
-                // This could be optimized, but only with more rustwide changes.
-                let metadata = Metadata::from_crate_root(build.host_source_dir())?;
-                let BuildTargets {
-                    default_target,
-                    other_targets,
-                } = metadata.targets(self.config.include_default_targets);
-                let mut targets = vec![default_target];
-                targets.extend(&other_targets);
+        self.publish_json_and_build_logs(build_id, name, version, &mut release)?;
 
-                {
-                    let _span = info_span!("fetch_build_std_dependencies").entered();
-                    // Fetch this before we enter the sandbox, so networking isn't blocked.
-                    build.fetch_build_std_dependencies(&targets)?;
-                }
+        let build_error = release
+            .targets
+            .first_mut()
+            .and_then(|target| target.documentation.error.take());
+        let rustc_version = self.environment.rustc_version()?;
+        let docsrs_version = format!("docsrs {BUILDER_VERSION}");
+        let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+        self.runtime.block_on(finish_build(
+            &mut async_conn,
+            build_id,
+            &rustc_version,
+            &docsrs_version,
+            if successful {
+                BuildStatus::Success
+            } else {
+                BuildStatus::Failure
+            },
+            documentation_size,
+            memory_peak,
+            build_error.as_ref(),
+        ))?;
 
+        if successful {
+            self.builder_metrics.successful_builds.add(1, &[]);
+        } else if release.cargo_metadata.root().is_library() {
+            self.builder_metrics.failed_builds.add(1, &[]);
+        } else {
+            self.builder_metrics.non_library_builds.add(1, &[]);
+        }
 
-                let mut successful_targets = Vec::new();
-
-                // Perform an initial build
-                let mut res =
-                    self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
-
-                // If the build fails with the lockfile given, try using only the dependencies listed in Cargo.toml.
-                let cargo_lock = build.host_source_dir().join("Cargo.lock");
-                if !res.successful() && cargo_lock.exists() {
-                    info!("removing lockfile and reattempting build");
-                    std::fs::remove_file(cargo_lock)?;
-                    {
-                        let _span = info_span!("cargo_generate_lockfile").entered();
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .current_directory(build.host_source_dir())
-                            .arg("generate-lockfile")
-                            .run_capture()?;
-                    }
-                    {
-                        let _span = info_span!("cargo fetch --locked").entered();
-                        Command::new(&self.workspace, self.toolchain.cargo())
-                            .current_directory(build.host_source_dir())
-                            .args(["fetch", "--locked"])
-                            .run_capture()?;
-                    }
-                    res =
-                        self.execute_build(build_id, name, version, default_target, true, build, &limits, &metadata, false, collect_metrics)?;
-                }
-
-                let has_docs = res.has_docs();
-
-                let mut target_build_logs = HashMap::new();
-                let documentation_size = if has_docs {
-                    debug!("adding documentation for the default target to the database");
-                    res.copy_docs(
-                        local_storage.path(),
-                    )?;
-
-                    successful_targets.push(res.target.clone());
-
-                    // Then build the documentation for all the targets
-                    // Limit the number of targets so that no one can try to build all 200000 possible targets
-                    for target in other_targets.into_iter().take(limits.targets()) {
-                        debug!("building package {} {} for {}", name, version, target);
-                        let target_res = self.build_target(
-                            build_id,
-                            name,
-                            version,
-                            target,
-                            build,
-                            &limits,
-                            local_storage.path(),
-                            &mut successful_targets,
-                            &metadata,
-                            collect_metrics,
-                        )?;
-                        let successful = target_res.successful();
-                        target_build_logs.insert(target, (target_res.build_log, successful));
-                    }
-
-                    let doc_stats  =
-                        self.runtime.block_on(
-                        self.storage.store_all_in_archive(
-                            &rustdoc_archive_path(name, version),
-                            local_storage.path(),
-                        ))?;
-                    self.builder_metrics.documentation_size.record(doc_stats.original_size, &[]);
-                    algs.insert(doc_stats.alg);
-                    Some(doc_stats.original_size)
-                } else {
-                    None
-                };
-
-                let build_stats = build.statistics();
-
-                let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-
-                self.runtime.block_on(finish_build(
-                    &mut async_conn,
-                    build_id,
-                    &res.result.rustc_version,
-                    &res.result.docsrs_version,
-                    if res.successful() {
-                        BuildStatus::Success
-                    } else {
-                        BuildStatus::Failure
-                    },
-                    documentation_size,
-                    build_stats.memory_peak_bytes(),
-                    res.result.build_error.as_ref()
-                ))?;
-
-                let successful = res.successful();
-
-                {
-                    let mut build_logs = Vec::new();
-
-                    let _span = info_span!("store_build_logs").entered();
-                    let build_log_path = format!("build-logs/{build_id}/{default_target}.txt");
-                    let successful = res.successful();
-                    self.blocking_storage.store_one(build_log_path, res.build_log)?;
-                    build_logs.push((format!("{default_target}.txt"), successful));
-                    for (target, (log, successful)) in target_build_logs {
-                        let build_log_path = format!("build-logs/{build_id}/{target}.txt");
-                        self.blocking_storage.store_one(build_log_path, log)?;
-                        build_logs.push((format!("{target}.txt"), successful));
-                    }
-                    self.runtime.block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
-                }
-
-                if successful {
-                    self.builder_metrics.successful_builds.add(1, &[]);
-                } else if res.cargo_metadata.root().is_library() {
-                    self.builder_metrics.failed_builds.add(1, &[]);
-                } else {
-                    self.builder_metrics.non_library_builds.add(1, &[]);
-                }
-
-                let release_data = if !is_local {
-                    match self
-                        .runtime
-                        .block_on(self.registry_api.get_release_data(name, version))
-                        {
-                        Ok(data) => data,
-                        Err(err) => {
-                            error!(%name, %version, ?err, "could not fetch releases-data");
-                            None
-                        }
-                    }
-                } else {
+        let release_data = if !is_local {
+            match self
+                .runtime
+                .block_on(self.registry_api.get_release_data(name, version))
+            {
+                Ok(data) => data,
+                Err(err) => {
+                    error!(%name, %version, ?err, "could not fetch releases-data");
                     None
                 }
-                .unwrap_or_else(ReleaseData::dummy);
+            }
+        } else {
+            None
+        }
+        .unwrap_or_else(ReleaseData::dummy);
 
-                let cargo_metadata = res.cargo_metadata.root();
-                let repository = self.get_repo(cargo_metadata)?;
-
-                // when we have an unsuccessful build, but the release was already successfullly
-                // built in the past, don't touch the release record so the docs stay intact.
-                // This mainly happens with manually triggered or automated rebuilds.
-                // The `release_build_status` table is already updated with the information from
-                // the current build via `finish_build`.
-                let current_release_build_status = self.runtime.block_on(sqlx::query_scalar!(
-                    r#"
+        let cargo_metadata = release.cargo_metadata.root();
+        let repository = self.get_repo(cargo_metadata)?;
+        let current_release_build_status = self.runtime.block_on(
+            sqlx::query_scalar!(
+                r#"
                     SELECT build_status AS "build_status: BuildStatus"
                     FROM release_build_status
                     WHERE rid = $1
                     "#,
-                    release_id.0,
-                ).fetch_optional(&mut *async_conn))?;
-
-                if !successful && current_release_build_status == Some(BuildStatus::Success) {
-                    info!("build was unsuccessful, but the release was already successfully built in the past. Skipping release record update.");
-                    return Ok(false);
-                }
-
-                let has_examples = build.host_source_dir().join("examples").is_dir();
-                self.runtime.block_on(finish_release(
-                    &mut async_conn,
-                    crate_id,
-                    release_id,
-                    cargo_metadata,
-                    &build.host_source_dir(),
-                    &res.target,
-                    successful_targets,
-                    &release_data,
-                    has_docs,
-                    has_examples,
-                    algs,
-                    repository,
-                    source_stats.original_size,
-                ))?;
-
-                if let Some(repository_id) = repository {
-                    self.runtime.block_on(workspaces::update_repository_stats(&mut async_conn, repository_id))?;
-                }
-
-                if let Some(doc_coverage) = res.doc_coverage {
-                    self.runtime.block_on(add_doc_coverage(
-                        &mut async_conn,
-                        release_id,
-                        doc_coverage,
-                    ))?;
-                }
-
-                // Some crates.io crate data is mutable, so we proactively update it during a release
-                if !is_local {
-                    match self
-                        .runtime
-                        .block_on(self.registry_api.get_crate_data(name))
-                    {
-                        Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
-                            &mut async_conn,
-                            name,
-                            &crate_data,
-                        ))?,
-                        Err(err) => warn!("{:#?}", err),
-                    }
-                }
-
-                if successful {
-                    // delete eventually existing files from pre-archive storage.
-                    // we're doing this in the end so eventual problems in the build
-                    // won't lead to non-existing docs.
-                    for prefix in &["rustdoc", "sources"] {
-                        let prefix = format!("{prefix}/{name}/{version}/");
-                        debug!("cleaning old storage folder {}", prefix);
-                        self.blocking_storage.delete_prefix(&prefix)?;
-                    }
-                }
-
-                self.runtime.block_on(async move {
-                    // we need to drop the async connection inside an async runtime context
-                    // so sqlx can use a runtime to handle the pool.
-                    drop(async_conn);
-                });
-
-                Ok(successful)
-            })?;
-
-        {
-            let _span = info_span!("purge_from_cache").entered();
-            krate.purge_from_cache(&self.workspace)?;
-            local_storage.close()?;
-        }
-        Ok(successful.into_inner())
-    }
-
-    #[instrument(skip(self, build))]
-    #[allow(clippy::too_many_arguments)]
-    fn build_target(
-        &self,
-        build_id: BuildId,
-        name: &KrateName,
-        version: &Version,
-        target: &str,
-        build: &Build,
-        limits: &Limits,
-        local_storage: &Path,
-        successful_targets: &mut Vec<String>,
-        metadata: &Metadata,
-        collect_metrics: bool,
-    ) -> Result<FullBuildResult> {
-        let target_res = self.execute_build(
-            build_id,
-            name,
-            version,
-            target,
-            false,
-            build,
-            limits,
-            metadata,
-            false,
-            collect_metrics,
+                release_id.0,
+            )
+            .fetch_optional(&mut *async_conn),
         )?;
-        if target_res.successful() {
-            // Cargo is not giving any error and not generating documentation of some crates
-            // when we use a target compile options. Check documentation exists before
-            // adding target to successfully_targets.
-            if target_res.doc_output_dir.is_dir() {
-                debug!("adding documentation for target {} to the database", target,);
-                target_res.copy_docs(local_storage)?;
-                successful_targets.push(target.to_string());
-            }
-        }
-        Ok(target_res)
-    }
 
-    /// Run the build with rustdoc JSON output for a specific target and directly upload the
-    /// build log & the JSON files.
-    ///
-    /// The method only returns an `Err` for internal errors that should be retryable.
-    /// For all build errors we would just upload the log file and still return `Ok(())`.
-    #[instrument(skip(self, build))]
-    #[allow(clippy::too_many_arguments)]
-    fn execute_json_build(
-        &self,
-        build_id: BuildId,
-        name: &KrateName,
-        version: &Version,
-        target: &str,
-        is_default_target: bool,
-        build: &Build<'_>,
-        metadata: &Metadata,
-        limits: &Limits,
-    ) -> Result<()> {
-        let rustdoc_flags = vec!["--output-format".to_string(), "json".to_string()];
-
-        let mut storage = LogStorage::new(log::LevelFilter::Info);
-        storage.set_max_size(limits.max_log_size());
-
-        let result = logging::capture(&storage, || {
-            let _span = info_span!("cargo_build_json", target = %target).entered();
-            self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)
-                .and_then(|command| command.run().map_err(Into::into))
-        });
-
-        {
-            let _span = info_span!("store_json_build_logs").entered();
-            let build_log_path = format!("build-logs/{build_id}/{target}_json.txt");
-            self.blocking_storage
-                .store_one(build_log_path, storage.to_string())
-                .context("storing build log on S3")?;
-        }
-
-        if result.is_err() {
-            // this is a normal build error and will be visible in the uploaded build logs.
-            // We don't need the Err variant here.
-            return Ok(());
-        };
-
-        let doc_output_dir = build.doc_output_dir(metadata, target);
-        if metadata.proc_macro {
-            assert!(
-                is_default_target && target == HOST_TARGET,
-                "can't handle cross-compiling macros"
+        if !successful && current_release_build_status == Some(BuildStatus::Success) {
+            info!(
+                "build was unsuccessful, but the release was already successfully built in the past. Skipping release record update."
             );
+            return Ok(false);
         }
 
-        let json_filename = find_single_file_in_doc_output_dir(&doc_output_dir, "json")?;
-
-        let format_version = {
-            let _span = info_span!("read_format_version").entered();
-            read_format_version_from_rustdoc_json(&File::open(&json_filename)?)
-                .context("couldn't parse rustdoc json to find format version")?
-        };
-
-        self.runtime.block_on(try_join_all(
-            RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(move |alg| {
-                let json_filename = json_filename.clone();
-                self.upload_json_output(name, version, target, format_version, *alg, json_filename)
-            }),
+        let has_examples = source_dir.path().join("examples").is_dir();
+        self.runtime.block_on(finish_release(
+            &mut async_conn,
+            crate_id,
+            release_id,
+            cargo_metadata,
+            source_dir.path(),
+            &default_target,
+            successful_targets,
+            &release_data,
+            has_docs,
+            has_examples,
+            algs,
+            repository,
+            source_stats.original_size,
         ))?;
 
+        if let Some(repository_id) = repository {
+            self.runtime.block_on(workspaces::update_repository_stats(
+                &mut async_conn,
+                repository_id,
+            ))?;
+        }
+
+        if let Some(doc_coverage) = release
+            .targets
+            .first_mut()
+            .and_then(|target| target.coverage.output.take())
+            .flatten()
+        {
+            self.runtime
+                .block_on(add_doc_coverage(&mut async_conn, release_id, doc_coverage))?;
+        }
+
+        if !is_local {
+            match self
+                .runtime
+                .block_on(self.registry_api.get_crate_data(name))
+            {
+                Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
+                    &mut async_conn,
+                    name,
+                    &crate_data,
+                ))?,
+                Err(err) => warn!("{:#?}", err),
+            }
+        }
+
+        if successful {
+            for prefix in &["rustdoc", "sources"] {
+                let prefix = format!("{prefix}/{name}/{version}/");
+                debug!("cleaning old storage folder {}", prefix);
+                self.blocking_storage.delete_prefix(&prefix)?;
+            }
+        }
+
+        self.runtime.block_on(async move {
+            drop(async_conn);
+        });
+        local_storage.close()?;
+        Ok(successful)
+    }
+
+    #[instrument(skip(self, release))]
+    fn publish_json_and_build_logs(
+        &self,
+        build_id: BuildId,
+        name: &KrateName,
+        version: &Version,
+        release: &mut ReleaseBuildResult,
+    ) -> Result<()> {
+        let mut build_logs = Vec::new();
+
+        for target in &mut release.targets {
+            let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
+            self.blocking_storage
+                .store_one(json_log_path, std::mem::take(&mut target.rustdoc_json.log))?;
+
+            if let Some(json) = &target.rustdoc_json.output {
+                let upload = json.format_version().and_then(|format_version| {
+                    self.runtime.block_on(try_join_all(
+                        RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
+                            self.upload_json_output(
+                                name,
+                                version,
+                                &target.target,
+                                format_version,
+                                *algorithm,
+                                json.path().to_owned(),
+                            )
+                        }),
+                    ))?;
+                    Ok(())
+                });
+                if let Err(error) = upload {
+                    error!(
+                        ?error,
+                        target = target.target,
+                        "internal error while publishing rustdoc JSON output"
+                    );
+                }
+            }
+
+            let successful = target.successful();
+            let log_name = format!("{}.txt", target.target);
+            self.blocking_storage.store_one(
+                format!("build-logs/{build_id}/{log_name}"),
+                std::mem::take(&mut target.documentation.log),
+            )?;
+            build_logs.push((log_name, successful));
+        }
+
+        let mut conn = self.runtime.block_on(self.db.get_async())?;
+        self.runtime
+            .block_on(add_build_logs(&mut conn, build_id, build_logs))?;
         Ok(())
     }
 
@@ -1066,422 +589,49 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    #[instrument(skip(self, build))]
-    fn get_coverage(
-        &self,
-        target: &str,
-        build: &Build<'_>,
-        metadata: &Metadata,
-        limits: &Limits,
-    ) -> Result<Option<DocCoverage>> {
-        let rustdoc_flags = vec![
-            "--output-format".to_string(),
-            "json".to_string(),
-            "--show-coverage".to_string(),
-        ];
-
-        let mut coverage = DocCoverage {
-            total_items: 0,
-            documented_items: 0,
-            total_items_needing_examples: 0,
-            items_with_examples: 0,
-        };
-
-        self.prepare_command(build, target, metadata, limits, rustdoc_flags, false)?
-            .process_lines(&mut |line, _| {
-                // NOTE: legacy for old nightlies.
-                // can be removed when the new nightly is used in prod, and coverage
-                // works.
-                if line.starts_with('{') && line.ends_with('}') {
-                    match doc_coverage::parse_line(line) {
-                        Ok(file_coverages) => coverage.extend(file_coverages),
-                        Err(err) => warn!(?err, line, "failed to parse coverage line"),
-                    }
-                }
-            })
-            .log_output(true)
-            .run()?;
-
-        let doc_output_dir = build.doc_output_dir(metadata, target);
-        match find_single_file_in_doc_output_dir(&doc_output_dir, "json") {
-            Ok(coverage_json_file) => {
-                let reader = BufReader::new(File::open(&coverage_json_file)?);
-                for line in reader.lines() {
-                    let line = line?;
-                    match doc_coverage::parse_line(&line) {
-                        Ok(file_coverages) => coverage.extend(file_coverages),
-                        Err(err) => warn!(?err, line, "failed to parse coverage line"),
-                    }
-                }
-            }
-            Err(err) => {
-                warn!(?err, "can't find coverage output file");
-            }
-        }
-
-        Ok(
-            if coverage.total_items == 0 && coverage.documented_items == 0 {
-                None
-            } else {
-                Some(coverage)
-            },
-        )
-    }
-
-    #[instrument(skip(self, build))]
-    #[allow(clippy::too_many_arguments)]
-    fn execute_build(
-        &self,
-        build_id: BuildId,
-        name: &KrateName,
-        version: &Version,
-        target: &str,
-        is_default_target: bool,
-        build: &Build<'_>,
-        limits: &Limits,
-        metadata: &Metadata,
-        create_essential_files: bool,
-        collect_metrics: bool,
-    ) -> Result<FullBuildResult> {
-        let cargo_metadata = load_metadata_from_rustwide(
-            &self.workspace,
-            &self.toolchain,
-            &build.host_source_dir(),
-        )?;
-
-        let mut rustdoc_flags = vec![
-            if create_essential_files {
-                "--emit=html-static-files"
-            } else {
-                "--emit=html-non-static-files"
-            }
-            .to_string(),
-        ];
-        rustdoc_flags.extend(vec![
-            "--resource-suffix".to_string(),
-            format!("-{}", parse_rustc_version(self.rustc_version()?)?),
-        ]);
-
-        let mut storage = LogStorage::new(log::LevelFilter::Info);
-        storage.set_max_size(limits.max_log_size());
-
-        // we have to run coverage before the doc-build because currently it
-        // deletes the doc-target folder.
-        // https://github.com/rust-lang/cargo/issues/9447
-        let doc_coverage = match self.get_coverage(target, build, metadata, limits) {
-            Ok(cov) => cov,
-            Err(err) => {
-                info!(
-                    ?err,
-                    "error when trying to get coverage, continuing anyways.",
-                );
-                None
-            }
-        };
-
-        if let Err(err) = self.execute_json_build(
-            build_id,
-            name,
-            version,
-            target,
-            is_default_target,
-            build,
-            metadata,
-            limits,
-        ) {
-            // FIXME: this is temporary. Theoretically all `Err` things coming out
-            // of the method should be retryable, so we could juse use `?` here.
-            // But since this is new, I want to be carful and first see what kind of
-            // errors we are seeing here.
-            error!(
-                ?err,
-                "internal error when trying to generate rustdoc JSON output"
-            );
-        }
-
-        let result = {
-            let _span = info_span!("cargo_build", target = %target, is_default_target).entered();
-            logging::capture(&storage, || {
-                self.prepare_command(
-                    build,
-                    target,
-                    metadata,
-                    limits,
-                    rustdoc_flags,
-                    collect_metrics,
-                )
-                .and_then(|command| {
-                    command
-                        // Enables the unstable rustdoc-scrape-examples feature. We are "soft launching" this feature on
-                        // docs.rs, but once it's stable we can remove this flag.
-                        .arg("-Zrustdoc-scrape-examples")
-                        .run()
-                        .map_err(Into::into)
-                })
-            })
-        };
-
-        if collect_metrics
-            && let Some(compiler_metric_target_dir) = &self.config.compiler_metrics_collection_path
-        {
-            let metric_output = build.host_target_dir().join("metrics/");
-            info!(
-                "found {} files in metric dir, copy over to {} (exists: {})",
-                fs::read_dir(&metric_output)?.count(),
-                &compiler_metric_target_dir.to_string_lossy(),
-                &compiler_metric_target_dir.exists(),
-            );
-            copy_dir_all(&metric_output, compiler_metric_target_dir)?;
-            fs::remove_dir_all(&metric_output)?;
-        }
-
-        let doc_output_dir = build.doc_output_dir(metadata, target);
-
-        if result.is_ok() && metadata.proc_macro {
-            assert!(
-                is_default_target && target == HOST_TARGET,
-                "can't handle cross-compiling macros"
-            );
-        }
-
-        Ok(FullBuildResult {
-            result: BuildResult {
-                rustc_version: self.rustc_version()?,
-                docsrs_version: format!("docsrs {}", docs_rs_utils::BUILD_VERSION),
-                build_error: result.err(),
-            },
-            doc_coverage,
-            cargo_metadata,
-            build_log: storage.to_string(),
-            target: target.to_string(),
-            is_default_target,
-            doc_output_dir,
-        })
-    }
-
-    fn prepare_command<'ws, 'pl>(
-        &self,
-        build: &Build<'ws>,
-        target: &str,
-        metadata: &Metadata,
-        limits: &Limits,
-        mut rustdoc_flags_extras: Vec<String>,
-        collect_metrics: bool,
-    ) -> Result<Command<'ws, 'pl>, RustwideBuildError> {
-        // Add docs.rs specific arguments
-        let mut cargo_args = vec![
-            "--offline".into(),
-            // We know that `metadata` unconditionally passes `-Z rustdoc-map`.
-            // Don't copy paste this, since that fact is not stable and may change in the future.
-            "-Zunstable-options".into(),
-            // Add `target` so that if a dependency has target-specific docs, this links to them properly.
-            //
-            // Note that this includes the target even if this is the default, since the dependency
-            // may have a different default (and the web backend will take care of redirecting if
-            // necessary).
-            //
-            // FIXME: host-only crates like proc-macros should probably not have this passed? but #1417 should make it OK
-            format!(
-                r#"--config=doc.extern-map.registries.crates-io="https://docs.rs/{{pkg_name}}/{{version}}/{target}""#
-            ),
-        ];
-        if let Some(cargo_job_limit) = self.config.cargo_job_limit() {
-            cargo_args.push(format!("-j{cargo_job_limit}"));
-        }
-        // Cargo has a series of frightening bugs around cross-compiling proc-macros:
-        // - Passing `--target` causes RUSTDOCFLAGS to fail to be passed 🤦
-        // - Passing `--target` will *create* `target/{target-name}/doc` but will put the docs in `target/doc` anyway
-        // As a result, it's not possible for us to support cross-compiling proc-macros.
-        // However, all these caveats unfortunately still apply when `{target-name}` is the host.
-        // So, only pass `--target` for crates that aren't proc-macros.
-        //
-        // Originally, this had a simpler check `target != HOST_TARGET`, but *that* was buggy when `HOST_TARGET` wasn't the same as the default target.
-        // Rather than trying to keep track of it all, only special case proc-macros, which are what we actually care about.
-        if !metadata.proc_macro {
-            cargo_args.push("--target".into());
-            cargo_args.push(target.into());
-        };
-
-        #[rustfmt::skip]
-        const UNCONDITIONAL_ARGS: &[&str] = &[
-            "--static-root-path", "/-/rustdoc.static/",
-            "--cap-lints", "warn",
-            "--extern-html-root-takes-precedence",
-        ];
-
-        rustdoc_flags_extras.extend(UNCONDITIONAL_ARGS.iter().map(|&s| s.to_owned()));
-        let mut cargo_args = metadata.cargo_args(&cargo_args, &rustdoc_flags_extras);
-
-        // If the explicit target is not a tier one target, we need to install it.
-        let has_build_std = cargo_args.windows(2).any(|args| {
-            args[0].starts_with("-Zbuild-std")
-                || (args[0] == "-Z" && args[1].starts_with("build-std"))
-        }) || cargo_args.last().unwrap().starts_with("-Zbuild-std");
-        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) && !has_build_std {
-            // This is a no-op if the target is already installed.
-            self.toolchain.add_target(&self.workspace, target)?;
-        }
-
-        let mut command = build
-            .cargo()
-            .timeout(Some(limits.timeout()))
-            .no_output_timeout(None);
-
-        for (key, val) in metadata.environment_variables() {
-            command = command.env(key, val);
-        }
-
-        if collect_metrics && self.config.compiler_metrics_collection_path.is_some() {
-            // set the `./target/metrics/` directory inside the build container
-            // as a target directory for the metric files.
-            let flag = "-Zmetrics-dir=/opt/rustwide/target/metrics";
-
-            // this is how we can reach it from outside the container.
-            fs::create_dir_all(build.host_target_dir().join("metrics/")).map_err(Error::from)?;
-
-            let rustdocflags = toml::Value::try_from(vec![flag])
-                .expect("serializing a string should never fail")
-                .to_string();
-            cargo_args.push("--config".into());
-            cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
-        }
-
-        Ok(command.args(&cargo_args))
-    }
-
     fn get_repo(&self, metadata: &MetadataPackage) -> Result<Option<i32>> {
         self.runtime
             .block_on(self.repository_stats.load_repository(metadata))
     }
 }
 
-struct FullBuildResult {
-    result: BuildResult,
-    target: String,
-    is_default_target: bool,
-    cargo_metadata: CargoMetadata,
-    doc_coverage: Option<DocCoverage>,
-    build_log: String,
-    /// the directory where cargo/rustdoc put the docs.
-    doc_output_dir: PathBuf,
-}
+#[instrument(skip(result))]
+fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()> {
+    let source = result
+        .documentation
+        .output
+        .as_ref()
+        .context("successful documentation build has no output directory")?;
+    let destination = if result.is_default {
+        destination.to_owned()
+    } else {
+        destination.join(&result.target)
+    };
 
-impl FullBuildResult {
-    pub(crate) fn successful(&self) -> bool {
-        self.result.successful()
-    }
-
-    pub(crate) fn has_docs(&self) -> bool {
-        if self.successful()
-            && let Some(name) = self.cargo_metadata.root().library_name()
-        {
-            self.doc_output_dir.join(name).is_dir()
-        } else {
-            false
-        }
-    }
-
-    #[instrument(skip(self))]
-    fn copy_docs<P>(&self, dest: P) -> Result<()>
-    where
-        P: Into<PathBuf> + fmt::Debug,
-    {
-        let source = &self.doc_output_dir;
-        let mut dest = dest.into();
-
-        // only add target name to destination directory when we are copying a non-default target.
-        // this is allowing us to host documents in the root of the crate documentation directory.
-        // for example winapi will be available in docs.rs/winapi/$version/winapi/ for it's
-        // default target: x86_64-pc-windows-msvc. But since it will be built under
-        // target/x86_64-pc-windows-msvc we still need target in this function.
-        if !self.is_default_target {
-            dest = dest.join(&self.target);
-        }
-
-        info!("copy {} to {}", source.display(), dest.display());
-        copy_dir_all(source, dest).map_err(Into::into)
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct BuildResult {
-    pub(crate) rustc_version: String,
-    pub(crate) docsrs_version: String,
-    pub(crate) build_error: Option<RustwideBuildError>,
-}
-
-impl BuildResult {
-    pub(crate) fn successful(&self) -> bool {
-        self.build_error.is_none()
-    }
+    info!(
+        source = %source.display(),
+        destination = %destination.display(),
+        "copying documentation"
+    );
+    Ok(copy_dir_all(source, destination)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        config::BuildCores,
-        testing::{TestEnvironment, TestEnvironmentExt as _},
-    };
-    use docs_rs_config::AppConfig as _;
+    use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
+    use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
-        BuildStatus, CompressionAlgorithm, Feature, ReleaseId, SimpleBuildError, Version,
-        testing::V0_1,
+        BuildStatus, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version, testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
+    use docsrs_metadata::DEFAULT_TARGETS;
     use pretty_assertions::assert_eq;
-    use std::{collections::BTreeMap, io, iter, path::PathBuf};
-    use test_case::test_case;
+    use std::{collections::BTreeMap, iter, sync::LazyLock};
 
-    fn get_features(
-        env: &TestEnvironment,
-        name: &KrateName,
-        version: &Version,
-    ) -> Result<Option<Vec<Feature>>, anyhow::Error> {
-        block_on_async_with_conn!(env, |mut conn| async {
-            Ok(sqlx::query_scalar!(
-                r#"SELECT
-                        releases.features "features?: Vec<Feature>"
-                     FROM releases
-                     INNER JOIN crates ON crates.id = releases.crate_id
-                     WHERE crates.name = $1 AND releases.version = $2"#,
-                name as _,
-                version as _,
-            )
-            .fetch_one(&mut *conn)
-            .await?)
-        })
-    }
-
-    fn remove_cache_files(env: &TestEnvironment, crate_: &str, version: &Version) -> Result<()> {
-        let paths = [
-            format!("cache/index.crates.io-6f17d22bba15001f/{crate_}-{version}.crate"),
-            format!("src/index.crates.io-6f17d22bba15001f/{crate_}-{version}"),
-            format!(
-                "index/index.crates.io-6f17d22bba15001f/.cache/{}/{}/{crate_}",
-                &crate_[0..2],
-                &crate_[2..4]
-            ),
-        ];
-
-        for path in paths {
-            let full_path = env
-                .config()
-                .rustwide_workspace
-                .join("cargo-home/registry")
-                .join(path);
-            if full_path.exists() {
-                info!("deleting {}", full_path.display());
-                if full_path.is_file() {
-                    std::fs::remove_file(full_path)?;
-                } else {
-                    std::fs::remove_dir_all(full_path)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
+    static DUMMY_CRATE_NAME: LazyLock<KrateName> =
+        LazyLock::new(|| "empty-library".parse().unwrap());
+    const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
 
     #[test]
     #[ignore]
@@ -1503,7 +653,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             builder
-                .build_package(crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
@@ -1624,7 +774,9 @@ mod tests {
         // Non-dist toolchains only have a single target, and of course
         // if include_default_targets is false we won't have this full list
         // of targets.
-        if builder.toolchain.as_dist().is_some() && env.config().include_default_targets {
+        if builder.environment.toolchain().as_dist().is_some()
+            && env.config().include_default_targets
+        {
             assert_eq!(
                 targets,
                 vec![
@@ -1667,7 +819,7 @@ mod tests {
                     );
                 }
 
-                if target == &default_target {
+                if *target == default_target {
                     continue;
                 }
                 let target_docs_present = storage.exists_in_archive(
@@ -1693,38 +845,6 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_collect_metrics() -> Result<()> {
-        let metrics_dir = tempfile::tempdir().unwrap().keep();
-        let mut config = Config::test_config()?;
-        config.compiler_metrics_collection_path = Some(metrics_dir.clone());
-        config.include_default_targets = false;
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        let crate_ = &*DUMMY_CRATE_NAME;
-        let version = DUMMY_CRATE_VERSION;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(crate_, &version, PackageKind::CratesIo, true)?
-                .successful
-        );
-
-        let metric_files: Vec<_> = fs::read_dir(&metrics_dir)?
-            .filter_map(|di| di.ok())
-            .map(|di| di.path())
-            .collect();
-
-        assert_eq!(metric_files.len(), 1);
-
-        let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
     fn test_build_binary_crate() -> Result<()> {
         let env = TestEnvironment::new()?;
 
@@ -1742,7 +862,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(&crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
@@ -1871,194 +991,11 @@ mod tests {
         assert!(
             // not successful build
             !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
+                .build_package(&crate_, &version, PackageKind::CratesIo)?
                 .successful
         );
 
         check_rustdoc_status(&env, release_id)?;
-        Ok(())
-    }
-
-    #[test_case("scsys-macros", Version::new(0, 2, 6))]
-    #[test_case("scsys-derive", Version::new(0, 2, 6))]
-    #[test_case("thiserror-impl", Version::new(1, 0, 26))]
-    #[test_case("contained-macros", Version::new(0, 2, 5))]
-    #[ignore]
-    fn test_proc_macro(crate_: &'static str, version: Version) -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let crate_ = KrateName::from_static(crate_);
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
-
-        // check coverage
-        let row = block_on_async_with_conn!(env, |mut conn| async {
-            sqlx::query!(
-                r#"SELECT cov.total_items
-                    FROM
-                        crates as c
-                        INNER JOIN releases AS r ON c.id = r.crate_id
-                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
-                "#
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(Into::into)
-        })?;
-
-        assert!(row.total_items.unwrap() > 0);
-
-        let storage = env.blocking_storage()?;
-
-        // doc archive exists
-        let doc_archive = rustdoc_archive_path(&crate_, &version);
-        assert!(storage.exists(&doc_archive)?);
-
-        // source archive exists
-        let source_archive = source_archive_path(&crate_, &version);
-        assert!(storage.exists(&source_archive)?);
-
-        // test if rustdoc json was created
-        assert!(
-            storage
-                .list_prefix(&format!(
-                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
-                    crate_, version
-                ))
-                .filter_map(|res| res.ok())
-                .find(|path| {
-                    path.ends_with(&format!(
-                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
-                        crate_, version
-                    ))
-                })
-                .is_some()
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_cross_compile_non_host_default() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let crate_ = KrateName::from_static("windows-win");
-        let version = Version::new(2, 4, 1);
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        if builder.toolchain.as_ci().is_some() {
-            return Ok(());
-        }
-        assert!(
-            builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
-
-        let storage = env.blocking_storage()?;
-
-        // doc archive exists
-        let doc_archive = rustdoc_archive_path(&crate_, &version);
-        assert!(storage.exists(&doc_archive)?, "{}", doc_archive);
-
-        // source archive exists
-        let source_archive = source_archive_path(&crate_, &version);
-        assert!(storage.exists(&source_archive)?, "{}", source_archive);
-
-        let target = "x86_64-unknown-linux-gnu";
-        let crate_path = crate_.as_str().replace('-', "_");
-        let target_docs_present = storage.exists_in_archive(
-            &doc_archive,
-            None,
-            &format!("{target}/{crate_path}/index.html"),
-        )?;
-        assert!(target_docs_present);
-
-        // FIXME: how to assert his later? move to integration tests?
-        // env.runtime().block_on(async {
-        //     let web = env.web_app().await;
-        //     let target_url = format!("/{crate_}/{version}/{target}/{crate_path}/index.html");
-
-        //     web.assert_success(&target_url).await
-        // })?;
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_locked_fails_unlocked_needs_new_deps() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.include_default_targets = false;
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        // if the corrected dependency of the crate was already downloaded we need to remove it
-        remove_cache_files(&env, "rand_core", &Version::new(0, 5, 1))?;
-
-        // Specific setup required:
-        //  * crate has a binary so that it is published with a lockfile
-        //  * crate has a library so that it is documented by docs.rs
-        //  * crate has an optional dependency
-        //  * metadata enables the optional dependency for docs.rs
-        //  * `cargo doc` fails with the version of the dependency in the lockfile
-        //  * there is a newer version of the dependency available that correctly builds
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_1"))?
-                .successful
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_locked_fails_unlocked_needs_new_unknown_deps() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.include_default_targets = false;
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        // if the corrected dependency of the crate was already downloaded we need to remove it
-        remove_cache_files(&env, "value-bag-sval2", &Version::new(1, 4, 1))?;
-
-        // Similar to above, this crate fails to build with the published
-        // lockfile, but generating a new working lockfile requires
-        // introducing a completely new dependency (not just version) which
-        // would not have had its details pulled down from the sparse-index.
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/incorrect_lockfile_0_2"))?
-                .successful
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_rustflags_are_passed_to_build_script() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let crate_ = KrateName::from_static("proc-macro2");
-        let version = Version::new(1, 0, 95);
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
         Ok(())
     }
 
@@ -2073,7 +1010,8 @@ mod tests {
         // added. Will fail when we try to build.
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
-        let test_crate = Path::new("tests/crates/simple-build-failure/");
+        let test_crate =
+            Path::new("../../lib/docs_rs_rustwide/tests/fixtures/simple-build-failure/");
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
@@ -2111,7 +1049,7 @@ mod tests {
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
-        let summary = builder.build_package(&crate_, &version, PackageKind::CratesIo, false)?;
+        let summary = builder.build_package(&crate_, &version, PackageKind::CratesIo)?;
 
         assert!(!summary.successful);
         assert!(summary.should_reattempt);
@@ -2142,377 +1080,6 @@ mod tests {
         assert_eq!(row.build_status, BuildStatus::Failure);
         assert_eq!(row.error_kind, Some("Other".into()));
         assert!(row.errors.unwrap().contains("missing Cargo.toml"));
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_implicit_features_for_optional_dependencies() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let crate_ = KrateName::from_static("serde");
-        let version = Version::new(1, 0, 152);
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
-
-        assert!(
-            get_features(&env, &crate_, &version)?
-                .unwrap()
-                .iter()
-                .any(|f| f.name == "serde_derive")
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_no_implicit_features_for_optional_dependencies_with_dep_syntax() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let krate = KrateName::from_static("optional-dep");
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(&PathBuf::from(&format!("tests/crates/{krate}")))?
-                .successful
-        );
-
-        let mut features = get_features(&env, &krate, &Version::new(0, 0, 1))?
-            .unwrap()
-            .iter()
-            .map(|f| f.name.to_owned())
-            .collect::<Vec<_>>();
-        features.sort_unstable();
-        assert_eq!(
-            features,
-            // "regex" feature is not in the list,
-            // because we don't have implicit features for optional dependencies
-            // with `dep` syntax any more.
-            vec!["alloc", "default", "optional_regex", "std"]
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_build_std() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
-                .successful
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_workspace_reinitialize_at_once() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        builder.reinitialize_workspace_if_interval_passed()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
-                .successful
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_workspace_reinitialize_after_interval() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.build_workspace_reinitialization_interval = Duration::from_secs(1);
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        use std::thread::sleep;
-        use std::time::Duration;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
-                .successful
-        );
-        sleep(Duration::from_secs(1));
-        builder.reinitialize_workspace_if_interval_passed()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/build-std"))?
-                .successful
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_new_builder_detects_existing_rustc() -> Result<()> {
-        let env = TestEnvironment::new()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        let old_version = builder.rustc_version()?;
-        drop(builder);
-
-        // new builder should detect the existing rustc version from the previous builder
-        // (simulating running `update-toolchain` and `build crate` in separate invocations)
-        let mut builder = env.build_builder()?;
-        assert!(
-            builder
-                .build_package(
-                    &DUMMY_CRATE_NAME,
-                    &DUMMY_CRATE_VERSION,
-                    PackageKind::CratesIo,
-                    false
-                )?
-                .successful
-        );
-        assert_eq!(old_version, builder.rustc_version()?);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_format_version_from_rustdoc_json() -> Result<()> {
-        let buf = serde_json::to_vec(&serde_json::json!({
-            "something": "else",
-            "format_version": 42
-        }))?;
-
-        assert_eq!(
-            read_format_version_from_rustdoc_json(&mut io::Cursor::new(buf))?,
-            RustdocJsonFormatVersion::Version(42)
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_additional_targets() -> Result<()> {
-        fn assert_contains(targets: &[String], target: &str) {
-            assert!(
-                targets.iter().any(|t| t == target),
-                "Not found target {target:?} in {targets:?}"
-            );
-        }
-
-        let env = TestEnvironment::new()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/additional-targets"))?
-                .successful
-        );
-
-        let row = block_on_async_with_conn!(env, |mut conn| async {
-            sqlx::query!(
-                r#"SELECT
-                        r.doc_targets
-                    FROM
-                        crates as c
-                        INNER JOIN releases AS r ON c.id = r.crate_id
-                    WHERE
-                        c.name = $1 AND
-                        r.version = $2"#,
-                "additional-targets",
-                "0.1.0",
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(Into::into)
-        })?;
-
-        let targets: Vec<String> = row
-            .doc_targets
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_owned())
-            .collect();
-
-        assert_contains(&targets, "x86_64-apple-darwin");
-        // Part of the default targets.
-        assert_contains(&targets, "aarch64-apple-darwin");
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_build_with_cpu_limit() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.build_cpu_limit = Some(2);
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/hello-world"))?
-                .successful
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_build_with_cpu_cores() -> Result<()> {
-        let mut config = Config::test_config()?;
-        config.build_cpu_cores = Some(BuildCores(1..=2));
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/hello-world"))?
-                .successful
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_with_examples() -> Result<()> {
-        // there was a bug where coverage and rustdoc json was broken for
-        // libraries with examples.
-        // This test ensures that this works.
-
-        let mut config = Config::test_config()?;
-        config.include_default_targets = false;
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_local_package(Path::new("tests/crates/with-examples"))?
-                .successful
-        );
-
-        // check release record in the db
-        let row = block_on_async_with_conn!(env, |mut conn| async {
-            sqlx::query!(
-                r#"SELECT
-                        c.name as "name!",
-                        r.version as "version!",
-                        r.rustdoc_status,
-                        cov.total_items
-                    FROM
-                        crates as c
-                        INNER JOIN releases AS r ON c.id = r.crate_id
-                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
-                "#
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(Into::into)
-        })?;
-
-        assert_eq!(row.name, "with-examples");
-        assert_eq!(row.version, "0.1.0");
-        assert!(row.total_items.unwrap() > 0);
-
-        let storage = env.blocking_storage()?;
-        assert!(
-            storage
-                .list_prefix(&format!(
-                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
-                    row.name, row.version
-                ))
-                .filter_map(|res| res.ok())
-                .find(|path| {
-                    path.ends_with("with-examples_0.1.0_x86_64-unknown-linux-gnu_latest.json.zst")
-                })
-                .is_some()
-        );
-
-        Ok(())
-    }
-
-    #[test_case("ffizz-string", Version::new(0, 5, 0))]
-    #[test_case("ffizz-passby", Version::new(0, 5, 0))]
-    #[ignore]
-    fn test_with_examples_custom_scrape(crate_: &'static str, version: Version) -> Result<()> {
-        // some crates add `-Zrustdoc-scrape-examples` themselves in their `cargo-args`.
-        // In this case we just remove it.
-        let crate_: KrateName = crate_.parse().unwrap();
-
-        let mut config = Config::test_config()?;
-        config.include_default_targets = false;
-        let env = TestEnvironment::builder().config(config).build()?;
-
-        let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(&crate_, &version, PackageKind::CratesIo, false)?
-                .successful
-        );
-
-        // check release record in the db
-        let row = block_on_async_with_conn!(env, |mut conn| async {
-            sqlx::query!(
-                r#"SELECT
-                        c.name as "name!",
-                        r.version as "version!",
-                        r.rustdoc_status,
-                        cov.total_items
-                    FROM
-                        crates as c
-                        INNER JOIN releases AS r ON c.id = r.crate_id
-                        LEFT OUTER JOIN doc_coverage AS cov ON r.id = cov.release_id
-                "#
-            )
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(Into::into)
-        })?;
-
-        assert_eq!(row.name, crate_.as_str());
-        assert_eq!(row.version, version.to_string());
-        assert!(row.total_items.unwrap() > 0);
-
-        let storage = env.blocking_storage()?;
-        assert!(
-            storage
-                .list_prefix(&format!(
-                    "rustdoc-json/{}/{}/x86_64-unknown-linux-gnu/",
-                    row.name, row.version
-                ))
-                .filter_map(|res| res.ok())
-                .find(|path| {
-                    path.ends_with(&format!(
-                        "{}_{}_x86_64-unknown-linux-gnu_latest.json.zst",
-                        row.name, row.version
-                    ))
-                })
-                .is_some()
-        );
 
         Ok(())
     }

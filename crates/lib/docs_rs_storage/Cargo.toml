@@ -37,7 +37,7 @@ docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_rustdoc_json = { path = "../docs_rs_rustdoc_json" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
-flate2 = "1.1.1"
+flate2 = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }

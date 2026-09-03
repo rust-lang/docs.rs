@@ -1,6 +1,8 @@
 use docs_rs_types::KrateName;
+#[cfg(feature = "database")]
 use futures_util::stream::TryStreamExt;
 
+#[cfg(feature = "database")]
 type Result<T> = std::result::Result<T, BlacklistError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -11,11 +13,13 @@ pub enum BlacklistError {
     #[error("crate {0} is not on the blacklist")]
     CrateNotOnBlacklist(KrateName),
 
+    #[cfg(feature = "database")]
     #[error(transparent)]
     DatabaseError(#[from] sqlx::Error),
 }
 
 /// Returns whether the given name is blacklisted.
+#[cfg(feature = "database")]
 pub async fn is_blacklisted(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<bool> {
     Ok(sqlx::query_scalar!(
         r#"SELECT 1  FROM blacklisted_crates WHERE crate_name = $1;"#,
@@ -27,6 +31,7 @@ pub async fn is_blacklisted(conn: &mut sqlx::PgConnection, name: &KrateName) -> 
 }
 
 /// Returns the crate names on the blacklist, sorted ascending.
+#[cfg(feature = "database")]
 pub async fn list_crates(conn: &mut sqlx::PgConnection) -> Result<Vec<KrateName>> {
     Ok(sqlx::query!(
         r#"
@@ -43,6 +48,7 @@ pub async fn list_crates(conn: &mut sqlx::PgConnection) -> Result<Vec<KrateName>
 }
 
 /// Adds a crate to the blacklist.
+#[cfg(feature = "database")]
 pub async fn add_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<()> {
     if is_blacklisted(&mut *conn, name).await? {
         return Err(BlacklistError::CrateAlreadyOnBlacklist(name.into()));
@@ -59,6 +65,7 @@ pub async fn add_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Resul
 }
 
 /// Removes a crate from the blacklist.
+#[cfg(feature = "database")]
 pub async fn remove_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<()> {
     if !is_blacklisted(conn, name).await? {
         return Err(BlacklistError::CrateNotOnBlacklist(name.into()));

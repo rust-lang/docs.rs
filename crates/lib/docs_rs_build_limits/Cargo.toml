@@ -4,14 +4,19 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[features]
+database = ["dep:sqlx"]
+default = ["database"]
+
 [dependencies]
 anyhow = { workspace = true }
+bon = { workspace = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
 futures-util = { workspace = true }
 serde = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

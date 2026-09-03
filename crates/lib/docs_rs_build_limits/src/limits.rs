@@ -1,52 +1,61 @@
-use crate::{config::Config, overrides::Overrides};
-use anyhow::Result;
+use crate::config::Config;
+#[cfg(feature = "database")]
+use crate::overrides::Overrides;
+#[cfg(feature = "database")]
 use docs_rs_types::KrateName;
 use serde::Serialize;
 use std::time::Duration;
 
 const GB: usize = 1024 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, bon::Builder)]
+#[builder(on(_, into, overwritable))]
 pub struct Limits {
+    #[builder(default = 3 * GB)]
     pub memory: usize,
+    #[builder(default = crate::DEFAULT_MAX_TARGETS)]
     pub targets: usize,
+    #[builder(default = Duration::from_secs(15 * 60))] // 15 minutes
     pub timeout: Duration,
+    #[builder(default = false)]
     pub networking: bool,
+    #[builder(default = 100usize * 1024)] // 100 KiB
     pub max_log_size: usize,
 }
 
+use limits_builder::State;
+
+impl<S: State> LimitsBuilder<S> {
+    pub fn load_config(self, config: &Config) -> LimitsBuilder<S> {
+        self.maybe_memory(config.build_default_memory_limit)
+    }
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
 impl Limits {
-    pub fn new(config: &Config) -> Self {
-        Self {
-            // 3 GB default default
-            memory: config.build_default_memory_limit.unwrap_or(3 * GB),
-            timeout: Duration::from_secs(15 * 60), // 15 minutes
-            targets: crate::DEFAULT_MAX_TARGETS,
-            networking: false,
-            max_log_size: 100 * 1024, // 100 KB
-        }
+    pub fn from_config(config: &Config) -> Limits {
+        Self::builder().load_config(config).build()
     }
 
+    #[cfg(feature = "database")]
     pub async fn for_crate(
         config: &Config,
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
-    ) -> Result<Self> {
-        let default = Self::new(config);
+    ) -> anyhow::Result<Self> {
         let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
-        Ok(Self {
-            memory: overrides
-                .memory
-                .unwrap_or(default.memory)
-                .max(default.memory),
-            targets: overrides
-                .targets
-                .or(overrides.timeout.map(|_| 1))
-                .unwrap_or(default.targets),
-            timeout: overrides.timeout.unwrap_or(default.timeout),
-            networking: default.networking,
-            max_log_size: default.max_log_size,
-        })
+
+        Ok(Self::builder()
+            .load_config(config)
+            .maybe_memory(overrides.memory)
+            .maybe_targets(overrides.targets)
+            .maybe_timeout(overrides.timeout)
+            .build())
     }
 
     pub fn memory(&self) -> usize {
@@ -94,7 +103,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         let krate = KrateName::from_static("hexponent");
         // limits work if no crate has limits set
@@ -164,7 +173,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn config_default_memory_limit() -> Result<()> {
+    async fn config_default_memory_limit() -> anyhow::Result<()> {
         let db = db().await?;
 
         let cfg = Config {
@@ -180,13 +189,13 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn overrides_dont_lower_memory_limit() -> Result<()> {
+    async fn overrides_dont_lower_memory_limit() -> anyhow::Result<()> {
         let db = db().await?;
         let mut conn = db.async_conn().await?;
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         Overrides::save(
             &mut conn,
