@@ -103,6 +103,7 @@ lint-rust:
 # Run the standard local and CI lint suite.
 [group('linting')]
 lint: lint-rust lint-actions lint-js lint-dependencies-machete lint-mise-lock
+    typos
 
 # Verify that mise.lock matches the tools pinned in mise.toml.
 [group('linting')]

@@ -145,7 +145,7 @@ async fn conditional_get(
     // But there is an edge case, that only happens when there is a path
     // where we were able to statically generate an ETag in the
     // build-script, but the file can't be found later.
-    // Until now, happend only in local dev, but would also happen
+    // Until now, happened only in local dev, but would also happen
     // if the static file was deleted from the server after deployment.
     if status.is_success() {
         res.headers_mut().typed_insert(etag);

@@ -117,7 +117,7 @@ pub async fn set_last_seen_reference(
 
 async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
     let Some(cdn) = &cdn else {
-        info!(%krate, "no CDN configured, skippping crate invalidation");
+        info!(%krate, "no CDN configured, skipping crate invalidation");
         return;
     };
 
@@ -186,7 +186,7 @@ async fn process_changes(
         let crate_version = change.version();
         let change_type = change.kind();
 
-        // Start temporarily loging all changes, as preparation for the SQS event migration.
+        // Start temporarily logging all changes, as preparation for the SQS event migration.
         debug!(
             target: "docs_rs_watcher::index_event",
             source = %EventSource::Git,

@@ -25,7 +25,7 @@ impl Config {
         if let Some(ref database) = self.database {
             Ok(database)
         } else {
-            Err(anyhow!("datbase config is missing"))
+            Err(anyhow!("database config is missing"))
         }
     }
 
