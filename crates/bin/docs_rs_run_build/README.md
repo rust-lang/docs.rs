@@ -103,15 +103,43 @@ built.
 
 ## Sandbox image
 
-The normal docs.rs build image is used by default. For faster testing with the
-smaller image used by the build library's integration tests, pass:
+The normal docs.rs build image is used by default. It contains a broad set of
+native libraries so that docs.rs can build crates with system dependencies, but
+that compatibility makes the initial download large. As of 2026-09-03, the
+current amd64 image has approximately 3.4 GB of compressed layers and takes
+more space after extraction.
+
+For faster testing with the smaller image used by the build library's
+integration tests, pass:
 
 ```console
 docs_rs_run_build --small-image
 ```
 
+The corresponding amd64 micro image is approximately 259 MB compressed. It is
+a good choice when the crate does not rely on native packages available only in
+the full image; otherwise, use the default image for the closest reproduction
+of docs.rs.
+
 A custom image and its resolution policy can be selected with `--image` and
 `--image-source`.
+
+### Caching the image in CI
+
+The example workflow intentionally does not use `actions/cache` for the Docker
+image. GitHub-hosted runners have a fresh Docker daemon for each job, and
+saving then restoring a multi-gigabyte image generally transfers roughly the
+same data while adding cache storage and `docker save`/`docker load` overhead.
+
+For frequent builds, prefer one of these approaches:
+
+- Use `--small-image` when the crate does not need the full image's native
+  dependencies.
+- Run multiple documentation checks in the same job, where Docker reuses the
+  already-pulled layers.
+- Use a self-hosted runner with a persistent Docker daemon. The default
+  `local-or-remote` image policy then reuses its local image; use
+  `--image-source remote` when the job must refresh the image tag.
 
 ## Build behavior and exit status
 
