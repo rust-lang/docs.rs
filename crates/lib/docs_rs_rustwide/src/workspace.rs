@@ -37,7 +37,7 @@ pub enum SandboxImageSource {
 }
 
 impl SandboxImageSource {
-    #[instrument(skip(self), fields(source = ?self))]
+    #[instrument(skip_all)]
     fn resolve(&self) -> Result<Option<SandboxImage>> {
         let image = match self {
             Self::RustwideDefault => return Ok(None),
@@ -63,17 +63,15 @@ struct WorkspaceConfiguration {
 }
 
 impl WorkspaceConfiguration {
-    #[instrument(
-        skip(self),
-        fields(
+    #[instrument(skip_all)]
+    fn initialize(&self) -> Result<Workspace> {
+        debug!(
             path = %self.path.display(),
             running_inside_docker = self.running_inside_docker,
             fast_init = self.fast_init,
             sandbox_image = ?self.sandbox_image,
-        )
-    )]
-    fn initialize(&self) -> Result<Workspace> {
-        debug!("initializing rustwide workspace");
+            "initializing rustwide workspace"
+        );
         let mut builder = WorkspaceBuilder::new(&self.path, APP_USER_AGENT)
             .running_inside_docker(self.running_inside_docker)
             .fast_init(self.fast_init);
@@ -96,9 +94,13 @@ struct ManagedWorkspace {
 }
 
 impl ManagedWorkspace {
-    #[instrument(skip(configuration), fields(path = %configuration.path.display()))]
+    #[instrument(skip_all)]
     fn new(configuration: WorkspaceConfiguration) -> Result<Self> {
         let workspace = configuration.initialize()?;
+        debug!(
+            path = %configuration.path.display(),
+            "creating Managed Workspace"
+        );
         Ok(Self {
             workspace,
             configuration,
@@ -106,13 +108,7 @@ impl ManagedWorkspace {
         })
     }
 
-    #[instrument(
-        skip(self),
-        fields(
-            path = %self.configuration.path.display(),
-            interval = ?self.configuration.reinitialization_interval,
-        )
-    )]
+    #[instrument(skip_all)]
     fn refresh_if_due(&mut self) -> Result<bool> {
         let elapsed = self.initialized_at.elapsed();
         if elapsed < self.configuration.reinitialization_interval {
@@ -223,7 +219,7 @@ impl BuildEnvironment {
     /// When [`MaintenanceResult::toolchain_updated`] is `true`, callers that
     /// publish rustdoc's shared static files should rebuild and publish them
     /// before processing the next release.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     pub fn perform_maintenance(&mut self) -> Result<MaintenanceResult> {
         let workspace_refreshed = self.workspace.refresh_if_due()?;
         if workspace_refreshed {
@@ -264,10 +260,7 @@ impl BuildEnvironment {
     ///
     /// The selected toolchain is made ready before this method returns. The
     /// result reports whether the toolchain itself had to be installed.
-    #[instrument(
-        skip(self, toolchain),
-        fields(old_toolchain = %self.toolchain, new_toolchain = %toolchain)
-    )]
+    #[instrument(skip_all)]
     pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
         let selection_changed = self.toolchain != toolchain;
         self.toolchain = toolchain;
@@ -309,7 +302,7 @@ impl BuildEnvironment {
             .contains(&self.toolchain))
     }
 
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     fn ensure_toolchain_installed(&self) -> Result<bool> {
         if self.is_toolchain_installed()? {
             debug!("toolchain is already installed");
@@ -325,7 +318,7 @@ impl BuildEnvironment {
     // Establish the toolchain invariant for this environment without checking
     // whether an installed distribution toolchain can be updated. Unmanaged
     // targets are preserved here and only cleaned up by `update_toolchain`.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     fn ensure_toolchain_ready(&self) -> Result<bool> {
         let installed = self.ensure_toolchain_installed()?;
 
@@ -350,7 +343,7 @@ impl BuildEnvironment {
     /// successful call resets the maintenance interval. CI toolchains always
     /// report a change because their existing version cannot be detected
     /// through rustup reliably.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             debug!("reinstalling CI toolchain");
@@ -419,7 +412,7 @@ impl BuildEnvironment {
     ///
     /// Like a release build, this requires exclusive access to the shared
     /// rustwide workspace.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
@@ -490,7 +483,7 @@ impl BuildEnvironment {
     ///
     /// CI toolchains use a stable synthetic version because rustup's normal
     /// `+toolchain` invocation cannot address CI artifacts.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain))]
+    #[instrument(skip_all)]
     pub fn rustc_version(&self) -> Result<String> {
         if let Some(ci) = self.toolchain.as_ci() {
             let version = ci_rustc_version(ci.sha());
@@ -514,7 +507,7 @@ impl BuildEnvironment {
     ///
     /// This is primarily useful for local crates, where callers need the package
     /// name and version before creating a [`Crate::local`] release context.
-    #[instrument(skip(self), fields(toolchain = %self.toolchain, source_dir = %source_dir.as_ref().display()))]
+    #[instrument(skip_all)]
     pub fn load_cargo_metadata(&self, source_dir: impl AsRef<Path>) -> Result<CargoMetadata> {
         let source_dir = source_dir.as_ref();
         debug!("loading Cargo metadata");
@@ -532,7 +525,7 @@ impl BuildEnvironment {
         Ok(metadata)
     }
 
-    #[instrument(skip(self), fields(toolchain = %self.toolchain, target = %target.as_ref()))]
+    #[instrument(skip_all)]
     pub(crate) fn ensure_target_installed(&self, target: impl AsRef<str>) -> Result<()> {
         let target = target.as_ref();
         debug!("ensuring target is installed");
