@@ -16,7 +16,7 @@ docs_rs_utils = { path = "../docs_rs_utils" }
 log = { version = "0.4", optional = true }
 sentry = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "env-filter", "fmt", "json", "tracing-log"] }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "env-filter", "fmt", "json"] }
 
 [dev-dependencies]
 docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
