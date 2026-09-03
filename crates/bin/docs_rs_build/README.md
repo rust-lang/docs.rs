@@ -19,13 +19,13 @@ Windows, run it in a Linux VM or a Linux CI job.
 Once the crate is published, install the locked release with:
 
 ```console
-cargo install docs_rs_build_cli --locked
+cargo install docs_rs_build --locked
 ```
 
 When developing docs.rs itself, install the workspace copy with:
 
 ```console
-cargo install --path crates/bin/docs_rs_build_cli --locked
+cargo install --path crates/bin/docs_rs_build --locked
 ```
 
 ## Building a crate
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install docs.rs build runner
-        run: cargo install docs_rs_build_cli --locked
+        run: cargo install docs_rs_build --locked
       - name: Build documentation as docs.rs
         run: docs_rs_build --package my-crate
 ```

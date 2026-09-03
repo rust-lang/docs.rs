@@ -2045,7 +2045,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "docs_rs_build_cli"
+name = "docs_rs_build"
 version = "0.1.0"
 dependencies = [
  "anyhow",
