@@ -8,7 +8,11 @@ use args::Args;
 use clap::Parser as _;
 use docs_rs_rustwide::BuildEnvironment;
 use rustwide::Crate;
-use std::{path::Path, process::ExitCode};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::{self, ExitCode},
+};
 use tracing::info;
 
 fn main() -> ExitCode {
@@ -75,16 +79,16 @@ fn ensure_crate_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn absolute_path(path: &Path) -> Result<std::path::PathBuf> {
+fn absolute_path(path: &Path) -> Result<PathBuf> {
     if path.is_absolute() {
         Ok(path.to_owned())
     } else {
-        Ok(std::env::current_dir()?.join(path))
+        Ok(env::current_dir()?.join(path))
     }
 }
 
 fn ensure_docker_available() -> Result<()> {
-    let output = std::process::Command::new("docker")
+    let output = process::Command::new("docker")
         .args(["info", "--format", "{{.ServerVersion}}"])
         .output()
         .context("running `docker info`; install Docker and ensure its daemon is reachable")?;
