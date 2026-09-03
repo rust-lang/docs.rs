@@ -411,9 +411,11 @@ impl RustwideBuilder {
                     error!(%name, %version, ?err, "could not fetch releases-data");
                     None
                 }
-                .unwrap_or_else(ReleaseData::dummy),
             }
-        };
+        } else {
+            None
+        }
+        .unwrap_or_else(ReleaseData::dummy);
 
         let cargo_metadata = release.cargo_metadata.root();
         let repository = self.get_repo(cargo_metadata)?;

@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "docs_rs_run_build"
-version = "0.6.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
