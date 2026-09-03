@@ -8,8 +8,8 @@ use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
 use docsrs_metadata::{BuildTargets, Metadata};
-use rustwide::Build;
 use rustwide::{
+    Build,
     cmd::Command,
     logging::{self, LogStorage},
 };

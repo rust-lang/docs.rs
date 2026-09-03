@@ -10,6 +10,8 @@ mod command;
 mod release;
 mod result;
 mod sandbox;
+#[doc(hidden)]
+pub mod testing;
 mod utils;
 mod workspace;
 

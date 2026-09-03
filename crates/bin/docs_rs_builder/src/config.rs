@@ -76,6 +76,8 @@ impl AppConfig for Config {
         let mut config = Self::from_environment()?;
 
         config.include_default_targets = true;
+        config.rustwide_workspace = docs_rs_rustwide::testing::test_workspace_path();
+        config.docker_image = Some(docs_rs_rustwide::testing::TEST_SANDBOX_IMAGE.into());
 
         Ok(config)
     }
