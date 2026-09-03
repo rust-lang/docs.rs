@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use clap::{ArgAction, Parser, ValueEnum};
-use docs_rs_build_engine::{CpuLimit, SandboxImageSource};
 use docs_rs_build_limits::Limits;
+use docs_rs_rustwide::{CpuLimit, SandboxImageSource};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{ops::RangeInclusive, path::PathBuf, time::Duration};
 

@@ -11,8 +11,8 @@ readme = "README.md"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-docs_rs_build_engine = { path = "../../lib/docs_rs_build_engine" }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits", default-features = false }
+docs_rs_rustwide = { path = "../../lib/docs_rs_rustwide" }
 flate2 = { workspace = true }
 humantime = "2.4.0"
 parse-size = "1.1.0"

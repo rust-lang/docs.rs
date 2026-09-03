@@ -39,7 +39,7 @@ callback.
 
 The current lifecycle marks the toolchain prepared inside update_toolchain()
 before essential files are built or published. See
-crates/lib/docs_rs_build_engine/src/workspace.rs:233.
+crates/lib/docs_rs_rustwide/src/workspace.rs:233.
 
 If essential-file generation or storage upload fails:
 

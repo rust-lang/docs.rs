@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use docs_rs_build_engine::{BuildEnvironment, SandboxImageSource};
+use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 use rustwide::Crate;
 use std::{env, fs, path::PathBuf};
 

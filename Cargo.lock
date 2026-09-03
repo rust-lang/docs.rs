@@ -2050,8 +2050,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "docs_rs_build_engine",
  "docs_rs_build_limits",
+ "docs_rs_rustwide",
  "flate2",
  "humantime",
  "parse-size",
@@ -2062,28 +2062,6 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "docs_rs_build_engine"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "bon",
- "docs_rs_build_limits",
- "docs_rs_cargo_metadata",
- "docs_rs_rustdoc_json",
- "docs_rs_types",
- "docs_rs_utils",
- "docsrs-metadata",
- "log",
- "rustwide",
- "serde_json",
- "sysinfo",
- "tempfile",
- "test-case",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
@@ -2139,7 +2117,6 @@ dependencies = [
  "anyhow",
  "bytes",
  "clap",
- "docs_rs_build_engine",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
@@ -2154,6 +2131,7 @@ dependencies = [
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
  "docs_rs_rustdoc_json",
+ "docs_rs_rustwide",
  "docs_rs_storage",
  "docs_rs_types",
  "docs_rs_utils",
@@ -2456,6 +2434,28 @@ dependencies = [
  "serde_json",
  "strum",
  "test-case",
+]
+
+[[package]]
+name = "docs_rs_rustwide"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_build_limits",
+ "docs_rs_cargo_metadata",
+ "docs_rs_rustdoc_json",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "docsrs-metadata",
+ "log",
+ "rustwide",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
-# docs_rs_build_engine
+# docs_rs_rustwide
 
-`docs_rs_build_engine` contains the service-independent part of the docs.rs build
+`docs_rs_rustwide` contains the service-independent part of the docs.rs build
 pipeline. It configures rustwide, applies the docs.rs sandbox limits and Cargo
 arguments, reads the crate's docs.rs metadata, and runs all build steps for a
 release in one sandbox.
@@ -17,7 +17,7 @@ workspace. Long-running builders should call
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::{BuildEnvironment, SandboxImageSource};
+# use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 # use std::{path::Path, time::Duration};
 # fn main() -> Result<()> {
 let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
@@ -46,7 +46,7 @@ regenerating and publishing shared rustdoc files:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::BuildEnvironment;
+# use docs_rs_rustwide::BuildEnvironment;
 # use rustwide::Toolchain;
 # use std::path::Path;
 # fn main() -> Result<()> {
@@ -83,7 +83,7 @@ the sandbox or host runtime to enforce the limit:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::BuildEnvironment;
+# use docs_rs_rustwide::BuildEnvironment;
 # use std::path::Path;
 # fn main() -> Result<()> {
 let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
@@ -99,7 +99,7 @@ destination is configured:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::BuildEnvironment;
+# use docs_rs_rustwide::BuildEnvironment;
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
@@ -125,7 +125,7 @@ the default target and the additional targets selected by the crate's metadata:
 
 ```rust,no_run
 use anyhow::Result;
-use docs_rs_build_engine::{BuildEnvironment, SandboxImageSource};
+use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 use rustwide::Crate;
 use std::path::Path;
 
@@ -166,7 +166,7 @@ rustwide build and sandbox:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::{BuildEnvironment, SandboxImageSource};
+# use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
@@ -194,7 +194,7 @@ archive sources before metadata parsing or sandbox preparation:
 
 ```rust,no_run
 # use anyhow::Result;
-# use docs_rs_build_engine::BuildEnvironment;
+# use docs_rs_rustwide::BuildEnvironment;
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {

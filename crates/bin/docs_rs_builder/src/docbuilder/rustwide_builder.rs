@@ -4,10 +4,6 @@ use crate::{
 };
 use anyhow::{Context as _, Error, Result};
 use bytes::Bytes;
-use docs_rs_build_engine::{
-    BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
-    TargetBuildResult,
-};
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::MetadataPackage;
@@ -25,6 +21,10 @@ use docs_rs_registry_api::RegistryApi;
 use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
+use docs_rs_rustwide::{
+    BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
+    TargetBuildResult,
+};
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
@@ -1026,7 +1026,7 @@ mod tests {
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
         let test_crate =
-            Path::new("../../lib/docs_rs_build_engine/tests/fixtures/simple-build-failure/");
+            Path::new("../../lib/docs_rs_rustwide/tests/fixtures/simple-build-failure/");
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;

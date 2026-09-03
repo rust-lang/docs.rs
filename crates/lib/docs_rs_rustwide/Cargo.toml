@@ -1,5 +1,5 @@
 [package]
-name = "docs_rs_build_engine"
+name = "docs_rs_rustwide"
 version.workspace = true
 authors.workspace = true
 license.workspace = true

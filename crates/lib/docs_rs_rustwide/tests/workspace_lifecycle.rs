@@ -1,7 +1,7 @@
 mod support;
 
 use anyhow::Result;
-use docs_rs_build_engine::BuildEnvironment;
+use docs_rs_rustwide::BuildEnvironment;
 use std::time::Duration;
 use support::{build_local, fixture, test_sandbox_image};
 

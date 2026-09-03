@@ -15,7 +15,7 @@ exclude = [
     ".workspace",
     "crates/bin/docs_rs_builder/.rustwide-docker",
     "crates/bin/docs_rs_builder/.workspace",
-    "crates/lib/docs_rs_build_engine/tests/fixtures",
+    "crates/lib/docs_rs_rustwide/tests/fixtures",
     "ignored",
 ]
 

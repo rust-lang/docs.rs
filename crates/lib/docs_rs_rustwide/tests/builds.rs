@@ -1,7 +1,7 @@
 mod support;
 
 use anyhow::{Context as _, Result};
-use docs_rs_build_engine::{BuildEnvironment, CpuLimit};
+use docs_rs_rustwide::{BuildEnvironment, CpuLimit};
 use rustwide::Crate;
 use std::fs;
 use support::{TestEnvironment, build_local, fixture, test_sandbox_image};
