@@ -1,5 +1,5 @@
 [package]
-name = "docs_rs_run_build"
+name = "docs_rs_build_cli"
 version = "0.1.0"
 authors.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-docs_rs_build = { path = "../../lib/docs_rs_build" }
+docs_rs_build_engine = { path = "../../lib/docs_rs_build_engine" }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits", default-features = false }
 flate2 = { workspace = true }
 humantime = "2.4.0"
@@ -26,3 +26,7 @@ tracing-subscriber = { version = "0.3.20", default-features = false, features = 
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "docs_rs_build"
+path = "src/main.rs"

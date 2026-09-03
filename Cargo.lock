@@ -2045,7 +2045,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "docs_rs_build"
+name = "docs_rs_build_cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "docs_rs_build_engine",
+ "docs_rs_build_limits",
+ "flate2",
+ "humantime",
+ "parse-size",
+ "rustwide",
+ "tar",
+ "tempfile",
+ "toml",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "docs_rs_build_engine"
 version = "0.6.0"
 dependencies = [
  "anyhow",
@@ -2119,7 +2139,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "clap",
- "docs_rs_build",
+ "docs_rs_build_engine",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",
@@ -2424,26 +2444,6 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "docs_rs_run_build"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "docs_rs_build",
- "docs_rs_build_limits",
- "flate2",
- "humantime",
- "parse-size",
- "rustwide",
- "tar",
- "tempfile",
- "toml",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

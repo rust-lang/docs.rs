@@ -1,5 +1,5 @@
 [package]
-name = "docs_rs_build"
+name = "docs_rs_build_engine"
 version.workspace = true
 authors.workspace = true
 license.workspace = true

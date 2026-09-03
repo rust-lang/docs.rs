@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context as _, Error, Result};
 use bytes::Bytes;
-use docs_rs_build::{
+use docs_rs_build_engine::{
     BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
     TargetBuildResult,
 };
@@ -1025,7 +1025,8 @@ mod tests {
         // added. Will fail when we try to build.
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
-        let test_crate = Path::new("../../lib/docs_rs_build/tests/fixtures/simple-build-failure/");
+        let test_crate =
+            Path::new("../../lib/docs_rs_build_engine/tests/fixtures/simple-build-failure/");
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;

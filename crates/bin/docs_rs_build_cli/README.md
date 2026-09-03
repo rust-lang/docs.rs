@@ -1,6 +1,6 @@
-# docs_rs_run_build
+# docs_rs_build
 
-`docs_rs_run_build` runs a crate through the same Cargo, rustdoc, rustwide, and
+`docs_rs_build` runs a crate through the same Cargo, rustdoc, rustwide, and
 sandbox configuration used by docs.rs. It is intended for crate authors who want
 to catch documentation build failures locally or in CI before publishing.
 
@@ -19,13 +19,13 @@ Windows, run it in a Linux VM or a Linux CI job.
 Once the crate is published, install the locked release with:
 
 ```console
-cargo install docs_rs_run_build --locked
+cargo install docs_rs_build_cli --locked
 ```
 
 When developing docs.rs itself, install the workspace copy with:
 
 ```console
-cargo install --path crates/bin/docs_rs_run_build --locked
+cargo install --path crates/bin/docs_rs_build_cli --locked
 ```
 
 ## Building a crate
@@ -33,13 +33,13 @@ cargo install --path crates/bin/docs_rs_run_build --locked
 From a package directory:
 
 ```console
-docs_rs_run_build
+docs_rs_build
 ```
 
 Or pass the package directory explicitly:
 
 ```console
-docs_rs_run_build path/to/package
+docs_rs_build path/to/package
 ```
 
 Before starting the sandbox, the command runs
@@ -59,7 +59,7 @@ root package is built by default. For a virtual workspace, select a member
 explicitly:
 
 ```console
-docs_rs_run_build --package my-crate
+docs_rs_build --package my-crate
 ```
 
 The package argument accepts the same package specification syntax as
@@ -70,7 +70,7 @@ rather than implicitly selecting a member.
 You can also point directly at a member directory:
 
 ```console
-docs_rs_run_build crates/my-crate
+docs_rs_build crates/my-crate
 ```
 
 ## GitHub Actions
@@ -93,9 +93,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install docs.rs build runner
-        run: cargo install docs_rs_run_build --locked
+        run: cargo install docs_rs_build_cli --locked
       - name: Build documentation as docs.rs
-        run: docs_rs_run_build --package my-crate
+        run: docs_rs_build --package my-crate
 ```
 
 Omit `--package` for a repository whose root manifest is the package being
@@ -113,7 +113,7 @@ For faster testing with the smaller image used by the build library's
 integration tests, pass:
 
 ```console
-docs_rs_run_build --small-image
+docs_rs_build --small-image
 ```
 
 The corresponding amd64 micro image is approximately 259 MB compressed. It is
@@ -151,7 +151,7 @@ not change the exit status, matching how docs.rs treats auxiliary output.
 Use `--strict` to make any auxiliary or additional-target failure fatal:
 
 ```console
-docs_rs_run_build --strict
+docs_rs_build --strict
 ```
 
 Cargo and rustdoc output is streamed to standard output. A final summary shows
@@ -165,7 +165,7 @@ Rustwide state, caches, and generated artifacts are stored in
 location when necessary:
 
 ```console
-docs_rs_run_build --workspace /tmp/docsrs-workspace
+docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
 The exact artifact paths are printed in the build summary. A later invocation
@@ -182,5 +182,5 @@ policy can be adjusted through command-line options.
 Run the following for the authoritative list of options and defaults:
 
 ```console
-docs_rs_run_build --help
+docs_rs_build --help
 ```

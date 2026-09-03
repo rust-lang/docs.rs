@@ -6,7 +6,7 @@ mod report;
 use anyhow::{Context as _, Result, bail};
 use args::Args;
 use clap::Parser as _;
-use docs_rs_build::BuildEnvironment;
+use docs_rs_build_engine::BuildEnvironment;
 use package::PackagedCrate;
 use rustwide::Crate;
 use std::{path::Path, process::ExitCode};

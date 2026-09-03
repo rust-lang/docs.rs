@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use docs_rs_build::{BuildEnvironment, SandboxImageSource};
+use docs_rs_build_engine::{BuildEnvironment, SandboxImageSource};
 use rustwide::{BuildResult, Crate};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -41,7 +41,7 @@ pub fn fixture(name: &str) -> PathBuf {
 pub fn build_local(
     environment: &mut BuildEnvironment,
     fixture_name: &str,
-) -> Result<BuildResult<docs_rs_build::ReleaseBuildResult>> {
+) -> Result<BuildResult<docs_rs_build_engine::ReleaseBuildResult>> {
     let fixture = fixture(fixture_name);
     let krate = Crate::local(&fixture);
     environment.release(&krate).run(|build| build.build_docs())

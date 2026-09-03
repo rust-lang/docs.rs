@@ -1,4 +1,4 @@
-use docs_rs_build::{ReleaseBuildResult, StepResult, TargetBuildResult};
+use docs_rs_build_engine::{ReleaseBuildResult, StepResult, TargetBuildResult};
 
 pub(crate) fn print(result: &ReleaseBuildResult, strict: bool) -> bool {
     println!();
