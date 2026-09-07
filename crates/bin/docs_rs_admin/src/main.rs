@@ -1,4 +1,3 @@
-mod cleanup_s3;
 mod rebuilds;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -373,12 +372,6 @@ enum DatabaseSubcommand {
     /// Updates GitHub/GitLab stats for crates.
     UpdateRepositoryFields,
 
-    /// Clean up the s3 bucket from non-archive storage files.
-    CleanS3Bucket {
-        #[arg(long)]
-        dry_run: bool,
-    },
-
     /// Backfill GitHub/GitLab stats for crates.
     BackfillRepositoryStats,
 
@@ -440,14 +433,6 @@ impl DatabaseSubcommand {
 
                 println!("update repository stats where outdated...");
                 ctx.repository_stats()?.update_all_crates().await?;
-            }
-
-            Self::CleanS3Bucket { dry_run } => {
-                println!("clean up s3 bucket...");
-                let mut conn = ctx.pool()?.get_async().await?;
-                let storage = ctx.storage()?;
-
-                cleanup_s3::cleanup_s3_bucket(&mut conn, storage, dry_run).await?;
             }
 
             Self::BackfillRepositoryStats => {
