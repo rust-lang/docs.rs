@@ -31,16 +31,15 @@ fn main() -> Result<()> {
     }
 
     let krate = Crate::crates_io(&name, &version);
-    let result = environment
-        .release(&krate)
-        .fetch()?
-        .try_inspect(|fetched| {
-            fetched.copy_source_to(&source_directory)?;
-            println!("extracted sources to {}", source_directory.display());
-            Ok(())
-        })?
+
+    let fetched = environment.release(&krate).fetch()?;
+    fetched.copy_source_to(&source_directory)?;
+    println!("extracted sources to {}", source_directory.display());
+
+    let result = fetched
         // Sandbox and build preparation only start after the source copy is complete.
         .run(|build| build.build_docs())?;
+
     println!(
         "documentation succeeded: {}",
         result.into_inner().successful()

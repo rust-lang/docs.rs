@@ -141,7 +141,8 @@ fn main() -> Result<()> {
         .release(&krate)
         .run(|build| build.build_docs())?;
 
-    // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment setup.
+    // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment
+    // setup.
     println!("build duration: {:?}", build.duration());
     println!("sandbox statistics: {:#?}", build.statistics());
     let release = build.into_inner();
@@ -202,11 +203,14 @@ archive sources before metadata parsing or sandbox preparation:
 # fn main() -> Result<()> {
 # let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
-let result = environment
+let fetched = environment
     .release(&krate)
-    .fetch()?
-    .try_inspect(|fetched| fetched.copy_source_to("./source-archive-input"))?
-    .run(|build| build.build_docs())?;
+    .fetch()?;
+
+fetched.copy_source_to("./source-archive-input")?
+
+let result = fetched.run(|build| build.build_docs())?;
+
 # let _ = result;
 # Ok(())
 # }

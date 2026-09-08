@@ -185,13 +185,11 @@ fn source_can_be_copied_before_a_failed_build() -> Result<()> {
     let destination = tempfile::tempdir()?;
     let fixture = fixture("simple-build-failure");
     let krate = Crate::local(&fixture);
-    let release = test
-        .environment
-        .release(&krate)
-        .fetch()?
-        .try_inspect(|fetched| fetched.copy_source_to(destination.path()))?
-        .run(|build| build.build_docs())?
-        .into_inner();
+
+    let fetched = test.environment.release(&krate).fetch()?;
+    fetched.copy_source_to(destination.path())?;
+
+    let release = fetched.run(|build| build.build_docs())?.into_inner();
 
     assert!(destination.path().join("src/main.rs").is_file());
     assert!(!release.successful());
