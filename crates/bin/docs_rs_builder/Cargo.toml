@@ -34,7 +34,7 @@ opentelemetry = { workspace = true }
 regex = { workspace = true }
 # rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 rustwide = {
-    path = "/home/syphar/src/rust-lang/rustwide-less-tracing-fields",
+    path = "/home/syphar/src/rust-lang/rustwide",
     default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"]
 }
 sqlx = { workspace = true }
