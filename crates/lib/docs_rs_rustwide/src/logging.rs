@@ -1,8 +1,8 @@
-use docs_rs_logging::Config;
+// use docs_rs_logging::Config;
 use log::{Level, Log, Metadata, Record};
 
-pub fn init(config: &Config) {
-    if config.log_build_logs {
+pub fn init(log_build_logs: bool) {
+    if log_build_logs {
         rustwide::logging::init_with(RustwideLogTracer);
     } else {
         rustwide::logging::init();

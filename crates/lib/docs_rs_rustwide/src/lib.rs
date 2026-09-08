@@ -7,6 +7,7 @@
 
 mod build;
 mod command;
+pub mod logging;
 mod release;
 mod result;
 mod sandbox;

@@ -1,7 +1,6 @@
 mod build_queue;
 mod config;
 pub mod docbuilder;
-pub mod logging;
 pub(crate) mod metrics;
 pub mod queue_builder;
 #[cfg(test)]

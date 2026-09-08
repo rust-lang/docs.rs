@@ -11,7 +11,7 @@ use tokio::runtime;
 
 fn main() -> Result<()> {
     let logging_config = docs_rs_logging::Config::from_environment()?;
-    docs_rs_builder::logging::init(&logging_config);
+    docs_rs_rustwide::logging::init(logging_config.log_build_logs);
     let _guard =
         docs_rs_logging::init_with_config(&logging_config).context("error initializing logging")?;
 
