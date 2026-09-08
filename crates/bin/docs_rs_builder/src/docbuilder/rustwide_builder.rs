@@ -610,7 +610,7 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
         destination = %destination.display(),
         "copying documentation"
     );
-    Ok(copy_dir_all(source, destination)?)
+    Ok(copy_dir_all(source, destination, |_| {})?)
 }
 
 #[cfg(test)]

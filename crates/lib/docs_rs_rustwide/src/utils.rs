@@ -4,16 +4,22 @@ use std::{fs, io, path::Path};
 use tracing::{debug, instrument};
 
 /// cp -r src dst
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
+pub fn copy_dir_all(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+    mut on_file: impl FnMut(&Path),
+) -> io::Result<()> {
     let dst = dst.as_ref();
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let filename = entry.file_name();
         if entry.file_type()?.is_dir() {
-            copy_dir_all(entry.path(), dst.join(filename))?;
+            copy_dir_all(entry.path(), dst.join(filename), &mut on_file)?;
         } else {
-            fs::copy(entry.path(), dst.join(filename))?;
+            let destination_path = dst.join(filename);
+            fs::copy(entry.path(), &destination_path)?;
+            on_file(&destination_path);
         }
     }
     Ok(())
@@ -76,6 +82,7 @@ pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use test_case::test_case;
 
     #[test_case(&[], "build-std" => false; "empty arguments")]
@@ -97,6 +104,8 @@ mod tests {
 
     #[test]
     fn test_copy_doc_dir() {
+        use pretty_assertions::assert_eq;
+
         let source = tempfile::Builder::new()
             .prefix("docsrs-src")
             .tempdir()
@@ -113,8 +122,22 @@ mod tests {
         fs::write(doc.join("inner").join("index.html"), "<html>spooky</html>").unwrap();
 
         // lets try to copy a src directory to tempdir
-        copy_dir_all(source.path().join("doc"), destination.path()).unwrap();
-        assert!(destination.path().join("index.html").exists());
-        assert!(destination.path().join("inner").join("index.html").exists());
+        let mut copied = Vec::new();
+        copy_dir_all(source.path().join("doc"), destination.path(), |path| {
+            copied.push(PathBuf::from(path));
+        })
+        .unwrap();
+
+        copied.sort();
+
+        assert_eq!(
+            copied,
+            vec![
+                destination.path().join("index.html"),
+                destination.path().join("inner").join("index.html"),
+            ]
+        );
+
+        assert!(copied.iter().all(|p| p.exists()));
     }
 }

@@ -26,6 +26,7 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt"] }
+pretty_assertions = { workspace = true }
 
 [lints]
 workspace = true

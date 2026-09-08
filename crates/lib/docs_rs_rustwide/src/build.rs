@@ -379,7 +379,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 metrics_dir,
                 self.environment.compiler_metrics_collection_path(),
             ) {
-                let copied_metrics = copy_dir_all(&source, destination)?;
+                let mut copied_metrics = Vec::new();
+                copy_dir_all(&source, destination, |path| {
+                    copied_metrics.push(path.into())
+                })
+                .map_err(anyhow::Error::from)?;
                 debug!(
                     count = copied_metrics.len(),
                     destination = %destination.display(),
@@ -543,25 +547,6 @@ mod tests {
         let static_files = directory.path().join("static.files");
         fs::create_dir(&static_files)?;
         assert_eq!(essential_files_directory(directory.path())?, static_files);
-        Ok(())
-    }
-
-    #[test]
-    fn reports_copied_compiler_metrics_paths() -> Result<()> {
-        let source = tempfile::tempdir()?;
-        let destination = tempfile::tempdir()?;
-        fs::create_dir(source.path().join("nested"))?;
-        fs::write(source.path().join("crate-1.json"), "{}")?;
-        fs::write(source.path().join("nested/crate-2.json"), "{}")?;
-
-        let mut copied = copy_directory_contents(source.path(), destination.path())?;
-        copied.sort();
-        let mut expected = vec![
-            destination.path().join("crate-1.json"),
-            destination.path().join("nested/crate-2.json"),
-        ];
-        expected.sort();
-        assert_eq!(copied, expected);
         Ok(())
     }
 }

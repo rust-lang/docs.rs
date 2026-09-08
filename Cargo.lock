@@ -2449,6 +2449,7 @@ dependencies = [
  "docs_rs_utils",
  "docsrs-metadata",
  "log",
+ "pretty_assertions",
  "rustwide",
  "serde_json",
  "sysinfo",
