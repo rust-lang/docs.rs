@@ -1,6 +1,6 @@
 use docs_rs_rustwide::{ReleaseBuildResult, StepResult, TargetBuildResult};
 
-pub(crate) fn print(result: &ReleaseBuildResult, strict: bool) -> bool {
+pub(crate) fn print(result: &ReleaseBuildResult, duration: std::time::Duration, strict: bool) -> bool {
     println!();
     println!("docs.rs build summary");
 
@@ -19,13 +19,13 @@ pub(crate) fn print(result: &ReleaseBuildResult, strict: bool) -> bool {
             println!("      output: {}", output.path().display());
         }
         print_step("documentation coverage", &target.coverage);
-        println!("    cumulative duration: {:.2}s", target.duration().as_secs_f64());
+        println!("    duration: {:.2}s", target.duration().as_secs_f64());
         for path in &target.compiler_metrics {
             println!("    compiler metrics: {}", path.display());
         }
     }
 
-    println!("  cumulative duration: {:.2}s", result.duration().as_secs_f64());
+    println!("  duration: {:.2}s", duration.as_secs_f64());
 
     match result.statistics.memory_peak_bytes() {
         Some(bytes) => println!(

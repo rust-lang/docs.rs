@@ -1,11 +1,12 @@
-use crate::{BuildEnvironment, ReleaseBuild};
+use crate::{BuildEnvironment, BuildResult, ReleaseBuild};
 use anyhow::Result;
 use docs_rs_build_limits::Limits;
-use rustwide::{BuildResult, Crate};
+use rustwide::Crate;
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     path::Path,
+    time::Instant,
 };
 use tracing::{debug, info, instrument};
 
@@ -29,6 +30,7 @@ impl<'release> ReleaseContext<'release> {
     /// metadata parsing or sandbox preparation can fail.
     #[instrument(skip_all)]
     pub fn fetch(self) -> Result<FetchedRelease<'release>> {
+        let started = Instant::now();
         let Self {
             environment,
             krate,
@@ -44,6 +46,7 @@ impl<'release> ReleaseContext<'release> {
         debug!("crate source fetched");
 
         Ok(FetchedRelease {
+            started,
             environment,
             krate,
             limits,
@@ -61,6 +64,7 @@ impl<'release> ReleaseContext<'release> {
 
 /// A crate release fetched into rustwide's cache but not yet prepared for building.
 pub struct FetchedRelease<'release> {
+    started: Instant,
     environment: &'release mut BuildEnvironment,
     krate: &'release Crate,
     limits: Option<Limits>,
@@ -103,6 +107,7 @@ impl FetchedRelease<'_> {
         callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
     ) -> Result<BuildResult<R>> {
         let Self {
+            started,
             environment,
             krate,
             limits,
@@ -123,7 +128,10 @@ impl FetchedRelease<'_> {
         debug!("release sandbox completed; purging crate source cache");
         krate.purge_from_cache(environment.workspace())?;
         debug!("release build completed");
-        Ok(result)
+        Ok(BuildResult {
+            inner: result,
+            duration: started.elapsed(),
+        })
     }
 }
 

@@ -233,6 +233,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         #[builder(start_fn)] target: &str,
         #[builder(default = false)] retry_without_lockfile: bool,
     ) -> Result<TargetBuildResult> {
+        let started = Instant::now();
         let is_default = target == self.metadata_targets().default_target;
         let mut target_result = self.build_target_once(target, is_default);
 
@@ -248,6 +249,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             target_result = self.build_target_once(target, is_default);
         }
 
+        target_result.duration = started.elapsed();
         Ok(target_result)
     }
 
@@ -275,6 +277,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         );
 
         TargetBuildResult {
+            duration: std::time::Duration::ZERO,
             target: target.into(),
             is_default,
             documentation: documentation_result,

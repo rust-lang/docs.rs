@@ -141,6 +141,8 @@ fn main() -> Result<()> {
         .release(&krate)
         .run(|build| build.build_docs())?;
 
+    // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment setup.
+    println!("build duration: {:?}", build.duration());
     println!("sandbox statistics: {:#?}", build.statistics());
     let release = build.into_inner();
     for target in release.targets {

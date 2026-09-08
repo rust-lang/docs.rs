@@ -20,7 +20,7 @@ pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
 pub use command::PrepareCommand;
 pub use release::{FetchedRelease, ReleaseContext};
 pub use result::{
-    BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult, TargetBuildResult,
+    BuildResult, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult, TargetBuildResult,
 };
 pub use sandbox::CpuLimit;
 pub use utils::resolve_sandbox_image;

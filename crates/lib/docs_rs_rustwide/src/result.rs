@@ -11,6 +11,30 @@ use std::{
 };
 use tracing::{debug, instrument};
 
+/// Output of a completed release lifecycle, including fetch and sandbox cleanup.
+pub struct BuildResult<T> {
+    pub(crate) inner: rustwide::BuildResult<T>,
+    pub(crate) duration: Duration,
+}
+
+impl<T> BuildResult<T> {
+    /// Elapsed time from entering fetch through sandbox teardown and cache cleanup.
+    /// Includes caller work between fetch and run, but excludes workspace/toolchain setup.
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+
+    /// Final statistics for the shared sandbox.
+    pub fn statistics(&self) -> &SandboxStatistics {
+        self.inner.statistics()
+    }
+
+    /// Return the callback output, discarding lifecycle duration and final statistics.
+    pub fn into_inner(self) -> T {
+        self.inner.into_inner()
+    }
+}
+
 /// A rustdoc JSON artifact produced by a successful JSON build.
 #[derive(Clone, Debug)]
 pub struct RustdocJsonOutput {
@@ -98,6 +122,7 @@ impl<T> StepResult<T> {
 /// Results for all build modes of one compilation target.
 #[derive(Debug)]
 pub struct TargetBuildResult {
+    pub(crate) duration: Duration,
     /// Rust target triple.
     pub target: String,
     /// Whether this is the release's default target.
@@ -113,10 +138,9 @@ pub struct TargetBuildResult {
 }
 
 impl TargetBuildResult {
-    /// Sum of the retained step durations for this target.
-    /// Excludes discarded attempts and lockfile regeneration.
+    /// Elapsed time for this target, including all attempts and lockfile regeneration.
     pub fn duration(&self) -> Duration {
-        self.coverage.duration + self.rustdoc_json.duration + self.documentation.duration
+        self.duration
     }
 
     /// Whether rustdoc produced a documentation output directory.
@@ -160,11 +184,6 @@ pub struct ReleaseBuildResult {
 }
 
 impl ReleaseBuildResult {
-    /// Sum of target durations, excluding release preparation and discarded attempts.
-    pub fn duration(&self) -> Duration {
-        self.targets.iter().map(TargetBuildResult::duration).sum()
-    }
-
     /// The default target result.
     pub fn default_target(&self) -> &TargetBuildResult {
         self.targets
@@ -202,6 +221,7 @@ mod tests {
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,
+            duration: Duration::ZERO,
             documentation: StepResult {
                 output: Some(documentation_path),
                 error: None,
