@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use anyhow::Result;
 pub use docs_rs_rustwide::testing::{TestWorkspace, test_sandbox_image};
 use docs_rs_rustwide::{BuildEnvironment, BuildResult};
