@@ -2550,6 +2550,7 @@ dependencies = [
  "pretty_assertions",
  "rayon",
  "sqlx",
+ "test-case",
  "tokio",
  "tracing",
 ]
