@@ -19,9 +19,20 @@ pub(crate) fn print(result: &ReleaseBuildResult, strict: bool) -> bool {
             println!("      output: {}", output.path().display());
         }
         print_step("documentation coverage", &target.coverage);
+        println!("    cumulative duration: {:.2}s", target.duration().as_secs_f64());
         for path in &target.compiler_metrics {
             println!("    compiler metrics: {}", path.display());
         }
+    }
+
+    println!("  cumulative duration: {:.2}s", result.duration().as_secs_f64());
+
+    match result.statistics.memory_peak_bytes() {
+        Some(bytes) => println!(
+            "  sandbox peak memory: {:.1} MiB",
+            bytes as f64 / (1024.0 * 1024.0)
+        ),
+        None => println!("  sandbox peak memory: unavailable"),
     }
 
     let default_succeeded = result.successful() && result.has_docs();
@@ -55,6 +66,7 @@ fn print_step<T>(name: &str, step: &StepResult<T>) {
         (None, None) => println!("    {name}: ok"),
         (_, Some(error)) => println!("    {name}: failed: {error:#}"),
     }
+    println!("      duration: {:.2}s", step.duration.as_secs_f64());
 }
 
 #[cfg(test)]

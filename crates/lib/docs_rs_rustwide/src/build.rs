@@ -21,6 +21,7 @@ use std::{
     io::{BufRead as _, BufReader},
     iter,
     path::{Path, PathBuf},
+    time::Instant,
 };
 use tracing::{Span, debug, instrument, warn};
 
@@ -218,6 +219,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         }
 
         Ok(ReleaseBuildResult {
+            statistics: self.build.statistics(),
             metadata: self.metadata.clone(),
             cargo_metadata,
             targets: target_results,
@@ -405,18 +407,22 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(self.limits.max_log_size());
+        let started = Instant::now();
         let captured_result = logging::capture(&storage, run);
+        let duration = started.elapsed();
 
         match captured_result {
             Ok(output) => StepResult {
                 output: Some(output),
                 error: None,
                 log: storage.to_string(),
+                duration,
             },
             Err(error) => StepResult {
                 output: None,
                 error: Some(error),
                 log: storage.to_string(),
+                duration,
             },
         }
     }

@@ -3,10 +3,11 @@ use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
 use docs_rs_types::{BuildError, doc_coverage::DocCoverage};
 use docsrs_metadata::Metadata;
-use rustwide::cmd::CommandError;
+use rustwide::{SandboxStatistics, cmd::CommandError};
 use std::{
     fs::File,
     path::{Path, PathBuf},
+    time::Duration,
 };
 use tracing::{debug, instrument};
 
@@ -77,6 +78,8 @@ impl BuildError for BuildStepError {
 /// Output and captured log of one non-fatal release build step.
 #[derive(Debug)]
 pub struct StepResult<T> {
+    /// Wall-clock time spent preparing, executing, and processing this step.
+    pub duration: Duration,
     /// Produced value when the step succeeded.
     pub output: Option<T>,
     /// Failure when the step did not succeed.
@@ -110,6 +113,12 @@ pub struct TargetBuildResult {
 }
 
 impl TargetBuildResult {
+    /// Sum of the retained step durations for this target.
+    /// Excludes discarded attempts and lockfile regeneration.
+    pub fn duration(&self) -> Duration {
+        self.coverage.duration + self.rustdoc_json.duration + self.documentation.duration
+    }
+
     /// Whether rustdoc produced a documentation output directory.
     ///
     /// Cargo can exit successfully without generating documentation for a
@@ -139,6 +148,9 @@ impl TargetBuildResult {
 
 /// Service-independent result of building one crate release.
 pub struct ReleaseBuildResult {
+    /// Sandbox statistics captured after all documentation targets finished.
+    /// Includes all targets and retry attempts in the shared sandbox.
+    pub statistics: SandboxStatistics,
     /// Metadata read from rustwide's prepared source directory.
     pub metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
@@ -148,6 +160,11 @@ pub struct ReleaseBuildResult {
 }
 
 impl ReleaseBuildResult {
+    /// Sum of target durations, excluding release preparation and discarded attempts.
+    pub fn duration(&self) -> Duration {
+        self.targets.iter().map(TargetBuildResult::duration).sum()
+    }
+
     /// The default target result.
     pub fn default_target(&self) -> &TargetBuildResult {
         self.targets
@@ -189,16 +206,19 @@ mod tests {
                 output: Some(documentation_path),
                 error: None,
                 log: String::new(),
+                duration: Duration::ZERO,
             },
             rustdoc_json: StepResult {
                 output: None,
                 error: None,
                 log: String::new(),
+                duration: Duration::ZERO,
             },
             coverage: StepResult {
                 output: None,
                 error: None,
                 log: String::new(),
+                duration: Duration::ZERO,
             },
             compiler_metrics: Vec::new(),
         }
