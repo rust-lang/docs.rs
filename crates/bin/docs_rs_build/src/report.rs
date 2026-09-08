@@ -1,5 +1,6 @@
 use cli_table::{Cell, Style, Table, format::Justify, print_stdout};
 use docs_rs_rustwide::{ReleaseBuildResult, StepResult, TargetBuildResult};
+use humantime::format_duration;
 use std::time::Duration;
 
 pub(crate) fn print(
@@ -28,7 +29,7 @@ pub(crate) fn print(
             step_cell(&target.documentation),
             step_cell(&target.rustdoc_json),
             step_cell(&target.coverage),
-            format_duration(target.duration()),
+            format_duration(target.duration()).to_string(),
         ]);
         totals[0] += target.documentation.duration;
         totals[1] += target.rustdoc_json.duration;
@@ -37,10 +38,10 @@ pub(crate) fn print(
     }
     rows.push([
         "Total".to_owned(),
-        format_duration(totals[0]),
-        format_duration(totals[1]),
-        format_duration(totals[2]),
-        format_duration(totals[3]),
+        format_duration(totals[0]).to_string(),
+        format_duration(totals[1]).to_string(),
+        format_duration(totals[2]).to_string(),
+        format_duration(totals[3]).to_string(),
     ]);
     print_table(&rows)?;
     println!("Target totals include retries and work between steps.");
@@ -94,10 +95,6 @@ fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
 
 fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: bool) -> bool {
     default_succeeded && (!strict || auxiliary_succeeded)
-}
-
-fn format_duration(duration: Duration) -> String {
-    format!("{:.2}s", duration.as_secs_f64())
 }
 
 fn step_cell<T>(step: &StepResult<T>) -> String {
