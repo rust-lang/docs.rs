@@ -1,8 +1,6 @@
-mod support;
-
 use anyhow::Result;
 use rustwide::Crate;
-use support::{TestEnvironment, build_local};
+use crate::support::{TestEnvironment, build_local};
 
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]

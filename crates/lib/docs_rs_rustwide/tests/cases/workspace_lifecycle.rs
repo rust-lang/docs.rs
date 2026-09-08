@@ -1,9 +1,7 @@
-mod support;
-
 use anyhow::Result;
 use docs_rs_rustwide::BuildEnvironment;
 use std::time::Duration;
-use support::{build_local, fixture, test_sandbox_image, test_workspace};
+use crate::support::{build_local, fixture, test_sandbox_image, test_workspace};
 
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
