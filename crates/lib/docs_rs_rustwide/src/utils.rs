@@ -4,6 +4,8 @@ use std::{fs, io, path::Path};
 use tracing::{debug, instrument};
 
 /// cp -r src dst
+///
+/// `on_file` will be called for every destination filename
 pub fn copy_dir_all(
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
