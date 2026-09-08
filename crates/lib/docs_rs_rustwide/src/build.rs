@@ -19,7 +19,6 @@ use std::{
     ffi::OsStr,
     fs::{self, File},
     io::{BufRead as _, BufReader},
-    iter,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -185,10 +184,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             ?other_targets,
             "selected documentation targets"
         );
-
-        self.fetch_build_std_dependencies(
-            iter::once(default_target).chain(other_targets.iter().copied()),
-        )?;
 
         let cargo_metadata = self.load_cargo_metadata()?;
         let root_package = cargo_metadata.root();
