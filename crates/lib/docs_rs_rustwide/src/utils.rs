@@ -11,13 +11,20 @@ pub fn copy_dir_all(
     dst: impl AsRef<Path>,
     mut on_file: impl FnMut(&Path),
 ) -> io::Result<()> {
-    let dst = dst.as_ref();
+    copy_dir_all_inner(src.as_ref(), dst.as_ref(), &mut on_file)
+}
+
+fn copy_dir_all_inner(
+    src: &Path,
+    dst: &Path,
+    on_file: &mut impl FnMut(&Path),
+) -> io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let filename = entry.file_name();
         if entry.file_type()?.is_dir() {
-            copy_dir_all(entry.path(), dst.join(filename), &mut on_file)?;
+            copy_dir_all_inner(&entry.path(), &dst.join(filename), on_file)?;
         } else {
             let destination_path = dst.join(filename);
             fs::copy(entry.path(), &destination_path)?;

@@ -184,7 +184,7 @@ impl BuildEnvironment {
         };
         let workspace = ManagedWorkspace::new(workspace_configuration)?;
 
-        let environment = Self {
+        let mut environment = Self {
             workspace,
             toolchain,
             toolchain_update_interval,
@@ -249,7 +249,7 @@ impl BuildEnvironment {
     }
 
     #[instrument(skip_all)]
-    fn purge_caches(&self) -> Result<()> {
+    fn purge_caches(&mut self) -> Result<()> {
         debug!("purging rustwide caches");
         retry(|| self.workspace().purge_all_caches(), 3)?;
         debug!("rustwide caches purged");
@@ -303,7 +303,7 @@ impl BuildEnvironment {
     }
 
     #[instrument(skip_all)]
-    fn ensure_toolchain_installed(&self) -> Result<bool> {
+    fn ensure_toolchain_installed(&mut self) -> Result<bool> {
         if self.is_toolchain_installed()? {
             debug!("toolchain is already installed");
             return Ok(false);
@@ -319,7 +319,7 @@ impl BuildEnvironment {
     // whether an installed distribution toolchain can be updated. Unmanaged
     // targets are preserved here and only cleaned up by `update_toolchain`.
     #[instrument(skip_all)]
-    fn ensure_toolchain_ready(&self) -> Result<bool> {
+    fn ensure_toolchain_ready(&mut self) -> Result<bool> {
         let installed = self.ensure_toolchain_installed()?;
 
         if self.toolchain.as_ci().is_none() {
@@ -536,7 +536,7 @@ impl BuildEnvironment {
         Ok(())
     }
 
-    fn ensure_toolchain_components(&self) {
+    fn ensure_toolchain_components(&mut self) {
         for component in TOOLCHAIN_COMPONENTS {
             debug!(component, "ensuring toolchain component is installed");
             if let Err(error) = self.toolchain.add_component(self.workspace(), component) {
@@ -555,7 +555,7 @@ impl BuildEnvironment {
             .collect()
     }
 
-    fn ensure_required_toolchain_targets(&self, installed_targets: &[String]) -> Result<()> {
+    fn ensure_required_toolchain_targets(&mut self, installed_targets: &[String]) -> Result<()> {
         let mut targets_to_install = Self::managed_toolchain_targets();
 
         for target in installed_targets {
