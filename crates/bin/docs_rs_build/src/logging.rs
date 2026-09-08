@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use docs_rs_logging::MessageOnlyLogTracer;
 use std::io::stdout;
 use tracing::level_filters::LevelFilter;
 
@@ -21,6 +20,6 @@ pub(crate) fn init(verbosity: u8) -> Result<()> {
 
     // Rustwide captures every build record in its StepResult and also forwards
     // it through this logger, which gives local and CI users live output.
-    rustwide::logging::init_with(MessageOnlyLogTracer);
+    docs_rs_rustwide::logging::init(true);
     Ok(())
 }
