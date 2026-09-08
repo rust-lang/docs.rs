@@ -36,11 +36,10 @@ impl<'release> ReleaseContext<'release> {
             krate,
             limits,
         } = self;
-        let effective_limits = limits
-            .as_ref()
-            .unwrap_or_else(|| environment.default_limits());
+        let effective_limits = limits.unwrap_or_else(|| environment.default_limits().clone());
+
         debug!("validating host resources");
-        environment.validate_host_resources(effective_limits)?;
+        environment.validate_host_resources(&effective_limits)?;
         info!(%self.krate, "fetching crate source");
         krate.fetch(environment.workspace())?;
         debug!("crate source fetched");
@@ -49,7 +48,7 @@ impl<'release> ReleaseContext<'release> {
             started,
             environment,
             krate,
-            limits,
+            effective_limits,
         })
     }
 
@@ -67,7 +66,7 @@ pub struct FetchedRelease<'release> {
     started: Instant,
     environment: &'release mut BuildEnvironment,
     krate: &'release Crate,
-    limits: Option<Limits>,
+    effective_limits: Limits,
 }
 
 impl FetchedRelease<'_> {
@@ -110,21 +109,19 @@ impl FetchedRelease<'_> {
             started,
             environment,
             krate,
-            limits,
+            effective_limits,
         } = self;
-        let limits = limits
-            .as_ref()
-            .unwrap_or_else(|| environment.default_limits());
+
         debug!("purging stale release build directories");
         environment.workspace().purge_all_build_dirs()?;
         let build_dir_name = build_dir_name(krate);
         debug!(build_dir_name, "preparing release build directory");
         let mut build_dir = environment.workspace().build_dir(&build_dir_name);
-        let sandbox = environment.sandbox_builder(limits);
+        let sandbox = environment.sandbox_builder(&effective_limits);
         debug!("starting release sandbox");
         let result = build_dir
             .build(environment.configured_toolchain(), krate, sandbox)
-            .run(|build| callback(ReleaseBuild::new(environment, build, limits)?))?;
+            .run(|build| callback(ReleaseBuild::new(environment, build, &effective_limits)?))?;
         debug!("release sandbox completed; purging crate source cache");
         krate.purge_from_cache(environment.workspace())?;
         debug!("release build completed");
