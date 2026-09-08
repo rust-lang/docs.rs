@@ -1,7 +1,4 @@
-use crate::{
-    Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics,
-    utils::copy::copy_dir_all,
-};
+use crate::{Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics};
 use anyhow::{Context as _, Error, Result};
 use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
@@ -23,7 +20,7 @@ use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
     BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
-    TargetBuildResult,
+    TargetBuildResult, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,

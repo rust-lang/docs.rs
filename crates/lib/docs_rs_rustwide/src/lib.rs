@@ -13,7 +13,7 @@ mod result;
 mod sandbox;
 #[doc(hidden)]
 pub mod testing;
-mod utils;
+pub mod utils;
 mod workspace;
 
 pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
@@ -24,7 +24,6 @@ pub use result::{
     TargetBuildResult,
 };
 pub use sandbox::CpuLimit;
-pub use utils::resolve_sandbox_image;
 pub use workspace::{BuildEnvironment, MaintenanceResult, SandboxImageSource};
 
 /// Version of docs.rs whose build behavior this crate implements.

@@ -1,6 +1,6 @@
 use crate::{
     BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
-    TargetBuildResult, command::PrepareCommand,
+    TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
@@ -187,11 +187,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let cargo_metadata = self.load_cargo_metadata()?;
         let root_package = cargo_metadata.root();
-        Span::current().record("crate_name", root_package.name.as_str());
-        Span::current().record(
-            "crate_version",
-            tracing::field::display(&root_package.version),
-        );
+        Span::current()
+            .record("crate_name", root_package.name.as_str())
+            .record(
+                "crate_version",
+                tracing::field::display(&root_package.version),
+            );
 
         let default_target_result = self
             .build_target(default_target)
@@ -363,12 +364,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .rustdoc_arg(format!("--emit={}", emit.as_str()))
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
                 .cargo_arg("-Zrustdoc-scrape-examples");
+
             if metrics_dir.is_some() {
-                command = command.cargo_args([
-                    "--config".to_owned(),
-                    "build.rustdocflags=['-Zmetrics-dir=/opt/rustwide/target/metrics']".to_owned(),
-                ]);
+                command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics")
             }
+
             let command_result = command
                 .prepare()
                 .map_err(BuildStepError::Output)?
@@ -379,7 +379,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 metrics_dir,
                 self.environment.compiler_metrics_collection_path(),
             ) {
-                let copied_metrics = copy_directory_contents(&source, destination)?;
+                let copied_metrics = copy_dir_all(&source, destination)?;
                 debug!(
                     count = copied_metrics.len(),
                     destination = %destination.display(),
@@ -460,23 +460,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.environment
             .load_cargo_metadata(self.build.host_source_dir())
     }
-}
-
-fn copy_directory_contents(source: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
-    fs::create_dir_all(destination)?;
-    let mut copied = Vec::new();
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
-            copied.extend(copy_directory_contents(&source_path, &destination_path)?);
-        } else {
-            fs::copy(source_path, &destination_path)?;
-            copied.push(destination_path);
-        }
-    }
-    Ok(copied)
 }
 
 fn essential_files_directory(documentation_output: &Path) -> Result<PathBuf> {

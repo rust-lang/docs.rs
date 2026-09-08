@@ -5,7 +5,6 @@ pub(crate) mod metrics;
 pub mod queue_builder;
 #[cfg(test)]
 mod testing;
-mod utils;
 
 pub use config::Config;
 pub use docbuilder::rustwide_builder::{PackageKind, RustwideBuilder};
