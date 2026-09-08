@@ -12,10 +12,17 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--extern-html-root-takes-precedence",
 ];
 
+/// Build-Command builder & prepare.
+///
+/// * collects cargo-args & rustdoc args separately
+/// * created / extends a `rustwide::Command` with these args.
+/// * fetches build-std dependencies, if needed
+/// * ensures the given build-target is installed
 #[must_use = "call `.prepare()` to create and prepare the rustwide command"]
 pub struct PrepareCommand<'release_build, 'build, 'ws> {
     release_build: &'release_build ReleaseBuild<'build, 'ws>,
 
+    /// the build target for this command.
     target: String,
 
     /// Extra arguments passed to Cargo before rustdoc's argument separator.
