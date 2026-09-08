@@ -52,6 +52,7 @@ fn run(args: &Args) -> Result<bool> {
         .docker_runtime(args.docker_runtime())
         .include_default_targets(args.include_default_targets())
         .default_limits(args.limits())
+        .fast_init(true)
         .build()
         .context("initializing the docs.rs build environment")?;
 

@@ -40,23 +40,38 @@ impl Log for RustwideLogTracer {
         match record.level() {
             Level::Error => tracing::event!(
                 target: "rustwide", tracing::Level::ERROR,
-                { "log.target" = record.target(), message = format_args!("{}", record.args()) }
+                {
+                    message = format_args!("{}", record.args()),
+                    "log.target" = record.target(),
+                }
             ),
             Level::Warn => tracing::event!(
                 target: "rustwide", tracing::Level::WARN,
-                { "log.target" = record.target(), message = format_args!("{}", record.args()) }
+                {
+                    message = format_args!("{}", record.args()),
+                    "log.target" = record.target(),
+                }
             ),
             Level::Info => tracing::event!(
                 target: "rustwide", tracing::Level::INFO,
-                { "log.target" = record.target(), message = format_args!("{}", record.args()) }
+                {
+                    message = format_args!("{}", record.args()),
+                    "log.target" = record.target(),
+                }
             ),
             Level::Debug => tracing::event!(
                 target: "rustwide", tracing::Level::DEBUG,
-                { "log.target" = record.target(), message = format_args!("{}", record.args()) }
+                {
+                    message = format_args!("{}", record.args()),
+                    "log.target" = record.target(),
+                }
             ),
             Level::Trace => tracing::event!(
                 target: "rustwide", tracing::Level::TRACE,
-                { "log.target" = record.target(), message = format_args!("{}", record.args()) }
+                {
+                    message = format_args!("{}", record.args()),
+                    "log.target" = record.target(),
+                }
             ),
         }
     }
