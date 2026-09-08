@@ -6,6 +6,7 @@ use std::{
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
 };
+use tracing::debug;
 
 /// The small sandbox image used by docs.rs build tests.
 pub const TEST_SANDBOX_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
@@ -43,9 +44,9 @@ impl TestWorkspace {
             .write(true)
             .truncate(true)
             .open(PathBuf::from(lock_path))?;
-        tracing::debug!(workspace = %path.display(), "waiting for test workspace lock");
+        debug!(workspace = %path.display(), "waiting for test workspace lock");
         lock.lock()?;
-        tracing::debug!(workspace = %path.display(), "acquired test workspace lock");
+        debug!(workspace = %path.display(), "acquired test workspace lock");
 
         Ok(Self { path, _lock: lock })
     }
