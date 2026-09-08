@@ -21,12 +21,11 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.13.3"
+version = "3.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11004b0e9b44b4eb3d15e0c3132b96fb178c7e50a74758b2f17bb9cc9a7fb4f6"
+checksum = "86d62d1a48894ec9450bcde7ef1e3681205771ff6ea9c61cc5ae031145192787"
 dependencies = [
  "actix-codec",
- "actix-rt",
  "actix-service",
  "actix-utils",
  "bitflags 2.13.1",
@@ -308,9 +307,9 @@ dependencies = [
 
 [[package]]
 name = "askama"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1bf825125edd887a019d0a3a837dcc5499a68b0d034cc3eb594070c3e18addc"
+checksum = "6024d73179f43f15ccd2b881bfea6fee7f3a46ec53f33b52210dea749ebebaa4"
 dependencies = [
  "askama_macros",
  "itoa 1.0.18",
@@ -321,9 +320,9 @@ dependencies = [
 
 [[package]]
 name = "askama_derive"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1c7065972a130eafa84215f21352ae15b4a7393da48c1f5e103904490736738"
+checksum = "071ee5ebf2138e3ad180e0aacf6940c2cab5e6d8333741d9925c7bee2b153f39"
 dependencies = [
  "askama_parser",
  "basic-toml",
@@ -334,23 +333,23 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_derive",
- "syn 2.0.119",
+ "syn 3.0.5",
 ]
 
 [[package]]
 name = "askama_macros"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e23b1d2c4bd39a41971f6124cef4cc6fd0540913ecb90919b69ab3bbe44ae1a"
+checksum = "643e1c7cbb6aec1d920332fe51a7c0d8219e273dcb8602db03f5263e4d16487b"
 dependencies = [
  "askama_derive",
 ]
 
 [[package]]
 name = "askama_parser"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7db09fde9143e7ac4513358fb32ee32847125b63b18ea715afd487956da715da"
+checksum = "2c5ae75772275d268b03ab8bdccdd12117b6169ee23256942b34e46c9f476583"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -371,9 +370,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.43"
+version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3976abdc8fe7d1133d43d304afd42abdf5bc3e1319d263d223bde07b5efc4be8"
+checksum = "515a1f282e33d55983c499d7e9e87082e81cbc32974825bf9032f928392d5844"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -422,7 +421,7 @@ checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -462,9 +461,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-config"
-version = "1.11.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a767267da9e2c2e189b2f9df8b5657e850ecf5352644734ba130d4a57095cf1b"
+checksum = "b8d7b388a9fc3a6db15a5ec778c38b354eff1364882c94d08e0252f7a47dcaa4"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -500,9 +499,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.18.0"
+version = "1.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce2b2dcc879c3bae0d371e77c99f2238400ef24ec001394befa67b6e543add9e"
+checksum = "b281d307588d634de920874890732659e2e7672f72b5e10e81badc1a8a83621e"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -510,9 +509,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.44.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f09fae7be8bb3174e05c6afdb34199e6dc0c7c04ba9fa237b1967adfbde27483"
+checksum = "9bff6c3b54fad79a2e60b8102caf565819711497c1f5f092f49508e2f5c31b27"
 dependencies = [
  "cc",
  "cmake",
@@ -523,9 +522,9 @@ dependencies = [
 
 [[package]]
 name = "aws-runtime"
-version = "1.9.1"
+version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9007227e10b5fed2f3e0a2beff489211e2b5604c400b7a9d5d81ca9d64c24bb"
+checksum = "ef47857a1d4488b528f4a5d5715fa7c3300820897824152234d3fa22b1426657"
 dependencies = [
  "aws-credential-types",
  "aws-sigv4",
@@ -551,9 +550,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.144.0"
+version = "1.145.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30dc8bf6baaf7d46336a0ca2c69f223d9b90d7a801fb3e28f7ea17b00dc6b1de"
+checksum = "f0e6320417a37c8a62f78b443d0b4cf628b57cd340a09b0eb56173d47cc94e93"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -588,9 +587,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sts"
-version = "1.113.0"
+version = "1.114.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68182ecb449f7537db0f4d5d25917789cf41e32074a9fe47b6a0b847fe1d2032"
+checksum = "ef45745026107ec30c4ef86bd8ae4b002e7e5f6a86e4225240bdf6b06a0b944a"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -786,9 +785,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime-api"
-version = "1.15.0"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "954c563ce84507722d2679f07a35d21b9c6466b3872d513020d0281fc8112ac9"
+checksum = "9c054752dd9e4dc73d0b75748c99ac2d0feafbf2f25c7b0516f03a3534161223"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-runtime-api-macros",
@@ -826,9 +825,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types"
-version = "1.6.2"
+version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fce83ce9abbb198d25bc7131e468d0f9fe1257125e58c39f3f9fc9f5098c9647"
+checksum = "8f94d16e797ec62cd999fc9d5942b48fa7050c3093ddadff48e4d7528d16fcb9"
 dependencies = [
  "base64-simd",
  "bytes",
@@ -874,9 +873,9 @@ dependencies = [
 
 [[package]]
 name = "aws-types"
-version = "1.5.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eec1cd5469f328c782dc3e33d4153cf118a54e33cbb3356d60d16f89883e1f94"
+checksum = "209f3a6d82a6e9e5f94abbed94c7a26e1c052341002bf57a5fb5481f625896fc"
 dependencies = [
  "aws-credential-types",
  "aws-smithy-async",
@@ -1097,7 +1096,7 @@ dependencies = [
  "prettyplease",
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -1202,9 +1201,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.4.4"
+version = "1.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad534f4357a5264cce5019c989cf66a4f0dc4e0d1b1d15f8aacec0ff7360273"
+checksum = "005ec2760ca554fae18df7a11195552ec576cd665632a881bc011d5bb2fd4d80"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1305,7 +1304,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -1394,29 +1393,29 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.38"
+version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce2548391e9c1929c21bf6aa2680af86fe4c1b33e6cea9ac1cfeec0bd11218cf"
+checksum = "2fe67f2944eef52fc7b106b8c9450d243a88701a0c065f7f57235e76abaed7df"
 dependencies = [
  "bzip2",
  "compression-core",
  "flate2",
  "memchr",
- "zstd",
- "zstd-safe",
+ "zstd 0.13.3",
+ "zstd-safe 7.3.0",
 ]
 
 [[package]]
 name = "compression-core"
-version = "0.4.32"
+version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
+checksum = "6e8ccc4ea9f6acc32d102c0f6d471d11d913ad15f20c04de743374861fa1d414"
 
 [[package]]
 name = "comrak"
-version = "0.54.0"
+version = "0.55.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d5910408554659ed848ff469e67ec83b30f179e72cec286cfdae64d1616f466"
+checksum = "daa3d1ea6b01ce72405fa3f826768f51c7a44917527c89b37856ffdd17ee57e4"
 dependencies = [
  "caseless",
  "entities",
@@ -1505,11 +1504,11 @@ dependencies = [
 
 [[package]]
 name = "crates-index"
-version = "3.14.1"
+version = "3.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8759756200ee0abc6f62374c5205af1528d3b0a851c83667a69f76de1e19836f"
+checksum = "df0c4fcc3d3dd00ae2f27d79cef61a6c0da98aebcab6679894acb68de3766ff0"
 dependencies = [
- "gix 0.83.0",
+ "gix 0.87.1",
  "hex",
  "home",
  "http 1.5.0",
@@ -1642,18 +1641,18 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.16"
+version = "0.5.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
 dependencies = [
  "crossbeam-utils",
 ]
 
 [[package]]
 name = "crossbeam-deque"
-version = "0.8.7"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5181e0de7b61eb03a81e347d6dd8797bae9da5146707b51077e2d71a54ec0ceb"
+checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
 dependencies = [
  "crossbeam-epoch",
  "crossbeam-utils",
@@ -1661,27 +1660,27 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.20"
+version = "0.9.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
+checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
 dependencies = [
  "crossbeam-utils",
 ]
 
 [[package]]
 name = "crossbeam-queue"
-version = "0.3.13"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "803d13fb3b09d88be9f4dbc29062c66b19bf7170867ceb746d2a8689bf6c7a26"
+checksum = "03e8bd762f7479489c70ed6c768ddca99d7296857de437a68dcb2a94365b3fae"
 dependencies = [
  "crossbeam-utils",
 ]
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.22"
+version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61803da095bee82a81bb1a452ecc25d3b2f1416d1897eb86430c6159ef717c17"
+checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
 name = "crunchy"
@@ -1691,9 +1690,9 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "crypto-common"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
+checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
@@ -1809,7 +1808,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -1831,7 +1830,7 @@ checksum = "2ac7135c3ef02b2f7833bbeb1be5ba7f966dcde8a87c6b87f65a778d71a02785"
 dependencies = [
  "darling_core 0.24.1",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -1891,9 +1890,9 @@ dependencies = [
 
 [[package]]
 name = "der"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a69dedd701da44b0536442edf09c81a64b0ab97a7a4a5e3d1971f00027cbc63d"
+checksum = "a878c850e9e421b20262e9b41f9c860e4785fa07541c266b62ff9d1ef998a80a"
 dependencies = [
  "pem-rfc7468",
  "zeroize",
@@ -1963,7 +1962,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer 0.10.4",
- "crypto-common 0.1.6",
+ "crypto-common 0.1.7",
 ]
 
 [[package]]
@@ -1996,7 +1995,7 @@ checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -2017,7 +2016,6 @@ dependencies = [
  "docs_rs_logging",
  "docs_rs_opentelemetry",
  "docs_rs_repository_stats",
- "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",
  "docs_rs_uri",
@@ -2496,7 +2494,7 @@ dependencies = [
  "tracing",
  "walkdir",
  "zip",
- "zstd",
+ "zstd 0.14.0",
 ]
 
 [[package]]
@@ -2663,7 +2661,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "tower",
- "tower-http 0.7.0",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-futures",
  "url",
@@ -2822,9 +2820,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
+checksum = "3e0f1c7c3a72c66fd80abe965175f7523475c0489a87d3ff9d6e8c87d87a9d2d"
 
 [[package]]
 name = "findshlibs"
@@ -3003,7 +3001,7 @@ checksum = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -3046,9 +3044,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.14.9"
+version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bb6743198531e02858aeaea5398fcc883e71851fcbcb5a2f773e2fb6cb1edf2"
+checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
@@ -3112,59 +3110,53 @@ checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
 name = "gix"
-version = "0.83.0"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce52001b946a6249d5d0d3011df0a042ac3f8a4d013460db6476577b0b9c567"
+checksum = "ae54ae0ebd1a5a3c3f8d95dd3b5ca6e63f4fed9bfd585e13801a97d7bde8f9ce"
 dependencies = [
- "gix-actor",
- "gix-archive",
- "gix-attributes",
- "gix-blame",
- "gix-command",
- "gix-commitgraph",
- "gix-config 0.56.0",
- "gix-credentials",
- "gix-date",
- "gix-diff 0.63.0",
- "gix-dir",
- "gix-discover 0.51.0",
- "gix-error",
- "gix-features",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-glob",
- "gix-hash",
- "gix-hashtable",
- "gix-ignore",
- "gix-index 0.51.0",
- "gix-lock",
- "gix-merge",
- "gix-negotiate 0.31.0",
- "gix-object 0.60.0",
- "gix-odb 0.80.0",
- "gix-pack 0.70.0",
+ "gix-actor 0.41.2",
+ "gix-attributes 0.33.2",
+ "gix-command 0.9.2",
+ "gix-commitgraph 0.37.1",
+ "gix-config 0.57.0",
+ "gix-credentials 0.38.2",
+ "gix-date 0.15.6",
+ "gix-diff 0.64.0",
+ "gix-discover 0.52.0",
+ "gix-error 0.2.5",
+ "gix-features 0.48.1",
+ "gix-filter 0.31.0",
+ "gix-fs 0.21.2",
+ "gix-glob 0.26.1",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
+ "gix-ignore 0.21.1",
+ "gix-index 0.52.0",
+ "gix-lock 23.0.1",
+ "gix-negotiate 0.32.0",
+ "gix-object 0.61.0",
+ "gix-odb 0.81.0",
+ "gix-pack 0.71.0",
  "gix-path",
- "gix-pathspec",
- "gix-prompt",
- "gix-protocol 0.61.0",
- "gix-ref 0.63.0",
- "gix-refspec 0.41.0",
- "gix-revision 0.45.0",
- "gix-revwalk 0.31.0",
+ "gix-pathspec 0.18.1",
+ "gix-prompt 0.15.1",
+ "gix-protocol 0.62.0",
+ "gix-ref 0.64.0",
+ "gix-refspec 0.42.0",
+ "gix-revision 0.46.0",
+ "gix-revwalk 0.32.0",
  "gix-sec",
- "gix-shallow",
- "gix-status",
- "gix-submodule 0.30.0",
- "gix-tempfile",
+ "gix-shallow 0.12.1",
+ "gix-submodule 0.31.0",
+ "gix-tempfile 23.0.2",
  "gix-trace",
- "gix-transport",
- "gix-traverse 0.57.0",
- "gix-url",
+ "gix-transport 0.57.2",
+ "gix-traverse 0.58.0",
+ "gix-url 0.36.2",
  "gix-utils",
  "gix-validate",
- "gix-worktree 0.52.0",
- "gix-worktree-state",
- "gix-worktree-stream",
+ "gix-worktree 0.53.0",
+ "gix-worktree-stream 0.33.0",
  "nonempty",
  "smallvec",
  "thiserror",
@@ -3172,52 +3164,56 @@ dependencies = [
 
 [[package]]
 name = "gix"
-version = "0.84.0"
+version = "0.87.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae54ae0ebd1a5a3c3f8d95dd3b5ca6e63f4fed9bfd585e13801a97d7bde8f9ce"
+checksum = "fdefc1465d8631807deaf504dacdeff628b978de515653b47976ca7c28ab2a7a"
 dependencies = [
- "gix-actor",
- "gix-attributes",
- "gix-command",
- "gix-commitgraph",
- "gix-config 0.57.0",
- "gix-credentials",
- "gix-date",
- "gix-diff 0.64.0",
- "gix-discover 0.52.0",
- "gix-error",
- "gix-features",
- "gix-filter 0.31.0",
- "gix-fs",
- "gix-glob",
- "gix-hash",
- "gix-hashtable",
- "gix-ignore",
- "gix-index 0.52.0",
- "gix-lock",
- "gix-negotiate 0.32.0",
- "gix-object 0.61.0",
- "gix-odb 0.81.0",
- "gix-pack 0.71.0",
+ "gix-actor 0.42.0",
+ "gix-attributes 0.35.0",
+ "gix-command 0.10.1",
+ "gix-commitgraph 0.39.0",
+ "gix-config 0.60.0",
+ "gix-credentials 0.40.0",
+ "gix-date 0.16.0",
+ "gix-diff 0.67.1",
+ "gix-discover 0.55.0",
+ "gix-error 0.3.2",
+ "gix-features 0.49.1",
+ "gix-filter 0.34.0",
+ "gix-fs 0.22.1",
+ "gix-glob 0.27.1",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-ignore 0.22.1",
+ "gix-index 0.55.0",
+ "gix-lock 24.0.0",
+ "gix-negotiate 0.35.1",
+ "gix-note",
+ "gix-object 0.64.1",
+ "gix-odb 0.84.0",
+ "gix-pack 0.74.2",
  "gix-path",
- "gix-pathspec",
- "gix-prompt",
- "gix-protocol 0.62.0",
- "gix-ref 0.64.0",
- "gix-refspec 0.42.0",
- "gix-revision 0.46.0",
- "gix-revwalk 0.32.0",
+ "gix-pathspec 0.20.0",
+ "gix-prompt 0.17.0",
+ "gix-protocol 0.65.1",
+ "gix-quote 0.8.0",
+ "gix-ref 0.67.1",
+ "gix-refspec 0.45.1",
+ "gix-revision 0.49.1",
+ "gix-revwalk 0.35.0",
  "gix-sec",
- "gix-shallow",
- "gix-submodule 0.31.0",
- "gix-tempfile",
+ "gix-shallow 0.13.0",
+ "gix-submodule 0.34.0",
+ "gix-tempfile 24.0.0",
  "gix-trace",
- "gix-transport",
- "gix-traverse 0.58.0",
- "gix-url",
+ "gix-transport 0.59.2",
+ "gix-traverse 0.61.0",
+ "gix-url 0.38.0",
  "gix-utils",
  "gix-validate",
- "gix-worktree 0.53.0",
+ "gix-worktree 0.56.0",
+ "gix-worktree-stream 0.36.1",
+ "gix-zlib",
  "nonempty",
  "smallvec",
  "thiserror",
@@ -3230,21 +3226,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f9308ad6fd35b2a865cbe4117ac61b2be59e4a9ef1621c7a9794f7c8e52c5b"
 dependencies = [
  "bstr",
- "gix-date",
- "gix-error",
+ "gix-date 0.15.6",
+ "gix-error 0.2.5",
 ]
 
 [[package]]
-name = "gix-archive"
-version = "0.32.0"
+name = "gix-actor"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a20ec244b733338d4cb60e5e05eac700dab7fcc689647b1d1daa9396b119342"
+checksum = "e37efa99929ac62f980fb1a7dcd09dea85b3aa6ead6ba0498362add3f4e698de"
 dependencies = [
  "bstr",
- "gix-date",
- "gix-error",
- "gix-object 0.60.0",
- "gix-worktree-stream",
+ "gix-date 0.16.0",
+ "gix-error 0.3.2",
 ]
 
 [[package]]
@@ -3254,11 +3248,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39b40888d0ed415c0744a6cdc61eebf0304c9d26ab726725b718443c322e5ba4"
 dependencies = [
  "bstr",
- "gix-glob",
+ "gix-glob 0.26.1",
  "gix-path",
- "gix-quote",
+ "gix-quote 0.7.2",
  "gix-trace",
  "kstring",
+ "smallvec",
+ "thiserror",
+ "unicode-bom",
+]
+
+[[package]]
+name = "gix-attributes"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76b83782ac69ae28921a6e8fbcf2e24069613f1518030b97ae622b079abffa54"
+dependencies = [
+ "bstr",
+ "gix-features 0.49.1",
+ "gix-glob 0.27.1",
+ "gix-path",
+ "gix-quote 0.8.0",
+ "gix-trace",
  "smallvec",
  "thiserror",
  "unicode-bom",
@@ -3270,27 +3281,16 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd1d118d0f5d88b96e6f6e13b566475fef4797ead4a02c26fed36c1375066f7"
 dependencies = [
- "gix-error",
+ "gix-error 0.2.5",
 ]
 
 [[package]]
-name = "gix-blame"
-version = "0.13.0"
+name = "gix-bitmap"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14dab9a942ab54a9661ded7397c3bf927274e7afa94494db0d75cfcbde02ca0a"
+checksum = "f17013c7ef5cb95ebb4bf4978201e6a8a42ffea9d666fd5388f1b7e742307d80"
 dependencies = [
- "gix-commitgraph",
- "gix-date",
- "gix-diff 0.63.0",
- "gix-error",
- "gix-hash",
- "gix-object 0.60.0",
- "gix-revwalk 0.31.0",
- "gix-trace",
- "gix-traverse 0.57.0",
- "gix-worktree 0.52.0",
- "smallvec",
- "thiserror",
+ "gix-error 0.3.2",
 ]
 
 [[package]]
@@ -3299,7 +3299,16 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2a871e5cab12ba568845714473505deefffb3c04eb47f4708ce344cd459c1cc"
 dependencies = [
- "gix-error",
+ "gix-error 0.2.5",
+]
+
+[[package]]
+name = "gix-chunk"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00e32f938b3745ac93d73bc7490b6a15a661b2fc81973bfe90e275cc53c908e1"
+dependencies = [
+ "gix-error 0.3.2",
 ]
 
 [[package]]
@@ -3310,9 +3319,21 @@ checksum = "cf4363accdf6ef7ba861871d2d521ab7418a04aaaed919fadb022af71d379b12"
 dependencies = [
  "bstr",
  "gix-path",
- "gix-quote",
+ "gix-quote 0.7.2",
  "gix-trace",
  "shell-words",
+]
+
+[[package]]
+name = "gix-command"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa00adbd2c77f584cfe41f348772d2f131af1fa519a7f6b98638f1144ead96a4"
+dependencies = [
+ "bstr",
+ "gix-path",
+ "gix-quote 0.8.0",
+ "gix-trace",
 ]
 
 [[package]]
@@ -3322,29 +3343,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f675d0df484a7f6a47e64bd6f311af489d947c0323b0564f36d14f3d7762abb"
 dependencies = [
  "bstr",
- "gix-chunk",
- "gix-error",
- "gix-hash",
+ "gix-chunk 0.7.3",
+ "gix-error 0.2.5",
+ "gix-hash 0.25.1",
  "memmap2",
  "nonempty",
 ]
 
 [[package]]
-name = "gix-config"
-version = "0.56.0"
+name = "gix-commitgraph"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c01848aebd21c67f6ba41f1de8efd46ae96df21f001954a3c9e1517e514d410"
+checksum = "6b93c9fb1f5be01bba54a7a3b7455d359efc68555539c75ef74b8021bb6db497"
 dependencies = [
  "bstr",
- "gix-config-value",
- "gix-features",
- "gix-glob",
- "gix-path",
- "gix-ref 0.63.0",
- "gix-sec",
- "smallvec",
- "thiserror",
- "unicode-bom",
+ "gix-chunk 0.8.0",
+ "gix-error 0.3.2",
+ "gix-hash 0.26.2",
+ "memmap2",
+ "nonempty",
 ]
 
 [[package]]
@@ -3354,12 +3371,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f2372d4b49ca28431e7d150cab9d25edc1890f0184bd57eb0e917c7799e63de"
 dependencies = [
  "bstr",
- "gix-config-value",
- "gix-features",
- "gix-glob",
+ "gix-config-value 0.18.1",
+ "gix-features 0.48.1",
+ "gix-glob 0.26.1",
  "gix-path",
  "gix-ref 0.64.0",
  "gix-sec",
+ "smallvec",
+ "thiserror",
+ "unicode-bom",
+]
+
+[[package]]
+name = "gix-config"
+version = "0.60.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f973c28c0a4871a7926fc90c8377d4458fd6cbb19692f56582b4d2022313ae90"
+dependencies = [
+ "bstr",
+ "gix-config-value 0.19.1",
+ "gix-features 0.49.1",
+ "gix-glob 0.27.1",
+ "gix-path",
+ "gix-ref 0.67.1",
+ "gix-sec",
+ "gix-utils",
  "smallvec",
  "thiserror",
  "unicode-bom",
@@ -3379,20 +3415,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "gix-config-value"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f6af5321bfd3711a279d6b244d58532ba1cfabf9eb6374791f19929d8970082"
+dependencies = [
+ "bitflags 2.13.1",
+ "bstr",
+ "gix-path",
+ "libc",
+ "thiserror",
+]
+
+[[package]]
 name = "gix-credentials"
 version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8a0fcfcd73229d1a9c34e04edd05dbcb80364ec6f3788d24c546de2916671eb"
 dependencies = [
  "bstr",
- "gix-command",
- "gix-config-value",
- "gix-date",
+ "gix-command 0.9.2",
+ "gix-config-value 0.18.1",
+ "gix-date 0.15.6",
  "gix-path",
- "gix-prompt",
+ "gix-prompt 0.15.1",
  "gix-sec",
  "gix-trace",
- "gix-url",
+ "gix-url 0.36.2",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-credentials"
+version = "0.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16c11822054fd4b80a1ab722b703f2e7c691b20484d898374289b742c1f49e50"
+dependencies = [
+ "bstr",
+ "gix-command 0.10.1",
+ "gix-config-value 0.19.1",
+ "gix-date 0.16.0",
+ "gix-path",
+ "gix-prompt 0.17.0",
+ "gix-quote 0.8.0",
+ "gix-sec",
+ "gix-trace",
+ "gix-url 0.38.0",
  "thiserror",
 ]
 
@@ -3403,30 +3471,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e47b9e8cdc688296609b706428de570f88b1e0eed7156dde7b4a89d26fa4567"
 dependencies = [
  "bstr",
- "gix-error",
+ "gix-error 0.2.5",
  "itoa 1.0.18",
  "jiff",
 ]
 
 [[package]]
-name = "gix-diff"
-version = "0.63.0"
+name = "gix-date"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc08e0fa1a91ff5f24affeab052f198056645e1de004910bde7b82b50ea5982a"
+checksum = "e63d9aa18f29facd571c8953e66224ee0075b9e16622024794555ed4acceea85"
 dependencies = [
  "bstr",
- "gix-command",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-hash",
- "gix-imara-diff",
- "gix-object 0.60.0",
- "gix-path",
- "gix-tempfile",
- "gix-trace",
- "gix-traverse 0.57.0",
- "gix-worktree 0.52.0",
- "thiserror",
+ "gix-error 0.3.2",
+ "itoa 1.0.18",
+ "jiff",
 ]
 
 [[package]]
@@ -3436,14 +3495,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b6d9528f32d94cef2edf39a1ac01fe5a0fc44ddbb18d9e44099936047c3302b"
 dependencies = [
  "bstr",
- "gix-command",
+ "gix-command 0.9.2",
  "gix-filter 0.31.0",
- "gix-fs",
- "gix-hash",
+ "gix-fs 0.21.2",
+ "gix-hash 0.25.1",
  "gix-imara-diff",
  "gix-object 0.61.0",
  "gix-path",
- "gix-tempfile",
+ "gix-tempfile 23.0.2",
  "gix-trace",
  "gix-traverse 0.58.0",
  "gix-worktree 0.53.0",
@@ -3451,37 +3510,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-dir"
-version = "0.25.0"
+name = "gix-diff"
+version = "0.67.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32a0fc06e9e1e430cbf0a313666976d90f822f461a6525320427aa9b8af5236c"
+checksum = "1b1689ff5ddeee4acfb2a43e875a1072a76d208624b15a9065c938b39cb0da2a"
 dependencies = [
  "bstr",
- "gix-discover 0.51.0",
- "gix-fs",
- "gix-ignore",
- "gix-index 0.51.0",
- "gix-object 0.60.0",
- "gix-path",
- "gix-pathspec",
- "gix-trace",
- "gix-utils",
- "gix-worktree 0.52.0",
- "thiserror",
-]
-
-[[package]]
-name = "gix-discover"
-version = "0.51.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17852e6a501e688a1702b24ebe5b3761d4719455bc869fd29f38b0b859bcad34"
-dependencies = [
- "bstr",
- "dunce",
- "gix-fs",
- "gix-path",
- "gix-ref 0.63.0",
- "gix-sec",
+ "gix-hash 0.26.2",
+ "gix-object 0.64.1",
  "thiserror",
 ]
 
@@ -3493,9 +3529,24 @@ checksum = "77bacdd12b7879d2178a80c58c2f319995e4654e1a7a23e3181e5c8a12b824f7"
 dependencies = [
  "bstr",
  "dunce",
- "gix-fs",
+ "gix-fs 0.21.2",
  "gix-path",
  "gix-ref 0.64.0",
+ "gix-sec",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-discover"
+version = "0.55.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec32a30ec2934735599c2545f30067e80bd255fd3454b52a5d59bc02b52874a3"
+dependencies = [
+ "bstr",
+ "dunce",
+ "gix-fs 0.22.1",
+ "gix-path",
+ "gix-ref 0.67.1",
  "gix-sec",
  "thiserror",
 ]
@@ -3505,6 +3556,15 @@ name = "gix-error"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a9292309fd944e71b2a3c96d3c03a6feb8852db646febdde7cbb9f79cb5f329"
+dependencies = [
+ "bstr",
+]
+
+[[package]]
+name = "gix-error"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a1ba536602db507119eb5f3cdf80bef3ca5a5ec0dfc6e9c7f46dc70ade7c112"
 dependencies = [
  "bstr",
 ]
@@ -3531,24 +3591,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-filter"
-version = "0.30.0"
+name = "gix-features"
+version = "0.49.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac917dbe9653c9b615d248db91907a365bd779750c9e1b457a9d9fdeece3a08"
+checksum = "39c0e59d9d253dcccc38c3a46b91bfb9b46bd63eed54fe1a719e12194884d52a"
 dependencies = [
- "bstr",
- "encoding_rs",
- "gix-attributes",
- "gix-command",
- "gix-hash",
- "gix-object 0.60.0",
- "gix-packetline",
+ "bytes",
+ "crc32fast",
+ "crossbeam-channel",
  "gix-path",
- "gix-quote",
  "gix-trace",
  "gix-utils",
- "smallvec",
- "thiserror",
+ "libc",
+ "once_cell",
+ "parking_lot",
+ "prodash",
+ "walkdir",
 ]
 
 [[package]]
@@ -3559,13 +3617,34 @@ checksum = "ecf74b7d16f6694ce4a3049074c41be0c7987105743674f1671807bd6dce09fa"
 dependencies = [
  "bstr",
  "encoding_rs",
- "gix-attributes",
- "gix-command",
- "gix-hash",
+ "gix-attributes 0.33.2",
+ "gix-command 0.9.2",
+ "gix-hash 0.25.1",
  "gix-object 0.61.0",
- "gix-packetline",
+ "gix-packetline 0.21.5",
  "gix-path",
- "gix-quote",
+ "gix-quote 0.7.2",
+ "gix-trace",
+ "gix-utils",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-filter"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c30b28d957e2e6f1e1bbfbfd26b8e0bb0aab68d8a5e730fb4fd3049943575e3"
+dependencies = [
+ "bstr",
+ "encoding_rs",
+ "gix-attributes 0.35.0",
+ "gix-command 0.10.1",
+ "gix-hash 0.26.2",
+ "gix-object 0.64.1",
+ "gix-packetline 0.22.2",
+ "gix-path",
+ "gix-quote 0.8.0",
  "gix-trace",
  "gix-utils",
  "smallvec",
@@ -3580,7 +3659,20 @@ checksum = "6cdff46db8798e47e2f727d84b9379aac5add3dd3d9d0b07bb4d7d5d640771fe"
 dependencies = [
  "bstr",
  "fastrand",
- "gix-features",
+ "gix-features 0.48.1",
+ "gix-path",
+ "gix-utils",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-fs"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebcfa9fd253f25350a3b21b3dd74034a446098e373c6123d4cee3519894f12ef"
+dependencies = [
+ "bstr",
+ "gix-features 0.49.1",
  "gix-path",
  "gix-utils",
  "thiserror",
@@ -3594,7 +3686,19 @@ checksum = "d1fcb8ef5b16bcf874abe9b68d8abb3c0493c876d367ab824151f30a0f3f3756"
 dependencies = [
  "bitflags 2.13.1",
  "bstr",
- "gix-features",
+ "gix-features 0.48.1",
+ "gix-path",
+]
+
+[[package]]
+name = "gix-glob"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b417cf515fd8c91468b578071f76d6cba716f8a1eccd853906bff4908b2c1413"
+dependencies = [
+ "bitflags 2.13.1",
+ "bstr",
+ "gix-features 0.49.1",
  "gix-path",
 ]
 
@@ -3605,7 +3709,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0926d3819c837750b4e03c7754901e73f68b8c9b690753a6372a1bed4eedce"
 dependencies = [
  "faster-hex",
- "gix-features",
+ "gix-features 0.48.1",
+ "sha1-checked",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-hash"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "380b9c423a54f0821064b954b5a5ab25c660812f6a91da03c3f1cb4b10762aa5"
+dependencies = [
+ "faster-hex",
+ "gix-features 0.49.1",
  "sha1-checked",
  "thiserror",
 ]
@@ -3616,7 +3732,18 @@ version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e261d54091f0d1c729bc83f54548c071bdec60a697de1e58e88bdfd7a99d24e"
 dependencies = [
- "gix-hash",
+ "gix-hash 0.25.1",
+ "hashbrown 0.17.1",
+ "parking_lot",
+]
+
+[[package]]
+name = "gix-hashtable"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78fccd6fea3bcf0b39c076bae60ae49b08daaf538b950202101a981f9d3c01d3"
+dependencies = [
+ "gix-hash 0.26.2",
  "hashbrown 0.17.1",
  "parking_lot",
 ]
@@ -3628,7 +3755,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d491bab9bf2c9f341dc754f425c31d5d3f63aca615312167b82e1deeaca97d8d"
 dependencies = [
  "bstr",
- "gix-glob",
+ "gix-glob 0.26.1",
+ "gix-path",
+ "gix-trace",
+ "unicode-bom",
+]
+
+[[package]]
+name = "gix-ignore"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65859a2f7de5e159d4344a5486ebf53b6bac22d5ec6afa836e47c10ae88a7f0f"
+dependencies = [
+ "bstr",
+ "gix-glob 0.27.1",
  "gix-path",
  "gix-trace",
  "unicode-bom",
@@ -3646,24 +3786,24 @@ dependencies = [
 
 [[package]]
 name = "gix-index"
-version = "0.51.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54c3ef97ad08121e4327a6226bd63fed6b9e3c6b976d48bddd4356d9d41191db"
+checksum = "4e6b28cc592dc753adb58302bb14a64e412ee591a3bec77aa4df87bff74fa80d"
 dependencies = [
  "bitflags 2.13.1",
  "bstr",
  "filetime",
  "fnv",
- "gix-bitmap",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-lock",
- "gix-object 0.60.0",
- "gix-traverse 0.57.0",
+ "gix-bitmap 0.3.3",
+ "gix-features 0.48.1",
+ "gix-fs 0.21.2",
+ "gix-hash 0.25.1",
+ "gix-lock 23.0.1",
+ "gix-object 0.61.0",
+ "gix-traverse 0.58.0",
  "gix-utils",
  "gix-validate",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
  "itoa 1.0.18",
  "libc",
  "memmap2",
@@ -3674,21 +3814,21 @@ dependencies = [
 
 [[package]]
 name = "gix-index"
-version = "0.52.0"
+version = "0.55.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e6b28cc592dc753adb58302bb14a64e412ee591a3bec77aa4df87bff74fa80d"
+checksum = "632e16cb48b0e88a747e106924cb2765194105d8070a7a961b0d080ed806c632"
 dependencies = [
  "bitflags 2.13.1",
  "bstr",
  "filetime",
  "fnv",
- "gix-bitmap",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-lock",
- "gix-object 0.61.0",
- "gix-traverse 0.58.0",
+ "gix-bitmap 0.4.0",
+ "gix-features 0.49.1",
+ "gix-fs 0.22.1",
+ "gix-hash 0.26.2",
+ "gix-lock 24.0.0",
+ "gix-object 0.64.1",
+ "gix-traverse 0.61.0",
  "gix-utils",
  "gix-validate",
  "hashbrown 0.17.1",
@@ -3706,49 +3846,31 @@ version = "23.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65c9dedd9e90b0d47624d2ed241d394e09294118364e87b9b7e5f1fe755f3c2c"
 dependencies = [
- "gix-tempfile",
+ "gix-tempfile 23.0.2",
  "gix-utils",
  "thiserror",
 ]
 
 [[package]]
-name = "gix-merge"
-version = "0.16.0"
+name = "gix-lock"
+version = "24.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74bbcdcc52b70a32f0a151b024dff9d0fcf56ee48f00d9503e735af9d99ea881"
+checksum = "d4c69157820343bf1c6e4b88b9808e920900de02e18aaf5862b30ada43814848"
 dependencies = [
- "bstr",
- "gix-command",
- "gix-diff 0.63.0",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-hash",
- "gix-imara-diff",
- "gix-index 0.51.0",
- "gix-object 0.60.0",
- "gix-path",
- "gix-quote",
- "gix-revision 0.45.0",
- "gix-revwalk 0.31.0",
- "gix-tempfile",
- "gix-trace",
- "gix-worktree 0.52.0",
- "nonempty",
+ "gix-tempfile 24.0.0",
+ "gix-utils",
  "thiserror",
 ]
 
 [[package]]
-name = "gix-negotiate"
-version = "0.31.0"
+name = "gix-macros"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "103d42bfade1b8a96ca5005933127bdad461ce588d92422b2c2daa3ff20d780c"
+checksum = "d3836b4b051393464a753c5a08fe19c7ce0d8b77574a92bd558972941d4553cb"
 dependencies = [
- "bitflags 2.13.1",
- "gix-commitgraph",
- "gix-date",
- "gix-hash",
- "gix-object 0.60.0",
- "gix-revwalk 0.31.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3758,30 +3880,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "890c936a215bae25818c076cb881cb2e54d2c66ba947ba58b8dd47cff921bf55"
 dependencies = [
  "bitflags 2.13.1",
- "gix-commitgraph",
- "gix-date",
- "gix-hash",
+ "gix-commitgraph 0.37.1",
+ "gix-date 0.15.6",
+ "gix-hash 0.25.1",
  "gix-object 0.61.0",
  "gix-revwalk 0.32.0",
 ]
 
 [[package]]
-name = "gix-object"
-version = "0.60.0"
+name = "gix-negotiate"
+version = "0.35.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a38075a95d7cc5df8afd38e72c617026c1456952207a4120a7f55a3fbf93b4d7"
+checksum = "91068ecee956121d663635b873ae87ad9c5d3f2d6788facfd12829140b39c897"
 dependencies = [
- "bstr",
- "gix-actor",
- "gix-date",
- "gix-features",
- "gix-hash",
- "gix-hashtable",
- "gix-utils",
- "gix-validate",
- "itoa 1.0.18",
- "smallvec",
- "thiserror",
+ "bitflags 2.13.1",
+ "gix-commitgraph 0.39.0",
+ "gix-date 0.16.0",
+ "gix-hash 0.26.2",
+ "gix-object 0.64.1",
+ "gix-revwalk 0.35.0",
+]
+
+[[package]]
+name = "gix-note"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9af6bbdb3f3c62b4920407c479af1cc0beb27fd75a762782d48baed53d330958"
+dependencies = [
+ "gix-error 0.3.2",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
 ]
 
 [[package]]
@@ -3791,11 +3920,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5cd857e29429c7213bdef3f5aef83f8cc124774fe8ae0d27b1607d218d6d525"
 dependencies = [
  "bstr",
- "gix-actor",
- "gix-date",
- "gix-features",
- "gix-hash",
- "gix-hashtable",
+ "gix-actor 0.41.2",
+ "gix-date 0.15.6",
+ "gix-features 0.48.1",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-utils",
  "gix-validate",
  "itoa 1.0.18",
@@ -3804,23 +3933,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-odb"
-version = "0.80.0"
+name = "gix-object"
+version = "0.64.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeeda12a9663120418735ecdc1250d06eeab0be75700e47b3402a981331716ba"
+checksum = "56fef799ca40cdeab4de5a3e74a696d8fa9b9c6264592646bf022e026f13ce2c"
 dependencies = [
- "arc-swap",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-hashtable",
- "gix-object 0.60.0",
- "gix-pack 0.70.0",
- "gix-path",
- "gix-quote",
- "memmap2",
- "parking_lot",
- "tempfile",
+ "bstr",
+ "gix-actor 0.42.0",
+ "gix-command 0.10.1",
+ "gix-date 0.16.0",
+ "gix-features 0.49.1",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-tempfile 24.0.0",
+ "gix-utils",
+ "gix-validate",
+ "itoa 1.0.18",
+ "smallvec",
  "thiserror",
 ]
 
@@ -3831,14 +3960,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d004c32858b1556f2d7874405edb3c97dc78fc09beaa87d57bb077ee2858a7d"
 dependencies = [
  "arc-swap",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-hashtable",
+ "gix-features 0.48.1",
+ "gix-fs 0.21.2",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-object 0.61.0",
  "gix-pack 0.71.0",
  "gix-path",
- "gix-quote",
+ "gix-quote 0.7.2",
  "memmap2",
  "parking_lot",
  "tempfile",
@@ -3846,25 +3975,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-pack"
-version = "0.70.0"
+name = "gix-odb"
+version = "0.84.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf02e6f5c8f07a069c9ea5245f40d9b14856ada4086091dc99941b49002b4fa"
+checksum = "cf45d195b71cb6363886e7b466821bf4dffd7aba1b6b814ff75488e0061d72a7"
 dependencies = [
- "clru",
- "gix-chunk",
- "gix-error",
- "gix-features",
- "gix-hash",
- "gix-hashtable",
- "gix-object 0.60.0",
+ "arc-swap",
+ "gix-features 0.49.1",
+ "gix-fs 0.22.1",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
+ "gix-pack 0.74.2",
  "gix-path",
- "gix-tempfile",
+ "gix-quote 0.8.0",
+ "gix-zlib",
  "memmap2",
  "parking_lot",
- "smallvec",
+ "tempfile",
  "thiserror",
- "uluru",
 ]
 
 [[package]]
@@ -3874,14 +4003,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e43626f2a27d1033674ec1a196b845614231e6bbd949d5e21c133045ff56b174"
 dependencies = [
  "clru",
- "gix-chunk",
- "gix-error",
- "gix-features",
- "gix-hash",
- "gix-hashtable",
+ "gix-chunk 0.7.3",
+ "gix-error 0.2.5",
+ "gix-features 0.48.1",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-object 0.61.0",
  "gix-path",
- "gix-tempfile",
+ "gix-tempfile 23.0.2",
+ "memmap2",
+ "parking_lot",
+ "smallvec",
+ "thiserror",
+ "uluru",
+]
+
+[[package]]
+name = "gix-pack"
+version = "0.74.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d199d515cbdcf05f531f3859be9771fc12acac7b7fe0f5b581b2c1ab1c3a61e"
+dependencies = [
+ "clru",
+ "crossbeam-deque",
+ "gix-chunk 0.8.0",
+ "gix-error 0.3.2",
+ "gix-features 0.49.1",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
+ "gix-path",
+ "gix-tempfile 24.0.0",
+ "gix-zlib",
  "memmap2",
  "parking_lot",
  "smallvec",
@@ -3902,10 +4055,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-path"
-version = "0.12.5"
+name = "gix-packetline"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b075e730586bba7341304d6fc1b4efc1d10cf64532622521c0e07f30e661046"
+checksum = "792bd92bea390087e6223b18d4d023decc36467de31e6b066b69b94beea1b9e2"
+dependencies = [
+ "bstr",
+ "faster-hex",
+ "gix-trace",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-path"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38fc6f029ea67de83cbcbd33fd98c05a48360d2932b39d9fdacbc6eae802d475"
 dependencies = [
  "bstr",
  "gix-trace",
@@ -3921,9 +4086,24 @@ checksum = "3050783b41ee11511e1e8fb35623df81806194f4030395f14f48ea37c2798c9f"
 dependencies = [
  "bitflags 2.13.1",
  "bstr",
- "gix-attributes",
- "gix-config-value",
- "gix-glob",
+ "gix-attributes 0.33.2",
+ "gix-config-value 0.18.1",
+ "gix-glob 0.26.1",
+ "gix-path",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-pathspec"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c92e44c63ba53bb55aa88ee48847664beae9446417621582fb14dfc69b2f8c72"
+dependencies = [
+ "bitflags 2.13.1",
+ "bstr",
+ "gix-attributes 0.35.0",
+ "gix-config-value 0.19.1",
+ "gix-glob 0.27.1",
  "gix-path",
  "thiserror",
 ]
@@ -3934,36 +4114,23 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ee604d7746080ae7e1023bf47204bcc2c5f307bfbe2306a3c90b1bfd1a2c6d8"
 dependencies = [
- "gix-command",
- "gix-config-value",
+ "gix-command 0.9.2",
+ "gix-config-value 0.18.1",
  "parking_lot",
  "rustix",
  "thiserror",
 ]
 
 [[package]]
-name = "gix-protocol"
-version = "0.61.0"
+name = "gix-prompt"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa4bee82db63ec635996b96efae71cf467c155fa3f34a556184373224a26c4fd"
+checksum = "802256e13ecb2133ba5f9e6acbaa6b08bac027b1c5929f85f6adbb56ba3a4f28"
 dependencies = [
- "bstr",
- "gix-credentials",
- "gix-date",
- "gix-features",
- "gix-hash",
- "gix-lock",
- "gix-negotiate 0.31.0",
- "gix-object 0.60.0",
- "gix-ref 0.63.0",
- "gix-refspec 0.41.0",
- "gix-revwalk 0.31.0",
- "gix-shallow",
- "gix-trace",
- "gix-transport",
- "gix-utils",
- "maybe-async",
- "nonempty",
+ "gix-command 0.10.1",
+ "gix-config-value 0.19.1",
+ "parking_lot",
+ "rustix",
  "thiserror",
 ]
 
@@ -3974,21 +4141,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51dea3acb390707ab868f1f9584f18449eb95d869deffae96768e47d303595ee"
 dependencies = [
  "bstr",
- "gix-credentials",
- "gix-date",
- "gix-features",
- "gix-hash",
- "gix-lock",
+ "gix-credentials 0.38.2",
+ "gix-date 0.15.6",
+ "gix-features 0.48.1",
+ "gix-hash 0.25.1",
+ "gix-lock 23.0.1",
  "gix-negotiate 0.32.0",
  "gix-object 0.61.0",
  "gix-ref 0.64.0",
  "gix-refspec 0.42.0",
  "gix-revwalk 0.32.0",
- "gix-shallow",
+ "gix-shallow 0.12.1",
  "gix-trace",
- "gix-transport",
+ "gix-transport 0.57.2",
  "gix-utils",
  "maybe-async",
+ "nonempty",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-protocol"
+version = "0.65.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68878c37ae168b474c762d70adc8a8e0f9323ed0d80444a672e2eb561fa16691"
+dependencies = [
+ "bstr",
+ "gix-credentials 0.40.0",
+ "gix-date 0.16.0",
+ "gix-features 0.49.1",
+ "gix-hash 0.26.2",
+ "gix-lock 24.0.0",
+ "gix-macros",
+ "gix-negotiate 0.35.1",
+ "gix-object 0.64.1",
+ "gix-ref 0.67.1",
+ "gix-refspec 0.45.1",
+ "gix-revwalk 0.35.0",
+ "gix-shallow 0.13.0",
+ "gix-trace",
+ "gix-transport 0.59.2",
+ "gix-utils",
  "nonempty",
  "thiserror",
 ]
@@ -4000,28 +4193,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6e541fc33cc2b783b7979040d445a0c86a2eca747c8faea4ca84230d06ae6ef"
 dependencies = [
  "bstr",
- "gix-error",
+ "gix-error 0.2.5",
  "gix-utils",
 ]
 
 [[package]]
-name = "gix-ref"
-version = "0.63.0"
+name = "gix-quote"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8ba9cc15f558b274c99349b83130f5ec83459660828fde9718bbbb43a726167"
+checksum = "f74795eb76eab8313063849f9cbd2bbcdc6e4692f71c1d7d0244ab11cd777329"
 dependencies = [
- "gix-actor",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-lock",
- "gix-object 0.60.0",
- "gix-path",
- "gix-tempfile",
+ "bstr",
+ "gix-error 0.3.2",
  "gix-utils",
- "gix-validate",
- "memmap2",
- "thiserror",
 ]
 
 [[package]]
@@ -4030,14 +4214,14 @@ version = "0.64.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c04f64c37eb7e6feb73c7060f8dc6f381cc5de5d53249bfd450bc48a86b2e8b"
 dependencies = [
- "gix-actor",
- "gix-features",
- "gix-fs",
- "gix-hash",
- "gix-lock",
+ "gix-actor 0.41.2",
+ "gix-features 0.48.1",
+ "gix-fs 0.21.2",
+ "gix-hash 0.25.1",
+ "gix-lock 23.0.1",
  "gix-object 0.61.0",
  "gix-path",
- "gix-tempfile",
+ "gix-tempfile 23.0.2",
  "gix-utils",
  "gix-validate",
  "memmap2",
@@ -4045,18 +4229,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-refspec"
-version = "0.41.0"
+name = "gix-ref"
+version = "0.67.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61755b27d57edc8940a1b1593c8c61548ca8e4c02da1ed8d5bfeda9eb2a6b761"
+checksum = "8328387e7ab354e1dc3afb63e6b4d1866f82d7ce035222bc9d5baaf36bc88020"
 dependencies = [
- "bstr",
- "gix-error",
- "gix-glob",
- "gix-hash",
- "gix-revision 0.45.0",
+ "gix-actor 0.42.0",
+ "gix-features 0.49.1",
+ "gix-fs 0.22.1",
+ "gix-hash 0.26.2",
+ "gix-lock 24.0.0",
+ "gix-object 0.64.1",
+ "gix-path",
+ "gix-tempfile 24.0.0",
+ "gix-utils",
  "gix-validate",
- "smallvec",
+ "memmap2",
  "thiserror",
 ]
 
@@ -4067,9 +4255,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b216ae06ec74b5f24ad0142026a997fb0a935b7410eaf9c1616fc3f0e6c5a6d3"
 dependencies = [
  "bstr",
- "gix-error",
- "gix-glob",
- "gix-hash",
+ "gix-error 0.2.5",
+ "gix-glob 0.26.1",
+ "gix-hash 0.25.1",
  "gix-revision 0.46.0",
  "gix-validate",
  "smallvec",
@@ -4077,22 +4265,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-revision"
-version = "0.45.0"
+name = "gix-refspec"
+version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb5288fac706d3ea3e4e2ba9ec38b78743b8c02f422e18cb342299cfd6ab7e8"
+checksum = "7de280d46e8fd9e4d3e7e2ab4276b965e377ba68b2b9a8fce56371015e8bb059"
 dependencies = [
- "bitflags 2.13.1",
  "bstr",
- "gix-commitgraph",
- "gix-date",
- "gix-error",
- "gix-hash",
- "gix-hashtable",
- "gix-object 0.60.0",
- "gix-revwalk 0.31.0",
- "gix-trace",
- "nonempty",
+ "gix-hash 0.26.2",
+ "gix-validate",
+ "smallvec",
+ "thiserror",
 ]
 
 [[package]]
@@ -4103,11 +4285,11 @@ checksum = "0b47c88884dd3c1a19a39da19d10211fcdea2809aadc86869b6e824a1774340f"
 dependencies = [
  "bitflags 2.13.1",
  "bstr",
- "gix-commitgraph",
- "gix-date",
- "gix-error",
- "gix-hash",
- "gix-hashtable",
+ "gix-commitgraph 0.37.1",
+ "gix-date 0.15.6",
+ "gix-error 0.2.5",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-object 0.61.0",
  "gix-revwalk 0.32.0",
  "gix-trace",
@@ -4115,19 +4297,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-revwalk"
-version = "0.31.0"
+name = "gix-revision"
+version = "0.49.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "313813706b073a12ff7f9b2896bf3e6504cdac7cfbc97b1920114724705069f0"
+checksum = "4577b864c3e134697e91564553e43230c2e401bb1bcc51cfa998edca21c95078"
 dependencies = [
- "gix-commitgraph",
- "gix-date",
- "gix-error",
- "gix-hash",
- "gix-hashtable",
- "gix-object 0.60.0",
- "smallvec",
- "thiserror",
+ "bitflags 2.13.1",
+ "bstr",
+ "gix-commitgraph 0.39.0",
+ "gix-date 0.16.0",
+ "gix-error 0.3.2",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
+ "gix-revwalk 0.35.0",
+ "gix-trace",
+ "nonempty",
 ]
 
 [[package]]
@@ -4136,12 +4321,28 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85f5756abffe0917827aac683b13684ed99875bc398fa1f9b8f479b0681ef9e6"
 dependencies = [
- "gix-commitgraph",
- "gix-date",
- "gix-error",
- "gix-hash",
- "gix-hashtable",
+ "gix-commitgraph 0.37.1",
+ "gix-date 0.15.6",
+ "gix-error 0.2.5",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-object 0.61.0",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-revwalk"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "248823eefe405e2c0754b74f6f43ab6faab68670cdbf2d6e114cb0471f766450"
+dependencies = [
+ "gix-commitgraph 0.39.0",
+ "gix-date 0.16.0",
+ "gix-error 0.3.2",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
  "smallvec",
  "thiserror",
 ]
@@ -4165,47 +4366,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a292fc2fe548c5dfa575479d16b445b0ddf1dd2f56f1fec6aed386f82553cd97"
 dependencies = [
  "bstr",
- "gix-hash",
- "gix-lock",
+ "gix-hash 0.25.1",
+ "gix-lock 23.0.1",
  "nonempty",
  "thiserror",
 ]
 
 [[package]]
-name = "gix-status"
-version = "0.30.0"
+name = "gix-shallow"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68c6d2a8c521ffa205fe7e268c82e6d1378ba37cd826ca10ab6129fdc29a4b65"
+checksum = "1ecc9f4b40537043e4bbd7d3d1760e74fb8e7b07a546166b558acaa73ad97f4a"
 dependencies = [
  "bstr",
- "filetime",
- "gix-diff 0.63.0",
- "gix-dir",
- "gix-features",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-hash",
- "gix-index 0.51.0",
- "gix-object 0.60.0",
- "gix-path",
- "gix-pathspec",
- "gix-worktree 0.52.0",
- "portable-atomic",
- "thiserror",
-]
-
-[[package]]
-name = "gix-submodule"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fd5fc8692890bd71a596e540fd4c364f8460eaa82c4eaaedebde6e1e3eb4d91"
-dependencies = [
- "bstr",
- "gix-config 0.56.0",
- "gix-path",
- "gix-pathspec",
- "gix-refspec 0.41.0",
- "gix-url",
+ "gix-hash 0.26.2",
+ "gix-lock 24.0.0",
+ "nonempty",
  "thiserror",
 ]
 
@@ -4218,9 +4394,24 @@ dependencies = [
  "bstr",
  "gix-config 0.57.0",
  "gix-path",
- "gix-pathspec",
+ "gix-pathspec 0.18.1",
  "gix-refspec 0.42.0",
- "gix-url",
+ "gix-url 0.36.2",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-submodule"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da85564d6725c483b8d95d7b31d1db0b78c29e462a2b481949e2f18e1ed55a6a"
+dependencies = [
+ "bstr",
+ "gix-config 0.60.0",
+ "gix-path",
+ "gix-pathspec 0.20.0",
+ "gix-refspec 0.45.1",
+ "gix-url 0.38.0",
  "thiserror",
 ]
 
@@ -4231,7 +4422,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ef60812443484e67bf84e444cc71b4c78ae62deb822221774a4fa0c57fdb17f"
 dependencies = [
  "dashmap",
- "gix-fs",
+ "gix-fs 0.21.2",
+ "libc",
+ "parking_lot",
+ "tempfile",
+]
+
+[[package]]
+name = "gix-tempfile"
+version = "24.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b675b920bd5a61d17ad542772f03ec34c60feb8ff683e1560c03ae967363731e"
+dependencies = [
+ "dashmap",
+ "gix-fs 0.22.1",
  "libc",
  "parking_lot",
  "tempfile",
@@ -4251,31 +4455,35 @@ checksum = "186874f7ad1fb2f9a2f2aa9c2dabc7f9dd087bef74c1a0eee2b4a9cf0248fcb3"
 dependencies = [
  "base64 0.22.1",
  "bstr",
- "gix-command",
- "gix-credentials",
- "gix-features",
- "gix-packetline",
- "gix-quote",
+ "gix-command 0.9.2",
+ "gix-credentials 0.38.2",
+ "gix-features 0.48.1",
+ "gix-packetline 0.21.5",
+ "gix-quote 0.7.2",
  "gix-sec",
- "gix-url",
+ "gix-url 0.36.2",
  "reqwest",
  "thiserror",
 ]
 
 [[package]]
-name = "gix-traverse"
-version = "0.57.0"
+name = "gix-transport"
+version = "0.59.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a14b7052c0786676c03e71fcfde7d7f0f8e8316e642b5cec6bb3998719b2ce5c"
+checksum = "b3f41a64939953ff49117df4eb91334d299abc59ff57a90fb2193d8ffa5886f1"
 dependencies = [
- "bitflags 2.13.1",
- "gix-commitgraph",
- "gix-date",
- "gix-hash",
- "gix-hashtable",
- "gix-object 0.60.0",
- "gix-revwalk 0.31.0",
- "smallvec",
+ "base64 0.22.1",
+ "bstr",
+ "gix-command 0.10.1",
+ "gix-credentials 0.40.0",
+ "gix-features 0.49.1",
+ "gix-packetline 0.22.2",
+ "gix-path",
+ "gix-quote 0.8.0",
+ "gix-sec",
+ "gix-url 0.38.0",
+ "parking_lot",
+ "reqwest",
  "thiserror",
 ]
 
@@ -4286,12 +4494,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8de590ecc86a3b2870665f2288324fa9f7f8672c7fc2d4e020fdd81cd1f7aed"
 dependencies = [
  "bitflags 2.13.1",
- "gix-commitgraph",
- "gix-date",
- "gix-hash",
- "gix-hashtable",
+ "gix-commitgraph 0.37.1",
+ "gix-date 0.15.6",
+ "gix-hash 0.25.1",
+ "gix-hashtable 0.15.2",
  "gix-object 0.61.0",
  "gix-revwalk 0.32.0",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-traverse"
+version = "0.61.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9af3503668739f4de5dba57fe15cfd9adc443b08bcbbf195e5de16b648872245"
+dependencies = [
+ "bitflags 2.13.1",
+ "gix-commitgraph 0.39.0",
+ "gix-date 0.16.0",
+ "gix-hash 0.26.2",
+ "gix-hashtable 0.16.0",
+ "gix-object 0.64.1",
+ "gix-revwalk 0.35.0",
  "smallvec",
  "thiserror",
 ]
@@ -4304,6 +4529,19 @@ checksum = "57d68e70e96da0e5f9c871f1566349e0fd0e1a20bb483c7f54af1dd0b85b4b29"
 dependencies = [
  "bstr",
  "gix-path",
+ "percent-encoding",
+ "thiserror",
+]
+
+[[package]]
+name = "gix-url"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bda80ccb4bc81fb9fb07a975916eb0c7a889bcbcb0c8a239c3f82a9cc2abdda"
+dependencies = [
+ "bstr",
+ "gix-path",
+ "gix-utils",
  "percent-encoding",
  "thiserror",
 ]
@@ -4331,34 +4569,16 @@ dependencies = [
 
 [[package]]
 name = "gix-worktree"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d69955eb5e2910832f88d041964b809eee01dadd579237e0b55efec58fd406fd"
-dependencies = [
- "bstr",
- "gix-attributes",
- "gix-fs",
- "gix-glob",
- "gix-hash",
- "gix-ignore",
- "gix-index 0.51.0",
- "gix-object 0.60.0",
- "gix-path",
- "gix-validate",
-]
-
-[[package]]
-name = "gix-worktree"
 version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cef414ed275e8407cd5d53d301e83be19700b0dd3f859d2434417b58f454a2d1"
 dependencies = [
  "bstr",
- "gix-attributes",
- "gix-fs",
- "gix-glob",
- "gix-hash",
- "gix-ignore",
+ "gix-attributes 0.33.2",
+ "gix-fs 0.21.2",
+ "gix-glob 0.26.1",
+ "gix-hash 0.25.1",
+ "gix-ignore 0.21.1",
  "gix-index 0.52.0",
  "gix-object 0.61.0",
  "gix-path",
@@ -4366,39 +4586,68 @@ dependencies = [
 ]
 
 [[package]]
-name = "gix-worktree-state"
-version = "0.30.0"
+name = "gix-worktree"
+version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a96dccbcf9e8fe0291c55f06e08da93ebb2e691c1311276f541eefcc6d70800"
+checksum = "3ed36b627476e2072c129900a17c977a38052b5497e27308159bc881fbf4eecf"
 dependencies = [
  "bstr",
- "gix-features",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-index 0.51.0",
- "gix-object 0.60.0",
+ "gix-attributes 0.35.0",
+ "gix-features 0.49.1",
+ "gix-fs 0.22.1",
+ "gix-glob 0.27.1",
+ "gix-hash 0.26.2",
+ "gix-ignore 0.22.1",
+ "gix-index 0.55.0",
+ "gix-object 0.64.1",
  "gix-path",
- "gix-worktree 0.52.0",
- "io-close",
- "thiserror",
+ "gix-validate",
 ]
 
 [[package]]
 name = "gix-worktree-stream"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8444b8ed4662e1a0c97f3eceda29630001a1bbb2632201e50312623e594213"
+checksum = "d25e9ed30100c63f7590bc581c225e53f731a53e06aa79a245739c07f7dcc557"
 dependencies = [
- "gix-attributes",
- "gix-error",
- "gix-features",
- "gix-filter 0.30.0",
- "gix-fs",
- "gix-hash",
- "gix-object 0.60.0",
+ "gix-attributes 0.33.2",
+ "gix-error 0.2.5",
+ "gix-features 0.48.1",
+ "gix-filter 0.31.0",
+ "gix-fs 0.21.2",
+ "gix-hash 0.25.1",
+ "gix-object 0.61.0",
  "gix-path",
- "gix-traverse 0.57.0",
+ "gix-traverse 0.58.0",
  "parking_lot",
+]
+
+[[package]]
+name = "gix-worktree-stream"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de5ec0ccbab39c9994656ea031ded8ffd90b370a3cc8e360fbe3c4ebe7c64964"
+dependencies = [
+ "gix-attributes 0.35.0",
+ "gix-error 0.3.2",
+ "gix-features 0.49.1",
+ "gix-filter 0.34.0",
+ "gix-fs 0.22.1",
+ "gix-hash 0.26.2",
+ "gix-object 0.64.1",
+ "gix-path",
+ "gix-traverse 0.61.0",
+ "parking_lot",
+]
+
+[[package]]
+name = "gix-zlib"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e8813f5579b3075ff9c90f7c59cd2b62b4ebb639361f0911648b22d7446cc7c"
+dependencies = [
+ "thiserror",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -4424,7 +4673,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d9e3df7f0222ce5184154973d247c591d9aadc28ce7a73c6cd31100c9facff6"
 dependencies = [
  "codemap",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "lasso",
  "once_cell",
  "phf 0.11.3",
@@ -4442,7 +4691,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.5.0",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "slab",
  "tokio",
  "tokio-util",
@@ -4558,9 +4807,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
+checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
 name = "hex"
@@ -4956,9 +5205,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.14.1"
+version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07aa2048142242915a31d35844fb311e0e53fcca590c3a0a40dcf1b841fa09eb"
+checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
@@ -4976,20 +5225,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-close"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cadcf447f06744f8ce713d2d6239bb5bde2c357a452397a9ed90c625da390bc"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "ipnet"
-version = "2.12.1"
+version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a756c3fac73139e83f14c2d742155dd2b78d3ee56597b419a0579b7bdd6dd78"
+checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -5156,9 +5395,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.104"
+version = "0.3.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0c1080212aad755ea003d18543e8768dd432c48819efd73a7bf1e39b7a5a3a"
+checksum = "ce57d20d1ea864ce2ac172ab472d409214f4fd359f0b2a2775abdf522e2af99e"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -5291,9 +5530,9 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.18.3"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d317b4b9eb398e6acce275758ec6125535505e7a146fb1a9b8bda2451b0ff4c"
+checksum = "ff9840bcc50b71349309900da0ce7279aa336ae71d73250b07998932c7d97c25"
 dependencies = [
  "hashbrown 0.17.1",
 ]
@@ -5424,9 +5663,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d65c71f1ce40ab09135ce117d742b9f8a19ff91a41a8b57ed50bc2de59c427"
+checksum = "4b18443e9c262bfe8fa82f51666e2642c53393f7e5c27b3e1aeab922cff5b9d8"
 dependencies = [
  "libc",
  "log",
@@ -6309,9 +6548,9 @@ checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
 name = "portable-atomic-util"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
+checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
 dependencies = [
  "portable-atomic",
 ]
@@ -6375,7 +6614,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
 dependencies = [
  "proc-macro2",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -6694,7 +6933,7 @@ checksum = "92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -7330,7 +7569,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -7389,7 +7628,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "jiff",
  "schemars 0.9.0",
  "schemars 1.2.2",
@@ -7573,9 +7812,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.15.2"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
+checksum = "b9be42f50aa861c555654aa3a37f52f4b1074bacf4e48fe0ef7fa584e80f1f0f"
 dependencies = [
  "serde",
 ]
@@ -7648,7 +7887,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "hashlink",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "log",
  "memchr",
  "percent-encoding",
@@ -7895,9 +8134,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6275cddf4610d1775e6d1fe9469b2e77d0f39fd98fb7450901b821e0c53649f"
+checksum = "12df2e0110f65b775f769bb17ef989067a1d931b2eb822bd4346631eeada89f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8075,7 +8314,7 @@ checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -8139,9 +8378,9 @@ dependencies = [
 
 [[package]]
 name = "tinyvec"
-version = "1.12.0"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb4ebadaa0af04fab11ae01eb5f9fdb5f9c5b875506e210e71c07873528baa7f"
+checksum = "4cf0ded5c4e56918d8f8a339e1bb67d038d3bc6d144ac407904015ba2e4cde9b"
 dependencies = [
  "tinyvec_macros",
 ]
@@ -8177,7 +8416,7 @@ checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -8192,9 +8431,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.26.4"
+version = "0.26.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+checksum = "b0c85f2c3ef0b1cd58b36682f4b17aaa995f0e5db534d85692b4903abce21f67"
 dependencies = [
  "rustls",
  "tokio",
@@ -8227,11 +8466,11 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.4+spec-1.1.0"
+version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aace63f4bbcdfc2c965b059de67119c89c4017a70d633be6c104910f67056f5"
+checksum = "12c0ba9680044b4ce98d391a62094047eada0d64860b80166c39f4a6b5640785"
 dependencies = [
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "serde_core",
  "serde_spanned",
  "toml_datetime",
@@ -8320,7 +8559,7 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "pin-project-lite",
  "slab",
  "sync_wrapper",
@@ -8356,9 +8595,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b11f75e912b0c2be01b63d8cf8057b8c3f97cf34abb3d431a3a4c8675498e233"
+checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
 dependencies = [
  "bitflags 2.13.1",
  "bytes",
@@ -8567,9 +8806,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "972d7902c8735f2695410b8aed7df6ed12a47394aa1c8d7af49f0497b731a94d"
+checksum = "af5546be8f5378d5414f83733f5c9a2526f4645829edbc1c41790aeef1b38e8b"
 dependencies = [
  "base64 0.23.1",
  "der",
@@ -8584,9 +8823,9 @@ dependencies = [
 
 [[package]]
 name = "ureq-proto"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da5f78b09e6941e1a0f2e30e695e4b120377b54d5e0aec11b594bb57b3971613"
+checksum = "fabc3e92916c89c95b20eef7b06b00b066bc217ef9ea3a4ac9bf1a7e35261e10"
 dependencies = [
  "base64 0.23.1",
  "http 1.5.0",
@@ -8715,9 +8954,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.127"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b70935747edd64d89de3efa29d73789b806c15798f8e7dca4d8ac356b50ce70"
+checksum = "aecb87a33d3b0c5e3b7aa46336eaf486cffafbd281b195e4c8b80d50df2351bf"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -8728,9 +8967,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.77"
+version = "0.4.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b7777d5cc23d0e91404e53ce2d5e8ec7acae3026b16233dba62cd3246457950"
+checksum = "6ef4c5d3d2cdf5c54f4231181768f5510842e350db025faf1f7163b1030ed928"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -8738,9 +8977,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.127"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77775f8f3f7217702089053b94958f8f54061a3f663417df76e19cbdcca29bc1"
+checksum = "a690d511e3c1a8b3a55e33511e3c2c00c78415cd23650f32b808627f5696b9ed"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -8748,22 +8987,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.127"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e11d33f857dc2fb11b8bc75aee111aa9cbeb12cd9f25efd3d4c2a3dd4e235284"
+checksum = "411e4887f0071ef2d2164a9d5fdf2d20efbef78fccd3a78b0c10a1dc5295e48a"
 dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.5",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.127"
+version = "0.2.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ef64dbcc55df09c7e5a46182d181c2cfa3e925f3da937ea764728b4bbb9dcbf"
+checksum = "81941cd78d0c92026c33e5e01312845a4cb1e9af3407f9134b100dd03144103e"
 dependencies = [
  "unicode-ident",
 ]
@@ -8797,9 +9036,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.104"
+version = "0.3.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c435338968042f4f59a557f690a253676d47ce13ceb55d70100e7facf6620a30"
+checksum = "9fbddc4a036f00ec4f18c83445bd3115cb306a91da554919a099d9222fe4a7f8"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -9225,7 +9464,7 @@ checksum = "34df6fc39dbd26ddc9c10e6a2984476e13acce22e64e4487636ef494369225da"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 3.0.4",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -9237,7 +9476,7 @@ dependencies = [
  "bzip2",
  "crc32fast",
  "flate2",
- "indexmap 2.14.1",
+ "indexmap 2.14.2",
  "memchr",
  "typed-path",
 ]
@@ -9260,23 +9499,41 @@ version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
 dependencies = [
- "zstd-safe",
+ "zstd-safe 7.3.0",
+]
+
+[[package]]
+name = "zstd"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf06bd8162af0734b344780deb55b42a2429ae430870d13fcc12f238e880fe6e"
+dependencies = [
+ "zstd-safe 8.0.0",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "7.2.4"
+version = "7.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+checksum = "64d80649ab6db9d9f6f9c80a40becd948eda4714a0a5ac8c4d157a32231c7882"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae42c0555055784c70058d19ba8e275528e8a99a706684868ace5da4e716a4ab"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.16+zstd.1.5.7"
+version = "2.1.0+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+checksum = "0ef0a8027ec3ee71300ab3bcbcd0393f434aa72b91ca6d635a39941deae8eea0"
 dependencies = [
  "cc",
  "pkg-config",

@@ -17,7 +17,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.8.15
+          version: 2026.9.1
           install_args: --jobs=1 just
 
       - name: setup docker buildx
