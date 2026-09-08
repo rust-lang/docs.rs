@@ -111,6 +111,12 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
 fn print_error<T>(name: &str, step: &StepResult<T>) {
     if let Some(error) = &step.error {
         println!("  {name}: failed: {error:#}");
+        if !step.log.trim().is_empty() {
+            println!("    captured build log:");
+            for line in step.log.lines() {
+                println!("      {line}");
+            }
+        }
     }
 }
 
