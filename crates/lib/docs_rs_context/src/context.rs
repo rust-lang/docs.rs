@@ -243,9 +243,10 @@ impl<S: State> ContextBuilder<S> {
     pub async fn with_registry_api(self) -> Result<ContextBuilder<SetRegistryApi<S>>>
     where
         S::RegistryApi: IsUnset,
+        S::MeterProvider: IsSet,
     {
         let config = docs_rs_registry_api::Config::from_environment()?;
-        let api = RegistryApi::from_config(&config).await?;
+        let api = RegistryApi::from_config(&config, self.get_meter_provider()).await?;
 
         Ok(self.registry_api(config.into(), api.into()))
     }

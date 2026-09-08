@@ -56,6 +56,7 @@ impl TestRegistry {
         /// By default, we'll generate a correct `IndexConfig`, that fits
         /// to the local http mocks we set up.
         index_config: Option<crates_index::IndexConfig>,
+        meter_provider: Option<docs_rs_opentelemetry::AnyMeterProvider>,
     ) -> Result<Self> {
         let cargo_home = spawn_blocking(|| Ok(tempfile::tempdir()?)).await?;
         let api_server = mockito::Server::new_async().await;
@@ -90,7 +91,15 @@ impl TestRegistry {
         // the sparse index url from a git-http URL.
         let index_url: Url = format!("sparse+{}", index_server.url()).parse()?;
 
-        let api = RegistryApi::new(index_url.clone(), retries, Some(cargo_home.path())).await?;
+        let meter_provider = meter_provider
+            .unwrap_or_else(|| Arc::new(docs_rs_opentelemetry::NoopMeterProvider::new()));
+        let api = RegistryApi::new(
+            index_url.clone(),
+            retries,
+            Some(cargo_home.path()),
+            &meter_provider,
+        )
+        .await?;
 
         let config = Arc::new(
             Config::builder()

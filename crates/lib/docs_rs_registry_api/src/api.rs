@@ -1,6 +1,7 @@
 use crate::{
     Config,
     error::{Error, Result},
+    metrics::{Operation, RegistryApiMetrics},
     models::{
         ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor,
         SearchResponse,
@@ -8,6 +9,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use docs_rs_crate_archive::{SourceDir, unpack_crate_archive};
+use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, spawn_blocking};
 use futures_util::StreamExt as _;
@@ -31,6 +33,8 @@ use url::Url;
 async fn send_sparse_request(
     client: &ClientWithMiddleware,
     request: http::Request<()>,
+    metrics: &RegistryApiMetrics,
+    operation: Operation,
 ) -> Result<http::Response<Vec<u8>>> {
     let (mut parts, _) = request.into_parts();
 
@@ -43,7 +47,9 @@ async fn send_sparse_request(
 
     let request: reqwest::Request = http::Request::from_parts(parts, Vec::new()).try_into()?;
 
-    let response = client.execute(request).await?;
+    let response = metrics
+        .record_request(operation, client.execute(request))
+        .await?;
 
     let mut builder = http::Response::builder()
         .status(response.status())
@@ -62,6 +68,7 @@ async fn send_sparse_request(
 async fn fetch_index_config(
     index: &crates_index::SparseIndex,
     client: &ClientWithMiddleware,
+    metrics: &RegistryApiMetrics,
 ) -> Result<crates_index::IndexConfig> {
     match index.index_config() {
         // Local `config.json` exists: use it without a request.
@@ -69,8 +76,13 @@ async fn fetch_index_config(
 
         // It is absent: fetch the live config and save it locally.
         Err(crates_index::Error::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
-            let response =
-                send_sparse_request(client, index.make_config_request()?.body(())?).await?;
+            let response = send_sparse_request(
+                client,
+                index.make_config_request()?.body(())?,
+                metrics,
+                Operation::IndexConfig,
+            )
+            .await?;
 
             // `true` writes config.json into Cargo's sparse-index directory.
             Ok(index.parse_config_response(response, true)?)
@@ -91,17 +103,19 @@ pub struct RegistryApi {
     api_base: Url,
     pub(crate) sparse_index: crates_index::SparseIndex,
     client: ClientWithMiddleware,
+    metrics: RegistryApiMetrics,
 }
 
 impl RegistryApi {
     /// Create a client using the configured sparse-index URL and retry policy.
     ///
     /// The index's `config.json` determines the API and download URLs.
-    pub async fn from_config(config: &Config) -> Result<Self> {
+    pub async fn from_config(config: &Config, meter_provider: &AnyMeterProvider) -> Result<Self> {
         Self::new(
             config.sparse_index_host.clone(),
             config.crates_io_api_call_retries,
             None,
+            meter_provider,
         )
         .await
     }
@@ -115,6 +129,7 @@ impl RegistryApi {
         sparse_base: Url,
         max_retries: u32,
         cargo_home: Option<&Path>,
+        meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
         let client = ClientBuilder::new(
             reqwest::Client::builder()
@@ -133,7 +148,8 @@ impl RegistryApi {
             // uses default cargo home on the system.
             crates_index::SparseIndex::from_url(sparse_base.as_str())?
         };
-        let index_config = fetch_index_config(&sparse_index, &client).await?;
+        let metrics = RegistryApiMetrics::new(meter_provider);
+        let index_config = fetch_index_config(&sparse_index, &client, &metrics).await?;
 
         Ok(Self {
             api_base: index_config
@@ -146,6 +162,7 @@ impl RegistryApi {
             index_config,
             sparse_index,
             client,
+            metrics,
         })
     }
 
@@ -179,9 +196,11 @@ impl RegistryApi {
         version: &Version,
     ) -> Result<SourceDir> {
         let response = self
-            .client
-            .get(self.download_url(name, version)?)
-            .send()
+            .metrics
+            .record_request(
+                Operation::Download,
+                self.client.get(self.download_url(name, version)?).send(),
+            )
             .await?
             .error_for_status()?;
 
@@ -228,6 +247,8 @@ impl RegistryApi {
             self.sparse_index
                 .make_cache_request(name.as_str())?
                 .body(())?,
+            &self.metrics,
+            Operation::IndexCrate,
         )
         .await?;
 
@@ -271,15 +292,19 @@ impl RegistryApi {
     ///
     /// We treat 5xx errors just as text, not knowing where they were raised.
     /// For 4xx errors we try to parse the the JSON error description.
-    async fn api_request<T>(&self, url: impl reqwest::IntoUrl) -> Result<T>
+    async fn api_request<T>(&self, operation: Operation, url: impl reqwest::IntoUrl) -> Result<T>
     where
         T: DeserializeOwned,
     {
         let response = self
-            .client
-            .get(url)
-            .header(ACCEPT, mime::APPLICATION_JSON.as_ref())
-            .send()
+            .metrics
+            .record_request(
+                operation,
+                self.client
+                    .get(url)
+                    .header(ACCEPT, mime::APPLICATION_JSON.as_ref())
+                    .send(),
+            )
             .await?;
         let status = response.status();
 
@@ -361,7 +386,7 @@ impl RegistryApi {
             kind: Option<OwnerKind>,
         }
 
-        let response: Response = self.api_request(url).await?;
+        let response: Response = self.api_request(Operation::ApiOwners, url).await?;
 
         let result = response
             .users
@@ -396,7 +421,7 @@ impl RegistryApi {
             url
         };
 
-        let response: SearchResponse = self.api_request(url).await?;
+        let response: SearchResponse = self.api_request(Operation::ApiSearch, url).await?;
 
         Ok(Search {
             crates: response.crates.ok_or(Error::MissingReleases)?,
@@ -926,6 +951,7 @@ mod tests {
             "https://index.example".parse().unwrap(),
             0,
             Some(cargo_home.path()),
+            docs_rs_opentelemetry::testing::TestMetrics::new().provider(),
         )
         .await
         .expect_err("invalid sparse URL");
@@ -958,7 +984,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_and_extract_source() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
+        let metrics = docs_rs_opentelemetry::testing::TestMetrics::new();
+        let env = TestRegistry::builder()
+            .meter_provider(metrics.provider().clone())
+            .build()
+            .await?;
         let root = tempfile::tempdir()?;
         fs::write(
             root.path().join("Cargo.toml"),

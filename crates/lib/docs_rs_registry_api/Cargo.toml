@@ -16,12 +16,14 @@ crates-index = { workspace = true, default-features = false, features = ["sparse
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_crate_archive = { path = "../docs_rs_crate_archive" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
 http = { workspace = true }
 mime = { workspace = true }
 mockito = { workspace = true, optional = true }
+opentelemetry = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
