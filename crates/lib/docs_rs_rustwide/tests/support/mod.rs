@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use docs_rs_rustwide::{BuildEnvironment, BuildResult};
 pub use docs_rs_rustwide::testing::{TestWorkspace, test_sandbox_image};
+use docs_rs_rustwide::{BuildEnvironment, BuildResult};
 use rustwide::Crate;
 use std::{
     path::{Path, PathBuf},

@@ -133,15 +133,16 @@ GitHub-hosted runners start each job with a fresh Docker daemon. On a cache hit,
 `docker load` makes the image available before `docs_rs_build` initializes its
 workspace. GitHub Actions caches are immutable, while the `linux` image tag is
 mutable, so increment `docs-rs-image-v1` whenever the workflow should fetch a
-new image. A pinned image tag or digest can instead be included in the cache key.
+new image. A pinned image tag or digest can instead be included in the cache
+key.
 
 ## Sandbox image
 
 The normal docs.rs build image is used by default. It contains a broad set of
 native libraries so that docs.rs can build crates with system dependencies, but
 that compatibility makes the initial download large. As of 2026-09-03, the
-current amd64 image has approximately 3.4 GB of compressed layers and takes
-more space after extraction.
+current amd64 image has approximately 3.4 GB of compressed layers and takes more
+space after extraction.
 
 For faster testing with the smaller image used by the build library's
 integration tests, pass:
@@ -150,21 +151,21 @@ integration tests, pass:
 docs_rs_build --small-image
 ```
 
-The corresponding amd64 micro image is approximately 259 MB compressed. It is
-a good choice when the crate does not rely on native packages available only in
-the full image; otherwise, use the default image for the closest reproduction
-of docs.rs.
+The corresponding amd64 micro image is approximately 259 MB compressed. It is a
+good choice when the crate does not rely on native packages available only in
+the full image; otherwise, use the default image for the closest reproduction of
+docs.rs.
 
 A custom image and its resolution policy can be selected with `--image` and
 `--image-source`.
 
 ### Caching the image in CI
 
-The example workflow uses `actions/cache` to preserve a compressed image
-archive and loads it into the fresh Docker daemon at the start of the job. This
-can avoid repeatedly pulling the image, but the full image remains a large
-cache entry. Restoring it can transfer roughly the same amount of data as an
-image pull while adding `docker save`/`docker load` overhead and consuming the
+The example workflow uses `actions/cache` to preserve a compressed image archive
+and loads it into the fresh Docker daemon at the start of the job. This can
+avoid repeatedly pulling the image, but the full image remains a large cache
+entry. Restoring it can transfer roughly the same amount of data as an image
+pull while adding `docker save`/`docker load` overhead and consuming the
 repository's cache allowance. Measure both approaches for your workload.
 
 For frequent builds, prefer one of these approaches:

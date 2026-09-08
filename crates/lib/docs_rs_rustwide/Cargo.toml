@@ -16,12 +16,7 @@ docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 docsrs-metadata = { path = "../metadata" }
 log = "0.4"
-# rustwide = { version = "0.26.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
-rustwide = {
-    path = "/home/syphar/src/rust-lang/rustwide",
-    default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"]
-}
-
+rustwide = { workspace = true }
 sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

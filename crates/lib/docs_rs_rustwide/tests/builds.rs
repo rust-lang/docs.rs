@@ -22,9 +22,8 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let duration = build.duration();
     let release = build.into_inner();
     let target = release.default_target();
-    let steps_duration = target.coverage.duration
-        + target.rustdoc_json.duration
-        + target.documentation.duration;
+    let steps_duration =
+        target.coverage.duration + target.rustdoc_json.duration + target.documentation.duration;
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets.iter().map(|target| target.duration()).sum());
     assert!(release.successful());

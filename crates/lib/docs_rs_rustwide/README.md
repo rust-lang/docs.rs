@@ -68,8 +68,8 @@ Preparation installs the toolchain, the docs.rs default targets, and the
 left by individual crate builds are removed before a distribution toolchain is
 updated. CI toolchains are installed and treated as changed on every update.
 
-A durable service should additionally compare `rustc_version()` with the
-version of the essential files it last published. That ensures generation and
+A durable service should additionally compare `rustc_version()` with the version
+of the essential files it last published. That ensures generation and
 publication are retried after a failure even when the installed compiler no
 longer changes on the next update check. The published version should only be
 recorded after publication succeeds.
