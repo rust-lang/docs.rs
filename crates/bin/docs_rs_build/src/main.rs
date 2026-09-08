@@ -71,7 +71,7 @@ fn run(args: &Args) -> Result<bool> {
         .context("running the docs.rs build")?;
     let duration = build.duration();
     let result = build.into_inner();
-    Ok(report::print(&result, duration, args.strict))
+    report::print(&result, duration, args.strict)
 }
 
 fn ensure_crate_path(path: &Path) -> Result<()> {

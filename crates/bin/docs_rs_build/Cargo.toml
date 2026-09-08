@@ -11,6 +11,7 @@ readme = "README.md"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+cli-table = { version = "0.5", default-features = false }
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits", default-features = false }
 docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive" }
 docs_rs_logging = { path = "../../lib/docs_rs_logging" }
