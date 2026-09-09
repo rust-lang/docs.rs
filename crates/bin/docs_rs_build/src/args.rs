@@ -116,11 +116,11 @@ impl Args {
 
     pub(crate) fn sandbox_image(&self) -> SandboxImageSource {
         if let Some(name) = self.image.clone() {
-            return match self.image_source {
+            match self.image_source {
                 ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
                 ImageSource::Local => SandboxImageSource::Local(name),
                 ImageSource::Remote => SandboxImageSource::Remote(name),
-            };
+            }
         } else if self.small_image {
             SandboxImageSource::linux_micro()
         } else {
