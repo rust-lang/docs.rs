@@ -15,16 +15,28 @@ pub struct Limits {
     pub max_log_size: usize,
 }
 
-impl Limits {
-    pub fn new(config: &Config) -> Self {
+impl Default for Limits {
+    fn default() -> Self {
         Self {
             // 3 GB default default
-            memory: config.build_default_memory_limit.unwrap_or(3 * GB),
+            memory: 3 * GB,
             timeout: Duration::from_secs(15 * 60), // 15 minutes
             targets: crate::DEFAULT_MAX_TARGETS,
             networking: false,
             max_log_size: 100 * 1024, // 100 KB
         }
+    }
+}
+
+impl Limits {
+    pub fn from_config(config: &Config) -> Self {
+        let mut limits = Limits::default();
+
+        if let Some(memory_limit) = config.build_default_memory_limit {
+            limits.memory = memory_limit;
+        }
+
+        limits
     }
 
     pub async fn for_crate(
@@ -32,7 +44,7 @@ impl Limits {
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
     ) -> Result<Self> {
-        let default = Self::new(config);
+        let default = Self::from_config(config);
         let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
         Ok(Self {
             memory: overrides
@@ -94,7 +106,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         let krate = KrateName::from_static("hexponent");
         // limits work if no crate has limits set
@@ -186,7 +198,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         Overrides::save(
             &mut conn,
