@@ -75,6 +75,13 @@ impl AppConfig for Config {
     fn test_config() -> Result<Self> {
         let mut config = Self::from_environment()?;
 
+        if let Some(image) = config.docker_image {
+            tracing::warn!(
+                image,
+                "docker image from environment will be ignored for tests."
+            )
+        }
+
         config.include_default_targets = true;
         config.rustwide_workspace = docs_rs_rustwide::testing::test_workspace_path();
         config.docker_image = Some(docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO.into());
