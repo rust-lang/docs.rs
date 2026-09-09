@@ -3,6 +3,7 @@ use std::{
     fs::{self, File, OpenOptions},
     path::Path,
 };
+use tracing::{debug, info};
 
 /// Separate from Rustwide's short-lived initialization lock; never unlink this file.
 pub(crate) struct WorkspaceLock {
@@ -10,10 +11,14 @@ pub(crate) struct WorkspaceLock {
 }
 
 impl WorkspaceLock {
-    pub(crate) fn acquire(path: &Path, wait: bool) -> Result<Self> {
-        fs::create_dir_all(path)
-            .with_context(|| format!("creating workspace {}", path.display()))?;
-        let lock_path = path.join(".docsrs-workspace.lock");
+    pub(crate) fn acquire(workspace: impl AsRef<Path>, wait: bool) -> Result<Self> {
+        let workspace = workspace.as_ref();
+
+        fs::create_dir_all(workspace)
+            .with_context(|| format!("creating workspace {}", workspace.display()))?;
+
+        let lock_path = workspace.join(".docsrs-workspace.lock");
+
         let file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -21,24 +26,26 @@ impl WorkspaceLock {
             .truncate(false)
             .open(&lock_path)
             .with_context(|| format!("opening workspace lock {}", lock_path.display()))?;
+
         if wait {
-            tracing::info!(workspace = %path.display(), "waiting for workspace lock");
+            info!(workspace = %workspace.display(), "waiting for workspace lock");
             file.lock()
-                .with_context(|| format!("locking workspace {}", path.display()))?;
+                .with_context(|| format!("locking workspace {}", workspace.display()))?;
         } else {
             match file.try_lock() {
                 Ok(()) => {}
-                Err(std::fs::TryLockError::WouldBlock) => bail!(
+                Err(fs::TryLockError::WouldBlock) => bail!(
                     "workspace {} is already in use; stop its current owner or select a different workspace",
-                    path.display()
+                    workspace.display()
                 ),
-                Err(std::fs::TryLockError::Error(error)) => {
+                Err(fs::TryLockError::Error(error)) => {
                     return Err(error)
-                        .with_context(|| format!("locking workspace {}", path.display()));
+                        .with_context(|| format!("locking workspace {}", workspace.display()));
                 }
             }
         }
-        tracing::debug!(workspace = %path.display(), "acquired workspace lock");
+
+        debug!(workspace = %workspace.display(), "acquired workspace lock");
         Ok(Self { _file: file })
     }
 }
@@ -46,7 +53,7 @@ impl WorkspaceLock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{process::Command, sync::mpsc, time::Duration};
+    use std::{env, process::Command, sync::mpsc, thread, time::Duration};
 
     #[test]
     fn competing_environment_fails_before_initialization() -> Result<()> {
@@ -67,7 +74,7 @@ mod tests {
         let lock = WorkspaceLock::acquire(directory.path(), false)?;
         let path = directory.path().to_owned();
         let (send, receive) = mpsc::channel();
-        let waiter = std::thread::spawn(move || {
+        let waiter = thread::spawn(move || {
             let lock = WorkspaceLock::acquire(&path, true).unwrap();
             send.send(()).unwrap();
             drop(lock);
@@ -85,13 +92,13 @@ mod tests {
     #[test]
     fn lock_coordinates_processes() -> Result<()> {
         const CHILD_PATH: &str = "DOCSRS_WORKSPACE_LOCK_TEST_PATH";
-        if let Some(path) = std::env::var_os(CHILD_PATH) {
+        if let Some(path) = env::var_os(CHILD_PATH) {
             assert!(WorkspaceLock::acquire(Path::new(&path), false).is_err());
             return Ok(());
         }
         let directory = tempfile::tempdir()?;
         let lock = WorkspaceLock::acquire(directory.path(), false)?;
-        let output = Command::new(std::env::current_exe()?)
+        let output = Command::new(env::current_exe()?)
             .args([
                 "--exact",
                 "workspace_lock::tests::lock_coordinates_processes",
