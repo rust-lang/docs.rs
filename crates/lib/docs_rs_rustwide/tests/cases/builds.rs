@@ -24,7 +24,7 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
         target.coverage.duration + target.rustdoc_json.duration + target.documentation.duration;
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets.iter().map(|target| target.duration()).sum());
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().rustdoc_json.successful());
     assert!(release.default_target().coverage.successful());
@@ -79,7 +79,7 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
         .run(|build| build.build_docs())?
         .into_inner();
 
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().coverage.successful());
     assert!(release.default_target().rustdoc_json.successful());
@@ -96,7 +96,7 @@ fn passes_rustflags_to_build_scripts() -> Result<()> {
         .release(&krate)
         .run(|build| build.build_docs())?
         .into_inner();
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     Ok(())
 }
 
@@ -106,7 +106,7 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
     let mut test = TestEnvironment::new()?;
     let release = build_local(&mut test.environment, "with-examples")?.into_inner();
 
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     assert!(release.default_target().coverage.successful());
     assert!(
         release
@@ -132,7 +132,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
         .run(|build| build.build_docs())?
         .into_inner();
 
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     assert!(release.default_target().coverage.successful());
     assert!(release.default_target().rustdoc_json.successful());
     Ok(())
@@ -173,7 +173,7 @@ fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
     assert!(
         build_local(&mut environment, "hello-world")?
             .into_inner()
-            .successful()
+            .build_succeeded()
     );
     Ok(())
 }
@@ -192,7 +192,7 @@ fn source_can_be_copied_before_a_failed_build() -> Result<()> {
     let release = fetched.run(|build| build.build_docs())?.into_inner();
 
     assert!(destination.path().join("src/main.rs").is_file());
-    assert!(!release.successful());
+    assert!(!release.build_succeeded());
     Ok(())
 }
 

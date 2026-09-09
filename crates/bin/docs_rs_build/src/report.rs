@@ -72,7 +72,7 @@ pub(crate) fn print(
         }
     }
 
-    let default_succeeded = result.successful() && result.has_docs();
+    let default_succeeded = result.build_succeeded() && result.has_docs();
     if !result.has_docs() {
         println!("  error: the default target produced no library documentation");
     }
@@ -90,7 +90,9 @@ pub(crate) fn print(
 }
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
-    target.successful() && target.rustdoc_json.successful() && target.coverage.successful()
+    target.documentation_succeeded()
+        && target.rustdoc_json.successful()
+        && target.coverage.successful()
 }
 
 fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: bool) -> bool {

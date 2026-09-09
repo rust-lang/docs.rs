@@ -20,7 +20,7 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
     assert!(
         build_local(&mut environment, "build-std")?
             .into_inner()
-            .successful()
+            .build_succeeded()
     );
     Ok(())
 }
@@ -40,14 +40,14 @@ fn refreshes_workspace_after_interval() -> Result<()> {
     assert!(
         build_local(&mut environment, "hello-world")?
             .into_inner()
-            .successful()
+            .build_succeeded()
     );
     std::thread::sleep(Duration::from_secs(1));
     assert!(environment.perform_maintenance()?.workspace_refreshed);
     assert!(
         build_local(&mut environment, "hello-world")?
             .into_inner()
-            .successful()
+            .build_succeeded()
     );
     Ok(())
 }
@@ -79,7 +79,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
             .release(&krate)
             .run(|build| build.build_docs())?
             .into_inner()
-            .successful()
+            .build_succeeded()
     );
     assert_eq!(old_version, environment.rustc_version()?);
     Ok(())

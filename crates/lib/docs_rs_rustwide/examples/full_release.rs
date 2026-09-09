@@ -33,7 +33,7 @@ fn main() -> Result<()> {
         println!("target: {}", target_result.target);
         println!(
             "  documentation: {}",
-            target_result.documentation.successful()
+            target_result.documentation_succeeded()
         );
         println!(
             "  rustdoc JSON: {}",

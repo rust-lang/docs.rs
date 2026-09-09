@@ -150,7 +150,7 @@ fn main() -> Result<()> {
         println!(
             "{}: documentation succeeded: {}",
             target.target,
-            target.documentation.successful()
+            target.documentation_succeeded()
         );
     }
 

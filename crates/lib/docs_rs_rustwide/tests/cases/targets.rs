@@ -1,6 +1,6 @@
+use crate::support::{TestEnvironment, build_local};
 use anyhow::Result;
 use rustwide::Crate;
-use crate::support::{TestEnvironment, build_local};
 
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
@@ -38,7 +38,7 @@ fn cross_compiles_non_host_default_target() -> Result<()> {
         .find(|result| result.target == "x86_64-unknown-linux-gnu")
         .expect("host target should be included");
 
-    assert!(host.successful());
+    assert!(host.documentation_succeeded());
     Ok(())
 }
 
@@ -47,6 +47,6 @@ fn cross_compiles_non_host_default_target() -> Result<()> {
 fn builds_with_build_std() -> Result<()> {
     let mut test = TestEnvironment::new()?;
     let release = build_local(&mut test.environment, "build-std")?.into_inner();
-    assert!(release.successful());
+    assert!(release.build_succeeded());
     Ok(())
 }

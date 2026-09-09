@@ -43,7 +43,7 @@ fn main() -> Result<()> {
 
     println!(
         "documentation succeeded: {}",
-        result.into_inner().successful()
+        result.into_inner().build_succeeded()
     );
 
     Ok(())

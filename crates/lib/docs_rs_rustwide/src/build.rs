@@ -238,7 +238,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let mut target_result = self.build_target_once(target, is_default);
 
         if retry_without_lockfile
-            && !target_result.successful()
+            && !target_result.build_succeeded()
             && self.build.host_source_dir().join("Cargo.lock").exists()
         {
             debug!(

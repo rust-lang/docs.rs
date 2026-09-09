@@ -34,8 +34,9 @@ use regex::Regex;
 use rustwide::{Crate, Toolchain};
 use std::{
     collections::HashSet,
-    fs::File,
+    fs::{self, File},
     io::BufReader,
+    mem,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -306,7 +307,7 @@ impl RustwideBuilder {
             PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version_string),
         };
 
-        std::fs::create_dir_all(&self.config.temp_dir)?;
+        fs::create_dir_all(&self.config.temp_dir)?;
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
         let source_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
@@ -325,18 +326,14 @@ impl RustwideBuilder {
 
         let memory_peak = build.statistics().memory_peak_bytes();
         let mut release = build.into_inner();
-        // Cargo can successfully complete `rustdoc --lib` without producing
-        // documentation, for example for a package without a documentable
-        // library target. The build record follows Cargo's exit status; the
-        // stricter checks below decide whether documentation is publishable.
-        let build_succeeded = release.default_target().documentation.successful();
+        let build_succeeded = release.build_succeeded();
         let has_docs = release.has_docs();
         let default_target = release.default_target().target.clone();
 
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
             for target in &release.targets {
-                if target.successful() {
+                if target.documentation_succeeded() {
                     copy_target_docs(target, local_storage.path())?;
                     successful_targets.push(target.target.clone());
                 }
@@ -500,7 +497,7 @@ impl RustwideBuilder {
         for target in &mut release.targets {
             let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
             self.blocking_storage
-                .store_one(json_log_path, std::mem::take(&mut target.rustdoc_json.log))?;
+                .store_one(json_log_path, mem::take(&mut target.rustdoc_json.log))?;
 
             if let Some(json) = &target.rustdoc_json.output {
                 let upload = json.format_version().and_then(|format_version| {
@@ -527,11 +524,11 @@ impl RustwideBuilder {
                 }
             }
 
-            let successful = target.successful();
+            let successful = target.documentation_succeeded();
             let log_name = format!("{}.txt", target.target);
             self.blocking_storage.store_one(
                 format!("build-logs/{build_id}/{log_name}"),
-                std::mem::take(&mut target.documentation.log),
+                mem::take(&mut target.documentation.log),
             )?;
             build_logs.push((log_name, successful));
         }

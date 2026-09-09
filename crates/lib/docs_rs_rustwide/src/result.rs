@@ -157,14 +157,19 @@ impl TargetBuildResult {
             .is_some_and(|path| path.is_dir())
     }
 
-    /// Whether the primary HTML documentation build succeeded and produced output.
-    pub fn successful(&self) -> bool {
-        self.documentation.successful() && self.documentation_exists()
+    /// Whether Cargo completed the primary HTML documentation command successfully.
+    pub fn build_succeeded(&self) -> bool {
+        self.documentation.successful()
+    }
+
+    /// Whether the primary HTML documentation build completed and produced output.
+    pub fn documentation_succeeded(&self) -> bool {
+        self.build_succeeded() && self.documentation_exists()
     }
 
     /// Whether this target produced documentation for the crate's library target.
     pub fn has_docs(&self, library_name: &str) -> bool {
-        self.successful()
+        self.documentation_succeeded()
             && self
                 .documentation
                 .output
@@ -194,9 +199,14 @@ impl ReleaseBuildResult {
             .expect("a release always has a default target")
     }
 
-    /// Whether the default HTML documentation build succeeded.
-    pub fn successful(&self) -> bool {
-        self.default_target().successful()
+    /// Whether Cargo completed the default HTML documentation command successfully.
+    pub fn build_succeeded(&self) -> bool {
+        self.default_target().build_succeeded()
+    }
+
+    /// Whether the default HTML documentation build completed and produced output.
+    pub fn documentation_succeeded(&self) -> bool {
+        self.default_target().documentation_succeeded()
     }
 
     /// Whether the default target produced documentation for this crate's library target.
@@ -248,16 +258,18 @@ mod tests {
     }
 
     #[test]
-    fn successful_target_requires_documentation_directory() {
+    fn documentation_success_requires_documentation_directory() {
         let temporary = tempfile::tempdir().unwrap();
         let missing = target_result(temporary.path().join("missing"));
         assert!(!missing.documentation_exists());
-        assert!(!missing.successful());
+        assert!(missing.build_succeeded());
+        assert!(!missing.documentation_succeeded());
         assert!(!missing.has_docs("example_crate"));
 
         let existing = target_result(temporary.path().to_owned());
         assert!(existing.documentation_exists());
-        assert!(existing.successful());
+        assert!(existing.build_succeeded());
+        assert!(existing.documentation_succeeded());
         assert!(!existing.has_docs("example_crate"));
 
         std::fs::create_dir(temporary.path().join("example_crate")).unwrap();
