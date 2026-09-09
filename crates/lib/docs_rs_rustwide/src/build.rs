@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
-    TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
+    BuildEnvironment, BuildStepError, InfrastructureError, ReleaseBuildResult, RustdocJsonOutput,
+    StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
@@ -306,7 +306,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all, fields(target))]
-    pub fn build_coverage(&self, target: &str) -> Result<StepResult<Option<DocCoverage>>> {
+    pub fn build_coverage(
+        &self,
+        target: &str,
+    ) -> Result<StepResult<Option<DocCoverage>>, InfrastructureError> {
         Self::capture_step(self.limits.max_log_size(), || {
             let mut coverage = DocCoverage::default();
             self.command(target)
@@ -336,7 +339,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all, fields(target))]
-    pub fn build_rustdoc_json(&self, target: &str) -> Result<StepResult<RustdocJsonOutput>> {
+    pub fn build_rustdoc_json(
+        &self,
+        target: &str,
+    ) -> Result<StepResult<RustdocJsonOutput>, InfrastructureError> {
         Self::capture_step(self.limits.max_log_size(), || {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
@@ -354,7 +360,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all)]
-    pub fn build_documentation(&self, target: &str) -> Result<StepResult<PathBuf>> {
+    pub fn build_documentation(
+        &self,
+        target: &str,
+    ) -> Result<StepResult<PathBuf>, InfrastructureError> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
@@ -383,7 +392,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all, fields(target, emit))]
-    fn build_html(&self, target: &str, emit: Emit) -> Result<StepResult<PathBuf>> {
+    fn build_html(
+        &self,
+        target: &str,
+        emit: Emit,
+    ) -> Result<StepResult<PathBuf>, InfrastructureError> {
         Self::capture_step(self.limits.max_log_size(), || {
             let metrics_dir = self.compiler_metrics_dir();
             if let Some(metrics_dir) = &metrics_dir {
@@ -444,7 +457,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     fn capture_step<T>(
         max_log_size: usize,
         run: impl FnOnce() -> Result<T, StepExecutionError>,
-    ) -> Result<StepResult<T>> {
+    ) -> Result<StepResult<T>, InfrastructureError> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(max_log_size);
         let started = Instant::now();
@@ -464,10 +477,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 log: storage.to_string(),
                 duration,
             }),
-            Err(StepExecutionError::Infrastructure(error)) => Err(error.context(format!(
-                "build infrastructure failed; captured build log:\n{}",
-                storage
-            ))),
+            Err(StepExecutionError::Infrastructure(error)) => Err(InfrastructureError {
+                error,
+                duration,
+                log: storage.to_string(),
+            }),
         }
     }
 
@@ -556,13 +570,31 @@ mod tests {
         assert!(matches!(step.error, Some(BuildStepError::Command(_))));
         assert!(step.output.is_none());
 
+        let started = Instant::now();
         let error = ReleaseBuild::capture_step::<()>(1024, || {
-            Err(StepExecutionError::Infrastructure(anyhow::anyhow!(
-                "dependency download failed"
-            )))
+            log::info!("fetching build-std dependencies");
+            Err(StepExecutionError::Infrastructure(
+                anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
+                    .context("dependency download failed"),
+            ))
         })
         .unwrap_err();
-        assert!(format!("{error:#}").contains("dependency download failed"));
+        assert!(error.duration > std::time::Duration::ZERO);
+        assert!(error.duration <= started.elapsed());
+        assert!(error.log.contains("fetching build-std dependencies"));
+        assert_eq!(
+            error.error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::ConnectionReset,
+        );
+        // Higher-level build methods propagate through anyhow without losing the fields.
+        let propagated = anyhow::Error::new(error).context("building release");
+        let infrastructure = propagated.downcast_ref::<InfrastructureError>().unwrap();
+        assert!(
+            infrastructure
+                .log
+                .contains("fetching build-std dependencies")
+        );
+        assert!(format!("{propagated:#}").contains("dependency download failed"));
     }
 
     #[test]

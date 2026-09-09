@@ -21,8 +21,8 @@ pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
 pub use release::{FetchedRelease, ReleaseContext};
 pub use result::{
-    BuildResult, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
-    TargetBuildResult,
+    BuildResult, BuildStepError, InfrastructureError, ReleaseBuildResult, RustdocJsonOutput,
+    StepResult, TargetBuildResult,
 };
 pub use sandbox::CpuLimit;
 pub use workspace::{

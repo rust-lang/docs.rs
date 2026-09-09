@@ -69,6 +69,22 @@ impl RustdocJsonOutput {
     }
 }
 
+/// A fatal infrastructure failure while executing a build step.
+///
+/// Unlike [`BuildStepError`], this aborts the release so the caller can retry it.
+/// The duration and log cover the failing step, not the whole target or release.
+#[derive(Debug, thiserror::Error)]
+#[error("build infrastructure failed after {duration:?}: {error}\ncaptured build log:\n{log}")]
+pub struct InfrastructureError {
+    /// Underlying infrastructure failure, including its context chain.
+    #[source]
+    pub error: anyhow::Error,
+    /// Wall-clock time spent in the failing step before it aborted.
+    pub duration: Duration,
+    /// Cargo and rustdoc output captured before the infrastructure failure.
+    pub log: String,
+}
+
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildStepError {

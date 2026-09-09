@@ -190,6 +190,14 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
+Individual step methods return `Result<StepResult<T>, InfrastructureError>`.
+Ordinary build failures remain in `StepResult::error`. Infrastructure failures
+abort the release and preserve the underlying `error`, the failing step's
+`duration`, and its captured `log`. Higher-level methods propagate this error
+through `anyhow::Error`; callers can retrieve it with
+`downcast_ref::<InfrastructureError>()`. This duration covers only the failing
+step, not the full target or release.
+
 ## Archiving sources before a build
 
 `ReleaseContext::fetch` exposes an intermediate phase for callers that need to
