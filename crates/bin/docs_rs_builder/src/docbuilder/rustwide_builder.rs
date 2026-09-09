@@ -496,8 +496,16 @@ impl RustwideBuilder {
 
         for target in &mut release.targets {
             let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
-            self.blocking_storage
-                .store_one(json_log_path, mem::take(&mut target.rustdoc_json.log))?;
+            if let Err(error) = self
+                .blocking_storage
+                .store_one(json_log_path, mem::take(&mut target.rustdoc_json.log))
+            {
+                error!(
+                    ?error,
+                    target = target.target,
+                    "failed to publish rustdoc JSON build log"
+                );
+            }
 
             if let Some(json) = &target.rustdoc_json.output {
                 let upload = json.format_version().and_then(|format_version| {

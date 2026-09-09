@@ -179,8 +179,8 @@ rustwide build and sandbox:
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {
     let target = build.selected_targets().default_target.to_owned();
-    let json = build.build_rustdoc_json(&target);
-    let documentation = build.build_documentation(&target);
+    let json = build.build_rustdoc_json(&target)?;
+    let documentation = build.build_documentation(&target)?;
     Ok((json, documentation))
 })?;
 # let _ = selected;

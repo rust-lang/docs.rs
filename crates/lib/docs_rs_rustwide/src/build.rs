@@ -34,6 +34,21 @@ pub enum Emit {
     HtmlNonStaticFiles,
 }
 
+/// Keep retryable infrastructure failures separate from non-fatal build steps.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StepExecutionError {
+    #[error(transparent)]
+    Build(#[from] BuildStepError),
+    #[error(transparent)]
+    Infrastructure(anyhow::Error),
+}
+
+impl From<anyhow::Error> for StepExecutionError {
+    fn from(error: anyhow::Error) -> Self {
+        Self::Build(BuildStepError::Output(error))
+    }
+}
+
 impl Emit {
     pub fn as_str(&self) -> &str {
         match self {
@@ -235,7 +250,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ) -> Result<TargetBuildResult> {
         let started = Instant::now();
         let is_default = target == self.metadata_targets().default_target;
-        let mut target_result = self.build_target_once(target, is_default);
+        let mut target_result = self.build_target_once(target, is_default)?;
 
         if retry_without_lockfile
             && !target_result.build_succeeded()
@@ -246,7 +261,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 "target build failed; retrying with a regenerated lockfile"
             );
             self.regenerate_lockfile()?;
-            target_result = self.build_target_once(target, is_default);
+            target_result = self.build_target_once(target, is_default)?;
         }
 
         target_result.duration = started.elapsed();
@@ -254,13 +269,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all)]
-    fn build_target_once(&self, target: &str, is_default: bool) -> TargetBuildResult {
+    fn build_target_once(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage_result = self.build_coverage(target);
-        let rustdoc_json_result = self.build_rustdoc_json(target);
-        let documentation_result = self.build_documentation(target);
+        let coverage_result = self.build_coverage(target)?;
+        let rustdoc_json_result = self.build_rustdoc_json(target)?;
+        let documentation_result = self.build_documentation(target)?;
         let compiler_metrics = self.compiler_metrics.take();
 
         if documentation_result.successful() && self.metadata.proc_macro {
@@ -276,7 +291,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             "target build completed"
         );
 
-        TargetBuildResult {
+        Ok(TargetBuildResult {
             duration: std::time::Duration::ZERO,
             target: target.into(),
             is_default,
@@ -284,18 +299,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             rustdoc_json: rustdoc_json_result,
             coverage: coverage_result,
             compiler_metrics,
-        }
+        })
     }
 
     /// Collect documentation coverage for one target.
+    ///
+    /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all, fields(target))]
-    pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
-        self.capture_step(|| {
+    pub fn build_coverage(&self, target: &str) -> Result<StepResult<Option<DocCoverage>>> {
+        Self::capture_step(self.limits.max_log_size(), || {
             let mut coverage = DocCoverage::default();
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
-                .prepare()
-                .map_err(BuildStepError::Output)?
+                .prepare_for_step()?
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
@@ -317,31 +333,34 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
+    ///
+    /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all, fields(target))]
-    pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
-        self.capture_step(|| {
+    pub fn build_rustdoc_json(&self, target: &str) -> Result<StepResult<RustdocJsonOutput>> {
+        Self::capture_step(self.limits.max_log_size(), || {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
-                .prepare()
-                .map_err(BuildStepError::Output)?
+                .prepare_for_step()?
                 .run()
                 .map_err(BuildStepError::Command)?;
 
             find_single_output_file(self.output_dir(target), "json")
                 .map(RustdocJsonOutput::new)
-                .map_err(BuildStepError::Output)
+                .map_err(Into::into)
         })
     }
 
     /// Build HTML documentation without emitting shared static files.
+    ///
+    /// Infrastructure failures abort the release; build failures remain in the step result.
     #[instrument(skip_all)]
-    pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
+    pub fn build_documentation(&self, target: &str) -> Result<StepResult<PathBuf>> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
     #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
-        let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
+        let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
         if let Some(error) = result.error {
             bail!(
                 "failed to build shared rustdoc static files: {error}\n{}",
@@ -364,11 +383,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all, fields(target, emit))]
-    fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
-        self.capture_step(|| {
+    fn build_html(&self, target: &str, emit: Emit) -> Result<StepResult<PathBuf>> {
+        Self::capture_step(self.limits.max_log_size(), || {
             let metrics_dir = self.compiler_metrics_dir();
             if let Some(metrics_dir) = &metrics_dir {
-                fs::create_dir_all(metrics_dir).map_err(anyhow::Error::from)?;
+                fs::create_dir_all(metrics_dir)
+                    .context("creating compiler metrics directory")
+                    .map_err(StepExecutionError::Infrastructure)?;
             }
 
             let mut command = self
@@ -382,8 +403,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             }
 
             let command_result = command
-                .prepare()
-                .map_err(BuildStepError::Output)?
+                .prepare_for_step()?
                 .run()
                 .map_err(BuildStepError::Command);
 
@@ -395,14 +415,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 copy_dir_all(&source, destination, |path| {
                     copied_metrics.push(path.into())
                 })
-                .map_err(anyhow::Error::from)?;
+                .context("copying compiler metrics")
+                .map_err(StepExecutionError::Infrastructure)?;
                 debug!(
                     count = copied_metrics.len(),
                     destination = %destination.display(),
                     "compiler metrics collected"
                 );
                 self.compiler_metrics.borrow_mut().extend(copied_metrics);
-                fs::remove_dir_all(source).map_err(anyhow::Error::from)?;
+                fs::remove_dir_all(source)
+                    .context("removing compiler metrics directory")
+                    .map_err(StepExecutionError::Infrastructure)?;
             }
 
             command_result?;
@@ -418,26 +441,33 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .then(|| self.build.host_target_dir().join("metrics"))
     }
 
-    fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
+    fn capture_step<T>(
+        max_log_size: usize,
+        run: impl FnOnce() -> Result<T, StepExecutionError>,
+    ) -> Result<StepResult<T>> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
-        storage.set_max_size(self.limits.max_log_size());
+        storage.set_max_size(max_log_size);
         let started = Instant::now();
         let captured_result = logging::capture(&storage, run);
         let duration = started.elapsed();
 
         match captured_result {
-            Ok(output) => StepResult {
+            Ok(output) => Ok(StepResult {
                 output: Some(output),
                 error: None,
                 log: storage.to_string(),
                 duration,
-            },
-            Err(error) => StepResult {
+            }),
+            Err(StepExecutionError::Build(error)) => Ok(StepResult {
                 output: None,
                 error: Some(error),
                 log: storage.to_string(),
                 duration,
-            },
+            }),
+            Err(StepExecutionError::Infrastructure(error)) => Err(error.context(format!(
+                "build infrastructure failed; captured build log:\n{}",
+                storage
+            ))),
         }
     }
 
@@ -515,6 +545,25 @@ fn find_single_output_file(
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+
+    #[test]
+    fn command_failures_are_recorded_but_infrastructure_failures_abort() {
+        crate::logging::init(false);
+        let step = ReleaseBuild::capture_step::<()>(1024, || {
+            Err(BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)).into())
+        })
+        .unwrap();
+        assert!(matches!(step.error, Some(BuildStepError::Command(_))));
+        assert!(step.output.is_none());
+
+        let error = ReleaseBuild::capture_step::<()>(1024, || {
+            Err(StepExecutionError::Infrastructure(anyhow::anyhow!(
+                "dependency download failed"
+            )))
+        })
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("dependency download failed"));
+    }
 
     #[test]
     fn finds_exactly_one_output_file() -> Result<()> {

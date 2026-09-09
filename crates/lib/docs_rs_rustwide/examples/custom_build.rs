@@ -28,9 +28,9 @@ fn main() -> Result<()> {
         let target = build.metadata_targets().default_target.to_owned();
 
         // Both commands run in the same prepared rustwide sandbox.
-        // Here we don't return early on errors in `build_rustdoc_json`, or `build_documentation`.
-        let rustdoc_json = build.build_rustdoc_json(&target);
-        let documentation = build.build_documentation(&target);
+        // Infrastructure errors abort; ordinary command failures remain in the step results.
+        let rustdoc_json = build.build_rustdoc_json(&target)?;
+        let documentation = build.build_documentation(&target)?;
 
         Ok((target, rustdoc_json, documentation))
     })?;
