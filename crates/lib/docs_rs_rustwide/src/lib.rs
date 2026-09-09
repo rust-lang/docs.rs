@@ -25,7 +25,10 @@ pub use result::{
     TargetBuildResult,
 };
 pub use sandbox::CpuLimit;
-pub use workspace::{BuildEnvironment, MaintenanceResult, SandboxImageSource};
+pub use workspace::{
+    BuildEnvironment, MaintenanceResult, SANDBOX_IMAGE_LINUX, SANDBOX_IMAGE_LINUX_MICRO,
+    SandboxImageSource,
+};
 
 /// Version of docs.rs whose build behavior this crate implements.
 pub const BUILDER_VERSION: &str = docs_rs_utils::BUILD_VERSION;

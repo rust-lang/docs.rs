@@ -23,6 +23,9 @@ const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_sec
 const DEFAULT_TOOLCHAIN_UPDATE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 
+pub const SANDBOX_IMAGE_LINUX: &str = "ghcr.io/rust-lang/crates-build-env/linux";
+pub const SANDBOX_IMAGE_LINUX_MICRO: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
+
 /// Describes how the sandbox image should be resolved whenever the workspace is initialized.
 #[derive(Clone, Debug, Default)]
 pub enum SandboxImageSource {
@@ -50,6 +53,14 @@ impl SandboxImageSource {
             },
         };
         Ok(Some(image))
+    }
+
+    pub fn linux() -> Self {
+        Self::LocalOrRemote(SANDBOX_IMAGE_LINUX.into())
+    }
+
+    pub fn linux_micro() -> Self {
+        Self::LocalOrRemote(SANDBOX_IMAGE_LINUX_MICRO.into())
     }
 }
 

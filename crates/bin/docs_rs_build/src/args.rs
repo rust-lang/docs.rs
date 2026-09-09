@@ -5,9 +5,6 @@ use docs_rs_rustwide::{CpuLimit, SandboxImageSource};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{ops::RangeInclusive, path::PathBuf, time::Duration};
 
-const NORMAL_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux";
-const SMALL_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
-
 /// Run the same sandboxed documentation build used by docs.rs.
 #[derive(Debug, Parser)]
 #[command(version, max_term_width = 100)]
@@ -118,18 +115,16 @@ impl Args {
     }
 
     pub(crate) fn sandbox_image(&self) -> SandboxImageSource {
-        let name = self.image.clone().unwrap_or_else(|| {
-            if self.small_image {
-                SMALL_IMAGE
-            } else {
-                NORMAL_IMAGE
-            }
-            .into()
-        });
-        match self.image_source {
-            ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
-            ImageSource::Local => SandboxImageSource::Local(name),
-            ImageSource::Remote => SandboxImageSource::Remote(name),
+        if let Some(name) = self.image.clone() {
+            return match self.image_source {
+                ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
+                ImageSource::Local => SandboxImageSource::Local(name),
+                ImageSource::Remote => SandboxImageSource::Remote(name),
+            };
+        } else if self.small_image {
+            SandboxImageSource::linux_micro()
+        } else {
+            SandboxImageSource::linux()
         }
     }
 

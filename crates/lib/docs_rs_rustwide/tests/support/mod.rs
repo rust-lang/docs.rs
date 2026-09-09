@@ -1,6 +1,5 @@
 use anyhow::Result;
-pub use docs_rs_rustwide::testing::test_sandbox_image;
-use docs_rs_rustwide::{BuildEnvironment, BuildResult};
+use docs_rs_rustwide::{BuildEnvironment, BuildResult, SandboxImageSource};
 use rustwide::Crate;
 use std::{
     path::{Path, PathBuf},
@@ -41,7 +40,7 @@ impl TestEnvironment {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(test_sandbox_image())
+            .sandbox_image(SandboxImageSource::linux_micro())
             .include_default_targets(include_default_targets)
             .build()?;
         Ok(Self { environment })
