@@ -1,4 +1,4 @@
-use crate::{BuildResult, CpuLimit, ReleaseContext};
+use crate::{BuildResult, CpuLimit, ReleaseContext, workspace_lock::WorkspaceLock};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
@@ -139,6 +139,11 @@ pub struct MaintenanceResult {
 }
 
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
+///
+/// Holds an exclusive filesystem lock until dropped, including during maintenance.
+/// Initialization fails if the workspace is already in use unless
+/// `wait_for_workspace_lock(true)` is selected. Keep this environment alive until
+/// its build artifacts have been consumed or copied out of the workspace.
 pub struct BuildEnvironment {
     workspace: ManagedWorkspace,
     toolchain: Toolchain,
@@ -151,6 +156,8 @@ pub struct BuildEnvironment {
     compiler_metrics_collection_path: Option<PathBuf>,
     // default limits on the builder host.
     default_limits: Limits,
+    // Drop last: workspace resources must be released before another owner enters.
+    _lock: WorkspaceLock,
 }
 
 #[bon]
@@ -165,6 +172,8 @@ impl BuildEnvironment {
         #[builder(default = false)] running_inside_docker: bool,
         #[builder(default)] sandbox_image: SandboxImageSource,
         #[builder(default = false)] fast_init: bool,
+        /// Wait for another environment to release this workspace instead of failing.
+        #[builder(default = false)] wait_for_workspace_lock: bool,
         #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
         workspace_reinitialization_interval: Duration,
         #[builder(default = DEFAULT_TOOLCHAIN_UPDATE_INTERVAL)] toolchain_update_interval: Duration,
@@ -175,6 +184,7 @@ impl BuildEnvironment {
         compiler_metrics_collection_path: Option<PathBuf>,
         #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
+        let lock = WorkspaceLock::acquire(path, wait_for_workspace_lock)?;
         let workspace_configuration = WorkspaceConfiguration {
             path: path.to_owned(),
             running_inside_docker,
@@ -195,6 +205,7 @@ impl BuildEnvironment {
             validate_host_resources,
             compiler_metrics_collection_path,
             default_limits,
+            _lock: lock,
         };
         environment.ensure_toolchain_ready()?;
         Ok(environment)

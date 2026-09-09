@@ -1,46 +1,23 @@
-//! Shared support for tests that exercise the docs.rs rustwide workspace.
+//! Shared configuration for tests that exercise the docs.rs rustwide workspace.
 
 use crate::SandboxImageSource;
-use anyhow::Result;
-use std::{
-    fs::{self, File, OpenOptions},
-    path::{Path, PathBuf},
-};
-use tracing::debug;
+use std::path::{Path, PathBuf};
 
-/// A persistent rustwide workspace locked for exclusive use by one test.
-///
-/// Reusing the workspace avoids reinstalling rustup and the configured
-/// toolchain for every ignored integration test. The lock prevents tests from
-/// concurrently purging or updating the shared workspace.
-pub struct TestWorkspace {
-    path: PathBuf,
-    _lock: File,
+pub const TEST_SANDBOX_IMAGE: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
+
+/// Persistent workspace used by integration tests. BuildEnvironment owns its lock.
+pub fn test_workspace_path() -> PathBuf {
+    std::env::var_os("DOCSRS_RUSTWIDE_WORKSPACE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(3)
+                .expect("docs_rs_rustwide must be inside the workspace")
+                .join(".workspace")
+        })
 }
 
-impl TestWorkspace {
-    /// Lock a specific rustwide workspace path for exclusive test use.
-    pub fn acquire_at(path: impl Into<PathBuf>) -> Result<Self> {
-        let path = path.into();
-        fs::create_dir_all(&path)?;
-
-        let lock_path = path.join(".test-lock");
-        let lock = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(true)
-            .open(&lock_path)?;
-
-        debug!(workspace = %path.display(), lockfile = %lock_path.display(), "waiting for test workspace lock");
-        lock.lock()?;
-        debug!(workspace = %path.display(), lockfile = %lock_path.display(), "acquired test workspace lock");
-
-        Ok(Self { path, _lock: lock })
-    }
-
-    /// Path of the locked rustwide workspace.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
+pub fn test_sandbox_image() -> SandboxImageSource {
+    SandboxImageSource::LocalOrRemote(TEST_SANDBOX_IMAGE.into())
 }

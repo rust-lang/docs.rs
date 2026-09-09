@@ -225,3 +225,15 @@ example that extracts sources before entering build preparation.
 `running_inside_docker(true)` is only needed when the calling program itself is
 inside a container, for example a container action using the host Docker socket.
 Leave it at its default (`false`) when invoking the program directly on a host.
+
+## Exclusive workspace access
+
+`BuildEnvironment` holds an exclusive filesystem lock from initialization until
+it is dropped, including across workspace refreshes and toolchain maintenance.
+The CLI and production builder fail with a workspace-in-use error if another
+environment owns the directory. Use a separate workspace for concurrent builders.
+Tests can opt into waiting with `.wait_for_workspace_lock(true)`.
+
+Keep the environment alive until artifacts have been consumed or copied out.
+Do not remove `.docsrs-workspace.lock` while an environment is running. The file
+may remain after exit; ownership is released automatically when its handle closes.

@@ -1,6 +1,6 @@
 use anyhow::Result;
-pub use docs_rs_rustwide::testing::{TestWorkspace, test_sandbox_image};
-use docs_rs_rustwide::{BuildEnvironment, BuildResult, SandboxImageSource};
+pub use docs_rs_rustwide::testing::test_sandbox_image;
+use docs_rs_rustwide::{BuildEnvironment, BuildResult};
 use rustwide::Crate;
 use std::{
     path::{Path, PathBuf},
@@ -22,7 +22,6 @@ pub fn init_logging() {
 }
 
 pub struct TestEnvironment {
-    _workspace: TestWorkspace,
     pub environment: BuildEnvironment,
 }
 
@@ -37,25 +36,21 @@ impl TestEnvironment {
 
     fn new_inner(include_default_targets: bool) -> Result<Self> {
         init_logging();
-        let workspace = TestWorkspace::acquire()?;
-        let environment = BuildEnvironment::builder(workspace.path())
+        let workspace = test_workspace();
+        let environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(SandboxImageSource::LocalOrRemote(
-                "ghcr.io/rust-lang/crates-build-env/linux-micro".into(),
-            ))
+            .sandbox_image(test_sandbox_image())
             .include_default_targets(include_default_targets)
             .build()?;
-        Ok(Self {
-            _workspace: workspace,
-            environment,
-        })
+        Ok(Self { environment })
     }
 }
 
-pub fn test_workspace() -> Result<TestWorkspace> {
+pub fn test_workspace() -> PathBuf {
     init_logging();
-    TestWorkspace::acquire()
+    docs_rs_rustwide::testing::test_workspace_path()
 }
 
 pub fn fixture(name: &str) -> PathBuf {

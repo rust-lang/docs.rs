@@ -107,6 +107,7 @@ impl RustwideBuilder {
             .toolchain(toolchain)
             .running_inside_docker(config.inside_docker)
             .sandbox_image(sandbox_image)
+            .wait_for_workspace_lock(cfg!(test))
             .fast_init(cfg!(test))
             .workspace_reinitialization_interval(config.build_workspace_reinitialization_interval)
             .maybe_cpu_limit(cpu_limit)

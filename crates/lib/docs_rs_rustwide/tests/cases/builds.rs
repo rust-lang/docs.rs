@@ -141,9 +141,10 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn collects_compiler_metrics() -> Result<()> {
-    let workspace = test_workspace()?;
+    let workspace = test_workspace();
     let metrics = tempfile::tempdir()?;
-    let mut environment = BuildEnvironment::builder(workspace.path())
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(test_sandbox_image())
@@ -161,8 +162,9 @@ fn collects_compiler_metrics() -> Result<()> {
 #[test_case(CpuLimit::Cores(1..=2))]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
-    let workspace = test_workspace()?;
-    let mut environment = BuildEnvironment::builder(workspace.path())
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(test_sandbox_image())

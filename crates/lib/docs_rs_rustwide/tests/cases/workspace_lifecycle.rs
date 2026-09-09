@@ -1,13 +1,14 @@
+use crate::support::{build_local, fixture, test_sandbox_image, test_workspace};
 use anyhow::Result;
 use docs_rs_rustwide::BuildEnvironment;
 use std::time::Duration;
-use crate::support::{build_local, fixture, test_sandbox_image, test_workspace};
 
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
 fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
-    let workspace = test_workspace()?;
-    let mut environment = BuildEnvironment::builder(workspace.path())
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(test_sandbox_image())
@@ -27,8 +28,9 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
 fn refreshes_workspace_after_interval() -> Result<()> {
-    let workspace = test_workspace()?;
-    let mut environment = BuildEnvironment::builder(workspace.path())
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(test_sandbox_image())
@@ -53,9 +55,10 @@ fn refreshes_workspace_after_interval() -> Result<()> {
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn recreated_environment_uses_existing_toolchain() -> Result<()> {
-    let workspace = test_workspace()?;
+    let workspace = test_workspace();
     let old_version = {
-        let environment = BuildEnvironment::builder(workspace.path())
+        let environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
             .sandbox_image(test_sandbox_image())
@@ -63,7 +66,8 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
         environment.rustc_version()?
     };
 
-    let mut environment = BuildEnvironment::builder(workspace.path())
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(test_sandbox_image())

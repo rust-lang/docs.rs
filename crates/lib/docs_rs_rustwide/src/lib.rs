@@ -15,6 +15,7 @@ mod sandbox;
 pub mod testing;
 pub mod utils;
 mod workspace;
+mod workspace_lock;
 
 pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
