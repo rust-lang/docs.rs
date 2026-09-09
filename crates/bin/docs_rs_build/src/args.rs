@@ -147,13 +147,13 @@ impl Args {
     }
 
     pub(crate) fn limits(&self) -> Limits {
-        Limits::builder()
-            .memory(self.memory)
-            .targets(self.max_targets)
-            .timeout(self.timeout)
-            .networking(self.network)
-            .max_log_size(self.max_captured_log_size)
-            .build()
+        Limits {
+            memory: self.memory,
+            targets: self.max_targets,
+            timeout: self.timeout,
+            networking: self.network,
+            max_log_size: self.max_captured_log_size,
+        }
     }
 }
 
