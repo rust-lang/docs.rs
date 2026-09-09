@@ -64,7 +64,7 @@ struct WorkspaceConfiguration {
 
 impl WorkspaceConfiguration {
     #[instrument(skip_all)]
-    fn initialize(&self) -> Result<Workspace> {
+    fn create_workspace(&self) -> Result<Workspace> {
         debug!(
             path = %self.path.display(),
             running_inside_docker = self.running_inside_docker,
@@ -96,7 +96,7 @@ struct ManagedWorkspace {
 impl ManagedWorkspace {
     #[instrument(skip_all)]
     fn new(configuration: WorkspaceConfiguration) -> Result<Self> {
-        let workspace = configuration.initialize()?;
+        let workspace = configuration.create_workspace()?;
         debug!(
             path = %configuration.path.display(),
             "creating Managed Workspace"
@@ -117,7 +117,7 @@ impl ManagedWorkspace {
         }
 
         debug!(?elapsed, "refreshing rustwide workspace");
-        self.workspace = self.configuration.initialize()?;
+        self.workspace = self.configuration.create_workspace()?;
         self.initialized_at = Instant::now();
         debug!("rustwide workspace refreshed");
         Ok(true)
