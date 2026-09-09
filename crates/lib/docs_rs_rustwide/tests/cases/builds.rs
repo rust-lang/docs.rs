@@ -1,8 +1,8 @@
+use crate::support::{TestEnvironment, build_local, fixture, test_workspace};
 use anyhow::{Context as _, Result};
-use docs_rs_rustwide::{BuildEnvironment, CpuLimit};
+use docs_rs_rustwide::{BuildEnvironment, CpuLimit, SandboxImageSource};
 use rustwide::Crate;
 use std::fs;
-use crate::support::{TestEnvironment, build_local, fixture, test_sandbox_image, test_workspace};
 use test_case::test_case;
 
 #[test]
@@ -147,7 +147,7 @@ fn collects_compiler_metrics() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(test_sandbox_image())
+        .sandbox_image(SandboxImageSource::linux_micro())
         .compiler_metrics_collection_path(metrics.path())
         .build()?;
 
@@ -167,7 +167,7 @@ fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(test_sandbox_image())
+        .sandbox_image(SandboxImageSource::linux_micro())
         .cpu_limit(cpu_limit)
         .build()?;
     assert!(

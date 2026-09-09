@@ -1,6 +1,6 @@
-use crate::support::{build_local, fixture, test_sandbox_image, test_workspace};
+use crate::support::{build_local, fixture, test_workspace};
 use anyhow::Result;
-use docs_rs_rustwide::BuildEnvironment;
+use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 use std::time::Duration;
 
 #[test]
@@ -11,7 +11,7 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(test_sandbox_image())
+        .sandbox_image(SandboxImageSource::linux_micro())
         .workspace_reinitialization_interval(Duration::ZERO)
         .build()?;
 
@@ -33,7 +33,7 @@ fn refreshes_workspace_after_interval() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(test_sandbox_image())
+        .sandbox_image(SandboxImageSource::linux_micro())
         .workspace_reinitialization_interval(Duration::from_secs(1))
         .build()?;
 
@@ -61,7 +61,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(test_sandbox_image())
+            .sandbox_image(SandboxImageSource::linux_micro())
             .build()?;
         environment.rustc_version()?
     };
@@ -70,7 +70,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(test_sandbox_image())
+        .sandbox_image(SandboxImageSource::linux_micro())
         .build()?;
     let fixture = fixture("hello-world");
     let krate = rustwide::Crate::local(&fixture);
