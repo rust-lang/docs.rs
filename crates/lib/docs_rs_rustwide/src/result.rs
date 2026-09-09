@@ -69,25 +69,26 @@ impl RustdocJsonOutput {
     }
 }
 
-/// A fatal infrastructure failure while executing a build step.
-///
-/// Unlike [`BuildStepError`], this aborts the release so the caller can retry it.
-/// The duration and log cover the failing step, not the whole target or release.
+/// Diagnostics for a failed step that the caller chose to propagate.
+/// The duration and log cover this step, not the whole target or release.
 #[derive(Debug, thiserror::Error)]
-#[error("build infrastructure failed after {duration:?}: {error}\ncaptured build log:\n{log}")]
-pub struct InfrastructureError {
-    /// Underlying infrastructure failure, including its context chain.
+#[error("build step failed after {duration:?}: {error}\ncaptured build log:\n{log}")]
+pub struct FailedStep {
+    /// Failure, including its context chain.
     #[source]
-    pub error: anyhow::Error,
+    pub error: BuildStepError,
     /// Wall-clock time spent in the failing step before it aborted.
     pub duration: Duration,
-    /// Cargo and rustdoc output captured before the infrastructure failure.
+    /// Cargo and rustdoc output captured before the step failed.
     pub log: String,
 }
 
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildStepError {
+    /// Dependencies or toolchain targets could not be prepared.
+    #[error(transparent)]
+    Prepare(anyhow::Error),
     /// Cargo or rustdoc failed inside the sandbox.
     #[error(transparent)]
     Command(#[from] CommandError),
@@ -113,20 +114,18 @@ impl BuildError for BuildStepError {
                 CommandError::IO(_) => "IO",
                 _ => "UnknownCommandError",
             },
-            Self::Output(_) => "Other",
+            Self::Prepare(_) | Self::Output(_) => "Other",
         }
     }
 }
 
-/// Output and captured log of one non-fatal release build step.
+/// Outcome and diagnostics of one release build step, including failures.
 #[derive(Debug)]
 pub struct StepResult<T> {
     /// Wall-clock time spent preparing, executing, and processing this step.
     pub duration: Duration,
-    /// Produced value when the step succeeded.
-    pub output: Option<T>,
-    /// Failure when the step did not succeed.
-    pub error: Option<BuildStepError>,
+    /// Produced value or the phase in which the step failed.
+    pub outcome: Result<T, BuildStepError>,
     /// Cargo and rustdoc output captured for this step.
     pub log: String,
 }
@@ -134,7 +133,27 @@ pub struct StepResult<T> {
 impl<T> StepResult<T> {
     /// Whether this step completed successfully.
     pub fn successful(&self) -> bool {
-        self.error.is_none()
+        self.outcome.is_ok()
+    }
+
+    /// Propagate failure with diagnostics when this step is required by the caller.
+    pub fn into_result(self) -> Result<T, FailedStep> {
+        self.outcome.map_err(|error| FailedStep {
+            error,
+            duration: self.duration,
+            log: self.log,
+        })
+    }
+
+    /// Release policy: preparation failures abort, other failures stay in the result.
+    pub(crate) fn abort_on_prepare(self) -> Result<Self> {
+        if matches!(&self.outcome, Err(BuildStepError::Prepare(_))) {
+            let Err(error) = self.into_result() else {
+                unreachable!()
+            };
+            return Err(error.into());
+        }
+        Ok(self)
     }
 }
 
@@ -153,7 +172,7 @@ pub struct TargetBuildResult {
     /// Documentation coverage build result.
     pub coverage: StepResult<Option<DocCoverage>>,
     /// Compiler metrics files copied out of this target's HTML build.
-    pub compiler_metrics: Vec<PathBuf>,
+    pub compiler_metrics: StepResult<Vec<PathBuf>>,
 }
 
 impl TargetBuildResult {
@@ -168,9 +187,9 @@ impl TargetBuildResult {
     /// target, so command success alone is not sufficient.
     pub fn documentation_exists(&self) -> bool {
         self.documentation
-            .output
+            .outcome
             .as_ref()
-            .is_some_and(|path| path.is_dir())
+            .is_ok_and(|path| path.is_dir())
     }
 
     /// Whether Cargo completed the primary HTML documentation command successfully.
@@ -188,9 +207,9 @@ impl TargetBuildResult {
         self.documentation_succeeded()
             && self
                 .documentation
-                .output
+                .outcome
                 .as_ref()
-                .is_some_and(|path| path.join(library_name).is_dir())
+                .is_ok_and(|path| path.join(library_name).is_dir())
     }
 }
 
@@ -252,24 +271,25 @@ mod tests {
             is_default: true,
             duration: Duration::ZERO,
             documentation: StepResult {
-                output: Some(documentation_path),
-                error: None,
+                outcome: Ok(documentation_path),
                 log: String::new(),
                 duration: Duration::ZERO,
             },
             rustdoc_json: StepResult {
-                output: None,
-                error: None,
+                outcome: Ok(RustdocJsonOutput::new(PathBuf::from("unused.json"))),
                 log: String::new(),
                 duration: Duration::ZERO,
             },
             coverage: StepResult {
-                output: None,
-                error: None,
+                outcome: Ok(None),
                 log: String::new(),
                 duration: Duration::ZERO,
             },
-            compiler_metrics: Vec::new(),
+            compiler_metrics: StepResult {
+                outcome: Ok(Vec::new()),
+                log: String::new(),
+                duration: Duration::ZERO,
+            },
         }
     }
 

@@ -179,8 +179,8 @@ rustwide build and sandbox:
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {
     let target = build.selected_targets().default_target.to_owned();
-    let json = build.build_rustdoc_json(&target)?;
-    let documentation = build.build_documentation(&target)?;
+    let json = build.build_rustdoc_json(&target);
+    let documentation = build.build_documentation(&target);
     Ok((json, documentation))
 })?;
 # let _ = selected;
@@ -190,13 +190,17 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
-Individual step methods return `Result<StepResult<T>, InfrastructureError>`.
-Ordinary build failures remain in `StepResult::error`. Infrastructure failures
-abort the release and preserve the underlying `error`, the failing step's
-`duration`, and its captured `log`. Higher-level methods propagate this error
-through `anyhow::Error`; callers can retrieve it with
-`downcast_ref::<InfrastructureError>()`. This duration covers only the failing
-step, not the full target or release.
+Individual step methods return `StepResult<T>` with a `duration`, captured `log`,
+and `outcome: Result<T, BuildStepError>`. Errors identify the failing phase:
+`Prepare`, `Command`, or `Output`. The full release build aborts on preparation
+failures and applies the default-target lockfile retry to HTML command failures.
+Coverage, JSON, and metrics output failures are nonfatal. Metrics collection has
+its own step result and cannot invalidate successful HTML documentation.
+
+Call `step.into_result()?` when a custom build requires a step to succeed. This
+propagates a `FailedStep` containing the error, duration, and log. Higher-level
+methods preserve it through `anyhow::Error` for `downcast_ref::<FailedStep>()`.
+Its duration covers only the failing step, not the full target or release.
 
 ## Archiving sources before a build
 

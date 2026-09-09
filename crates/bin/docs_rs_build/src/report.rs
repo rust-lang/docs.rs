@@ -61,13 +61,14 @@ pub(crate) fn print(
         print_error("HTML", &target.documentation);
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);
-        if let Some(path) = &target.documentation.output {
+        print_error("compiler metrics", &target.compiler_metrics);
+        if let Ok(path) = &target.documentation.outcome {
             println!("  HTML output: {}", path.display());
         }
-        if let Some(output) = &target.rustdoc_json.output {
+        if let Ok(output) = &target.rustdoc_json.outcome {
             println!("  JSON output: {}", output.path().display());
         }
-        for path in &target.compiler_metrics {
+        for path in target.compiler_metrics.outcome.iter().flatten() {
             println!("  compiler metrics: {}", path.display());
         }
     }
@@ -108,7 +109,7 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
 }
 
 fn print_error<T>(name: &str, step: &StepResult<T>) {
-    if let Some(error) = &step.error {
+    if let Err(error) = &step.outcome {
         println!("  {name}: failed: {error:#}");
         if !step.log.trim().is_empty() {
             println!("    captured build log:");

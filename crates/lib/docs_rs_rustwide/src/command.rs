@@ -1,7 +1,4 @@
-use crate::{
-    build::{ReleaseBuild, StepExecutionError},
-    utils::args_contain_unstable_feature,
-};
+use crate::{build::ReleaseBuild, utils::args_contain_unstable_feature};
 use anyhow::{Context as _, Result};
 use docsrs_metadata::Metadata;
 use rustwide::cmd::Command;
@@ -71,10 +68,6 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
 
     #[instrument(skip_all)]
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
-        self.prepare_for_step().map_err(Into::into)
-    }
-
-    pub(crate) fn prepare_for_step<'pl>(self) -> Result<Command<'ws, 'pl>, StepExecutionError> {
         debug!(
             cargo_arg_count = self.cargo_args.len(),
             rustdoc_arg_count = self.rustdoc_args.len(),
@@ -93,8 +86,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
             debug!("fetching build-std dependencies for command");
             self.release_build
                 .fetch_build_std_dependencies(iter::once(self.target.as_ref()))
-                .context("error fetching build_std dependencies")
-                .map_err(StepExecutionError::Infrastructure)?;
+                .context("error fetching build_std dependencies")?;
         } else {
             debug!(self.target, "ensuring command target is installed");
             self.release_build

@@ -28,9 +28,9 @@ fn main() -> Result<()> {
         let target = build.metadata_targets().default_target.to_owned();
 
         // Both commands run in the same prepared rustwide sandbox.
-        // Infrastructure errors abort; ordinary command failures remain in the step results.
-        let rustdoc_json = build.build_rustdoc_json(&target)?;
-        let documentation = build.build_documentation(&target)?;
+        // Retain all step outcomes here; callers choose which failures are fatal.
+        let rustdoc_json = build.build_rustdoc_json(&target);
+        let documentation = build.build_documentation(&target);
 
         Ok((target, rustdoc_json, documentation))
     })?;

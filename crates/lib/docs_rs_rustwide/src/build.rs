@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, InfrastructureError, ReleaseBuildResult, RustdocJsonOutput,
-    StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
+    TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, bail};
 use bon::bon;
@@ -34,21 +34,6 @@ pub enum Emit {
     HtmlNonStaticFiles,
 }
 
-/// Keep retryable infrastructure failures separate from non-fatal build steps.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum StepExecutionError {
-    #[error(transparent)]
-    Build(#[from] BuildStepError),
-    #[error(transparent)]
-    Infrastructure(anyhow::Error),
-}
-
-impl From<anyhow::Error> for StepExecutionError {
-    fn from(error: anyhow::Error) -> Self {
-        Self::Build(BuildStepError::Output(error))
-    }
-}
-
 impl Emit {
     pub fn as_str(&self) -> &str {
         match self {
@@ -72,7 +57,6 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
-    compiler_metrics: RefCell<Vec<PathBuf>>,
 }
 
 #[bon]
@@ -95,7 +79,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             limits,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
-            compiler_metrics: RefCell::new(Vec::new()),
         })
     }
 
@@ -253,7 +236,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let mut target_result = self.build_target_once(target, is_default)?;
 
         if retry_without_lockfile
-            && !target_result.build_succeeded()
+            && matches!(
+                target_result.documentation.outcome,
+                Err(BuildStepError::Command(_))
+            )
             && self.build.host_source_dir().join("Cargo.lock").exists()
         {
             debug!(
@@ -270,13 +256,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all)]
     fn build_target_once(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
-        self.compiler_metrics.borrow_mut().clear();
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage_result = self.build_coverage(target)?;
-        let rustdoc_json_result = self.build_rustdoc_json(target)?;
-        let documentation_result = self.build_documentation(target)?;
-        let compiler_metrics = self.compiler_metrics.take();
+        let coverage_result = self.build_coverage(target).abort_on_prepare()?;
+        let rustdoc_json_result = self.build_rustdoc_json(target).abort_on_prepare()?;
+        let documentation_result = self.build_documentation(target).abort_on_prepare()?;
+        let compiler_metrics = self.collect_compiler_metrics();
 
         if documentation_result.successful() && self.metadata.proc_macro {
             debug_assert!(is_default, "proc macros only support their host target");
@@ -287,7 +272,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             coverage_successful = coverage_result.successful(),
             rustdoc_json_successful = rustdoc_json_result.successful(),
             documentation_successful = documentation_result.successful(),
-            compiler_metrics_count = compiler_metrics.len(),
+            compiler_metrics_successful = compiler_metrics.successful(),
             "target build completed"
         );
 
@@ -304,31 +289,26 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Collect documentation coverage for one target.
     ///
-    /// Infrastructure failures abort the release; build failures remain in the step result.
+    /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
-    pub fn build_coverage(
-        &self,
-        target: &str,
-    ) -> Result<StepResult<Option<DocCoverage>>, InfrastructureError> {
+    pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         Self::capture_step(self.limits.max_log_size(), || {
             let mut coverage = DocCoverage::default();
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
-                .prepare_for_step()?
+                .prepare()
+                .map_err(BuildStepError::Prepare)?
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
 
             let output_dir = self.output_dir(target);
-            if let Ok(path) = find_single_output_file(&output_dir, "json") {
-                let reader = BufReader::new(File::open(path).map_err(anyhow::Error::from)?);
-                for line in reader.lines() {
-                    let line = line.map_err(anyhow::Error::from)?;
-                    match doc_coverage::parse_line(&line) {
-                        Ok(file_coverages) => coverage.extend(file_coverages),
-                        Err(error) => warn!(?error, line, "failed to parse coverage line"),
-                    }
-                }
+            let path = find_single_output_file(&output_dir, "json")?;
+            let reader = BufReader::new(File::open(path).map_err(anyhow::Error::from)?);
+            for line in reader.lines() {
+                let line = line.map_err(anyhow::Error::from)?;
+                coverage
+                    .extend(doc_coverage::parse_line(&line).context("parsing coverage output")?);
             }
 
             Ok((coverage.total_items != 0 || coverage.documented_items != 0).then_some(coverage))
@@ -337,16 +317,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Build unstable rustdoc JSON for one target.
     ///
-    /// Infrastructure failures abort the release; build failures remain in the step result.
+    /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
-    pub fn build_rustdoc_json(
-        &self,
-        target: &str,
-    ) -> Result<StepResult<RustdocJsonOutput>, InfrastructureError> {
+    pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         Self::capture_step(self.limits.max_log_size(), || {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
-                .prepare_for_step()?
+                .prepare()
+                .map_err(BuildStepError::Prepare)?
                 .run()
                 .map_err(BuildStepError::Command)?;
 
@@ -358,28 +336,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Build HTML documentation without emitting shared static files.
     ///
-    /// Infrastructure failures abort the release; build failures remain in the step result.
+    /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all)]
-    pub fn build_documentation(
-        &self,
-        target: &str,
-    ) -> Result<StepResult<PathBuf>, InfrastructureError> {
+    pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
     #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
-        let result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
-        if let Some(error) = result.error {
-            bail!(
-                "failed to build shared rustdoc static files: {error}\n{}",
-                result.log
-            );
-        }
-
-        let output = result
-            .output
-            .context("essential-files build succeeded without an output directory")?;
+        let output = self
+            .build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
+            .into_result()?;
 
         let static_files = output.join("static.files");
         if !static_files.is_dir() {
@@ -392,58 +359,45 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all, fields(target, emit))]
-    fn build_html(
-        &self,
-        target: &str,
-        emit: Emit,
-    ) -> Result<StepResult<PathBuf>, InfrastructureError> {
+    fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         Self::capture_step(self.limits.max_log_size(), || {
-            let metrics_dir = self.compiler_metrics_dir();
-            if let Some(metrics_dir) = &metrics_dir {
-                fs::create_dir_all(metrics_dir)
-                    .context("creating compiler metrics directory")
-                    .map_err(StepExecutionError::Infrastructure)?;
-            }
-
             let mut command = self
                 .command(target)
                 .rustdoc_arg(format!("--emit={emit}"))
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
                 .cargo_arg("-Zrustdoc-scrape-examples");
-
-            if metrics_dir.is_some() {
-                command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics")
+            if let Some(directory) = self.compiler_metrics_dir() {
+                // Metrics setup must not prevent HTML from being generated. Collection
+                // reports an unavailable metrics directory as its own output failure.
+                match fs::create_dir_all(&directory) {
+                    Ok(()) => {
+                        command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics");
+                    }
+                    Err(error) => warn!(
+                        ?error,
+                        "cannot create metrics directory; building without metrics"
+                    ),
+                }
             }
-
-            let command_result = command
-                .prepare_for_step()?
+            command
+                .prepare()
+                .map_err(BuildStepError::Prepare)?
                 .run()
-                .map_err(BuildStepError::Command);
-
-            if let (Some(source), Some(destination)) = (
-                metrics_dir,
-                self.environment.compiler_metrics_collection_path(),
-            ) {
-                let mut copied_metrics = Vec::new();
-                copy_dir_all(&source, destination, |path| {
-                    copied_metrics.push(path.into())
-                })
-                .context("copying compiler metrics")
-                .map_err(StepExecutionError::Infrastructure)?;
-                debug!(
-                    count = copied_metrics.len(),
-                    destination = %destination.display(),
-                    "compiler metrics collected"
-                );
-                self.compiler_metrics.borrow_mut().extend(copied_metrics);
-                fs::remove_dir_all(source)
-                    .context("removing compiler metrics directory")
-                    .map_err(StepExecutionError::Infrastructure)?;
-            }
-
-            command_result?;
-
+                .map_err(BuildStepError::Command)?;
             Ok(self.output_dir(target))
+        })
+    }
+
+    /// Copy compiler metrics after HTML execution. Failure does not invalidate HTML.
+    pub fn collect_compiler_metrics(&self) -> StepResult<Vec<PathBuf>> {
+        Self::capture_step(self.limits.max_log_size(), || {
+            let (Some(source), Some(destination)) = (
+                self.compiler_metrics_dir(),
+                self.environment.compiler_metrics_collection_path(),
+            ) else {
+                return Ok(Vec::new());
+            };
+            copy_compiler_metrics(&source, destination).map_err(BuildStepError::Output)
         })
     }
 
@@ -456,62 +410,54 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     fn capture_step<T>(
         max_log_size: usize,
-        run: impl FnOnce() -> Result<T, StepExecutionError>,
-    ) -> Result<StepResult<T>, InfrastructureError> {
+        run: impl FnOnce() -> Result<T, BuildStepError>,
+    ) -> StepResult<T> {
         let mut storage = LogStorage::new(log::LevelFilter::Info);
         storage.set_max_size(max_log_size);
         let started = Instant::now();
-        let captured_result = logging::capture(&storage, run);
-        let duration = started.elapsed();
-
-        match captured_result {
-            Ok(output) => Ok(StepResult {
-                output: Some(output),
-                error: None,
-                log: storage.to_string(),
-                duration,
-            }),
-            Err(StepExecutionError::Build(error)) => Ok(StepResult {
-                output: None,
-                error: Some(error),
-                log: storage.to_string(),
-                duration,
-            }),
-            Err(StepExecutionError::Infrastructure(error)) => Err(InfrastructureError {
-                error,
-                duration,
-                log: storage.to_string(),
-            }),
+        let outcome = logging::capture(&storage, run);
+        StepResult {
+            outcome,
+            duration: started.elapsed(),
+            log: storage.to_string(),
         }
     }
 
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> Result<()> {
-        let source_dir = self.build.host_source_dir();
-        debug!("removing invalid lockfile");
-        fs::remove_file(source_dir.join("Cargo.lock"))?;
+        Self::capture_step(self.limits.max_log_size(), || {
+            let source_dir = self.build.host_source_dir();
+            debug!("removing invalid lockfile");
+            fs::remove_file(source_dir.join("Cargo.lock"))
+                .context("removing invalid lockfile")
+                .map_err(BuildStepError::Prepare)?;
 
-        debug!("generating replacement lockfile");
-        Command::new(
-            self.environment.workspace(),
-            self.environment.configured_toolchain().cargo(),
-        )
-        .current_directory(&source_dir)
-        .arg("generate-lockfile")
-        .run_capture()
-        .context("generating a replacement lockfile")?;
+            debug!("generating replacement lockfile");
+            Command::new(
+                self.environment.workspace(),
+                self.environment.configured_toolchain().cargo(),
+            )
+            .current_directory(&source_dir)
+            .arg("generate-lockfile")
+            .run_capture()
+            .context("generating a replacement lockfile")
+            .map_err(BuildStepError::Prepare)?;
 
-        debug!("fetching dependencies for replacement lockfile");
-        Command::new(
-            self.environment.workspace(),
-            self.environment.configured_toolchain().cargo(),
-        )
-        .current_directory(source_dir)
-        .args(["fetch", "--locked"])
-        .run_capture()
-        .context("fetching dependencies for the replacement lockfile")?;
+            debug!("fetching dependencies for replacement lockfile");
+            Command::new(
+                self.environment.workspace(),
+                self.environment.configured_toolchain().cargo(),
+            )
+            .current_directory(source_dir)
+            .args(["fetch", "--locked"])
+            .run_capture()
+            .context("fetching dependencies for the replacement lockfile")
+            .map_err(BuildStepError::Prepare)?;
 
-        debug!("replacement lockfile is ready");
+            debug!("replacement lockfile is ready");
+            Ok(())
+        })
+        .into_result()?;
         Ok(())
     }
 
@@ -520,6 +466,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.environment
             .load_cargo_metadata(self.build.host_source_dir())
     }
+}
+
+fn copy_compiler_metrics(source: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
+    let mut copied = Vec::new();
+    copy_dir_all(source, destination, |path| copied.push(path.to_owned()))
+        .context("copying compiler metrics")?;
+    fs::remove_dir_all(source).context("removing compiler metrics directory")?;
+    Ok(copied)
 }
 
 fn find_single_output_file(
@@ -561,40 +515,47 @@ mod tests {
     use std::ffi::OsStr;
 
     #[test]
-    fn command_failures_are_recorded_but_infrastructure_failures_abort() {
+    fn preparation_aborts_with_diagnostics_but_command_and_output_failures_continue() {
         crate::logging::init(false);
-        let step = ReleaseBuild::capture_step::<()>(1024, || {
-            Err(BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)).into())
-        })
-        .unwrap();
-        assert!(matches!(step.error, Some(BuildStepError::Command(_))));
-        assert!(step.output.is_none());
-
+        for error in [
+            BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)),
+            BuildStepError::Output(anyhow::anyhow!("invalid JSON")),
+        ] {
+            let step = ReleaseBuild::capture_step::<()>(1024, || Err(error))
+                .abort_on_prepare()
+                .unwrap();
+            assert!(!step.successful());
+        }
         let started = Instant::now();
-        let error = ReleaseBuild::capture_step::<()>(1024, || {
+        let step = ReleaseBuild::capture_step::<()>(1024, || {
             log::info!("fetching build-std dependencies");
-            Err(StepExecutionError::Infrastructure(
-                anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
-                    .context("dependency download failed"),
-            ))
+            Err(BuildStepError::Prepare(anyhow::anyhow!(
+                "dependency download failed"
+            )))
+        });
+        assert!(step.duration > std::time::Duration::ZERO);
+        assert!(step.duration <= started.elapsed());
+        let error = step.abort_on_prepare().unwrap_err();
+        let failure = error.downcast_ref::<crate::FailedStep>().unwrap();
+        assert!(failure.log.contains("fetching build-std dependencies"));
+        assert!(matches!(failure.error, BuildStepError::Prepare(_)));
+    }
+
+    #[test]
+    fn metrics_copy_failure_is_nonfatal() -> Result<()> {
+        crate::logging::init(false);
+        let temporary = tempfile::tempdir()?;
+        let source = temporary.path().join("metrics");
+        fs::create_dir(&source)?;
+        fs::write(source.join("metrics.json"), "{}")?;
+        let destination = temporary.path().join("not-a-directory");
+        fs::write(&destination, "")?;
+        let metrics = ReleaseBuild::capture_step(1024, || {
+            copy_compiler_metrics(&source, &destination).map_err(BuildStepError::Output)
         })
-        .unwrap_err();
-        assert!(error.duration > std::time::Duration::ZERO);
-        assert!(error.duration <= started.elapsed());
-        assert!(error.log.contains("fetching build-std dependencies"));
-        assert_eq!(
-            error.error.downcast_ref::<std::io::Error>().unwrap().kind(),
-            std::io::ErrorKind::ConnectionReset,
-        );
-        // Higher-level build methods propagate through anyhow without losing the fields.
-        let propagated = anyhow::Error::new(error).context("building release");
-        let infrastructure = propagated.downcast_ref::<InfrastructureError>().unwrap();
-        assert!(
-            infrastructure
-                .log
-                .contains("fetching build-std dependencies")
-        );
-        assert!(format!("{propagated:#}").contains("dependency download failed"));
+        .abort_on_prepare()?;
+        assert!(matches!(metrics.outcome, Err(BuildStepError::Output(_))));
+        Ok(())
     }
 
     #[test]

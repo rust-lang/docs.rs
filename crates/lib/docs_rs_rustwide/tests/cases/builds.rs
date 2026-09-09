@@ -32,15 +32,15 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
         release
             .default_target()
             .coverage
-            .output
+            .outcome
             .as_ref()
-            .is_some_and(Option::is_some)
+            .is_ok_and(Option::is_some)
     );
     assert!(
         release
             .default_target()
             .rustdoc_json
-            .output
+            .outcome
             .as_ref()
             .expect("successful JSON build has an output")
             .format_version()
@@ -112,9 +112,9 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
         release
             .default_target()
             .coverage
-            .output
+            .outcome
             .as_ref()
-            .is_some_and(Option::is_some)
+            .is_ok_and(Option::is_some)
     );
     assert!(release.default_target().rustdoc_json.successful());
     Ok(())
@@ -152,7 +152,12 @@ fn collects_compiler_metrics() -> Result<()> {
         .build()?;
 
     let release = build_local(&mut environment, "hello-world")?.into_inner();
-    let metric_files = &release.default_target().compiler_metrics;
+    let metric_files = release
+        .default_target()
+        .compiler_metrics
+        .outcome
+        .as_ref()
+        .unwrap();
     assert_eq!(metric_files.len(), 1);
     let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
     Ok(())
