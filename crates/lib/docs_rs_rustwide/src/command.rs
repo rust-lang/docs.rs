@@ -15,7 +15,7 @@ const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
 /// Build-Command builder & prepare.
 ///
 /// * collects cargo-args & rustdoc args separately
-/// * created / extends a `rustwide::Command` with these args.
+/// * creates / extends a `rustwide::Command` with these args.
 /// * fetches build-std dependencies, if needed
 /// * ensures the given build-target is installed
 #[must_use = "call `.prepare()` to create and prepare the rustwide command"]

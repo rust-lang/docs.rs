@@ -28,12 +28,18 @@ fn main() -> Result<()> {
         .run(|build| build.build_docs())?;
 
     println!("sandbox statistics: {:#?}", build.statistics());
-    let release = build.into_inner();
-    for target in release.targets {
-        println!("target: {}", target.target);
-        println!("  documentation: {}", target.documentation.successful());
-        println!("  rustdoc JSON: {}", target.rustdoc_json.successful());
-        println!("  coverage: {}", target.coverage.successful());
+    let release_result = build.into_inner();
+    for target_result in release_result.targets {
+        println!("target: {}", target_result.target);
+        println!(
+            "  documentation: {}",
+            target_result.documentation.successful()
+        );
+        println!(
+            "  rustdoc JSON: {}",
+            target_result.rustdoc_json.successful()
+        );
+        println!("  coverage: {}", target_result.coverage.successful());
     }
 
     Ok(())

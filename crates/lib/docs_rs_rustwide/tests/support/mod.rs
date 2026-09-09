@@ -1,6 +1,6 @@
 use anyhow::Result;
 pub use docs_rs_rustwide::testing::{TestWorkspace, test_sandbox_image};
-use docs_rs_rustwide::{BuildEnvironment, BuildResult};
+use docs_rs_rustwide::{BuildEnvironment, BuildResult, SandboxImageSource};
 use rustwide::Crate;
 use std::{
     path::{Path, PathBuf},
@@ -41,7 +41,9 @@ impl TestEnvironment {
         let environment = BuildEnvironment::builder(workspace.path())
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(test_sandbox_image())
+            .sandbox_image(SandboxImageSource::LocalOrRemote(
+                "ghcr.io/rust-lang/crates-build-env/linux-micro".into(),
+            ))
             .include_default_targets(include_default_targets)
             .build()?;
         Ok(Self {

@@ -1,6 +1,11 @@
 // use docs_rs_logging::Config;
 use log::{Level, Log, Metadata, Record};
 
+/// initialize rustwide logging.
+///
+/// This is necessary for every builder once.
+/// `log_build_logs` will decide if we see the cargo build output in the logs,
+/// or just collect them.
 pub fn init(log_build_logs: bool) {
     if log_build_logs {
         rustwide::logging::init_with(RustwideLogTracer);

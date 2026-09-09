@@ -16,7 +16,7 @@ pub mod testing;
 pub mod utils;
 mod workspace;
 
-pub use build::{DOC_OUTPUT_DIR_NAME, ReleaseBuild};
+pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
 pub use release::{FetchedRelease, ReleaseContext};
 pub use result::{

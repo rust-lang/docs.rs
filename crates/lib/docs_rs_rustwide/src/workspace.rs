@@ -452,6 +452,8 @@ impl BuildEnvironment {
             return Ok(());
         }
 
+        debug!("validating host resources");
+
         let system = sysinfo::System::new_with_specifics(
             sysinfo::RefreshKind::nothing()
                 .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),

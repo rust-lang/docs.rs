@@ -24,9 +24,11 @@ fn main() -> Result<()> {
 
     let krate = Crate::crates_io(&name, &version);
     let build = environment.release(&krate).run(|build| {
+        // we only build the default target, don't care about the rest here.
         let target = build.metadata_targets().default_target.to_owned();
 
         // Both commands run in the same prepared rustwide sandbox.
+        // Here we don't return early on errors in `build_rustdoc_json`, or `build_documentation`.
         let rustdoc_json = build.build_rustdoc_json(&target);
         let documentation = build.build_documentation(&target);
 

@@ -25,7 +25,7 @@ use std::{
 use tracing::{Span, debug, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
-pub const DOC_OUTPUT_DIR_NAME: &str = "doc";
+const DOC_OUTPUT_DIR_NAME: &str = "doc";
 
 #[derive(Debug)]
 pub enum Emit {

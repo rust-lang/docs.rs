@@ -32,6 +32,7 @@ fn main() -> Result<()> {
 
     let krate = Crate::crates_io(&name, &version);
 
+    // `fetched` is an intermediate state of the environment / release / build pipeline.
     let fetched = environment.release(&krate).fetch()?;
     fetched.copy_source_to(&source_directory)?;
     println!("extracted sources to {}", source_directory.display());
