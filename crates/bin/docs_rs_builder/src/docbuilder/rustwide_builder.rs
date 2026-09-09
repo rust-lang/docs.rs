@@ -496,6 +496,8 @@ impl RustwideBuilder {
 
         for target in &mut release.targets {
             let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
+            // FIXME: perhaps return on these errors?  so the build fails with an internal error?
+            // then we would (?) re-attempt it?
             if let Err(error) = self
                 .blocking_storage
                 .store_one(json_log_path, mem::take(&mut target.rustdoc_json.log))
