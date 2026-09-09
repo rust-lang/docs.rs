@@ -173,7 +173,8 @@ impl BuildEnvironment {
         #[builder(default)] sandbox_image: SandboxImageSource,
         #[builder(default = false)] fast_init: bool,
         /// Wait for another environment to release this workspace instead of failing.
-        #[builder(default = false)] wait_for_workspace_lock: bool,
+        #[builder(default = false)]
+        wait_for_workspace_lock: bool,
         #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
         workspace_reinitialization_interval: Duration,
         #[builder(default = DEFAULT_TOOLCHAIN_UPDATE_INTERVAL)] toolchain_update_interval: Duration,
