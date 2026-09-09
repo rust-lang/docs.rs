@@ -17,6 +17,7 @@ use std::{
     cell::RefCell,
     collections::HashSet,
     ffi::OsStr,
+    fmt,
     fs::{self, File},
     io::{BufRead as _, BufReader},
     path::{Path, PathBuf},
@@ -42,6 +43,12 @@ impl Emit {
     }
 }
 
+impl fmt::Display for Emit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// A prepared release inside an active rustwide sandbox.
 pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) environment: &'build BuildEnvironment,
@@ -55,10 +62,7 @@ pub struct ReleaseBuild<'build, 'ws> {
 
 #[bon]
 impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
-    #[instrument(
-        skip_all,
-        fields(source_dir = %build.host_source_dir().display())
-    )]
+    #[instrument(skip_all)]
     pub(crate) fn new(
         environment: &'build BuildEnvironment,
         build: &'build Build<'ws>,
@@ -284,7 +288,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Collect documentation coverage for one target.
-    #[instrument(skip_all, fields(target = %target))]
+    #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_step(|| {
             let mut coverage = DocCoverage::default();
@@ -313,7 +317,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build unstable rustdoc JSON for one target.
-    #[instrument(skip_all, fields(target = %target))]
+    #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_step(|| {
             self.command(target)
@@ -359,7 +363,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(static_files)
     }
 
-    #[instrument(skip_all, fields(target = %target, emit = emit.as_str()))]
+    #[instrument(skip_all, fields(target, emit))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
         self.capture_step(|| {
             let metrics_dir = self.compiler_metrics_dir();
@@ -369,7 +373,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
             let mut command = self
                 .command(target)
-                .rustdoc_arg(format!("--emit={}", emit.as_str()))
+                .rustdoc_arg(format!("--emit={emit}"))
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
                 .cargo_arg("-Zrustdoc-scrape-examples");
 
@@ -467,7 +471,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(())
     }
 
-    #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
+    #[instrument(skip_all)]
     fn load_cargo_metadata(&self) -> Result<CargoMetadata> {
         self.environment
             .load_cargo_metadata(self.build.host_source_dir())

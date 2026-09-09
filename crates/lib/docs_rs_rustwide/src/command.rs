@@ -65,7 +65,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         self
     }
 
-    #[instrument(skip_all, fields(target = %self.target))]
+    #[instrument(skip_all)]
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
         debug!(
             cargo_arg_count = self.cargo_args.len(),
@@ -87,7 +87,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
                 .fetch_build_std_dependencies([self.target.as_ref()])
                 .context("error fetching build_std dependencies")?;
         } else {
-            debug!("ensuring command target is installed");
+            debug!(self.target, "ensuring command target is installed");
             self.release_build
                 .environment
                 .ensure_target_installed(&self.target)?;

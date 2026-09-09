@@ -54,9 +54,12 @@ impl RustdocJsonOutput {
     /// Read the format version embedded in the rustdoc JSON file.
     ///
     /// Parsing is lazy so callers that only need the artifact do not pay this cost.
-    #[instrument(skip_all, fields(path = %self.path.display()))]
+    #[instrument(skip_all)]
     pub fn format_version(&self) -> Result<RustdocJsonFormatVersion> {
-        debug!("reading rustdoc JSON format version");
+        debug!(
+            path = %self.path.display(),
+            "reading rustdoc JSON format version"
+        );
         let file = File::open(&self.path)
             .with_context(|| format!("opening rustdoc JSON at {}", self.path.display()))?;
         let version = read_format_version_from_rustdoc_json(file)

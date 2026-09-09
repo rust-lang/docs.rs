@@ -535,7 +535,7 @@ impl BuildEnvironment {
     #[instrument(skip_all)]
     pub fn load_cargo_metadata(&self, source_dir: impl AsRef<Path>) -> Result<CargoMetadata> {
         let source_dir = source_dir.as_ref();
-        debug!("loading Cargo metadata");
+        debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
         let output = Command::new(self.workspace(), self.toolchain.cargo())
             .args(["metadata", "--format-version", "1"])
             .current_directory(source_dir)
