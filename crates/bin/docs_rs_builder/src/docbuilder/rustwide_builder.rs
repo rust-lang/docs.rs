@@ -325,7 +325,11 @@ impl RustwideBuilder {
 
         let memory_peak = build.statistics().memory_peak_bytes();
         let mut release = build.into_inner();
-        let successful = release.successful();
+        // Cargo can successfully complete `rustdoc --lib` without producing
+        // documentation, for example for a package without a documentable
+        // library target. The build record follows Cargo's exit status; the
+        // stricter checks below decide whether documentation is publishable.
+        let build_succeeded = release.default_target().documentation.successful();
         let has_docs = release.has_docs();
         let default_target = release.default_target().target.clone();
 
@@ -365,7 +369,7 @@ impl RustwideBuilder {
             build_id,
             &rustc_version,
             &docsrs_version,
-            if successful {
+            if build_succeeded {
                 BuildStatus::Success
             } else {
                 BuildStatus::Failure
@@ -375,7 +379,7 @@ impl RustwideBuilder {
             build_error.as_ref(),
         ))?;
 
-        if successful {
+        if build_succeeded {
             self.builder_metrics.successful_builds.add(1, &[]);
         } else if release.cargo_metadata.root().is_library() {
             self.builder_metrics.failed_builds.add(1, &[]);
@@ -413,7 +417,7 @@ impl RustwideBuilder {
             .fetch_optional(&mut *async_conn),
         )?;
 
-        if !successful && current_release_build_status == Some(BuildStatus::Success) {
+        if !build_succeeded && current_release_build_status == Some(BuildStatus::Success) {
             info!(
                 "build was unsuccessful, but the release was already successfully built in the past. Skipping release record update."
             );
@@ -468,7 +472,7 @@ impl RustwideBuilder {
             }
         }
 
-        if successful {
+        if build_succeeded {
             for prefix in &["rustdoc", "sources"] {
                 let prefix = format!("{prefix}/{name}/{version}/");
                 debug!("cleaning old storage folder {}", prefix);
@@ -480,7 +484,7 @@ impl RustwideBuilder {
             drop(async_conn);
         });
         local_storage.close()?;
-        Ok(successful)
+        Ok(build_succeeded)
     }
 
     #[instrument(skip(self, release))]
