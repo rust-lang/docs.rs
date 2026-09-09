@@ -2,6 +2,7 @@ use crate::{build::ReleaseBuild, utils::args_contain_unstable_feature};
 use anyhow::{Context as _, Result};
 use docsrs_metadata::Metadata;
 use rustwide::cmd::Command;
+use std::iter;
 use tracing::{debug, instrument};
 
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
@@ -84,7 +85,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         if uses_build_std {
             debug!("fetching build-std dependencies for command");
             self.release_build
-                .fetch_build_std_dependencies([self.target.as_ref()])
+                .fetch_build_std_dependencies(iter::once(self.target.as_ref()))
                 .context("error fetching build_std dependencies")?;
         } else {
             debug!(self.target, "ensuring command target is installed");
