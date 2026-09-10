@@ -26,7 +26,7 @@ pub use result::{
     BuildResult, BuildStepError, FailedStep, ReleaseBuildResult, RustdocJsonOutput, StepResult,
     TargetBuildResult,
 };
-pub use sandbox::{BuildCores, CpuLimit, ParseBuildCoresError};
+pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
 pub use workspace::{
     BuildEnvironment, MaintenanceResult, SANDBOX_IMAGE_LINUX, SANDBOX_IMAGE_LINUX_MICRO,
     SandboxImageSource,

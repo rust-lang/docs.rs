@@ -1,6 +1,6 @@
 use clap::{ArgAction, Parser, ValueEnum};
 use docs_rs_build_limits::Limits;
-use docs_rs_rustwide::{BuildCores, CpuLimit, SandboxImageSource};
+use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{path::PathBuf, time::Duration};
 
@@ -77,8 +77,8 @@ pub(crate) struct Args {
     network: bool,
 
     /// Limit sandbox CPU time to this many CPUs, including fractional values.
-    #[arg(long, value_name = "CPUS", conflicts_with = "cpu_cores", value_parser = parse_cpu_quota)]
-    cpu_limit: Option<f32>,
+    #[arg(long, value_name = "CPUS", conflicts_with = "cpu_cores")]
+    cpu_limit: Option<CpuQuota>,
 
     /// Pin sandbox execution to one core or an inclusive range (for example 2 or 2-5).
     #[arg(long, value_name = "CORE[-CORE]")]
@@ -182,16 +182,6 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
     humantime::parse_duration(value).map_err(|error| error.to_string())
 }
 
-fn parse_cpu_quota(value: &str) -> Result<f32, String> {
-    let quota: f32 = value
-        .parse()
-        .map_err(|error| format!("invalid CPU quota: {error}"))?;
-    CpuLimit::Quota(quota)
-        .validate()
-        .map_err(|error| error.to_string())?;
-    Ok(quota)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,7 +259,10 @@ mod tests {
         assert!("5-2".parse::<BuildCores>().is_err());
         assert!(parse_byte_size("3watts").is_err());
         assert!(parse_duration("eventually").is_err());
-        assert!(parse_cpu_quota("0").is_err());
-        assert!(parse_cpu_quota("NaN").is_err());
+        for value in ["0", "NaN", "inf", "invalid"] {
+            assert!(Args::try_parse_from(["docs_rs_build", "--cpu-limit", value]).is_err());
+        }
+        let args = Args::try_parse_from(["docs_rs_build", "--cpu-limit", "0.5"]).unwrap();
+        assert!(matches!(args.cpu_limit(), Some(CpuLimit::Quota(quota)) if quota.get() == 0.5));
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
-use docs_rs_rustwide::{BuildCores, CpuLimit};
+use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota};
 use rustwide::cmd::DockerRuntime;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -36,7 +36,7 @@ impl AppConfig for Config {
     fn from_environment() -> Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
 
-        let build_cpu_limit: Option<f32> = maybe_env("DOCSRS_BUILD_CPU_LIMIT")?;
+        let build_cpu_limit: Option<CpuQuota> = maybe_env("DOCSRS_BUILD_CPU_LIMIT")?;
         let build_cpu_cores: Option<BuildCores> = maybe_env("DOCSRS_BUILD_CPU_CORES")?;
 
         if build_cpu_limit.is_some() && build_cpu_cores.is_some() {
@@ -46,9 +46,6 @@ impl AppConfig for Config {
         let build_cpu_limit = build_cpu_cores
             .map(CpuLimit::Cores)
             .or(build_cpu_limit.map(CpuLimit::Quota));
-        if let Some(limit) = &build_cpu_limit {
-            limit.validate()?;
-        }
         Ok(Self {
             temp_dir: prefix.join("tmp"),
             prefix,

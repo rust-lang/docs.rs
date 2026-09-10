@@ -163,7 +163,7 @@ fn collects_compiler_metrics() -> Result<()> {
     Ok(())
 }
 
-#[test_case(CpuLimit::Quota(2.0))]
+#[test_case(CpuLimit::Quota(2.0.try_into().unwrap()))]
 #[test_case(CpuLimit::Cores((1..=2).try_into().unwrap()))]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {

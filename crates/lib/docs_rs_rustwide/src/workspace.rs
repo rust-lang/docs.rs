@@ -204,9 +204,6 @@ impl BuildEnvironment {
             );
         }
 
-        if let Some(limit) = &cpu_limit {
-            limit.validate()?;
-        }
         let lock = WorkspaceLock::acquire(path, wait_for_workspace_lock)?;
         let workspace_configuration = WorkspaceConfiguration {
             path: path.to_owned(),
@@ -459,7 +456,7 @@ impl BuildEnvironment {
             .enable_networking(limits.networking())
             .docker_runtime(self.docker_runtime);
         match &self.cpu_limit {
-            Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(*limit)),
+            Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(limit.get())),
             Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.into())),
             None => builder,
         }

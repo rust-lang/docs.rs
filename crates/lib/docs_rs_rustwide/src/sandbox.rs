@@ -5,31 +5,56 @@ use std::{
 };
 use thiserror::Error;
 
+/// A positive, finite number of CPUs available to the sandbox.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CpuQuota(f32);
+
+/// A CPU quota must be a positive, finite number.
+#[derive(Clone, Copy, Debug, Error)]
+#[error("CPU quota must be a positive finite number")]
+pub struct InvalidCpuQuota;
+
+impl TryFrom<f32> for CpuQuota {
+    type Error = InvalidCpuQuota;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        if value.is_finite() && value > 0.0 {
+            Ok(Self(value))
+        } else {
+            Err(InvalidCpuQuota)
+        }
+    }
+}
+
+impl FromStr for CpuQuota {
+    type Err = InvalidCpuQuota;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::try_from(value.parse::<f32>().map_err(|_| InvalidCpuQuota)?)
+    }
+}
+
+impl CpuQuota {
+    /// The validated CPU quota passed to Docker.
+    pub fn get(self) -> f32 {
+        self.0
+    }
+}
+
 /// CPU restriction applied to the build sandbox.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CpuLimit {
     /// Restrict the container to a fraction or number of CPU cores.
-    Quota(f32),
+    Quota(CpuQuota),
     /// Pin the container to an inclusive range of host CPU IDs.
     Cores(BuildCores),
 }
 
 impl CpuLimit {
-    /// Reject invalid quotas before initializing the workspace or starting Docker.
-    pub fn validate(&self) -> anyhow::Result<()> {
-        if let Self::Quota(quota) = self {
-            anyhow::ensure!(
-                quota.is_finite() && *quota > 0.0,
-                "CPU quota must be a positive finite number"
-            );
-        }
-        Ok(())
-    }
-
     /// Number of Cargo jobs matching this CPU restriction, when it is integral.
     pub fn cargo_jobs(&self) -> Option<usize> {
         match self {
-            Self::Quota(limit) if limit.fract() == 0.0 && *limit >= 1.0 => Some(*limit as usize),
+            Self::Quota(limit) if limit.get().fract() == 0.0 => Some(limit.get() as usize),
             Self::Cores(cores) => Some(cores.len()),
             Self::Quota(_) => None,
         }
@@ -182,16 +207,28 @@ mod tests {
     #[test]
     fn rejects_invalid_quotas() {
         for quota in [0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-            assert!(CpuLimit::Quota(quota).validate().is_err());
+            assert!(CpuQuota::try_from(quota).is_err());
         }
-        assert!(CpuLimit::Quota(0.5).validate().is_ok());
-        assert!(CpuLimit::Quota(2.0).validate().is_ok());
+        assert_eq!(CpuQuota::try_from(0.5).unwrap().get(), 0.5);
+        assert_eq!(CpuQuota::try_from(2.0).unwrap().get(), 2.0);
+    }
+
+    #[test]
+    fn parses_only_valid_quotas() {
+        for value in ["", "no", "0", "-0", "-1", "NaN", "inf", "-inf", "1e100"] {
+            assert!(value.parse::<CpuQuota>().is_err(), "{value}");
+        }
+        assert_eq!("0.5".parse::<CpuQuota>().unwrap().get(), 0.5);
+        assert_eq!("2".parse::<CpuQuota>().unwrap().get(), 2.0);
     }
 
     #[test]
     fn derives_cargo_jobs_from_cpu_restrictions() {
-        assert_eq!(CpuLimit::Quota(2.0).cargo_jobs(), Some(2));
-        assert_eq!(CpuLimit::Quota(0.5).cargo_jobs(), None);
+        assert_eq!(
+            CpuLimit::Quota(2.0.try_into().unwrap()).cargo_jobs(),
+            Some(2)
+        );
+        assert_eq!(CpuLimit::Quota(0.5.try_into().unwrap()).cargo_jobs(), None);
         assert_eq!(CpuLimit::Cores(BuildCores(3..=5)).cargo_jobs(), Some(3));
     }
 }
