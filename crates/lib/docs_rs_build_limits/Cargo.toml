@@ -10,7 +10,6 @@ default = ["database"]
 
 [dependencies]
 anyhow = { workspace = true }
-bon = { workspace = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
