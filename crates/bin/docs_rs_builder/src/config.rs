@@ -43,7 +43,7 @@ impl AppConfig for Config {
             bail!("you only can define one of build_cpu_limit and build_cpu_cores");
         }
 
-        let config = Self {
+        Ok(Self {
             temp_dir: prefix.join("tmp"),
             prefix,
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
@@ -62,9 +62,7 @@ impl AppConfig for Config {
             compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
             docker_runtime: maybe_env("DOCSRS_DOCKER_RUNTIME")?.unwrap_or_default(),
             build_limits: Arc::new(docs_rs_build_limits::Config::from_environment()?),
-        };
-
-        Ok(config)
+        })
     }
 
     #[cfg(test)]
