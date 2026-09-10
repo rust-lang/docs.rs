@@ -29,7 +29,6 @@ docs_rs_types = { path = "../../lib/docs_rs_types" }
 docs_rs_utils = { path = "../../lib/docs_rs_utils" }
 docsrs-metadata = { path = "../../lib/metadata" }
 futures-util = { workspace = true }
-num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 regex = { workspace = true }
 rustwide = { workspace = true }

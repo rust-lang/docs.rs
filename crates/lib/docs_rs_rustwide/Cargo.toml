@@ -20,7 +20,6 @@ rustwide = { workspace = true }
 sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-num_cpus = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
