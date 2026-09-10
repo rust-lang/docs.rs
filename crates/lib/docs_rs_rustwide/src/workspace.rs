@@ -204,6 +204,9 @@ impl BuildEnvironment {
             );
         }
 
+        if let Some(limit) = &cpu_limit {
+            limit.validate()?;
+        }
         let lock = WorkspaceLock::acquire(path, wait_for_workspace_lock)?;
         let workspace_configuration = WorkspaceConfiguration {
             path: path.to_owned(),

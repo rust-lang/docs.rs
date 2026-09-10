@@ -15,6 +15,17 @@ pub enum CpuLimit {
 }
 
 impl CpuLimit {
+    /// Reject invalid quotas before initializing the workspace or starting Docker.
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if let Self::Quota(quota) = self {
+            anyhow::ensure!(
+                quota.is_finite() && *quota > 0.0,
+                "CPU quota must be a positive finite number"
+            );
+        }
+        Ok(())
+    }
+
     /// Number of Cargo jobs matching this CPU restriction, when it is integral.
     pub fn cargo_jobs(&self) -> Option<usize> {
         match self {
@@ -25,12 +36,21 @@ impl CpuLimit {
     }
 }
 
+/// A nonempty inclusive CPU-ID range, parsed as `CORE` or `START-END`.
+/// Docker checks CPU availability on the daemon host; parsing is host-independent.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildCores(RangeInclusive<usize>);
 
-impl From<RangeInclusive<usize>> for BuildCores {
-    fn from(value: RangeInclusive<usize>) -> Self {
-        BuildCores(value)
+impl TryFrom<RangeInclusive<usize>> for BuildCores {
+    type Error = ParseBuildCoresError;
+    fn try_from(value: RangeInclusive<usize>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err(ParseBuildCoresError::DescendingRange);
+        }
+        if (value.end() - value.start()).checked_add(1).is_none() {
+            return Err(ParseBuildCoresError::RangeTooLarge);
+        }
+        Ok(Self(value))
     }
 }
 
@@ -66,8 +86,6 @@ impl Deref for BuildCores {
 
 #[derive(Debug, Error)]
 pub enum ParseBuildCoresError {
-    #[error("expected build core range in the form <start>-<end>")]
-    MissingSeparator,
     #[error("invalid build core range start `{value}`: {source}")]
     InvalidStart {
         value: String,
@@ -82,17 +100,15 @@ pub enum ParseBuildCoresError {
     },
     #[error("build core range start must be less than or equal to end")]
     DescendingRange,
-    #[error("not enough cores, we only have {0}")]
-    NotEnoughCores(usize),
+    #[error("CPU core range length does not fit usize")]
+    RangeTooLarge,
 }
 
 impl FromStr for BuildCores {
     type Err = ParseBuildCoresError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let (start, end) = s
-            .split_once('-')
-            .ok_or(ParseBuildCoresError::MissingSeparator)?;
+        let (start, end) = s.split_once('-').unwrap_or((s, s));
 
         let start = start
             .parse()
@@ -108,20 +124,7 @@ impl FromStr for BuildCores {
                 source,
             })?;
 
-        if start > end {
-            return Err(ParseBuildCoresError::DescendingRange);
-        }
-
-        let cpus = num_cpus::get();
-
-        if end >= cpus {
-            // NOTE: docker counts the cores zero-based, so
-            // a core-number that is exactly the cpu-count is already
-            // too high.
-            return Err(ParseBuildCoresError::NotEnoughCores(cpus));
-        }
-
-        Ok(Self(start..=end))
+        Self::try_from(start..=end)
     }
 }
 
@@ -148,13 +151,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_build_core_range_without_separator() {
-        let err = "3".parse::<BuildCores>().unwrap_err();
-
-        assert!(
-            err.to_string()
-                .contains("expected build core range in the form <start>-<end>")
-        );
+    fn parses_single_core_without_separator() {
+        assert_eq!("3".parse::<BuildCores>().unwrap(), BuildCores(3..=3));
     }
 
     #[test]
@@ -175,14 +173,19 @@ mod tests {
     }
 
     #[test]
-    fn rejects_build_core_range_with_invalid_core_number() {
-        let cpus = num_cpus::get();
-        let err = format!("0-{cpus}").parse::<BuildCores>().unwrap_err();
+    fn validates_ranges_without_relying_on_host_cpu_count() {
+        assert_eq!("1024-1025".parse::<BuildCores>().unwrap().len(), 2);
+        assert!(BuildCores::try_from(RangeInclusive::new(4, 3)).is_err());
+        assert!(BuildCores::try_from(0..=usize::MAX).is_err());
+    }
 
-        assert!(
-            err.to_string()
-                .contains(&format!("not enough cores, we only have {cpus}"))
-        );
+    #[test]
+    fn rejects_invalid_quotas() {
+        for quota in [0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(CpuLimit::Quota(quota).validate().is_err());
+        }
+        assert!(CpuLimit::Quota(0.5).validate().is_ok());
+        assert!(CpuLimit::Quota(2.0).validate().is_ok());
     }
 
     #[test]

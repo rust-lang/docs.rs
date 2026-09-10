@@ -1,9 +1,8 @@
-use anyhow::{Result, bail};
 use clap::{ArgAction, Parser, ValueEnum};
 use docs_rs_build_limits::Limits;
-use docs_rs_rustwide::{CpuLimit, SandboxImageSource};
+use docs_rs_rustwide::{BuildCores, CpuLimit, SandboxImageSource};
 use rustwide::{Toolchain, cmd::DockerRuntime};
-use std::{ops::RangeInclusive, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 /// Run the same sandboxed documentation build used by docs.rs.
 #[derive(Debug, Parser)]
@@ -82,8 +81,8 @@ pub(crate) struct Args {
     cpu_limit: Option<f32>,
 
     /// Pin sandbox execution to one core or an inclusive range (for example 2 or 2-5).
-    #[arg(long, value_name = "CORE[-CORE]", value_parser = parse_cpu_cores)]
-    cpu_cores: Option<RangeInclusive<usize>>,
+    #[arg(long, value_name = "CORE[-CORE]")]
+    cpu_cores: Option<BuildCores>,
 
     /// Maximum amount of output retained for each build step.
     ///
@@ -183,32 +182,14 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
     humantime::parse_duration(value).map_err(|error| error.to_string())
 }
 
-fn parse_cpu_cores(value: &str) -> Result<RangeInclusive<usize>, String> {
-    parse_cpu_cores_inner(value).map_err(|error| error.to_string())
-}
-
 fn parse_cpu_quota(value: &str) -> Result<f32, String> {
     let quota: f32 = value
         .parse()
         .map_err(|error| format!("invalid CPU quota: {error}"))?;
-    if !quota.is_finite() || quota <= 0.0 {
-        return Err("CPU quota must be a positive finite number".into());
-    }
+    CpuLimit::Quota(quota)
+        .validate()
+        .map_err(|error| error.to_string())?;
     Ok(quota)
-}
-
-fn parse_cpu_cores_inner(value: &str) -> Result<RangeInclusive<usize>> {
-    let (start, end) = match value.split_once('-') {
-        Some((start, end)) => (start.parse()?, end.parse()?),
-        None => {
-            let core = value.parse()?;
-            (core, core)
-        }
-    };
-    if start > end {
-        bail!("CPU core range starts after it ends");
-    }
-    Ok(start..=end)
 }
 
 #[cfg(test)]
@@ -245,7 +226,9 @@ mod tests {
         assert_eq!(args.limits().memory, 512 * 1024 * 1024);
         assert_eq!(args.limits().timeout, Duration::from_secs(2 * 60 * 60));
         assert_eq!(args.limits().max_log_size, 2_000_000);
-        assert!(matches!(args.cpu_limit(), Some(CpuLimit::Cores(cores)) if cores == (2..=5)));
+        assert!(
+            matches!(args.cpu_limit(), Some(CpuLimit::Cores(cores)) if cores == "2-5".parse::<BuildCores>().unwrap())
+        );
     }
 
     #[test]
@@ -283,7 +266,7 @@ mod tests {
 
     #[test]
     fn invalid_ranges_and_units_are_rejected() {
-        assert!(parse_cpu_cores_inner("5-2").is_err());
+        assert!("5-2".parse::<BuildCores>().is_err());
         assert!(parse_byte_size("3watts").is_err());
         assert!(parse_duration("eventually").is_err());
         assert!(parse_cpu_quota("0").is_err());

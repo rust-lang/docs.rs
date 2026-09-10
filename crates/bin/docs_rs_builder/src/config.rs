@@ -43,6 +43,12 @@ impl AppConfig for Config {
             bail!("you only can define one of build_cpu_limit and build_cpu_cores");
         }
 
+        let build_cpu_limit = build_cpu_cores
+            .map(CpuLimit::Cores)
+            .or(build_cpu_limit.map(CpuLimit::Quota));
+        if let Some(limit) = &build_cpu_limit {
+            limit.validate()?;
+        }
         Ok(Self {
             temp_dir: prefix.join("tmp"),
             prefix,
@@ -50,9 +56,7 @@ impl AppConfig for Config {
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-            build_cpu_limit: build_cpu_cores
-                .map(CpuLimit::Cores)
-                .or(build_cpu_limit.map(CpuLimit::Quota)),
+            build_cpu_limit,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
             build_workspace_reinitialization_interval: Duration::from_secs(env(
