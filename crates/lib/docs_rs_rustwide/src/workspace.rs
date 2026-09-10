@@ -196,6 +196,14 @@ impl BuildEnvironment {
         compiler_metrics_collection_path: Option<PathBuf>,
         #[builder(default)] default_limits: Limits,
     ) -> Result<Self> {
+        if !crate::logging::is_initialized() {
+            bail!(
+                "Rustwide logging is not initialized; call \
+                 docs_rs_rustwide::logging::init(log_build_logs) \
+                 before creating a BuildEnvironment"
+            );
+        }
+
         let lock = WorkspaceLock::acquire(path, wait_for_workspace_lock)?;
         let workspace_configuration = WorkspaceConfiguration {
             path: path.to_owned(),

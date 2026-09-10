@@ -1,5 +1,12 @@
-// use docs_rs_logging::Config;
 use log::{Level, Log, Metadata, Record};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_initialized() -> bool {
+    // NOTE: perhaps this could move to rustwide itself
+    INITIALIZED.load(Ordering::SeqCst)
+}
 
 /// initialize rustwide logging.
 ///
@@ -12,6 +19,7 @@ pub fn init(log_build_logs: bool) {
     } else {
         rustwide::logging::init();
     }
+    INITIALIZED.store(true, Ordering::SeqCst);
 }
 
 /// Forwards Rustwide's `log` records as tracing events containing their level,

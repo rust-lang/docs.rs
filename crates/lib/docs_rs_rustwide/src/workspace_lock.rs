@@ -5,6 +5,9 @@ use std::{
 };
 use tracing::{debug, info};
 
+/// A lock for the workspace folder, so any parallel builder processes or build CLIs
+/// won't share the workspace.
+///
 /// Separate from Rustwide's short-lived initialization lock; never unlink this file.
 pub(crate) struct WorkspaceLock {
     _file: File,
