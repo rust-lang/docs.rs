@@ -46,6 +46,7 @@ impl AppConfig for Config {
         let build_cpu_limit = build_cpu_cores
             .map(CpuLimit::Cores)
             .or(build_cpu_limit.map(CpuLimit::Quota));
+
         Ok(Self {
             temp_dir: prefix.join("tmp"),
             prefix,
