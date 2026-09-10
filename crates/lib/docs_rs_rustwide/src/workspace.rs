@@ -457,7 +457,7 @@ impl BuildEnvironment {
             .docker_runtime(self.docker_runtime);
         match &self.cpu_limit {
             Some(CpuLimit::Quota(limit)) => builder.cpu_limit(Some(limit.get())),
-            Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.into())),
+            Some(CpuLimit::Cores(cores)) => builder.cpuset_cpus(Some(cores.get())),
             None => builder,
         }
     }

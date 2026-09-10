@@ -79,19 +79,11 @@ impl TryFrom<RangeInclusive<usize>> for BuildCores {
     }
 }
 
-impl From<BuildCores> for RangeInclusive<usize> {
-    fn from(value: BuildCores) -> Self {
-        value.0
-    }
-}
-
-impl From<&BuildCores> for RangeInclusive<usize> {
-    fn from(value: &BuildCores) -> Self {
-        value.clone().0
-    }
-}
-
 impl BuildCores {
+    pub fn get(&self) -> RangeInclusive<usize> {
+        self.0.clone()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
