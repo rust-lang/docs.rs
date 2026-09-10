@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
-use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota};
+use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource};
 use rustwide::cmd::DockerRuntime;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -19,7 +19,7 @@ pub struct Config {
     // Build params
     pub rustwide_workspace: PathBuf,
     pub inside_docker: bool,
-    pub docker_image: Option<String>,
+    pub docker_image: Option<SandboxImageSource>,
     /// Docker CPU limit
     /// Either quota, or assigned cores.
     pub build_cpu_limit: Option<CpuLimit>,
@@ -52,7 +52,8 @@ impl AppConfig for Config {
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
-                .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
+                .map(SandboxImageSource::Remote)
+                .or(maybe_env("DOCSRS_DOCKER_IMAGE")?.map(SandboxImageSource::Remote)),
             build_cpu_limit,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
@@ -72,14 +73,14 @@ impl AppConfig for Config {
 
         if let Some(image) = config.docker_image {
             tracing::warn!(
-                image,
+                ?image,
                 "docker image from environment will be ignored for tests."
             )
         }
 
         config.include_default_targets = true;
         config.rustwide_workspace = docs_rs_rustwide::testing::test_workspace_path();
-        config.docker_image = Some(docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO.into());
+        config.docker_image = Some(SandboxImageSource::linux_micro());
 
         Ok(config)
     }

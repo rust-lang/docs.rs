@@ -83,16 +83,10 @@ impl RustwideBuilder {
 
         let default_limits = Limits::from_config(&config.build_limits);
 
-        let sandbox_image = config
-            .docker_image
-            .as_ref()
-            .map(|image| SandboxImageSource::LocalOrRemote(image.clone()))
-            .unwrap_or_default();
-
         let environment = BuildEnvironment::builder(config.rustwide_workspace.as_path())
             .toolchain(toolchain)
             .running_inside_docker(config.inside_docker)
-            .sandbox_image(sandbox_image)
+            .sandbox_image(config.docker_image.clone().unwrap_or_default())
             .wait_for_workspace_lock(cfg!(test))
             .fast_init(cfg!(test))
             .workspace_reinitialization_interval(config.build_workspace_reinitialization_interval)
