@@ -192,8 +192,10 @@ See [`examples/custom_build.rs`](examples/custom_build.rs).
 
 Individual step methods return `StepResult<T>` with a `duration`, captured `log`,
 and `outcome: Result<T, BuildStepError>`. Errors identify the failing phase:
-`Prepare`, `Command`, or `Output`. The full release build aborts on preparation
-failures and applies the default-target lockfile retry to HTML command failures.
+`Prepare`, `Command`, or `Output`. The full release build aborts on default-target
+preparation failures and applies the default-target lockfile retry to HTML command
+failures. Additional-target preparation failures remain in their step results,
+allowing successful default-target documentation to be published.
 Coverage, JSON, and metrics output failures are nonfatal. Metrics collection has
 its own step result and cannot invalidate successful HTML documentation.
 

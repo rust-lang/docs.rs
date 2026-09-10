@@ -145,9 +145,9 @@ impl<T> StepResult<T> {
         })
     }
 
-    /// Release policy: preparation failures abort, other failures stay in the result.
-    pub(crate) fn abort_on_prepare(self) -> Result<Self> {
-        if matches!(&self.outcome, Err(BuildStepError::Prepare(_))) {
+    /// Preparation failures abort required targets; optional targets retain all failures.
+    pub(crate) fn abort_on_prepare(self, required: bool) -> Result<Self> {
+        if required && matches!(&self.outcome, Err(BuildStepError::Prepare(_))) {
             let Err(error) = self.into_result() else {
                 unreachable!()
             };

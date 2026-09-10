@@ -115,16 +115,18 @@ impl Args {
     }
 
     pub(crate) fn sandbox_image(&self) -> SandboxImageSource {
-        if let Some(name) = self.image.clone() {
-            match self.image_source {
-                ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
-                ImageSource::Local => SandboxImageSource::Local(name),
-                ImageSource::Remote => SandboxImageSource::Remote(name),
+        let name = self.image.clone().unwrap_or_else(|| {
+            if self.small_image {
+                docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO
+            } else {
+                docs_rs_rustwide::SANDBOX_IMAGE_LINUX
             }
-        } else if self.small_image {
-            SandboxImageSource::linux_micro()
-        } else {
-            SandboxImageSource::linux()
+            .into()
+        });
+        match self.image_source {
+            ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
+            ImageSource::Local => SandboxImageSource::Local(name),
+            ImageSource::Remote => SandboxImageSource::Remote(name),
         }
     }
 
@@ -251,6 +253,32 @@ mod tests {
         assert!(
             Args::try_parse_from(["docs_rs_build", "--small-image", "--image", "custom",]).is_err()
         );
+    }
+
+    #[test]
+    fn image_source_applies_to_default_small_and_explicit_images() {
+        for (image_args, expected_name) in [
+            (vec![], docs_rs_rustwide::SANDBOX_IMAGE_LINUX),
+            (
+                vec!["--small-image"],
+                docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+            ),
+            (vec!["--image", "custom/image"], "custom/image"),
+        ] {
+            for source in ["local", "remote", "local-or-remote"] {
+                let mut argv = vec!["docs_rs_build", "--image-source", source];
+                argv.extend(&image_args);
+                let args = Args::try_parse_from(argv).unwrap();
+                let image = args.sandbox_image();
+                let name = match (source, image) {
+                    ("local", SandboxImageSource::Local(name))
+                    | ("remote", SandboxImageSource::Remote(name))
+                    | ("local-or-remote", SandboxImageSource::LocalOrRemote(name)) => name,
+                    (_, image) => panic!("unexpected policy for {source}: {image:?}"),
+                };
+                assert_eq!(name, expected_name);
+            }
+        }
     }
 
     #[test]

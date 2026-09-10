@@ -258,9 +258,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     fn build_target_once(&self, target: &str, is_default: bool) -> Result<TargetBuildResult> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage_result = self.build_coverage(target).abort_on_prepare()?;
-        let rustdoc_json_result = self.build_rustdoc_json(target).abort_on_prepare()?;
-        let documentation_result = self.build_documentation(target).abort_on_prepare()?;
+        let coverage_result = self.build_coverage(target).abort_on_prepare(is_default)?;
+        let rustdoc_json_result = self
+            .build_rustdoc_json(target)
+            .abort_on_prepare(is_default)?;
+        let documentation_result = self
+            .build_documentation(target)
+            .abort_on_prepare(is_default)?;
         let compiler_metrics = self.collect_compiler_metrics();
 
         if documentation_result.successful() && self.metadata.proc_macro {
@@ -522,7 +526,7 @@ mod tests {
             BuildStepError::Output(anyhow::anyhow!("invalid JSON")),
         ] {
             let step = ReleaseBuild::capture_step::<()>(1024, || Err(error))
-                .abort_on_prepare()
+                .abort_on_prepare(true)
                 .unwrap();
             assert!(!step.successful());
         }
@@ -535,7 +539,7 @@ mod tests {
         });
         assert!(step.duration > std::time::Duration::ZERO);
         assert!(step.duration <= started.elapsed());
-        let error = step.abort_on_prepare().unwrap_err();
+        let error = step.abort_on_prepare(true).unwrap_err();
         let failure = error.downcast_ref::<crate::FailedStep>().unwrap();
         assert!(failure.log.contains("fetching build-std dependencies"));
         assert!(matches!(failure.error, BuildStepError::Prepare(_)));
@@ -553,9 +557,25 @@ mod tests {
         let metrics = ReleaseBuild::capture_step(1024, || {
             copy_compiler_metrics(&source, &destination).map_err(BuildStepError::Output)
         })
-        .abort_on_prepare()?;
+        .abort_on_prepare(true)?;
         assert!(matches!(metrics.outcome, Err(BuildStepError::Output(_))));
         Ok(())
+    }
+
+    #[test]
+    fn additional_target_preparation_failures_remain_step_results() {
+        crate::logging::init(false);
+        let step = ReleaseBuild::capture_step::<()>(1024, || {
+            log::info!("installing additional target");
+            Err(BuildStepError::Prepare(anyhow::anyhow!(
+                "target unavailable"
+            )))
+        })
+        .abort_on_prepare(false)
+        .unwrap();
+        assert!(matches!(step.outcome, Err(BuildStepError::Prepare(_))));
+        assert!(!step.successful());
+        assert!(step.log.contains("installing additional target"));
     }
 
     #[test]

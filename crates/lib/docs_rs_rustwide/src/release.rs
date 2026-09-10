@@ -53,10 +53,17 @@ impl<'release> ReleaseContext<'release> {
     ///
     /// Shortcut for:
     ///
-    /// ```
-    /// environment
+    /// ```no_run
+    /// # use anyhow::Result;
+    /// # use docs_rs_rustwide::BuildEnvironment;
+    /// # use rustwide::Crate;
+    /// # fn example(environment: &mut BuildEnvironment, krate: &Crate) -> Result<()> {
+    /// let result = environment
+    ///     .release(krate)
     ///     .fetch()?
-    ///     .run(|build| [...])?;
+    ///     .run(|build| build.build_docs())?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn run<R>(
         self,
