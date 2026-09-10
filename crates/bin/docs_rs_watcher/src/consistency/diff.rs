@@ -92,9 +92,12 @@ where
                             // where the releases is still in progress.
                             // Since `yanked` is mandatory on the sparse index, we can use that
                             // as an indicator that `release_time` can be overwritten.
+                            // The index only stores whole seconds, while historical API
+                            // values can include subseconds. Compare at index precision.
                             if db_release.yanked.is_some()
                                 && let Some(index_release_time) = index_release.release_time
-                                && db_release.release_time != Some(index_release_time)
+                                && db_release.release_time.map(|time| time.timestamp())
+                                    != Some(index_release_time.timestamp())
                             {
                                 result.push(Difference::ReleaseTime(
                                     db_crate.name.clone(),
@@ -136,6 +139,7 @@ mod tests {
     use chrono::DateTime;
     use docs_rs_types::testing::{KRATE, V2, V3};
     use std::iter;
+    use test_case::test_case;
 
     #[test]
     fn test_empty() {
@@ -263,6 +267,43 @@ mod tests {
         assert_eq!(
             calculate_diff(db_releases.iter(), index_releases.iter()),
             vec![Difference::ReleaseTime(KRATE, V2, expected)]
+        );
+    }
+
+    #[test_case(Some("2022-04-15T08:49:30Z"), false; "equal seconds")]
+    #[test_case(Some("2022-04-15T08:49:30.157869Z"), false; "historical API precision")]
+    #[test_case(Some("2022-04-15T08:49:30.999999Z"), false; "subseconds are truncated")]
+    #[test_case(Some("2022-04-15T08:49:29.999999Z"), true; "previous second")]
+    #[test_case(Some("2022-04-15T08:49:31Z"), true; "next second")]
+    #[test_case(None, true; "missing database timestamp")]
+    fn test_release_time_diff_at_second_precision(db_time: Option<&str>, differs: bool) {
+        let index_time = "2022-04-15T08:49:30Z".parse::<DateTime<Utc>>().unwrap();
+        let index_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: Some(index_time),
+            }],
+        }];
+
+        let db_releases = [Crate {
+            name: KRATE,
+            releases: vec![Release {
+                version: V2,
+                yanked: Some(false),
+                release_time: db_time.map(|time| time.parse::<DateTime<Utc>>().unwrap()),
+            }],
+        }];
+        let expected = if differs {
+            vec![Difference::ReleaseTime(KRATE, V2, index_time)]
+        } else {
+            vec![]
+        };
+
+        assert_eq!(
+            calculate_diff(db_releases.iter(), index_releases.iter()),
+            expected,
         );
     }
 

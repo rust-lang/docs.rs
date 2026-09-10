@@ -3,6 +3,7 @@
 mod api;
 mod config;
 mod error;
+mod metrics;
 mod models;
 #[cfg(any(test, feature = "testing"))]
 /// Test utilities for supplying a local, fully mocked registry.
