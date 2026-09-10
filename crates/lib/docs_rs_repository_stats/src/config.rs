@@ -7,9 +7,13 @@ pub struct Config {
     // Github authentication
     pub(crate) github_accesstoken: Option<String>,
     pub(crate) github_updater_min_rate_limit: u32,
+    /// Maximum number of retries for transient GitHub API HTTP failures.
+    pub(crate) github_api_retries: u32,
 
     // GitLab authentication
     pub(crate) gitlab_accesstoken: Option<String>,
+    /// Maximum number of retries for transient GitLab API HTTP failures.
+    pub(crate) gitlab_api_retries: u32,
 }
 
 impl AppConfig for Config {
@@ -17,7 +21,9 @@ impl AppConfig for Config {
         Ok(Self {
             github_accesstoken: maybe_env("DOCSRS_GITHUB_ACCESSTOKEN")?,
             github_updater_min_rate_limit: env("DOCSRS_GITHUB_UPDATER_MIN_RATE_LIMIT", 2500u32)?,
+            github_api_retries: env("DOCSRS_GITHUB_API_RETRIES", 3)?,
             gitlab_accesstoken: maybe_env("DOCSRS_GITLAB_ACCESSTOKEN")?,
+            gitlab_api_retries: env("DOCSRS_GITLAB_API_RETRIES", 3)?,
         })
     }
 }
