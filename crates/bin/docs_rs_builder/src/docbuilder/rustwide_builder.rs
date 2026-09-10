@@ -220,21 +220,6 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    pub fn build_local_package(&mut self, path: &Path) -> Result<BuildPackageSummary> {
-        let metadata = self.environment.load_cargo_metadata(path).map_err(|err| {
-            err.context(format!("failed to load local package {}", path.display()))
-        })?;
-        let package = metadata.root();
-        self.build_package(
-            &package
-                .name
-                .parse()
-                .context("invalid crate name in package")?,
-            &package.version,
-            PackageKind::Local(path),
-        )
-    }
-
     #[instrument(skip(self))]
     pub fn build_package(
         &mut self,
@@ -1035,8 +1020,10 @@ mod tests {
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
+        let summary = builder.build_package(&crate_, &version, PackageKind::Local(test_crate))?;
+
         // `Result` is `Ok`, but the build-result is `false`
-        assert!(!builder.build_local_package(test_crate)?.successful);
+        assert!(!summary.successful);
 
         // source archive exists
         let source_archive = source_archive_path(&crate_, &version);

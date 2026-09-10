@@ -541,7 +541,10 @@ impl BuildEnvironment {
     /// This is primarily useful for local crates, where callers need the package
     /// name and version before creating a [`Crate::local`] release context.
     #[instrument(skip_all)]
-    pub fn load_cargo_metadata(&self, source_dir: impl AsRef<Path>) -> Result<CargoMetadata> {
+    pub(crate) fn load_cargo_metadata(
+        &self,
+        source_dir: impl AsRef<Path>,
+    ) -> Result<CargoMetadata> {
         let source_dir = source_dir.as_ref();
         debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
         let output = Command::new(self.workspace(), self.toolchain.cargo())
