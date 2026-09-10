@@ -164,7 +164,7 @@ fn collects_compiler_metrics() -> Result<()> {
 }
 
 #[test_case(CpuLimit::Quota(2.0))]
-#[test_case(CpuLimit::Cores(1..=2))]
+#[test_case(CpuLimit::Cores((1..=2).into()))]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
     let workspace = test_workspace();
