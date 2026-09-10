@@ -185,13 +185,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn cargo_jobs_uses_core_range_length() {
-    //     let config = config_with_cpu_settings(Some(12), Some(BuildCores(3..=4)));
-
-    //     assert_eq!(config.cargo_job_limit(), Some(2));
-    // }
-
     #[test]
     fn derives_cargo_jobs_from_cpu_restrictions() {
         assert_eq!(CpuLimit::Quota(2.0).cargo_jobs(), Some(2));

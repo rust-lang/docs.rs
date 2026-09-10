@@ -1,16 +1,9 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
+use docs_rs_rustwide::{BuildCores, CpuLimit};
 use rustwide::cmd::DockerRuntime;
-use std::{
-    num::ParseIntError,
-    ops::{Deref, RangeInclusive},
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
-use thiserror::Error;
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Debug)]
 pub struct Config {
@@ -27,10 +20,9 @@ pub struct Config {
     pub rustwide_workspace: PathBuf,
     pub inside_docker: bool,
     pub docker_image: Option<String>,
-    /// Docker CPU quota / CPU count.
-    pub build_cpu_limit: Option<u32>,
-    /// CPU cores the builder should use.
-    pub build_cpu_cores: Option<BuildCores>,
+    /// Docker CPU limit
+    /// Either quota, or assigned cores.
+    pub build_cpu_limit: Option<CpuLimit>,
     pub include_default_targets: bool,
     pub disable_memory_limit: bool,
     /// Docker runtime the builder should use.
@@ -43,6 +35,14 @@ pub struct Config {
 impl AppConfig for Config {
     fn from_environment() -> Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
+
+        let build_cpu_limit: Option<f32> = maybe_env("DOCSRS_BUILD_CPU_LIMIT")?;
+        let build_cpu_cores: Option<BuildCores> = maybe_env("DOCSRS_BUILD_CPU_CORES")?;
+
+        if build_cpu_limit.is_some() && build_cpu_cores.is_some() {
+            bail!("you only can define one of build_cpu_limit and build_cpu_cores");
+        }
+
         let config = Self {
             temp_dir: prefix.join("tmp"),
             prefix,
@@ -50,9 +50,9 @@ impl AppConfig for Config {
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?),
-
-            build_cpu_limit: maybe_env("DOCSRS_BUILD_CPU_LIMIT")?,
-            build_cpu_cores: maybe_env("DOCSRS_BUILD_CPU_CORES")?,
+            build_cpu_limit: build_cpu_cores
+                .map(CpuLimit::Cores)
+                .or(build_cpu_limit.map(CpuLimit::Quota)),
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
             build_workspace_reinitialization_interval: Duration::from_secs(env(
@@ -63,10 +63,6 @@ impl AppConfig for Config {
             docker_runtime: maybe_env("DOCSRS_DOCKER_RUNTIME")?.unwrap_or_default(),
             build_limits: Arc::new(docs_rs_build_limits::Config::from_environment()?),
         };
-
-        if config.build_cpu_limit.is_some() && config.build_cpu_cores.is_some() {
-            bail!("you only can define one of build_cpu_limit and build_cpu_cores");
-        }
 
         Ok(config)
     }

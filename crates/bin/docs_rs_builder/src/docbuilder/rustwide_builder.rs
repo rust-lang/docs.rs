@@ -19,8 +19,8 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, CpuLimit, ReleaseBuildResult, SandboxImageSource,
-    TargetBuildResult, utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, SandboxImageSource, TargetBuildResult,
+    utils::copy_dir_all,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -83,16 +83,6 @@ impl RustwideBuilder {
 
         let default_limits = Limits::from_config(&config.build_limits);
 
-        let cpu_limit = config
-            .build_cpu_cores
-            .as_ref()
-            .map(|cores| CpuLimit::Cores(cores.0.clone()))
-            .or_else(|| {
-                config
-                    .build_cpu_limit
-                    .map(|limit| CpuLimit::Quota(limit as f32))
-            });
-
         let sandbox_image = config
             .docker_image
             .as_ref()
@@ -106,7 +96,7 @@ impl RustwideBuilder {
             .wait_for_workspace_lock(cfg!(test))
             .fast_init(cfg!(test))
             .workspace_reinitialization_interval(config.build_workspace_reinitialization_interval)
-            .maybe_cpu_limit(cpu_limit)
+            .maybe_cpu_limit(config.build_cpu_limit.clone())
             .docker_runtime(config.docker_runtime)
             .include_default_targets(config.include_default_targets)
             .validate_host_resources(!config.disable_memory_limit)
