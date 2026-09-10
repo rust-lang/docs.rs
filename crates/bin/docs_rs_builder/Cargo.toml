@@ -40,6 +40,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive", features = ["testing"] }
+serde_json = { workspace = true }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue", features = ["testing"] }
 docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }

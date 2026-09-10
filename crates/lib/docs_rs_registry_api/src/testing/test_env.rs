@@ -79,6 +79,7 @@ impl TestRegistry {
 
         let config_mock = index_server
             .mock("GET", "/config.json")
+            .expect_at_least(1)
             .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
             .with_body(serde_json::to_vec(&serde_json::json!({
                 "dl": index_config.dl,

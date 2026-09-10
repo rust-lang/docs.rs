@@ -1,5 +1,5 @@
 use crate::BuilderMetrics;
-use crate::{PackageKind, RustwideBuilder};
+use crate::RustwideBuilder;
 use anyhow::Result;
 use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
 use docs_rs_context::Context;
@@ -91,7 +91,7 @@ pub(crate) fn build_next_queue_package(
             return Err(err);
         }
 
-        builder.build_package(&krate.name, &krate.version, PackageKind::CratesIo)
+        builder.build_package(&krate.name, &krate.version)
     })?;
 
     Ok(processed)

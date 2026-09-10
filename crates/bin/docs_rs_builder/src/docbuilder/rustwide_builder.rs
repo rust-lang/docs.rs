@@ -59,12 +59,6 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
     }
 }
 
-#[derive(Debug)]
-pub enum PackageKind<'a> {
-    Local(&'a Path),
-    CratesIo,
-}
-
 pub struct RustwideBuilder {
     environment: BuildEnvironment,
     runtime: Handle,
@@ -73,6 +67,7 @@ pub struct RustwideBuilder {
     blocking_storage: Arc<Storage>,
     storage: Arc<AsyncStorage>,
     registry_api: Arc<RegistryApi>,
+    registry_config: Arc<docs_rs_registry_api::Config>,
     repository_stats: Arc<RepositoryStatsUpdater>,
     pub(crate) builder_metrics: Arc<BuilderMetrics>,
 }
@@ -127,6 +122,7 @@ impl RustwideBuilder {
             blocking_storage: context.blocking_storage()?.clone(),
             storage: context.storage()?.clone(),
             registry_api: context.registry_api()?.clone(),
+            registry_config: context.config().registry_api()?.clone(),
             repository_stats: context.repository_stats()?.clone(),
             builder_metrics: BuilderMetrics::new(context.meter_provider()).into(),
         })
@@ -225,7 +221,6 @@ impl RustwideBuilder {
         &mut self,
         name: &KrateName,
         version: &Version,
-        kind: PackageKind<'_>,
     ) -> Result<BuildPackageSummary> {
         let (crate_id, release_id, build_id) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
@@ -235,7 +230,7 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(name, version, kind, crate_id, release_id, build_id) {
+        match self.build_package_inner(name, version, crate_id, release_id, build_id) {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -264,7 +259,6 @@ impl RustwideBuilder {
         &mut self,
         name: &KrateName,
         version: &Version,
-        kind: PackageKind<'_>,
         crate_id: CrateId,
         release_id: ReleaseId,
         build_id: BuildId,
@@ -285,12 +279,11 @@ impl RustwideBuilder {
         }
 
         let limits = self.get_limits(name)?;
-        let is_local = matches!(kind, PackageKind::Local(_));
-        let version_string = version.to_string();
-        let krate = match kind {
-            PackageKind::Local(path) => Crate::local(path),
-            PackageKind::CratesIo => Crate::crates_io(name.as_str(), &version_string),
-        };
+        let krate = Crate::sparse_registry(
+            self.registry_config.sparse_index_host.clone(),
+            name.as_str(),
+            &version.to_string(),
+        )?;
 
         fs::create_dir_all(&self.config.temp_dir)?;
         let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
@@ -371,19 +364,15 @@ impl RustwideBuilder {
             self.builder_metrics.non_library_builds.add(1, &[]);
         }
 
-        let release_data = if !is_local {
-            match self
-                .runtime
-                .block_on(self.registry_api.get_release_data(name, version))
-            {
-                Ok(data) => data,
-                Err(err) => {
-                    error!(%name, %version, ?err, "could not fetch releases-data");
-                    None
-                }
+        let release_data = match self
+            .runtime
+            .block_on(self.registry_api.get_release_data(name, version))
+        {
+            Ok(data) => data,
+            Err(err) => {
+                error!(%name, %version, ?err, "could not fetch releases-data");
+                None
             }
-        } else {
-            None
         }
         .unwrap_or_else(ReleaseData::dummy);
 
@@ -442,18 +431,16 @@ impl RustwideBuilder {
                 .block_on(add_doc_coverage(&mut async_conn, release_id, doc_coverage))?;
         }
 
-        if !is_local {
-            match self
-                .runtime
-                .block_on(self.registry_api.get_crate_data(name))
-            {
-                Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
-                    &mut async_conn,
-                    name,
-                    &crate_data,
-                ))?,
-                Err(err) => warn!("{:#?}", err),
-            }
+        match self
+            .runtime
+            .block_on(self.registry_api.get_crate_data(name))
+        {
+            Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
+                &mut async_conn,
+                name,
+                &crate_data,
+            ))?,
+            Err(err) => warn!("{:#?}", err),
         }
 
         if build_succeeded {
@@ -633,6 +620,48 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::{collections::BTreeMap, iter, sync::LazyLock};
 
+    /// Serve a dependency-free package through the same registry used for release metadata.
+    fn mock_package(
+        env: &TestEnvironment,
+        name: &KrateName,
+        version: &Version,
+        source_file: Option<&str>,
+        source: &str,
+    ) -> Result<()> {
+        let root = tempfile::tempdir()?;
+        if let Some(source_file) = source_file {
+            fs::write(
+                root.path().join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
+                ),
+            )?;
+            fs::create_dir(root.path().join("src"))?;
+            fs::write(root.path().join("src").join(source_file), source)?;
+        }
+        let archive =
+            docs_rs_crate_archive::testing::create_source_tarball(name, version, root.path())?;
+        env.runtime().block_on(async {
+            env.test_registry()
+                .mock_download(name, version, archive)
+                .await;
+            // Fetch-stage failures never reach the release metadata lookup.
+            if source_file.is_some() {
+                env.test_registry()
+                    .mock_index_response(
+                        name,
+                        [serde_json::json!({
+                            "name": name.as_str(), "vers": version.to_string(),
+                            "deps": [], "cksum": "0".repeat(64), "features": {}, "yanked": false,
+                            "pubtime": "2020-01-01T00:00:00Z"
+                        })],
+                    )
+                    .await;
+            }
+        });
+        Ok(())
+    }
+
     static DUMMY_CRATE_NAME: LazyLock<KrateName> =
         LazyLock::new(|| "empty-library".parse().unwrap());
     const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);
@@ -646,6 +675,13 @@ mod tests {
         let crate_path = crate_.as_str().replace('-', "_");
         let version = DUMMY_CRATE_VERSION;
         let default_target = "x86_64-unknown-linux-gnu";
+        mock_package(
+            &env,
+            crate_,
+            &version,
+            Some("lib.rs"),
+            "pub fn example() {}",
+        )?;
 
         let storage = env.blocking_storage()?;
         let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
@@ -655,11 +691,7 @@ mod tests {
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
-        assert!(
-            builder
-                .build_package(crate_, &version, PackageKind::CratesIo)?
-                .successful
-        );
+        assert!(builder.build_package(crate_, &version)?.successful);
 
         // check release record in the db (default and other targets)
         let row = block_on_async_with_conn!(env, |mut conn| async {
@@ -855,6 +887,7 @@ mod tests {
         // some binary crate
         let crate_ = KrateName::from_static("heater");
         let version = Version::new(0, 2, 3);
+        mock_package(&env, &crate_, &version, Some("main.rs"), "fn main() {}")?;
 
         let storage = env.blocking_storage()?;
         let old_rustdoc_file = format!("rustdoc/{crate_}/{version}/some_doc_file");
@@ -864,11 +897,7 @@ mod tests {
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
-        assert!(
-            !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo)?
-                .successful
-        );
+        assert!(!builder.build_package(&crate_, &version)?.successful);
 
         // check release record in the db (default and other targets)
         let row = block_on_async_with_conn!(env, |mut conn| async {
@@ -914,10 +943,16 @@ mod tests {
     fn test_failed_build_with_existing_successful_release() -> Result<()> {
         let env = TestEnvironment::new()?;
 
-        // rand 0.8.5 fails to build with recent nightly versions
-        // https://github.com/rust-lang/docs.rs/issues/26750
+        // A failed rebuild must preserve previously published documentation.
         let crate_ = KrateName::from_static("rand");
         let version = Version::new(0, 8, 5);
+        mock_package(
+            &env,
+            &crate_,
+            &version,
+            Some("lib.rs"),
+            "compile_error!(\"build fails\");",
+        )?;
 
         // create a successful release & build in the database
         let release_id = block_on_async_with_conn!(env, |mut conn| async {
@@ -994,9 +1029,7 @@ mod tests {
         builder.update_toolchain()?;
         assert!(
             // not successful build
-            !builder
-                .build_package(&crate_, &version, PackageKind::CratesIo)?
-                .successful
+            !builder.build_package(&crate_, &version)?.successful
         );
 
         check_rustdoc_status(&env, release_id)?;
@@ -1009,18 +1042,23 @@ mod tests {
         let env = TestEnvironment::new()?;
 
         // https://github.com/rust-lang/docs.rs/issues/2523
-        // package with invalid cargo metadata.
+        // Package whose source fails to compile.
         // Will succeed in the crate fetch step, so sources are
         // added. Will fail when we try to build.
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
-        let test_crate =
-            Path::new("../../lib/docs_rs_rustwide/tests/fixtures/simple-build-failure/");
+        mock_package(
+            &env,
+            &crate_,
+            &version,
+            Some("main.rs"),
+            "fn main() { this fails; }",
+        )?;
 
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
-        let summary = builder.build_package(&crate_, &version, PackageKind::Local(test_crate))?;
+        let summary = builder.build_package(&crate_, &version)?;
 
         // `Result` is `Ok`, but the build-result is `false`
         assert!(!summary.successful);
@@ -1051,11 +1089,12 @@ mod tests {
         // package without Cargo.toml, so fails directly in the fetch stage.
         let crate_ = KrateName::from_static("emheap");
         let version = Version::new(0, 1, 0);
+        mock_package(&env, &crate_, &version, None, "")?;
         let mut builder = env.build_builder()?;
         builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
-        let summary = builder.build_package(&crate_, &version, PackageKind::CratesIo)?;
+        let summary = builder.build_package(&crate_, &version)?;
 
         assert!(!summary.successful);
         assert!(summary.should_reattempt);
@@ -1087,6 +1126,7 @@ mod tests {
         assert_eq!(row.error_kind, Some("Other".into()));
         assert!(row.errors.unwrap().contains("missing Cargo.toml"));
 
+        env.runtime().block_on(env.test_registry().assert_mocks());
         Ok(())
     }
 }
