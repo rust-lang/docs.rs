@@ -7226,7 +7226,6 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "rustwide"
 version = "0.26.0"
-source = "git+https://github.com/rust-lang/rustwide?rev=6b719d2c14c0e768e760098855a6b078da4b57fd#6b719d2c14c0e768e760098855a6b078da4b57fd"
 dependencies = [
  "anyhow",
  "attohttpc",
@@ -7247,6 +7246,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tracing",
+ "url",
  "walkdir",
  "windows-sys 0.52.0",
 ]

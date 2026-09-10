@@ -56,7 +56,8 @@ regex = "1"
 reqwest = { version = "0.13", features = ["gzip", "http2", "json", "stream"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
-rustwide = { git = "https://github.com/rust-lang/rustwide", rev = "6b719d2c14c0e768e760098855a6b078da4b57fd", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+# rustwide = { git = "https://github.com/rust-lang/rustwide", rev = "6b719d2c14c0e768e760098855a6b078da4b57fd", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+rustwide = { path= "/home/syphar/src/rust-lang/rustwide", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 sentry = { version = "0.49.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
