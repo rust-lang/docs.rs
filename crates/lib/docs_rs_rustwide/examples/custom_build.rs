@@ -4,6 +4,7 @@ use rustwide::Crate;
 use std::{env, path::PathBuf};
 
 fn main() -> Result<()> {
+    docs_rs_rustwide::logging::init(false);
     let mut args = env::args_os().skip(1);
     let name = args.next().context("usage: custom_build NAME VERSION")?;
     let version = args.next().context("usage: custom_build NAME VERSION")?;
@@ -12,9 +13,7 @@ fn main() -> Result<()> {
 
     let workspace = PathBuf::from("rustwide-workspace");
     let mut environment = BuildEnvironment::builder(workspace.as_path())
-        .sandbox_image(SandboxImageSource::LocalOrRemote(
-            "docsrs/build-env:latest".into(),
-        ))
+        .sandbox_image(SandboxImageSource::linux())
         .build()?;
     let maintenance = environment.perform_maintenance()?;
     if maintenance.toolchain_updated {

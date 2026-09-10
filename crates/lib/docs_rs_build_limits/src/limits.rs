@@ -1,10 +1,4 @@
 use crate::config::Config;
-#[cfg(feature = "database")]
-use crate::overrides::Overrides;
-#[cfg(feature = "database")]
-use anyhow::Result;
-#[cfg(feature = "database")]
-use docs_rs_types::KrateName;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -47,10 +41,12 @@ impl Limits {
     pub async fn for_crate(
         config: &Config,
         conn: &mut sqlx::PgConnection,
-        name: &KrateName,
-    ) -> Result<Self> {
+        name: &docs_rs_types::KrateName,
+    ) -> anyhow::Result<Self> {
         let default = Self::from_config(config);
-        let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
+        let overrides = crate::overrides::Overrides::for_crate(conn, name)
+            .await?
+            .unwrap_or_default();
         Ok(Self {
             memory: overrides
                 .memory
@@ -90,10 +86,12 @@ impl Limits {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Overrides;
+    use anyhow::Result;
     use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use docs_rs_types::testing::KRATE;
+    use docs_rs_types::{KrateName, testing::KRATE};
 
     async fn db() -> anyhow::Result<TestDatabase> {
         let test_metrics = TestMetrics::new();

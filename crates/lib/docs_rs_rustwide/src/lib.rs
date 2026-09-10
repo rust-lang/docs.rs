@@ -5,6 +5,8 @@
 //! as the build queue, database records, and artifact storage belong in
 //! `docs_rs_builder`, while local and CI frontends can use this crate directly.
 
+#![doc = include_str!("../README.md")]
+
 mod build;
 mod command;
 pub mod logging;

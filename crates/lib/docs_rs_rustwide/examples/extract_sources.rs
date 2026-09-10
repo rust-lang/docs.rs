@@ -4,6 +4,7 @@ use rustwide::Crate;
 use std::{env, fs, path::PathBuf};
 
 fn main() -> Result<()> {
+    docs_rs_rustwide::logging::init(false);
     let mut args = env::args_os().skip(1);
     let name = args
         .next()
@@ -20,9 +21,7 @@ fn main() -> Result<()> {
     fs::create_dir_all(&source_directory)?;
 
     let mut environment = BuildEnvironment::builder(PathBuf::from("rustwide-workspace").as_path())
-        .sandbox_image(SandboxImageSource::LocalOrRemote(
-            "docsrs/build-env:latest".into(),
-        ))
+        .sandbox_image(SandboxImageSource::linux())
         .build()?;
     let maintenance = environment.perform_maintenance()?;
     if maintenance.toolchain_updated {
@@ -43,7 +42,7 @@ fn main() -> Result<()> {
 
     println!(
         "documentation succeeded: {}",
-        result.into_inner().build_succeeded()
+        result.into_inner().documentation_succeeded()
     );
 
     Ok(())

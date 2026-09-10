@@ -5,6 +5,10 @@ pipeline. It configures rustwide, applies the docs.rs sandbox limits and Cargo
 arguments, reads the crate's docs.rs metadata, and runs all build steps for a
 release in one sandbox.
 
+Initialize `docs_rs_rustwide::logging::init(log_build_logs)` once before running
+builds. This enables log capture; `true` also forwards build output to the
+application's tracing subscriber.
+
 The crate does not store build results in the docs.rs database or copy artifacts
 to docs.rs storage. A caller can decide what to do with the returned paths,
 logs, coverage, and sandbox statistics.
@@ -13,21 +17,24 @@ logs, coverage, and sandbox statistics.
 
 `BuildEnvironment` retains the configuration needed to recreate its rustwide
 workspace. Long-running builders should call
-`refresh_workspace_if_interval_passed` between releases:
+`perform_maintenance` between releases:
 
 ```rust,no_run
 # use anyhow::Result;
 # use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 # use std::{path::Path, time::Duration};
 # fn main() -> Result<()> {
+# docs_rs_rustwide::logging::init(true);
 let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
     .sandbox_image(SandboxImageSource::Remote(
-        "docsrs/build-env:latest".into(),
+        "ghcr.io/rust-lang/crates-build-env/linux".into(),
     ))
     .workspace_reinitialization_interval(Duration::from_secs(24 * 60 * 60))
     .build()?;
 
-environment.refresh_workspace_if_interval_passed()?;
+let maintenance = environment.perform_maintenance()?;
+// Publish new shared rustdoc files when maintenance.toolchain_updated is true.
+# let _ = maintenance;
 # Ok(())
 # }
 ```
@@ -35,8 +42,9 @@ environment.refresh_workspace_if_interval_passed()?;
 `Remote` pulls the configured image on every initialization, including a timed
 refresh. `LocalOrRemote` uses an existing local image and only pulls when it is
 missing, which is useful for locally built images. Workspace initialization and
-refresh both purge stale build directories; caches can be removed explicitly
-with `purge_caches`.
+refresh both purge stale build directories. Toolchain changes automatically
+purge incompatible caches. Maintenance checks the toolchain at most once per
+hour by default; the first maintenance call always checks for an update.
 
 ## Toolchain lifecycle
 
@@ -50,6 +58,7 @@ regenerating and publishing shared rustdoc files:
 # use rustwide::Toolchain;
 # use std::path::Path;
 # fn main() -> Result<()> {
+# docs_rs_rustwide::logging::init(true);
 let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
 
 // A service can fetch this selection from its configuration or database.
@@ -63,8 +72,10 @@ if environment.update_toolchain()? {
 # }
 ```
 
-Preparation installs the toolchain, the docs.rs default targets, and the
-`llvm-tools-preview`, `rustc-dev`, and `rustfmt` components. Non-default targets
+Environment initialization installs a missing toolchain. For distribution
+toolchains it also installs the docs.rs default targets and attempts to install
+`llvm-tools-preview`, `rustc-dev`, and `rustfmt`; unavailable components produce
+warnings and do not prevent initialization. Non-default targets
 left by individual crate builds are removed before a distribution toolchain is
 updated. CI toolchains are installed and treated as changed on every update.
 
@@ -76,8 +87,9 @@ recorded after publication succeeds.
 
 ## Host resources and compiler metrics
 
-Before fetching a release, the environment verifies that the host's currently
-available memory can satisfy the release's effective sandbox limit. This check
+After fetching the release, when `FetchedRelease::run` starts, the environment
+verifies that the host's available memory can satisfy the effective sandbox
+limit. Callers can archive sources before this check. This check
 is enabled by default and can be disabled when the caller intentionally wants
 the sandbox or host runtime to enforce the limit:
 
@@ -86,7 +98,8 @@ the sandbox or host runtime to enforce the limit:
 # use docs_rs_rustwide::BuildEnvironment;
 # use std::path::Path;
 # fn main() -> Result<()> {
-let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+# docs_rs_rustwide::logging::init(true);
+let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
     .validate_host_resources(false)
     .build()?;
 # let _ = environment;
@@ -103,7 +116,8 @@ destination is configured:
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
-let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+# docs_rs_rustwide::logging::init(true);
+let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
     .compiler_metrics_collection_path("./compiler-metrics")
     .build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
@@ -115,13 +129,18 @@ let result = environment.release(&krate).run(|build| build.build_docs())?;
 ```
 
 For HTML builds, the library passes rustdoc's unstable metrics directory flag
-and copies the generated files out of rustwide's target directory before the
-release sandbox is cleaned up.
+when the metrics directory is available. `build_docs` collects metrics after
+each HTML attempt into `TargetBuildResult::compiler_metrics`, a separate
+`StepResult<Vec<PathBuf>>`. Collection failures do not invalidate HTML. Custom
+builds using `build_documentation` should call `collect_compiler_metrics` afterward
+if they need the metrics copied to the configured destination.
 
 ## Complete release build
 
 The usual entry point builds coverage, rustdoc JSON, and HTML documentation for
-the default target and the additional targets selected by the crate's metadata:
+the default target and, if it produces library documentation, additional targets
+selected by the crate's metadata. Set `.include_default_targets(true)` to also
+use the docs.rs default target list when metadata does not specify targets:
 
 ```rust,no_run
 use anyhow::Result;
@@ -130,9 +149,10 @@ use rustwide::Crate;
 use std::path::Path;
 
 fn main() -> Result<()> {
-    let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+    docs_rs_rustwide::logging::init(true);
+    let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
         .sandbox_image(SandboxImageSource::LocalOrRemote(
-            "docsrs/build-env:latest".into(),
+            "ghcr.io/rust-lang/crates-build-env/linux".into(),
         ))
         .build()?;
 
@@ -173,12 +193,13 @@ rustwide build and sandbox:
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
-# let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-#     .sandbox_image(SandboxImageSource::LocalOrRemote("docsrs/build-env:latest".into()))
+# docs_rs_rustwide::logging::init(true);
+# let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+#     .sandbox_image(SandboxImageSource::LocalOrRemote("ghcr.io/rust-lang/crates-build-env/linux".into()))
 #     .build()?;
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {
-    let target = build.selected_targets().default_target.to_owned();
+    let target = build.metadata_targets().default_target.to_owned();
     let json = build.build_rustdoc_json(&target);
     let documentation = build.build_documentation(&target);
     Ok((json, documentation))
@@ -215,13 +236,14 @@ archive sources before metadata parsing or sandbox preparation:
 # use rustwide::Crate;
 # use std::path::Path;
 # fn main() -> Result<()> {
-# let environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
+# docs_rs_rustwide::logging::init(true);
+# let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace")).build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
 let fetched = environment
     .release(&krate)
     .fetch()?;
 
-fetched.copy_source_to("./source-archive-input")?
+fetched.copy_source_to("./source-archive-input")?;
 
 let result = fetched.run(|build| build.build_docs())?;
 
@@ -249,5 +271,7 @@ environment owns the directory. Use a separate workspace for concurrent builders
 Tests can opt into waiting with `.wait_for_workspace_lock(true)`.
 
 Keep the environment alive until artifacts have been consumed or copied out.
+Starting another release or refreshing the workspace purges previous build
+directories, including generated artifacts. Copy files that must survive first.
 Do not remove `.docsrs-workspace.lock` while an environment is running. The file
 may remain after exit; ownership is released automatically when its handle closes.

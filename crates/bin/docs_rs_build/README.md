@@ -43,8 +43,7 @@ docs_rs_build path/to/package
 ```
 
 Before starting the sandbox, the command runs
-`cargo package --allow-dirty
---no-verify` and extracts the resulting crate
+`cargo package --allow-dirty --no-verify` and extracts the resulting crate
 archive. The build therefore uses the files and normalized manifest that would
 be published, rather than the whole source checkout. Packaging errors are
 treated as build failures.
@@ -63,8 +62,7 @@ docs_rs_build --package my-crate
 ```
 
 The package argument accepts the same package specification syntax as
-`cargo
-package --package`. A virtual workspace without `--package` is rejected
+`cargo package --package`. A virtual workspace without `--package` is rejected
 rather than implicitly selecting a member.
 
 You can also point directly at a member directory:
@@ -75,7 +73,7 @@ docs_rs_build crates/my-crate
 
 ## GitHub Actions
 
-A minimal workflow job looks like this:
+A workflow template for use once `docs_rs_build` is published looks like this:
 
 ```yaml
 name: docs.rs build
@@ -157,7 +155,9 @@ the full image; otherwise, use the default image for the closest reproduction of
 docs.rs.
 
 A custom image and its resolution policy can be selected with `--image` and
-`--image-source`.
+`--image-source`. The source policy also applies to the default image and
+`--small-image`: `local` requires a cached image, `remote` pulls it, and the
+default `local-or-remote` pulls only when the image is missing locally.
 
 ### Caching the image in CI
 
@@ -181,19 +181,29 @@ For frequent builds, prefer one of these approaches:
 ## Build behavior and exit status
 
 By default, the command fails when setup, packaging, the default-target HTML
-build, or production of the crate's library documentation fails. Failures in
-rustdoc JSON, documentation coverage, or additional targets are reported but do
-not change the exit status, matching how docs.rs treats auxiliary output.
+build, or production of the crate's library documentation fails. Preparation
+failures during any default-target step also abort the build. JSON and coverage
+command/output failures, and additional-target failures including preparation,
+are reported but do not change the default exit status.
 
-Use `--strict` to make any auxiliary or additional-target failure fatal:
+A default-target HTML command failure retries once with a regenerated lockfile
+when one exists. This reruns coverage, JSON, and HTML. Lockfile regeneration or
+dependency-fetch failure aborts the build. Additional targets are built only
+when the default target produces library documentation. The CLI does not have
+the production builder's queue reattempt mechanism.
+
+Use `--strict` to make JSON, coverage, or additional-target failures affect the
+exit status:
 
 ```console
 docs_rs_build --strict
 ```
 
-Cargo and rustdoc output is streamed to standard output. A final summary shows
-the result for every target and the paths of generated HTML and rustdoc JSON
-artifacts.
+Cargo and rustdoc build output is streamed live. When the release completes, a
+table shows HTML, JSON, and coverage status/duration for each target, totals,
+full build duration, and sandbox peak memory. Failed steps include their captured
+logs. Setup and fatal preparation errors return early with an error instead of
+the summary table. Packaging output is printed after `cargo package` finishes.
 
 ## Workspace and generated files
 
@@ -206,12 +216,17 @@ docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
 The exact artifact paths are printed in the build summary. A later invocation
-may clean old release build directories, so copy artifacts needed after the CI
-job before starting another build with the same workspace.
+purges old release build directories, so copy artifacts needed after the CI job
+before starting another build with the same workspace. The workspace is locked
+for the lifetime of the build environment; concurrent invocations must use
+different workspace directories.
 
 ## Configuration
 
 The default toolchain is nightly and the default sandbox limits match docs.rs.
+An installed distribution toolchain is checked for updates unless
+`--no-update-toolchain` is set. A missing toolchain is always installed; CI
+toolchains are not automatically updated by the CLI.
 Documentation targets are selected through the crate's docs.rs metadata;
 toolchains, images, CPU and memory limits, networking, timeouts, and failure
 policy can be adjusted through command-line options.

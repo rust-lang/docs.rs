@@ -169,8 +169,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
     ///
     /// All commands execute through the same rustwide build and reusable
-    /// sandbox. Coverage and JSON failures are returned with their individual
-    /// steps and do not prevent the primary HTML build from running.
+    /// sandbox. Default-target preparation failures abort the release. Coverage
+    /// and JSON command/output failures, additional-target failures, and metrics
+    /// collection failures remain in their step results. Additional targets are
+    /// built only when the default target produces library documentation.
     #[instrument(skip_all, fields(crate_name, crate_version))]
     pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
         let metadata_targets = self.metadata_targets();
@@ -225,6 +227,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
+    ///
+    /// Preparation failures abort for the metadata-selected default target;
+    /// additional targets retain them as step results. When requested, an HTML
+    /// command failure retries all steps once with a regenerated lockfile if one
+    /// exists. Lockfile regeneration failures abort with captured diagnostics.
+    /// Metrics collection is a separate, nonfatal step after each HTML attempt.
     #[builder(finish_fn(name=run))]
     pub fn build_target(
         &self,

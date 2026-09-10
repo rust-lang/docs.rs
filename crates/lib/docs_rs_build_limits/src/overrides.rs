@@ -1,7 +1,4 @@
-#[cfg(feature = "database")]
 use docs_rs_types::KrateName;
-#[cfg(feature = "database")]
-use futures_util::stream::TryStreamExt;
 use std::time::Duration;
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
@@ -11,7 +8,6 @@ pub struct Overrides {
     pub timeout: Option<Duration>,
 }
 
-#[cfg(feature = "database")]
 macro_rules! row_to_overrides {
     ($row:expr) => {{
         Overrides {
@@ -23,8 +19,9 @@ macro_rules! row_to_overrides {
 }
 
 impl Overrides {
-    #[cfg(feature = "database")]
     pub async fn all(conn: &mut sqlx::PgConnection) -> anyhow::Result<Vec<(KrateName, Self)>> {
+        use futures_util::stream::TryStreamExt;
+
         Ok(sqlx::query!(
             r#"
             SELECT
@@ -41,7 +38,6 @@ impl Overrides {
         .await?)
     }
 
-    #[cfg(feature = "database")]
     pub async fn for_crate(
         conn: &mut sqlx::PgConnection,
         krate: &KrateName,
@@ -55,7 +51,6 @@ impl Overrides {
         .map(|row| row_to_overrides!(row)))
     }
 
-    #[cfg(feature = "database")]
     pub async fn save(
         conn: &mut sqlx::PgConnection,
         krate: &KrateName,
@@ -99,7 +94,6 @@ impl Overrides {
         Ok(())
     }
 
-    #[cfg(feature = "database")]
     pub async fn remove(conn: &mut sqlx::PgConnection, krate: &KrateName) -> anyhow::Result<()> {
         sqlx::query!(
             "DELETE FROM sandbox_overrides WHERE crate_name = $1",

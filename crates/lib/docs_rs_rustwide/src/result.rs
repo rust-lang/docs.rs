@@ -92,7 +92,7 @@ pub enum BuildStepError {
     /// Cargo or rustdoc failed inside the sandbox.
     #[error(transparent)]
     Command(#[from] CommandError),
-    /// The command completed but its output could not be processed.
+    /// A step's output could not be found, parsed, or collected.
     #[error(transparent)]
     Output(#[from] anyhow::Error),
 }
