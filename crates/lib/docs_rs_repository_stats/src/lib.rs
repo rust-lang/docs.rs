@@ -2,6 +2,7 @@ mod config;
 mod errors;
 mod github;
 mod gitlab;
+mod retry;
 mod updater;
 pub mod workspaces;
 
