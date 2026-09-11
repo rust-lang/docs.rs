@@ -876,7 +876,9 @@ impl RustwideBuilder {
                             name,
                             &crate_data,
                         ))?,
-                        Err(err) => warn!("{:#?}", err),
+                        Err(err) => {
+                            error!(%name, %version, ?err, "could not fetch crate & owner data");
+                        },
                     }
                 }
 
