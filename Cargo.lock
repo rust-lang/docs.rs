@@ -1314,6 +1314,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
+name = "cli-table"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14da8d951cef7cc4f13ccc9b744d736963d57863c7e6fc33c070ea274546082c"
+dependencies = [
+ "termcolor",
+ "unicode-width",
+]
+
+[[package]]
 name = "clru"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1562,6 +1572,7 @@ dependencies = [
  "docs_rs_config",
  "docs_rs_context",
  "docs_rs_logging",
+ "docs_rs_rustwide",
  "docs_rs_utils",
  "docs_rs_watcher",
  "docs_rs_web",
@@ -2028,6 +2039,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_build"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "cli-table",
+ "docs_rs_build_limits",
+ "docs_rs_crate_archive",
+ "docs_rs_rustwide",
+ "humantime",
+ "parse-size",
+ "rustwide",
+ "tempfile",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "docs_rs_build_limits"
 version = "0.0.0"
 dependencies = [
@@ -2084,6 +2114,7 @@ dependencies = [
  "docs_rs_cargo_metadata",
  "docs_rs_config",
  "docs_rs_context",
+ "docs_rs_crate_archive",
  "docs_rs_database",
  "docs_rs_env_vars",
  "docs_rs_fastly",
@@ -2093,25 +2124,21 @@ dependencies = [
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
  "docs_rs_rustdoc_json",
+ "docs_rs_rustwide",
  "docs_rs_storage",
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
  "futures-util",
- "log",
- "num_cpus",
  "opentelemetry",
  "pretty_assertions",
  "regex",
  "rustwide",
  "serde_json",
  "sqlx",
- "sysinfo",
  "tempfile",
- "test-case",
  "thiserror",
  "tokio",
- "toml",
  "tracing",
 ]
 
@@ -2409,6 +2436,30 @@ dependencies = [
  "serde_json",
  "strum",
  "test-case",
+]
+
+[[package]]
+name = "docs_rs_rustwide"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_build_limits",
+ "docs_rs_cargo_metadata",
+ "docs_rs_rustdoc_json",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "docsrs-metadata",
+ "log",
+ "pretty_assertions",
+ "rustwide",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "test-case",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4908,6 +4959,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
+name = "humantime"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15cdd26707701c53297e2fa6afb323d55fbc1d0810c3aec078ae3ef0424c3c15"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6223,6 +6280,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "parse-size"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487f2ccd1e17ce8c1bfab3a65c89525af41cfad4c8659021a1e9a2aacd73b89b"
+
+[[package]]
 name = "pem-rfc7468"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7164,8 +7227,6 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "rustwide"
 version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87cea0e47a21dd5f5462edb1e9dc65769cc9d731e637e0ce9724bc2b0bc24fb6"
 dependencies = [
  "anyhow",
  "attohttpc",
@@ -7186,6 +7247,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tracing",
+ "url",
  "walkdir",
  "windows-sys 0.52.0",
 ]
@@ -8182,6 +8244,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "test-case"
 version = "3.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8714,6 +8785,12 @@ name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unicode-xid"

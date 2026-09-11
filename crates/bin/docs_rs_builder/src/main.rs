@@ -1,17 +1,16 @@
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
-use docs_rs_builder::{Config, PackageKind, RustwideBuilder, queue_builder};
+use docs_rs_builder::{Config, RustwideBuilder, queue_builder};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
-use docs_rs_env_vars::maybe_env;
 use docs_rs_types::{KrateName, Version};
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use tokio::runtime;
 
 fn main() -> Result<()> {
     let logging_config = docs_rs_logging::Config::from_environment()?;
-    docs_rs_builder::logging::init(&logging_config);
+    docs_rs_rustwide::logging::init(logging_config.log_build_logs);
     let _guard =
         docs_rs_logging::init_with_config(&logging_config).context("error initializing logging")?;
 
@@ -77,16 +76,12 @@ enum BuildSubcommand {
     /// Builds documentation for a crate
     Crate {
         /// Crate name
-        #[arg(name = "CRATE_NAME", requires("CRATE_VERSION"))]
-        crate_name: Option<KrateName>,
+        #[arg(name = "CRATE_NAME")]
+        crate_name: KrateName,
 
         /// Version of crate
         #[arg(name = "CRATE_VERSION")]
-        crate_version: Option<Version>,
-
-        /// Build a crate at a specific path
-        #[arg(short = 'l', long = "local", conflicts_with_all(&["CRATE_NAME", "CRATE_VERSION"]))]
-        local: Option<PathBuf>,
+        crate_version: Version,
     },
 
     /// update the currently installed rustup toolchain
@@ -109,35 +104,14 @@ impl BuildSubcommand {
             Self::Crate {
                 crate_name,
                 crate_version,
-                local,
             } => {
                 let mut builder = rustwide_builder()?;
 
                 builder.update_toolchain_and_add_essential_files()?;
 
-                if let Some(path) = local {
-                    builder
-                        .build_local_package(&path)
-                        .context("Building documentation failed")?;
-                } else {
-                    if maybe_env::<String>("REGISTRY_URL")?.is_some() {
-                        bail!("we temporarily don't support custom registries in this commmand.");
-                    }
-
-                    builder
-                        .build_package(
-                            &crate_name
-                                .with_context(|| anyhow!("must specify name if not local"))?,
-                            &crate_version
-                                .with_context(|| anyhow!("must specify version if not local"))?,
-                            PackageKind::CratesIo,
-                            // registry_url
-                            //     .map(|s| PackageKind::Registry(s.as_str()))
-                            //     .unwrap_or(PackageKind::CratesIo
-                            true,
-                        )
-                        .context("Building documentation failed")?;
-                }
+                builder
+                    .build_package(&crate_name, &crate_version)
+                    .context("Building documentation failed")?;
             }
 
             Self::UpdateToolchain { only_first_time } => {

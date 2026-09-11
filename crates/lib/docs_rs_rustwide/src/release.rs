@@ -1,0 +1,146 @@
+use crate::{BuildEnvironment, BuildResult, ReleaseBuild};
+use anyhow::Result;
+use docs_rs_build_limits::Limits;
+use rustwide::Crate;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    path::Path,
+    time::Instant,
+};
+use tracing::{debug, info, instrument};
+
+/// A crate release whose build lifecycle is managed by docs.rs.
+pub struct ReleaseContext<'release> {
+    pub(crate) environment: &'release mut BuildEnvironment,
+    pub(crate) krate: &'release Crate,
+    pub(crate) limits: Option<Limits>,
+}
+
+impl<'release> ReleaseContext<'release> {
+    /// Override the environment's default limits for this release.
+    pub fn limits(mut self, limits: Limits) -> Self {
+        self.limits = Some(limits);
+        self
+    }
+
+    /// Fetch this release into rustwide's crate cache.
+    ///
+    /// The returned phase allows callers to archive the fetched sources before
+    /// metadata parsing or sandbox preparation can fail.
+    #[instrument(skip_all)]
+    pub fn fetch(self) -> Result<FetchedRelease<'release>> {
+        let started = Instant::now();
+        let Self {
+            environment,
+            krate,
+            limits,
+        } = self;
+
+        info!(%self.krate, "fetching crate source");
+        krate.fetch(environment.workspace())?;
+        debug!("crate source fetched");
+
+        Ok(FetchedRelease {
+            started,
+            environment,
+            krate,
+            limits,
+        })
+    }
+
+    /// Fetch the release and run selected build operations in one reusable sandbox.
+    ///
+    /// Shortcut for:
+    ///
+    /// ```no_run
+    /// # use anyhow::Result;
+    /// # use docs_rs_rustwide::BuildEnvironment;
+    /// # use rustwide::Crate;
+    /// # fn example(environment: &mut BuildEnvironment, krate: &Crate) -> Result<()> {
+    /// let result = environment
+    ///     .release(krate)
+    ///     .fetch()?
+    ///     .run(|build| build.build_docs())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn run<R>(
+        self,
+        callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
+    ) -> Result<BuildResult<R>> {
+        self.fetch()?.run(callback)
+    }
+}
+
+/// A crate release fetched into rustwide's cache but not yet prepared for building.
+pub struct FetchedRelease<'release> {
+    started: Instant,
+    environment: &'release mut BuildEnvironment,
+    krate: &'release Crate,
+    limits: Option<Limits>,
+}
+
+impl FetchedRelease<'_> {
+    /// Copy the fetched crate sources into a caller-owned directory.
+    ///
+    /// This is intended for source archiving before the build sandbox is entered.
+    #[instrument(skip_all)]
+    pub fn copy_source_to(&self, destination: impl AsRef<Path>) -> Result<()> {
+        info!(
+            krate = %self.krate,
+            destination = %destination.as_ref().display(),
+            "copying fetched crate source"
+        );
+
+        self.krate
+            .copy_source_to(self.environment.workspace(), destination.as_ref())?;
+        debug!("fetched crate source copied");
+        Ok(())
+    }
+
+    /// Run selected build operations in one reusable sandbox.
+    #[instrument(skip_all)]
+    pub fn run<R>(
+        self,
+        callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
+    ) -> Result<BuildResult<R>> {
+        let Self {
+            started,
+            environment,
+            krate,
+            limits,
+        } = self;
+
+        let effective_limits = limits.unwrap_or_else(|| environment.default_limits().clone());
+        environment.validate_host_resources(&effective_limits)?;
+
+        debug!("purging stale release build directories");
+        environment.workspace().purge_all_build_dirs()?;
+
+        let build_dir_name = build_dir_name(krate);
+        debug!(build_dir_name, "preparing release build directory");
+        let mut build_dir = environment.workspace().build_dir(&build_dir_name);
+
+        debug!("starting release sandbox, calling callback");
+        let sandbox_builder = environment.sandbox_builder(&effective_limits);
+        let result = build_dir
+            .build(environment.configured_toolchain(), krate, sandbox_builder)
+            .run(|build| callback(ReleaseBuild::new(environment, build, &effective_limits)?))?;
+
+        debug!("release sandbox completed; purging crate source cache");
+        krate.purge_from_cache(environment.workspace())?;
+
+        debug!("release build completed");
+        Ok(BuildResult {
+            inner: result,
+            duration: started.elapsed(),
+        })
+    }
+}
+
+fn build_dir_name(krate: &Crate) -> String {
+    let mut hasher = DefaultHasher::new();
+    krate.to_string().hash(&mut hasher);
+    format!("release-{:016x}", hasher.finish())
+}

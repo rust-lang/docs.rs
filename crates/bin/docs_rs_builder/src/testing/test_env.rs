@@ -10,7 +10,8 @@ pub(crate) trait TestEnvironmentExt {
 
 impl TestEnvironmentExt for TestEnvironment {
     fn build_builder(&self) -> Result<RustwideBuilder> {
-        crate::logging::init(&docs_rs_logging::Config::test_config()?); // initialize rustwide logging
+        let logging_config = docs_rs_logging::Config::test_config()?;
+        docs_rs_rustwide::logging::init(logging_config.log_build_logs);
         RustwideBuilder::init(self.config().clone(), self)
     }
 }

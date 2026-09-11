@@ -1,0 +1,86 @@
+use crate::support::{build_local, fixture, test_workspace};
+use anyhow::Result;
+use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
+use std::time::Duration;
+
+#[test]
+#[ignore = "requires Docker, network access, and a Rust toolchain"]
+fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(SandboxImageSource::linux_micro())
+        .workspace_reinitialization_interval(Duration::ZERO)
+        .build()?;
+
+    let maintenance = environment.perform_maintenance()?;
+    assert!(maintenance.workspace_refreshed);
+    assert!(
+        build_local(&mut environment, "build-std")?
+            .into_inner()
+            .build_succeeded()
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires Docker, network access, and a Rust toolchain"]
+fn refreshes_workspace_after_interval() -> Result<()> {
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(SandboxImageSource::linux_micro())
+        .workspace_reinitialization_interval(Duration::from_secs(1))
+        .build()?;
+
+    assert!(
+        build_local(&mut environment, "hello-world")?
+            .into_inner()
+            .build_succeeded()
+    );
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(environment.perform_maintenance()?.workspace_refreshed);
+    assert!(
+        build_local(&mut environment, "hello-world")?
+            .into_inner()
+            .build_succeeded()
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires Docker and a Rust toolchain"]
+fn recreated_environment_uses_existing_toolchain() -> Result<()> {
+    let workspace = test_workspace();
+    let old_version = {
+        let environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
+            .fast_init(true)
+            .validate_host_resources(false)
+            .sandbox_image(SandboxImageSource::linux_micro())
+            .build()?;
+        environment.rustc_version()?
+    };
+
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(SandboxImageSource::linux_micro())
+        .build()?;
+    let fixture = fixture("hello-world");
+    let krate = rustwide::Crate::local(&fixture);
+    assert!(
+        environment
+            .release(&krate)
+            .run(|build| build.build_docs())?
+            .into_inner()
+            .build_succeeded()
+    );
+    assert_eq!(old_version, environment.rustc_version()?);
+    Ok(())
+}

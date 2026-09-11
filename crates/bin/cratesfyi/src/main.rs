@@ -11,7 +11,7 @@ fn main() {
     // through rustwide.
     let logging_config =
         docs_rs_logging::Config::from_environment().expect("error loading logging config");
-    docs_rs_builder::logging::init(&logging_config);
+    docs_rs_rustwide::logging::init(logging_config.log_build_logs);
     let guard =
         docs_rs_logging::init_with_config(&logging_config).expect("error initializing logging");
 

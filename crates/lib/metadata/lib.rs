@@ -100,7 +100,7 @@ pub enum MetadataError {
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
     /// Whether the current crate is a proc-macro (used by docs.rs to hack around cargo bugs).
