@@ -19,8 +19,7 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, TargetBuildResult,
-    utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, TargetBuildResult, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -81,8 +80,6 @@ impl RustwideBuilder {
             get_configured_toolchain(&mut conn).await
         })?;
 
-        let default_limits = Limits::from_config(&config.build_limits);
-
         let environment = BuildEnvironment::builder(config.rustwide_workspace.as_path())
             .toolchain(toolchain)
             .running_inside_docker(config.inside_docker)
@@ -95,7 +92,7 @@ impl RustwideBuilder {
             .include_default_targets(config.include_default_targets)
             .validate_host_resources(!config.disable_memory_limit)
             .maybe_compiler_metrics_collection_path(config.compiler_metrics_collection_path.clone())
-            .default_limits(default_limits)
+            .default_limits(Limits::from_config(&config.build_limits))
             .build()?;
 
         Ok(RustwideBuilder {
