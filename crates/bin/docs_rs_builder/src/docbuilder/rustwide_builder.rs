@@ -19,7 +19,7 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, SandboxImageSource, TargetBuildResult,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, TargetBuildResult,
     utils::copy_dir_all,
 };
 use docs_rs_storage::{

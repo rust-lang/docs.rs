@@ -19,7 +19,7 @@ pub fn copy_dir_all(
         let entry = entry?;
         let filename = entry.file_name();
         if entry.file_type()?.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(filename), &mut on_file)?;
+            copy_dir_all(entry.path(), dst.join(filename), &mut on_file)?;
         } else {
             let destination_path = dst.join(filename);
             fs::copy(entry.path(), &destination_path)?;
