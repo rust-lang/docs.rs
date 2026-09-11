@@ -5,7 +5,7 @@ use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
 use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
-use docs_rs_utils::{Handle, retry};
+use docs_rs_utils::Handle;
 use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::{error, info_span};
@@ -82,7 +82,7 @@ pub(crate) fn build_next_queue_package(
 
         processed = true;
 
-        if let Err(err) = retry(|| builder.perform_maintenance(), 3) {
+        if let Err(err) = builder.perform_maintenance() {
             error!(
                 ?err,
                 "Builder maintenance failed after retries, locking queue"

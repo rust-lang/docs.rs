@@ -27,7 +27,7 @@ use docs_rs_storage::{
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
-use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, retry, spawn_blocking};
+use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
 use regex::Regex;
 use rustwide::{Crate, Toolchain};
@@ -125,7 +125,9 @@ impl RustwideBuilder {
     #[instrument(skip_all)]
     pub fn update_toolchain_and_add_essential_files(&mut self) -> Result<()> {
         self.sync_configured_toolchain()?;
-        let updated = retry(|| self.environment.update_toolchain(), 3)
+        let updated = self
+            .environment
+            .update_toolchain()
             .context("downloading new toolchain failed")?;
 
         debug!(updated, "toolchain update check complete");
@@ -186,13 +188,14 @@ impl RustwideBuilder {
         let rustc_version = self.environment.rustc_version()?;
         info!("building a dummy crate to get essential files");
         let rustdoc_static_dir = self.environment.build_essential_files()?.into_inner();
-        self.runtime.block_on(
-            self.storage
-                .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &rustdoc_static_dir),
-        )?;
+
         self.runtime.block_on(async {
+            self.storage
+                .store_all(RUSTDOC_STATIC_STORAGE_PREFIX, &rustdoc_static_dir)
+                .await?;
+
             let mut conn = self.db.get_async().await?;
-            set_config(&mut conn, ConfigName::RustcVersion, rustc_version).await
+            set_config(&mut conn, ConfigName::RustcVersion, &rustc_version).await
         })?;
         Ok(())
     }

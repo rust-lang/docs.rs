@@ -83,6 +83,7 @@ impl WorkspaceConfiguration {
             sandbox_image = ?self.sandbox_image,
             "initializing rustwide workspace"
         );
+
         let mut builder = WorkspaceBuilder::new(&self.path, APP_USER_AGENT)
             .running_inside_docker(self.running_inside_docker)
             .fast_init(self.fast_init);
@@ -92,7 +93,8 @@ impl WorkspaceConfiguration {
         }
 
         let workspace = builder.init()?;
-        workspace.purge_all_build_dirs()?;
+
+        retry(|| workspace.purge_all_build_dirs(), 3)?;
         debug!("rustwide workspace initialized");
         Ok(workspace)
     }
@@ -236,6 +238,10 @@ impl BuildEnvironment {
     /// The workspace is refreshed and the toolchain is checked for updates only
     /// when their independently configured intervals have elapsed. The first
     /// maintenance call always checks for a toolchain update.
+    /// Workspace initialization, toolchain installation, target changes, and cache
+    /// cleanup retry their own failing operations. Callers should propagate a
+    /// maintenance failure rather than retry the entire sequence, which may have
+    /// already changed the workspace or toolchain.
     /// Refreshing a workspace configured with [`SandboxImageSource::Remote`]
     /// resolves and pulls the image again, allowing a long-running builder to
     /// pick up newly published versions of the same remote image tag.
@@ -341,7 +347,7 @@ impl BuildEnvironment {
         }
 
         debug!("installing toolchain");
-        self.toolchain.install(self.workspace())?;
+        retry(|| self.toolchain.install(self.workspace()), 3)?;
         debug!("toolchain installed");
         Ok(true)
     }
@@ -378,7 +384,7 @@ impl BuildEnvironment {
     pub fn update_toolchain(&mut self) -> Result<bool> {
         if self.toolchain.as_ci().is_some() {
             debug!("reinstalling CI toolchain");
-            self.toolchain.install(self.workspace())?;
+            retry(|| self.toolchain.install(self.workspace()), 3)?;
             self.purge_caches()?;
             self.toolchain_last_update_check = Some(Instant::now());
             return Ok(true);
@@ -405,12 +411,12 @@ impl BuildEnvironment {
         for target in &installed_targets {
             if !managed_targets.contains(target) {
                 debug!(target, "removing unmanaged target before toolchain update");
-                self.toolchain.remove_target(self.workspace(), target)?;
+                retry(|| self.toolchain.remove_target(self.workspace(), target), 3)?;
             }
         }
 
         debug!(old_version, "installing or updating toolchain");
-        self.toolchain.install(self.workspace())?;
+        retry(|| self.toolchain.install(self.workspace()), 3)?;
         self.ensure_toolchain_ready()?;
 
         let new_version = self.rustc_version()?;
@@ -599,7 +605,7 @@ impl BuildEnvironment {
         }
         for target in targets_to_install {
             debug!(target, "installing required toolchain target");
-            self.toolchain.add_target(self.workspace(), &target)?;
+            retry(|| self.toolchain.add_target(self.workspace(), &target), 3)?;
         }
         Ok(())
     }
