@@ -1,6 +1,6 @@
 use crate::{
-    PathNotFoundError, blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry,
-    types::FileRange, utils::file_list::walk_dir_recursive,
+    blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry, types::FileRange,
+    utils::file_list::walk_dir_recursive,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
@@ -16,13 +16,13 @@ use opentelemetry::{
 };
 use sqlx::{ConnectOptions as _, Connection as _, QueryBuilder, Row as _, Sqlite};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     future::Future,
     path::{Path, PathBuf},
     pin::Pin,
     sync::{
-        Arc,
+        Arc, Mutex as StdMutex,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -30,8 +30,8 @@ use std::{
 use tokio::{
     fs,
     io::{self, AsyncRead, AsyncSeek, AsyncWriteExt as _},
-    sync::mpsc,
-    task::JoinHandle,
+    sync::{Mutex, OwnedMutexGuard, mpsc},
+    task::{JoinHandle, JoinSet},
 };
 use tokio_util::io::SyncIoBridge;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -172,6 +172,53 @@ impl Entry {
 
 type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 
+/// Only active operations and waiters retain a lock, not every cached file.
+#[derive(Default)]
+struct PathLocks(StdMutex<HashMap<PathBuf, (Arc<Mutex<()>>, usize)>>);
+
+struct PathGuard {
+    registry: Arc<PathLocks>,
+    path: PathBuf,
+    guard: Option<OwnedMutexGuard<()>>,
+}
+
+impl PathLocks {
+    async fn lock(self: &Arc<Self>, path: &Path) -> Arc<PathGuard> {
+        let lock = {
+            let mut locks = self.0.lock().unwrap();
+            let (lock, users) = locks.entry(path.to_owned()).or_default();
+            *users += 1;
+            lock.clone()
+        };
+        // Construct the lease before awaiting so cancellation also unregisters it.
+        let mut lease = PathGuard {
+            registry: self.clone(),
+            path: path.to_owned(),
+            guard: None,
+        };
+        lease.guard = Some(lock.lock_owned().await);
+        Arc::new(lease)
+    }
+}
+
+impl Drop for PathGuard {
+    fn drop(&mut self) {
+        drop(self.guard.take());
+        let mut locks = self.registry.0.lock().unwrap();
+        let (_, users) = locks.get_mut(&self.path).unwrap();
+        *users -= 1;
+        if *users == 0 {
+            locks.remove(&self.path);
+        }
+    }
+}
+
+enum Cleanup {
+    Evicted(Arc<PathBuf>),
+    #[cfg(test)]
+    Flush(tokio::sync::oneshot::Sender<()>),
+}
+
 /// Local archive index cache.
 ///
 /// Note: "last access" times for cache entries reset on each server startup
@@ -190,8 +237,11 @@ type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 ///   marginal benefit.
 pub(crate) struct Cache {
     config: Arc<ArchiveIndexCacheConfig>,
-    /// Tracks locally cached archive indices and coordinates their initialization & invalidation.
+    /// Tracks size and recency; path locks coordinate file access and initialization.
     manager: CacheManager,
+    path_locks: Arc<PathLocks>,
+    #[cfg(test)]
+    cleanup: mpsc::UnboundedSender<Cleanup>,
     metrics: Arc<Metrics>,
     background_tasks: Vec<JoinHandle<()>>,
 }
@@ -216,8 +266,9 @@ impl Cache {
 
         cache.background_tasks.push(tokio::spawn({
             let manager = cache.manager.clone();
+            let path_locks = cache.path_locks.clone();
             async move {
-                if let Err(err) = Self::backfill_cache_manager(config, manager).await {
+                if let Err(err) = Self::backfill_cache_manager(config, manager, path_locks).await {
                     error!(?err, "failed to backfill archive index cache manager");
                 }
             }
@@ -236,7 +287,7 @@ impl Cache {
     ) -> Result<Self> {
         let cache = Self::new_inner(config.clone(), meter_provider).await?;
 
-        Self::backfill_cache_manager(config, cache.manager.clone())
+        Self::backfill_cache_manager(config, cache.manager.clone(), cache.path_locks.clone())
             .await
             .context("failed to backfill archive index cache manager")?;
 
@@ -253,6 +304,9 @@ impl Cache {
 
         let metrics = Arc::new(Metrics::new(meter_provider));
         let metrics_for_eviction = metrics.clone();
+        let path_locks = Arc::new(PathLocks::default());
+        let (cleanup, mut cleanup_rx) = mpsc::unbounded_channel();
+        let cleanup_for_eviction = cleanup.clone();
         let manager = CacheManager::builder()
             .initial_capacity(config.expected_count)
             // Time to idle (TTI): A cached entry will be expired after
@@ -269,42 +323,67 @@ impl Cache {
             .max_capacity(config.max_size_mb * 1024)
             // the eviction listener is called when moka evicts a cache entry.
             // In this case we want to delete the corresponding local files.
-            .async_eviction_listener(move |path, entry, reason| {
-                let path = path.to_path_buf();
+            .eviction_listener(move |path, entry, reason| {
                 let metrics = metrics_for_eviction.clone();
-                Box::pin(async move {
-                    let evicted_bytes = entry.file_size_kib as u64 * 1024;
-                    let reason_attr = [KeyValue::new("cause", format!("{reason:?}"))];
+                let evicted_bytes = entry.file_size_kib as u64 * 1024;
+                let reason_attr = [KeyValue::new("cause", format!("{reason:?}"))];
 
-                    metrics.evicted_entries.add(1, &reason_attr);
-                    metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
-                    metrics
-                        .evicted_entry_size
-                        .record(evicted_bytes, &reason_attr);
+                metrics.evicted_entries.add(1, &reason_attr);
+                metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
+                metrics
+                    .evicted_entry_size
+                    .record(evicted_bytes, &reason_attr);
 
-                    // Explicit invalidation leaves file cleanup to the caller
-                    // (`purge` or the repair initializer in `find_index_inner`).
-                    // Deleting again could remove a newly downloaded replacement.
-                    if reason == RemovalCause::Explicit {
-                        return;
-                    }
+                // Explicit invalidation leaves file cleanup to the caller
+                // (`purge` or repair in `find_index_inner`).
+                // Deleting again could remove a newly downloaded replacement.
+                if reason == RemovalCause::Explicit {
+                    return;
+                }
 
-                    trace!(
-                        ?path,
-                        ?reason_attr,
-                        "evicting local archive index file from cache"
-                    );
-                    if let Err(err) = Self::remove_local_index(&path).await {
-                        error!(
-                            ?err,
-                            ?path,
-                            ?reason,
-                            "failed to remove local archive index file on cache eviction"
-                        );
-                    }
-                })
+                trace!(
+                    ?path,
+                    ?reason_attr,
+                    "evicting local archive index file from cache"
+                );
+                // Never wait for a path lock here: the caller may hold it
+                // while Moka invokes the listener during an insert.
+                let _ = cleanup_for_eviction.send(Cleanup::Evicted(path));
             })
             .build();
+
+        let cleanup_task = tokio::spawn({
+            let manager = manager.clone();
+            let path_locks = path_locks.clone();
+            async move {
+                let mut tasks = JoinSet::new();
+                while let Some(message) = cleanup_rx.recv().await {
+                    match message {
+                        Cleanup::Evicted(path) => {
+                            // Bound active cleanup work; unrelated paths can be
+                            // reclaimed while another path is being downloaded.
+                            if tasks.len() >= 16 {
+                                let _ = tasks.join_next().await;
+                            }
+                            let manager = manager.clone();
+                            let path_locks = path_locks.clone();
+                            tasks.spawn(async move {
+                                if let Err(err) =
+                                    Self::cleanup_evicted(&manager, &path_locks, &path).await
+                                {
+                                    error!(?err, ?path, "failed to remove evicted archive index");
+                                }
+                            });
+                        }
+                        #[cfg(test)]
+                        Cleanup::Flush(done) => {
+                            while tasks.join_next().await.is_some() {}
+                            let _ = done.send(());
+                        }
+                    }
+                }
+            }
+        });
 
         let handle = tokio::spawn({
             let manager = manager.clone();
@@ -333,9 +412,12 @@ impl Cache {
 
         let cache = Self {
             manager,
+            path_locks,
+            #[cfg(test)]
+            cleanup,
             config,
             metrics,
-            background_tasks: vec![handle],
+            background_tasks: vec![handle, cleanup_task],
         };
         Ok(cache)
     }
@@ -344,12 +426,20 @@ impl Cache {
     #[cfg(test)]
     async fn flush(&self) -> Result<()> {
         self.manager.run_pending_tasks().await;
+        let (done, completed) = tokio::sync::oneshot::channel();
+        self.cleanup.send(Cleanup::Flush(done))?;
+        completed.await?;
         Ok(())
     }
 
     #[cfg(test)]
     async fn backfill(&self) -> Result<()> {
-        Self::backfill_cache_manager(self.config.clone(), self.manager.clone()).await
+        Self::backfill_cache_manager(
+            self.config.clone(),
+            self.manager.clone(),
+            self.path_locks.clone(),
+        )
+        .await
     }
 
     /// backfill the in memory cache management based on the local files that are already
@@ -366,6 +456,7 @@ impl Cache {
     async fn backfill_cache_manager(
         config: Arc<ArchiveIndexCacheConfig>,
         manager: CacheManager,
+        path_locks: Arc<PathLocks>,
     ) -> Result<()> {
         info!(path=%config.path.display(), "starting cache-manager backfill from local directory");
         let inserted = Arc::new(AtomicU64::new(0));
@@ -375,16 +466,22 @@ impl Cache {
             .try_for_each_concurrent(Some(4), |item| {
                 let manager = manager.clone();
                 let inserted = inserted.clone();
+                let path_locks = path_locks.clone();
                 async move {
                     let path = item.absolute;
                     if path.extension().and_then(|ext| ext.to_str())
                         == Some(ARCHIVE_INDEX_FILE_EXTENSION)
                     {
+                        let _guard = path_locks.lock(&path).await;
+                        // The directory walk may have observed a file before cleanup.
+                        let metadata = match fs::metadata(&path).await {
+                            Ok(metadata) => metadata,
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+                            Err(err) => return Err(err.into()),
+                        };
                         let entry = manager
                             .entry(path)
-                            .or_insert_with(async {
-                                Arc::new(Entry::from_size(item.metadata.len()))
-                            })
+                            .or_insert_with(async { Arc::new(Entry::from_size(metadata.len())) })
                             .await;
 
                         if entry.is_fresh() {
@@ -403,20 +500,39 @@ impl Cache {
         Ok(())
     }
 
-    async fn remove_local_index(path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
-        for ext in &["wal", "shm"] {
-            let to_delete = path.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-{ext}"));
-            let _ = fs::remove_file(&to_delete).await;
+    async fn cleanup_evicted(
+        manager: &CacheManager,
+        path_locks: &Arc<PathLocks>,
+        path: &Path,
+    ) -> Result<()> {
+        let guard = path_locks.lock(path).await;
+        // Unlike get(), contains_key() does not refresh recency/frequency.
+        // Requests publish and register replacements while holding this lock.
+        if !manager.contains_key(path) {
+            Self::remove_local_index(&guard).await?;
         }
+        Ok(())
+    }
 
-        if let Err(err) = fs::remove_file(&path).await
-            && err.kind() != io::ErrorKind::NotFound
-        {
-            Err(err.into())
-        } else {
+    async fn remove_local_index(guard: &Arc<PathGuard>) -> Result<()> {
+        // Filesystem work can outlive a cancelled async caller. Keep the lock
+        // inside the blocking operation until its last unlink has completed.
+        let guard = guard.clone();
+        spawn_blocking(move || {
+            let path = &guard.path;
+            for ext in &["wal", "shm"] {
+                let to_delete =
+                    path.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-{ext}"));
+                let _ = std::fs::remove_file(&to_delete);
+            }
+            if let Err(err) = std::fs::remove_file(path)
+                && err.kind() != io::ErrorKind::NotFound
+            {
+                return Err(err.into());
+            }
             Ok(())
-        }
+        })
+        .await
     }
 
     fn local_index_path(&self, archive_path: &str, latest_build_id: Option<BuildId>) -> PathBuf {
@@ -433,7 +549,8 @@ impl Cache {
         latest_build_id: Option<BuildId>,
     ) -> Result<()> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
-        Self::remove_local_index(&local_index_path).await?;
+        let guard = self.path_locks.lock(&local_index_path).await;
+        Self::remove_local_index(&guard).await?;
         self.manager.invalidate(&local_index_path).await;
 
         Ok(())
@@ -488,95 +605,34 @@ impl Cache {
         downloader: &D,
     ) -> Result<Index> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
+        let guard = self.path_locks.lock(&local_index_path).await;
 
-        // fast path: try to use whatever is there, no locking
-        let force_redownload = match Index::open(&local_index_path).await {
-            Ok(index) => {
-                // Keep moka's recency/frequency view in sync with successful fast-path
-                // file lookups so TTI and admission decisions reflect real usage.
-                if self.manager.get(&local_index_path).await.is_none() {
-                    let entry_path = local_index_path.clone();
-                    self.manager
-                        .entry(local_index_path.clone())
-                        .or_insert_with(
-                            async move { Arc::new(Entry::from_path(&entry_path).await) },
-                        )
-                        .await;
-                }
-
-                return Ok(index);
-            }
+        let mut index = match Index::open(&local_index_path).await {
+            Ok(index) => index,
             Err(err) => {
-                let force_redownload = !err.is::<PathNotFoundError>();
                 debug!(?err, "archive index open failed, will try repair.");
-                force_redownload
+                self.manager.invalidate(&local_index_path).await;
+                Self::remove_local_index(&guard).await?;
+                let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+                self.download_archive_index(
+                    downloader,
+                    &local_index_path,
+                    &remote_index_path,
+                    &guard,
+                )
+                .await?;
+                Index::open(&local_index_path).await?
             }
         };
 
-        // An existing manager entry would skip the initializer even though its
-        // file could not be opened. Invalidate it so this attempt can repair it.
-        // Explicit invalidation does not delete files; cleanup and download are
-        // performed by the coalesced initializer below.
-        self.manager.invalidate(&local_index_path).await;
-
-        let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-
-        // moka will coalesce all concurrent calls to try_get_with_by_ref with the same key
-        // into a single call to the async closure.
-        // https://docs.rs/moka/0.12.14/moka/future/struct.Cache.html#concurrent-calls-on-the-same-key
-        // So we don't need any locking here to prevent multiple downloads for the same
-        // missing archive index.
-        self.manager
-            .try_get_with_by_ref(&local_index_path, async {
-                // The initializer's filesystem operations can still overlap eviction
-                // cleanup. The final open validates the file after initialization;
-                // the caller's bounded retry loop handles any remaining race.
-                let entry = if !force_redownload && fs::try_exists(&local_index_path).await? {
-                    // after server startup we might have local indexes that don't
-                    // yet exist in our cache manager.
-                    // So we only need to download if the file doesn't exist.
-                    Entry::from_path(&local_index_path).await
-                } else {
-                    if force_redownload {
-                        Self::remove_local_index(&local_index_path).await?;
-                    }
-                    Entry::from_size(
-                        self.download_archive_index(
-                            downloader,
-                            &local_index_path,
-                            &remote_index_path,
-                        )
-                        .await?,
-                    )
-                };
-                Ok::<_, anyhow::Error>(Arc::new(entry))
-            })
-            .await
-            .map_err(|arc_err: Arc<anyhow::Error>| {
-                // We can't convert this Arc<Error> into the inner error type.
-                // See https://github.com/moka-rs/moka/issues/497
-                // But since some callers are specifically checking
-                // ::is<PathNotFoundError> to differentiate other errors from
-                // the "not found" case, we want to preserve that information
-                // if it was the cause of the error.
-                //
-                // This mean all error types that we later want to use with ::is<> or
-                // ::downcast<> have to be mentioned here.
-                //
-                // While we could also migrate to a custom enum error type, this would
-                // only be really nice when the whole storage lib uses is. Otherwise
-                // we'll end up with some hardcoded conversions again.
-                // So I can leave it as-is for now.
-                if arc_err.is::<PathNotFoundError>() {
-                    anyhow!(PathNotFoundError)
-                } else {
-                    anyhow!(arc_err)
-                }
-            })?;
-
-        // Final open for this retry attempt. If it fails, the caller's retry loop
-        // purges the cache entry and tries again.
-        Index::open(local_index_path).await
+        // The path lock coalesces downloads and protects publication through
+        // registration. Cleanup cannot delete this file while the Index is alive.
+        if self.manager.get(&local_index_path).await.is_none() {
+            let entry = Arc::new(Entry::from_path(&local_index_path).await);
+            self.manager.insert(local_index_path, entry).await;
+        }
+        index._path_guard = Some(guard);
+        Ok(index)
     }
 
     /// Find the file metadata needed to fetch a certain path inside a remote archive.
@@ -623,12 +679,14 @@ impl Cache {
         }
     }
 
-    #[instrument(skip(self, downloader))]
-    pub(crate) async fn download_archive_index(
+    /// Caller must hold the path lock through publication and cache registration.
+    #[instrument(skip(self, downloader, guard))]
+    async fn download_archive_index(
         &self,
         downloader: &impl Downloader,
         local_index_path: &Path,
         remote_index_path: &str,
+        guard: &Arc<PathGuard>,
     ) -> Result<u64> {
         let parent = local_index_path
             .parent()
@@ -655,7 +713,13 @@ impl Cache {
 
         // Publish atomically.
         // Will replace any existing file.
-        fs::rename(&temp_path, local_index_path).await?;
+        let publish_guard = guard.clone();
+        let from = temp_path.to_path_buf();
+        spawn_blocking(move || {
+            std::fs::rename(from, &publish_guard.path)?;
+            Ok(())
+        })
+        .await?;
 
         temp_path.disable_cleanup(true);
 
@@ -817,6 +881,8 @@ where
 
 pub struct Index {
     conn: sqlx::SqliteConnection,
+    // Retain protection for callers that stream queries after find_index returns.
+    _path_guard: Option<Arc<PathGuard>>,
 }
 
 impl Index {
@@ -826,7 +892,10 @@ impl Index {
     {
         let archive_index_path = archive_index_path.as_ref().to_path_buf();
         let conn = sqlite_open(&archive_index_path).await?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            _path_guard: None,
+        })
     }
 
     #[instrument(skip(self))]
@@ -1501,6 +1570,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn queued_eviction_preserves_reinserted_file() -> Result<()> {
+        let cache = test_cache().await?;
+        let path = cache.local_index_path("reinserted.zip", Some(BuildId(7)));
+        let guard = cache.path_locks.lock(&path).await;
+        fs::write(&path, b"old index").await?;
+        // An oversized entry guarantees a real capacity eviction notification.
+        cache
+            .manager
+            .insert(
+                path.clone(),
+                Arc::new(Entry::from_size(
+                    (cache.config.max_size_mb + 1) * 1024 * 1024,
+                )),
+            )
+            .await;
+        cache.manager.run_pending_tasks().await;
+        assert!(!cache.manager.contains_key(&path));
+
+        // Cleanup is queued but cannot run while publication holds the lock.
+        fs::write(&path, b"replacement").await?;
+        cache
+            .manager
+            .insert(path.clone(), Arc::new(Entry::from_size(11)))
+            .await;
+        drop(guard);
+        tokio::time::timeout(Duration::from_secs(5), cache.flush()).await??;
+        assert_eq!(fs::read(&path).await?, b"replacement");
+        assert!(cache.manager.contains_key(&path));
+        assert!(cache.path_locks.0.lock().unwrap().is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn active_index_blocks_cleanup_but_not_other_paths() -> Result<()> {
+        let cache = test_cache().await?;
+        let path = cache.local_index_path("active.zip", None);
+        let mut downloader = FakeDownloader::new();
+        let bytes = create_index_bytes(1).await?;
+        downloader
+            .indices
+            .insert("active.zip.index".into(), bytes.clone());
+        downloader.indices.insert("other.zip.index".into(), bytes);
+        let mut index = cache.find_index("active.zip", None, &downloader).await?;
+        cache.manager.invalidate(&path).await;
+        // Simulate an eviction queued while the returned Index is still in use.
+        cache
+            .cleanup
+            .send(Cleanup::Evicted(Arc::new(path.clone())))?;
+        let mut cleanup = Box::pin(cache.flush());
+        assert!(futures_util::poll!(cleanup.as_mut()).is_pending());
+        assert!(index.find("testfile0").await?.is_some());
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(5),
+                cache.find("other.zip", None, "testfile0", &downloader)
+            )
+            .await??
+            .is_some()
+        );
+        assert!(fs::try_exists(&path).await?);
+        drop(index);
+        tokio::time::timeout(Duration::from_secs(5), cleanup).await??;
+        assert!(!fs::try_exists(&path).await?);
+        assert!(cache.path_locks.0.lock().unwrap().is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn path_locks_release_cancelled_waiters() {
+        let locks = Arc::new(PathLocks::default());
+        let path = Path::new("index");
+        let guard = locks.lock(path).await;
+        let mut waiter = Box::pin(locks.lock(path));
+        assert!(futures_util::poll!(waiter.as_mut()).is_pending());
+        assert_eq!(locks.0.lock().unwrap().get(path).unwrap().1, 2);
+        drop(waiter);
+        assert_eq!(locks.0.lock().unwrap().get(path).unwrap().1, 1);
+        drop(guard);
+        assert!(locks.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn manager_capacity_eviction_removes_index_wal_and_shm() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("listener-remove.zip", Some(BuildId(17)));
@@ -1746,6 +1897,7 @@ mod tests {
     async fn download_archive_index_overwrites_existing_file() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("test.zip", Some(BuildId(7)));
+        let _guard = cache.path_locks.lock(&local_index).await;
         fs::create_dir_all(local_index.parent().unwrap()).await?;
         fs::write(&local_index, b"old").await?;
 
@@ -1756,7 +1908,7 @@ mod tests {
             .insert(remote_index_path.to_string(), create_index_bytes(1).await?);
 
         cache
-            .download_archive_index(&downloader, &local_index, remote_index_path)
+            .download_archive_index(&downloader, &local_index, remote_index_path, &_guard)
             .await?;
 
         let written = fs::read(&local_index).await?;
