@@ -1,15 +1,16 @@
 use crate::{
-    PathNotFoundError, blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry,
-    types::FileRange, utils::file_list::walk_dir_recursive,
+    blob::StreamingBlob, config::ArchiveIndexCacheConfig, file::FolderEntry, types::FileRange,
+    utils::file_list::walk_dir_recursive,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
+use dashmap::DashMap;
 use docs_rs_mimes::detect_mime;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{Stream, TryStreamExt as _};
-use moka::future::Cache as MokaCache;
+use moka::{future::Cache as MokaCache, notification::RemovalCause};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Gauge, Histogram},
@@ -30,8 +31,8 @@ use std::{
 use tokio::{
     fs,
     io::{self, AsyncRead, AsyncSeek, AsyncWriteExt as _},
-    sync::mpsc,
-    task::JoinHandle,
+    sync::{Mutex, OwnedMutexGuard, mpsc},
+    task::{JoinHandle, JoinSet},
 };
 use tokio_util::io::SyncIoBridge;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -40,8 +41,6 @@ pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 /// dummy size we assume in case of errors
 const DUMMY_FILE_SIZE: u64 = 1024 * 1024; // 1 MiB
-/// self-repair attempts
-const REPAIR_ATTEMPTS: usize = 5;
 
 #[derive(Debug)]
 struct Metrics {
@@ -172,6 +171,53 @@ impl Entry {
 
 type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 
+/// Only active operations and waiters retain a lock, not every cached file.
+#[derive(Default)]
+struct PathLocks(DashMap<PathBuf, Arc<Mutex<()>>>);
+
+impl PathLocks {
+    async fn lock(self: &Arc<Self>, path: &Path) -> Arc<PathGuard> {
+        let lock = {
+            let entry = self.0.entry(path.to_owned()).or_default();
+            Arc::clone(entry.value())
+        };
+        // Construct the lease before awaiting so cancellation also unregisters it.
+        let mut lease = PathGuard {
+            registry: self.clone(),
+            path: path.to_owned(),
+            guard: None,
+        };
+        lease.guard = Some(lock.lock_owned().await);
+        Arc::new(lease)
+    }
+}
+
+/// a small guard, holding the mutex/lock for a single path.
+/// Will remove itself from the registry / dashmap when the
+/// last lock is given back.
+struct PathGuard {
+    registry: Arc<PathLocks>,
+    path: PathBuf,
+    guard: Option<OwnedMutexGuard<()>>,
+}
+
+impl Drop for PathGuard {
+    fn drop(&mut self) {
+        drop(self.guard.take());
+        // The registry owns one reference; waiters and owned guards own the
+        // others. Check under the same shard lock used to clone on acquisition.
+        self.registry
+            .0
+            .remove_if(&self.path, |_, lock| Arc::strong_count(lock) == 1);
+    }
+}
+
+enum Cleanup {
+    Evicted(Arc<PathBuf>),
+    #[cfg(test)]
+    Flush(tokio::sync::oneshot::Sender<()>),
+}
+
 /// Local archive index cache.
 ///
 /// Note: "last access" times for cache entries reset on each server startup
@@ -190,8 +236,11 @@ type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 ///   marginal benefit.
 pub(crate) struct Cache {
     config: Arc<ArchiveIndexCacheConfig>,
-    /// Tracks locally cached archive indices and coordinates their initialization & invalidation.
+    /// Tracks size and recency; path locks coordinate file access and initialization.
     manager: CacheManager,
+    path_locks: Arc<PathLocks>,
+    #[cfg(test)]
+    cleanup: mpsc::UnboundedSender<Cleanup>,
     metrics: Arc<Metrics>,
     background_tasks: Vec<JoinHandle<()>>,
 }
@@ -216,8 +265,9 @@ impl Cache {
 
         cache.background_tasks.push(tokio::spawn({
             let manager = cache.manager.clone();
+            let path_locks = cache.path_locks.clone();
             async move {
-                if let Err(err) = Self::backfill_cache_manager(config, manager).await {
+                if let Err(err) = Self::backfill_cache_manager(config, manager, path_locks).await {
                     error!(?err, "failed to backfill archive index cache manager");
                 }
             }
@@ -236,7 +286,7 @@ impl Cache {
     ) -> Result<Self> {
         let cache = Self::new_inner(config.clone(), meter_provider).await?;
 
-        Self::backfill_cache_manager(config, cache.manager.clone())
+        Self::backfill_cache_manager(config, cache.manager.clone(), cache.path_locks.clone())
             .await
             .context("failed to backfill archive index cache manager")?;
 
@@ -253,6 +303,9 @@ impl Cache {
 
         let metrics = Arc::new(Metrics::new(meter_provider));
         let metrics_for_eviction = metrics.clone();
+        let path_locks = Arc::new(PathLocks::default());
+        let (cleanup, mut cleanup_rx) = mpsc::unbounded_channel();
+        let cleanup_for_eviction = cleanup.clone();
         let manager = CacheManager::builder()
             .initial_capacity(config.expected_count)
             // Time to idle (TTI): A cached entry will be expired after
@@ -270,38 +323,66 @@ impl Cache {
             // the eviction listener is called when moka evicts a cache entry.
             // In this case we want to delete the corresponding local files.
             .eviction_listener(move |path, entry, reason| {
-                let path = path.to_path_buf();
                 let metrics = metrics_for_eviction.clone();
-                // The spawned task means file deletion is deferred. See the
-                // "benign race with the eviction listener" comment in `find_index_inner`
-                // for why this is acceptable.
-                tokio::spawn(async move {
-                    let reason = format!("{reason:?}");
-                    let evicted_bytes = entry.file_size_kib as u64 * 1024;
-                    let reason_attr = [KeyValue::new("cause", reason.clone())];
+                let evicted_bytes = entry.file_size_kib as u64 * 1024;
+                let reason_attr = [KeyValue::new("cause", format!("{reason:?}"))];
 
-                    metrics.evicted_entries.add(1, &reason_attr);
-                    metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
-                    metrics
-                        .evicted_entry_size
-                        .record(evicted_bytes, &reason_attr);
+                metrics.evicted_entries.add(1, &reason_attr);
+                metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
+                metrics
+                    .evicted_entry_size
+                    .record(evicted_bytes, &reason_attr);
 
-                    trace!(
-                        ?path,
-                        ?reason_attr,
-                        "evicting local archive index file from cache"
-                    );
-                    if let Err(err) = Self::remove_local_index(&path).await {
-                        error!(
-                            ?err,
-                            ?path,
-                            ?reason,
-                            "failed to remove local archive index file on cache eviction"
-                        );
-                    }
-                });
+                // Explicit invalidation leaves file cleanup to the caller
+                // (`purge` or repair in `find_index_inner`).
+                // Deleting again could remove a newly downloaded replacement.
+                if reason == RemovalCause::Explicit {
+                    return;
+                }
+
+                trace!(
+                    ?path,
+                    ?reason_attr,
+                    "evicting local archive index file from cache"
+                );
+                // Never wait for a path lock here: the caller may hold it
+                // while Moka invokes the listener during an insert.
+                let _ = cleanup_for_eviction.send(Cleanup::Evicted(path));
             })
             .build();
+
+        let cleanup_task = tokio::spawn({
+            let manager = manager.clone();
+            let path_locks = path_locks.clone();
+            async move {
+                let mut tasks = JoinSet::new();
+                while let Some(message) = cleanup_rx.recv().await {
+                    match message {
+                        Cleanup::Evicted(path) => {
+                            // Bound active cleanup work; unrelated paths can be
+                            // reclaimed while another path is being downloaded.
+                            if tasks.len() >= 16 {
+                                let _ = tasks.join_next().await;
+                            }
+                            let manager = manager.clone();
+                            let path_locks = path_locks.clone();
+                            tasks.spawn(async move {
+                                if let Err(err) =
+                                    Self::cleanup_evicted(&manager, &path_locks, &path).await
+                                {
+                                    error!(?err, ?path, "failed to remove evicted archive index");
+                                }
+                            });
+                        }
+                        #[cfg(test)]
+                        Cleanup::Flush(done) => {
+                            while tasks.join_next().await.is_some() {}
+                            let _ = done.send(());
+                        }
+                    }
+                }
+            }
+        });
 
         let handle = tokio::spawn({
             let manager = manager.clone();
@@ -330,9 +411,12 @@ impl Cache {
 
         let cache = Self {
             manager,
+            path_locks,
+            #[cfg(test)]
+            cleanup,
             config,
             metrics,
-            background_tasks: vec![handle],
+            background_tasks: vec![handle, cleanup_task],
         };
         Ok(cache)
     }
@@ -341,12 +425,20 @@ impl Cache {
     #[cfg(test)]
     async fn flush(&self) -> Result<()> {
         self.manager.run_pending_tasks().await;
+        let (done, completed) = tokio::sync::oneshot::channel();
+        self.cleanup.send(Cleanup::Flush(done))?;
+        completed.await?;
         Ok(())
     }
 
     #[cfg(test)]
     async fn backfill(&self) -> Result<()> {
-        Self::backfill_cache_manager(self.config.clone(), self.manager.clone()).await
+        Self::backfill_cache_manager(
+            self.config.clone(),
+            self.manager.clone(),
+            self.path_locks.clone(),
+        )
+        .await
     }
 
     /// backfill the in memory cache management based on the local files that are already
@@ -363,6 +455,7 @@ impl Cache {
     async fn backfill_cache_manager(
         config: Arc<ArchiveIndexCacheConfig>,
         manager: CacheManager,
+        path_locks: Arc<PathLocks>,
     ) -> Result<()> {
         info!(path=%config.path.display(), "starting cache-manager backfill from local directory");
         let inserted = Arc::new(AtomicU64::new(0));
@@ -372,19 +465,23 @@ impl Cache {
             .try_for_each_concurrent(Some(4), |item| {
                 let manager = manager.clone();
                 let inserted = inserted.clone();
+                let path_locks = path_locks.clone();
                 async move {
                     let path = item.absolute;
                     if path.extension().and_then(|ext| ext.to_str())
                         == Some(ARCHIVE_INDEX_FILE_EXTENSION)
                     {
-                        let entry = manager
-                            .entry(path)
-                            .or_insert_with(async {
-                                Arc::new(Entry::from_size(item.metadata.len()))
-                            })
-                            .await;
-
-                        if entry.is_fresh() {
+                        let _guard = path_locks.lock(&path).await;
+                        // The directory walk may have observed a file before cleanup.
+                        let metadata = match fs::metadata(&path).await {
+                            Ok(metadata) => metadata,
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+                            Err(err) => return Err(err.into()),
+                        };
+                        if !manager.contains_key(&path) {
+                            manager
+                                .insert(path, Arc::new(Entry::from_size(metadata.len())))
+                                .await;
                             inserted.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -400,20 +497,39 @@ impl Cache {
         Ok(())
     }
 
-    async fn remove_local_index(path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
-        for ext in &["wal", "shm"] {
-            let to_delete = path.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-{ext}"));
-            let _ = fs::remove_file(&to_delete).await;
+    async fn cleanup_evicted(
+        manager: &CacheManager,
+        path_locks: &Arc<PathLocks>,
+        path: &Path,
+    ) -> Result<()> {
+        let guard = path_locks.lock(path).await;
+        // Unlike get(), contains_key() does not refresh recency/frequency.
+        // Requests publish and register replacements while holding this lock.
+        if !manager.contains_key(path) {
+            Self::remove_local_index(&guard).await?;
         }
+        Ok(())
+    }
 
-        if let Err(err) = fs::remove_file(&path).await
-            && err.kind() != io::ErrorKind::NotFound
-        {
-            Err(err.into())
-        } else {
+    async fn remove_local_index(guard: &Arc<PathGuard>) -> Result<()> {
+        // Filesystem work can outlive a cancelled async caller. Keep the lock
+        // inside the blocking operation until its last unlink has completed.
+        let guard = guard.clone();
+        spawn_blocking(move || {
+            let path = &guard.path;
+            for ext in &["wal", "shm"] {
+                let to_delete =
+                    path.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-{ext}"));
+                let _ = std::fs::remove_file(&to_delete);
+            }
+            if let Err(err) = std::fs::remove_file(path)
+                && err.kind() != io::ErrorKind::NotFound
+            {
+                return Err(err.into());
+            }
             Ok(())
-        }
+        })
+        .await
     }
 
     fn local_index_path(&self, archive_path: &str, latest_build_id: Option<BuildId>) -> PathBuf {
@@ -430,38 +546,11 @@ impl Cache {
         latest_build_id: Option<BuildId>,
     ) -> Result<()> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
-        Self::remove_local_index(&local_index_path).await?;
+        let guard = self.path_locks.lock(&local_index_path).await;
+        Self::remove_local_index(&guard).await?;
         self.manager.invalidate(&local_index_path).await;
 
         Ok(())
-    }
-
-    async fn retry_with_purge<T, F, Fut>(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        mut action: F,
-    ) -> Result<(T, usize)>
-    where
-        F: FnMut() -> Fut,
-        Fut: Future<Output = Result<T>>,
-    {
-        for attempt in 1..=REPAIR_ATTEMPTS {
-            match action().await {
-                Ok(value) => return Ok((value, attempt)),
-                Err(err) if attempt < REPAIR_ATTEMPTS => {
-                    warn!(
-                        ?err,
-                        %attempt,
-                        "archive index operation failed, purging local cache and retrying"
-                    );
-                    self.purge(archive_path, latest_build_id).await?;
-                }
-                Err(err) => return Err(err),
-            }
-        }
-
-        unreachable!("archive index retry loop exited unexpectedly");
     }
 
     pub(crate) async fn find_index<D: Downloader + Sync>(
@@ -470,123 +559,55 @@ impl Cache {
         latest_build_id: Option<BuildId>,
         downloader: &D,
     ) -> Result<Index> {
-        let (index, _) = self
-            .retry_with_purge(archive_path, latest_build_id, || {
-                self.find_index_inner(archive_path, latest_build_id, downloader)
-            })
-            .await?;
-        Ok(index)
+        self.find_index_inner(archive_path, latest_build_id, downloader)
+            .await
+            .map(|(index, _downloaded)| index)
     }
 
+    /// Return the index and whether this call downloaded it. A fresh download
+    /// must not trigger another download if querying it also fails.
     async fn find_index_inner<D: Downloader + Sync>(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         downloader: &D,
-    ) -> Result<Index> {
+    ) -> Result<(Index, bool)> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
 
-        // fast path: try to use whatever is there, no locking
-        let force_redownload = match Index::open(&local_index_path).await {
-            Ok(index) => {
-                // Keep moka's recency/frequency view in sync with successful fast-path
-                // file lookups so TTI and admission decisions reflect real usage.
-                if self.manager.get(&local_index_path).await.is_none() {
-                    let entry_path = local_index_path.clone();
-                    self.manager
-                        .entry(local_index_path.clone())
-                        .or_insert_with(
-                            async move { Arc::new(Entry::from_path(&entry_path).await) },
-                        )
-                        .await;
-                }
+        // An open immutable connection survives unlinking. Refresh recency on
+        // a cache hit, but leave registration and repair to the locked path.
+        if let Ok(index) = Index::open(&local_index_path).await
+            && self.manager.get(&local_index_path).await.is_some()
+        {
+            return Ok((index, false));
+        }
 
-                return Ok(index);
-            }
+        let guard = self.path_locks.lock(&local_index_path).await;
+
+        // Recheck after locking: another request may already have repaired it.
+        let (index, downloaded_size) = match Index::open(&local_index_path).await {
+            Ok(index) => (index, None),
             Err(err) => {
-                let force_redownload = !err.is::<PathNotFoundError>();
                 debug!(?err, "archive index open failed, will try repair.");
-                force_redownload
+                let (index, size) = self.replace_index(archive_path, downloader, &guard).await?;
+                (index, Some(size))
             }
         };
 
-        let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-
-        // moka will coalesce all concurrent calls to try_get_with_by_ref with the same key
-        // into a single call to the async closure.
-        // https://docs.rs/moka/0.12.14/moka/future/struct.Cache.html#concurrent-calls-on-the-same-key
-        // So we don't need any locking here to prevent multiple downloads for the same
-        // missing archive index.
-        self.manager
-            .try_get_with_by_ref(&local_index_path, async {
-                // NOTE: benign race with the eviction listener.
-                //
-                // When moka evicts an entry (time/size pressure), it removes it from the
-                // cache immediately but runs the eviction listener later (via a spawned
-                // tokio task that deletes the local file).
-                //
-                // If a new request arrives between the cache removal and the file deletion:
-                //   1. Cache miss → we enter this closure.
-                //   2. `try_exists` → true (file not deleted yet).
-                //   3. We re-insert the existing file into the cache.
-                //   4. The eviction listener's spawned task then runs and deletes the file
-                //      out from under us.
-                //   5. The next `find` call fails on the fast path (file gone), falls back
-                //      into this closure, sees `try_exists` → false, and re-downloads.
-                //
-                // Net impact: one request pays the cost of an extra S3 download. No error
-                // is visible to the user since the self-repair logic handles it.
-                let entry = if !force_redownload && fs::try_exists(&local_index_path).await? {
-                    // after server startup we might have local indexes that don't
-                    // yet exist in our cache manager.
-                    // So we only need to download if the file doesn't exist.
-                    Entry::from_path(&local_index_path).await
-                } else {
-                    if force_redownload {
-                        Self::remove_local_index(&local_index_path).await?;
-                    }
-                    Entry::from_size(
-                        self.download_archive_index(
-                            downloader,
-                            &local_index_path,
-                            &remote_index_path,
-                        )
-                        .await?,
-                    )
-                };
-                Ok::<_, anyhow::Error>(Arc::new(entry))
-            })
-            .await
-            .map_err(|arc_err: Arc<anyhow::Error>| {
-                // We can't convert this Arc<Error> into the inner error type.
-                // See https://github.com/moka-rs/moka/issues/497
-                // But since some callers are specifically checking
-                // ::is<PathNotFoundError> to differentiate other errors from
-                // the "not found" case, we want to preserve that information
-                // if it was the cause of the error.
-                //
-                // This mean all error types that we later want to use with ::is<> or
-                // ::downcast<> have to be mentioned here.
-                //
-                // While we could also migrate to a custom enum error type, this would
-                // only be really nice when the whole storage lib uses is. Otherwise
-                // we'll end up with some hardcoded conversions again.
-                // So I can leave it as-is for now.
-                if arc_err.is::<PathNotFoundError>() {
-                    anyhow!(PathNotFoundError)
-                } else {
-                    anyhow!(arc_err)
-                }
-            })?;
-
-        // Final open for this retry attempt. If it fails, the caller's retry loop
-        // purges the cache entry and tries again.
-        Index::open(local_index_path).await
+        // Registration and publication share the path lock with cleanup.
+        if let Some(size) = downloaded_size {
+            self.manager
+                .insert(local_index_path, Arc::new(Entry::from_size(size)))
+                .await;
+        } else if self.manager.get(&local_index_path).await.is_none() {
+            let entry = Arc::new(Entry::from_path(&local_index_path).await);
+            self.manager.insert(local_index_path, entry).await;
+        }
+        Ok((index, downloaded_size.is_some()))
     }
 
-    /// Find the file metadata needed to fetch a certain path inside a remote archive.
-    /// Will try to use a local cache of the index file, and otherwise download it
-    /// from storage.
+    /// Find file metadata, repairing an unusable local index once. Download
+    /// failures and errors from a freshly downloaded index are returned directly.
     #[instrument(skip(self, downloader))]
     pub(crate) async fn find<D: Downloader + Sync>(
         &self,
@@ -595,46 +616,102 @@ impl Cache {
         path_in_archive: &str,
         downloader: &D,
     ) -> Result<Option<FileInfo>> {
-        let result = self
-            .retry_with_purge(archive_path, latest_build_id, || async {
-                let mut index = self
-                    .find_index_inner(archive_path, latest_build_id, downloader)
-                    .await?;
-                index.find(path_in_archive).await
-            })
-            .await;
-
-        match result {
-            Ok((file_info, attempt)) => {
-                self.metrics.find_calls.add(
-                    1,
-                    &[
-                        KeyValue::new("attempt", attempt.to_string()),
-                        KeyValue::new("outcome", "success"),
-                    ],
-                );
-                return Ok(file_info);
+        let mut attempt = 1;
+        let result = async {
+            let (mut index, downloaded) = self
+                .find_index_inner(archive_path, latest_build_id, downloader)
+                .await?;
+            match index.find(path_in_archive).await {
+                Err(err) if !downloaded => {
+                    warn!(?err, "cached archive index query failed, repairing once");
+                    drop(index);
+                    attempt = 2;
+                    self.recheck_and_repair_query(
+                        archive_path,
+                        latest_build_id,
+                        path_in_archive,
+                        downloader,
+                    )
+                    .await
+                }
+                result => result,
             }
+        }
+        .await;
+
+        self.metrics.find_calls.add(
+            1,
+            &[
+                KeyValue::new("attempt", attempt.to_string()),
+                KeyValue::new("outcome", if result.is_ok() { "success" } else { "error" }),
+            ],
+        );
+        result
+    }
+
+    async fn recheck_and_repair_query<D: Downloader + Sync>(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+        path_in_archive: &str,
+        downloader: &D,
+    ) -> Result<Option<FileInfo>> {
+        let path = self.local_index_path(archive_path, latest_build_id);
+        let guard = self.path_locks.lock(&path).await;
+        // The failed connection may refer to an old, unlinked file. Validate
+        // the current file before deleting anything, including an Ok(None).
+        if let Ok(mut current) = Index::open(&path).await
+            && let Ok(result) = current.find(path_in_archive).await
+        {
+            if self.manager.get(&path).await.is_none() {
+                self.manager
+                    .insert(path.clone(), Arc::new(Entry::from_path(&path).await))
+                    .await;
+            }
+            return Ok(result);
+        }
+
+        // Keep the lock through repair and the final query. Calling purge() or
+        // find_index() here would attempt to acquire the same lock again.
+        let (mut replacement, size) = self.replace_index(archive_path, downloader, &guard).await?;
+        self.manager
+            .insert(path, Arc::new(Entry::from_size(size)))
+            .await;
+        replacement.find(path_in_archive).await
+    }
+
+    /// Replace and open an unusable index while the caller holds its path lock.
+    async fn replace_index(
+        &self,
+        archive_path: &str,
+        downloader: &impl Downloader,
+        guard: &Arc<PathGuard>,
+    ) -> Result<(Index, u64)> {
+        self.manager.invalidate(&guard.path).await;
+        Self::remove_local_index(guard).await?;
+        let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+        let size = self
+            .download_archive_index(downloader, &remote_index_path, guard)
+            .await?;
+        match Index::open(&guard.path).await {
+            Ok(index) => Ok((index, size)),
             Err(err) => {
-                self.metrics.find_calls.add(
-                    1,
-                    &[
-                        KeyValue::new("attempt", REPAIR_ATTEMPTS.to_string()),
-                        KeyValue::new("outcome", "error"),
-                    ],
-                );
-                return Err(err);
+                // Publication succeeded but registration has not happened yet.
+                Self::remove_local_index(guard).await?;
+                Err(err)
             }
         }
     }
 
-    #[instrument(skip(self, downloader))]
-    pub(crate) async fn download_archive_index(
+    /// Caller must hold the path lock through publication and cache registration.
+    #[instrument(skip(self, downloader, guard))]
+    async fn download_archive_index(
         &self,
         downloader: &impl Downloader,
-        local_index_path: &Path,
         remote_index_path: &str,
+        guard: &Arc<PathGuard>,
     ) -> Result<u64> {
+        let local_index_path = &guard.path;
         let parent = local_index_path
             .parent()
             .ok_or_else(|| anyhow!("index path without parent"))?
@@ -660,7 +737,13 @@ impl Cache {
 
         // Publish atomically.
         // Will replace any existing file.
-        fs::rename(&temp_path, local_index_path).await?;
+        let publish_guard = guard.clone();
+        let from = temp_path.to_path_buf();
+        spawn_blocking(move || {
+            std::fs::rename(from, &publish_guard.path)?;
+            Ok(())
+        })
+        .await?;
 
         temp_path.disable_cleanup(true);
 
@@ -1326,6 +1409,45 @@ mod tests {
         Ok(())
     }
 
+    #[test_case::test_case(false; "missing file")]
+    #[test_case::test_case(true; "corrupt file")]
+    #[tokio::test]
+    async fn find_index_inner_repairs_stale_manager_entry(corrupt: bool) -> Result<()> {
+        let cache = test_cache().await?;
+        const BUILD_ID: Option<BuildId> = Some(BuildId(7));
+        const ARCHIVE_NAME: &str = "stale-manager.zip";
+        let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
+        let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+        let index_bytes = create_index_bytes(1).await?;
+        fs::write(&local_index, &index_bytes).await?;
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert(remote_index_path.clone(), index_bytes);
+
+        cache
+            .find(ARCHIVE_NAME, BUILD_ID, "testfile0", &downloader)
+            .await?;
+        assert_eq!(downloader.download_count(&remote_index_path), 0);
+        assert!(cache.manager.get(&local_index).await.is_some());
+
+        if corrupt {
+            fs::write(&local_index, b"not-a-sqlite-index").await?;
+        } else {
+            fs::remove_file(&local_index).await?;
+        }
+
+        // Repair must happen within one attempt, even though Moka still has an entry.
+        let (mut index, downloaded) = cache
+            .find_index_inner(ARCHIVE_NAME, BUILD_ID, &downloader)
+            .await?;
+        assert!(downloaded);
+        assert!(index.find("testfile0").await?.is_some());
+        assert_eq!(downloader.download_count(&remote_index_path), 1);
+        assert!(cache.manager.get(&local_index).await.is_some());
+        Ok(())
+    }
+
     #[tokio::test]
     async fn find_downloads_when_local_cache_missing() -> Result<()> {
         let cache = test_cache().await?;
@@ -1371,7 +1493,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn find_retries_then_errors() -> Result<()> {
+    async fn find_returns_corrupt_download_error_without_retrying() -> Result<()> {
         let cache = test_cache().await?;
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(7));
         const ARCHIVE_NAME: &str = "test.zip";
@@ -1398,16 +1520,132 @@ mod tests {
                 .message(),
             "file is not a database"
         );
-        assert_eq!(
-            downloader.download_count(&remote_index_path),
-            REPAIR_ATTEMPTS
-        );
+        assert_eq!(downloader.download_count(&remote_index_path), 1);
+        let local_index = cache.local_index_path(ARCHIVE_NAME, LATEST_BUILD_ID);
+        assert!(!fs::try_exists(&local_index).await?);
+        assert!(!cache.manager.contains_key(&local_index));
 
         Ok(())
     }
 
+    #[test_case::test_case(true, false; "repair cached query failure")]
+    #[test_case::test_case(false, true; "return fresh query failure")]
+    #[test_case::test_case(true, true; "return replacement query failure")]
     #[tokio::test]
-    async fn corrupted_local_index_uses_first_attempt_for_redownload() -> Result<()> {
+    async fn query_failure_downloads_at_most_once(
+        cached: bool,
+        invalid_remote: bool,
+    ) -> Result<()> {
+        let cache = test_cache().await?;
+        let fixture = tempfile::NamedTempFile::new()?.into_temp_path();
+        let mut conn = sqlite_create(&fixture).await?;
+        sqlx::query("CREATE TABLE unrelated (id INTEGER)")
+            .execute(&mut conn)
+            .await?;
+        conn.close().await?;
+        let invalid_index = fs::read(&fixture).await?;
+        let path = cache.local_index_path("query-failure.zip", None);
+        if cached {
+            fs::write(&path, &invalid_index).await?;
+            // Prove this fixture opens successfully; failure occurs at query time.
+            cache
+                .find_index("query-failure.zip", None, &FakeDownloader::new())
+                .await?;
+        }
+        let mut downloader = FakeDownloader::new();
+        downloader.indices.insert(
+            "query-failure.zip.index".into(),
+            if invalid_remote {
+                invalid_index
+            } else {
+                create_index_bytes(1).await?
+            },
+        );
+
+        let result = cache
+            .find("query-failure.zip", None, "testfile0", &downloader)
+            .await;
+        if invalid_remote {
+            let err = result.unwrap_err();
+            assert!(err.is::<sqlx::Error>());
+            assert!(
+                format!("{err:#}").contains("no such table: files"),
+                "{err:#}"
+            );
+        } else {
+            assert!(result?.is_some());
+        }
+        assert_eq!(downloader.download_count("query-failure.zip.index"), 1);
+        Ok(())
+    }
+
+    #[test_case::test_case("testfile0", true; "replacement contains requested file")]
+    #[test_case::test_case("missing", false; "replacement lacks requested file")]
+    #[tokio::test]
+    async fn stale_query_failure_preserves_concurrent_replacement(
+        requested: &'static str,
+        expected_found: bool,
+    ) -> Result<()> {
+        let cache = Arc::new(test_cache().await?);
+        let path = cache.local_index_path("stale-query.zip", None);
+        let mut conn = sqlite_create(&path).await?;
+        sqlx::query("CREATE TABLE unrelated (id INTEGER)")
+            .execute(&mut conn)
+            .await?;
+        conn.close().await?;
+        cache
+            .find_index("stale-query.zip", None, &FakeDownloader::new())
+            .await?;
+
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert("stale-query.zip.index".into(), create_index_bytes(1).await?);
+        let downloader = Arc::new(downloader);
+        let guard = cache.path_locks.lock(&path).await;
+        let lookup = tokio::spawn({
+            let cache = cache.clone();
+            let downloader = downloader.clone();
+            async move {
+                cache
+                    .find("stale-query.zip", None, requested, downloader.as_ref())
+                    .await
+            }
+        });
+
+        // The optimistic query fails against the old schema, then waits for
+        // our lock. The registry and our owned guard account for two references.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let waiting = Arc::strong_count(cache.path_locks.0.get(&path).unwrap().value()) > 2;
+                if waiting {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+
+        let (replacement, size) = cache
+            .replace_index("stale-query.zip", downloader.as_ref(), &guard)
+            .await?;
+        drop(replacement);
+        cache
+            .manager
+            .insert(path.clone(), Arc::new(Entry::from_size(size)))
+            .await;
+        drop(guard);
+
+        let result = tokio::time::timeout(Duration::from_secs(5), lookup).await???;
+        assert_eq!(result.is_some(), expected_found);
+        assert_eq!(downloader.download_count("stale-query.zip.index"), 1);
+        assert!(fs::try_exists(&path).await?);
+        assert!(cache.manager.contains_key(&path));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn corrupted_local_index_returns_download_failure_without_retrying() -> Result<()> {
         let cache = test_cache().await?;
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(808));
         const ARCHIVE_NAME: &str = "corrupt-first-attempt-redownload.zip";
@@ -1418,17 +1656,14 @@ mod tests {
         fs::write(&cache_file, b"not-an-sqlite-index").await?;
 
         let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-        let downloader = FlakyDownloader::new(
-            remote_index_path,
-            create_index_bytes(1).await?,
-            REPAIR_ATTEMPTS - 1,
-        );
+        let downloader = FlakyDownloader::new(remote_index_path, create_index_bytes(1).await?, 1);
 
         let result = cache
             .find(ARCHIVE_NAME, LATEST_BUILD_ID, FILE_IN_ARCHIVE, &downloader)
-            .await?;
-        assert!(result.is_some());
-        assert_eq!(downloader.fetch_count(), REPAIR_ATTEMPTS);
+            .await
+            .unwrap_err();
+        assert_eq!(result.to_string(), "synthetic download failure 1");
+        assert_eq!(downloader.fetch_count(), 1);
 
         Ok(())
     }
@@ -1466,8 +1701,121 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn manager_invalidate_removes_index_wal_and_shm_via_eviction_listener() -> Result<()> {
+    #[tokio::test]
+    async fn queued_eviction_preserves_reinserted_file() -> Result<()> {
+        let cache = test_cache().await?;
+        let path = cache.local_index_path("reinserted.zip", Some(BuildId(7)));
+        let guard = cache.path_locks.lock(&path).await;
+        fs::write(&path, b"old index").await?;
+        // An oversized entry guarantees a real capacity eviction notification.
+        cache
+            .manager
+            .insert(
+                path.clone(),
+                Arc::new(Entry::from_size(
+                    (cache.config.max_size_mb + 1) * 1024 * 1024,
+                )),
+            )
+            .await;
+        cache.manager.run_pending_tasks().await;
+        assert!(!cache.manager.contains_key(&path));
+
+        // Cleanup is queued but cannot run while publication holds the lock.
+        fs::write(&path, b"replacement").await?;
+        cache
+            .manager
+            .insert(path.clone(), Arc::new(Entry::from_size(11)))
+            .await;
+        drop(guard);
+        tokio::time::timeout(Duration::from_secs(5), cache.flush()).await??;
+        assert_eq!(fs::read(&path).await?, b"replacement");
+        assert!(cache.manager.contains_key(&path));
+        assert!(cache.path_locks.0.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cached_lookup_does_not_wait_for_path_lock() -> Result<()> {
+        let cache = test_cache().await?;
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert("fast-path.zip.index".into(), create_index_bytes(1).await?);
+        cache.find_index("fast-path.zip", None, &downloader).await?;
+
+        let path = cache.local_index_path("fast-path.zip", None);
+        let _guard = cache.path_locks.lock(&path).await;
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            cache.find("fast-path.zip", None, "testfile0", &downloader),
+        )
+        .await??;
+        assert!(result.is_some());
+        assert_eq!(downloader.download_count("fast-path.zip.index"), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn active_index_survives_cleanup_and_replacement() -> Result<()> {
+        let cache = test_cache().await?;
+        let path = cache.local_index_path("active.zip", None);
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert("active.zip.index".into(), create_index_bytes(1).await?);
+        let mut index = cache.find_index("active.zip", None, &downloader).await?;
+        cache.manager.invalidate(&path).await;
+        // Simulate an eviction queued while the returned Index is still in use.
+        cache
+            .cleanup
+            .send(Cleanup::Evicted(Arc::new(path.clone())))?;
+        tokio::time::timeout(Duration::from_secs(5), cache.flush()).await??;
+        assert!(!fs::try_exists(&path).await?);
+        assert!(index.find("testfile0").await?.is_some());
+
+        // A second lookup of the same archive must not wait for the first
+        // connection to be dropped, and must see the newly downloaded index.
+        downloader
+            .indices
+            .insert("active.zip.index".into(), create_index_bytes(2).await?);
+        let mut replacement = tokio::time::timeout(
+            Duration::from_secs(5),
+            cache.find_index("active.zip", None, &downloader),
+        )
+        .await??;
+        assert!(replacement.find("testfile1").await?.is_some());
+        assert!(index.find("testfile1").await?.is_none());
+        assert!(index.find("testfile0").await?.is_some());
+        assert!(fs::try_exists(&path).await?);
+        assert_eq!(downloader.download_count("active.zip.index"), 2);
+        assert!(cache.path_locks.0.is_empty());
+        Ok(())
+    }
+
+    #[test_case::test_case(false; "waiter cancelled before holder drops")]
+    #[test_case::test_case(true; "last waiter cancelled after holder drops")]
+    #[tokio::test]
+    async fn path_locks_release_cancelled_waiters(holder_drops_first: bool) {
+        let locks = Arc::new(PathLocks::default());
+        let path = Path::new("index");
+        let guard = locks.lock(path).await;
+        let mut waiter = Box::pin(locks.lock(path));
+        assert!(futures_util::poll!(waiter.as_mut()).is_pending());
+        assert!(locks.0.contains_key(path));
+        if holder_drops_first {
+            drop(guard);
+            assert!(locks.0.contains_key(path));
+            drop(waiter);
+        } else {
+            drop(waiter);
+            assert!(locks.0.contains_key(path));
+            drop(guard);
+        }
+        assert!(locks.0.is_empty());
+    }
+
+    #[tokio::test]
+    async fn manager_capacity_eviction_removes_index_wal_and_shm() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("listener-remove.zip", Some(BuildId(17)));
         let wal = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-wal"));
@@ -1480,19 +1828,47 @@ mod tests {
 
         cache
             .manager
-            .insert(local_index.clone(), Arc::new(Entry::from_size(5)))
+            .insert(
+                local_index.clone(),
+                Arc::new(Entry::from_size(
+                    (cache.config.max_size_mb + 1) * 1024 * 1024,
+                )),
+            )
             .await;
 
-        cache.manager.invalidate(&local_index).await;
         cache.flush().await?;
-        // The eviction listener deletes files in a spawned task;
-        // give it time to complete on the multi-thread runtime.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         assert!(!fs::try_exists(&local_index).await?);
         assert!(!fs::try_exists(&wal).await?);
         assert!(!fs::try_exists(&shm).await?);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn purge_eviction_listener_does_not_remove_replacement() -> Result<()> {
+        let cache = test_cache().await?;
+        const BUILD_ID: Option<BuildId> = Some(BuildId(17));
+        const ARCHIVE_NAME: &str = "purge-replacement.zip";
+        let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
+        let wal = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-wal"));
+        let shm = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-shm"));
+
+        fs::write(&local_index, b"old index").await?;
+        cache
+            .manager
+            .insert(local_index.clone(), Arc::new(Entry::from_size(9)))
+            .await;
+
+        cache.purge(ARCHIVE_NAME, BUILD_ID).await?;
+        fs::write(&local_index, b"replacement index").await?;
+        fs::write(&wal, b"replacement wal").await?;
+        fs::write(&shm, b"replacement shm").await?;
+        cache.flush().await?;
+
+        assert_eq!(fs::read(&local_index).await?, b"replacement index");
+        assert_eq!(fs::read(&wal).await?, b"replacement wal");
+        assert_eq!(fs::read(&shm).await?, b"replacement shm");
         Ok(())
     }
 
@@ -1684,6 +2060,7 @@ mod tests {
     async fn download_archive_index_overwrites_existing_file() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("test.zip", Some(BuildId(7)));
+        let _guard = cache.path_locks.lock(&local_index).await;
         fs::create_dir_all(local_index.parent().unwrap()).await?;
         fs::write(&local_index, b"old").await?;
 
@@ -1694,7 +2071,7 @@ mod tests {
             .insert(remote_index_path.to_string(), create_index_bytes(1).await?);
 
         cache
-            .download_archive_index(&downloader, &local_index, remote_index_path)
+            .download_archive_index(&downloader, remote_index_path, &_guard)
             .await?;
 
         let written = fs::read(&local_index).await?;
