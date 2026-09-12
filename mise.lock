@@ -59,6 +59,14 @@ version = "0.9.2"
 backend = "cargo:cargo-machete"
 specifiers = ["0.9.2"]
 
+[[tools."cargo:cargo-nextest"]]
+version = "0.9.144"
+backend = "cargo:cargo-nextest"
+specifiers = [
+    "0.9.144",
+    "latest",
+]
+
 [[tools."cargo:cargo-sort"]]
 version = "2.1.4"
 backend = "cargo:cargo-sort"
