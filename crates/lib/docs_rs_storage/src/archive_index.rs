@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
+use dashmap::DashMap;
 use docs_rs_mimes::detect_mime;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm};
@@ -16,13 +17,13 @@ use opentelemetry::{
 };
 use sqlx::{ConnectOptions as _, Connection as _, QueryBuilder, Row as _, Sqlite};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt,
     future::Future,
     path::{Path, PathBuf},
     pin::Pin,
     sync::{
-        Arc, Mutex as StdMutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -174,7 +175,7 @@ type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 
 /// Only active operations and waiters retain a lock, not every cached file.
 #[derive(Default)]
-struct PathLocks(StdMutex<HashMap<PathBuf, (Arc<Mutex<()>>, usize)>>);
+struct PathLocks(DashMap<PathBuf, (Arc<Mutex<()>>, usize)>);
 
 struct PathGuard {
     registry: Arc<PathLocks>,
@@ -185,8 +186,8 @@ struct PathGuard {
 impl PathLocks {
     async fn lock(self: &Arc<Self>, path: &Path) -> Arc<PathGuard> {
         let lock = {
-            let mut locks = self.0.lock().unwrap();
-            let (lock, users) = locks.entry(path.to_owned()).or_default();
+            let mut entry = self.0.entry(path.to_owned()).or_default();
+            let (lock, users) = entry.value_mut();
             *users += 1;
             lock.clone()
         };
@@ -204,12 +205,12 @@ impl PathLocks {
 impl Drop for PathGuard {
     fn drop(&mut self) {
         drop(self.guard.take());
-        let mut locks = self.registry.0.lock().unwrap();
-        let (_, users) = locks.get_mut(&self.path).unwrap();
-        *users -= 1;
-        if *users == 0 {
-            locks.remove(&self.path);
-        }
+        // Decrement and remove under the same shard lock as acquisition, so a
+        // new waiter cannot register between the last-user check and removal.
+        self.registry.0.remove_if_mut(&self.path, |_, (_, users)| {
+            *users -= 1;
+            *users == 0
+        });
     }
 }
 
@@ -1593,7 +1594,7 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(5), cache.flush()).await??;
         assert_eq!(fs::read(&path).await?, b"replacement");
         assert!(cache.manager.contains_key(&path));
-        assert!(cache.path_locks.0.lock().unwrap().is_empty());
+        assert!(cache.path_locks.0.is_empty());
         Ok(())
     }
 
@@ -1630,7 +1631,7 @@ mod tests {
         assert!(index.find("testfile0").await?.is_some());
         assert!(fs::try_exists(&path).await?);
         assert_eq!(downloader.download_count("active.zip.index"), 2);
-        assert!(cache.path_locks.0.lock().unwrap().is_empty());
+        assert!(cache.path_locks.0.is_empty());
         Ok(())
     }
 
@@ -1641,11 +1642,11 @@ mod tests {
         let guard = locks.lock(path).await;
         let mut waiter = Box::pin(locks.lock(path));
         assert!(futures_util::poll!(waiter.as_mut()).is_pending());
-        assert_eq!(locks.0.lock().unwrap().get(path).unwrap().1, 2);
+        assert_eq!(locks.0.get(path).unwrap().1, 2);
         drop(waiter);
-        assert_eq!(locks.0.lock().unwrap().get(path).unwrap().1, 1);
+        assert_eq!(locks.0.get(path).unwrap().1, 1);
         drop(guard);
-        assert!(locks.0.lock().unwrap().is_empty());
+        assert!(locks.0.is_empty());
     }
 
     #[tokio::test]
