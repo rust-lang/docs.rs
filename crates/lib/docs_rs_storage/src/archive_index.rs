@@ -41,8 +41,6 @@ pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 /// dummy size we assume in case of errors
 const DUMMY_FILE_SIZE: u64 = 1024 * 1024; // 1 MiB
-/// self-repair attempts
-const REPAIR_ATTEMPTS: usize = 5;
 
 #[derive(Debug)]
 struct Metrics {
@@ -480,12 +478,10 @@ impl Cache {
                             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
                             Err(err) => return Err(err.into()),
                         };
-                        let entry = manager
-                            .entry(path)
-                            .or_insert_with(async { Arc::new(Entry::from_size(metadata.len())) })
-                            .await;
-
-                        if entry.is_fresh() {
+                        if !manager.contains_key(&path) {
+                            manager
+                                .insert(path, Arc::new(Entry::from_size(metadata.len())))
+                                .await;
                             inserted.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -557,54 +553,25 @@ impl Cache {
         Ok(())
     }
 
-    async fn retry_with_purge<T, F, Fut>(
-        &self,
-        archive_path: &str,
-        latest_build_id: Option<BuildId>,
-        mut action: F,
-    ) -> Result<(T, usize)>
-    where
-        F: FnMut() -> Fut,
-        Fut: Future<Output = Result<T>>,
-    {
-        for attempt in 1..=REPAIR_ATTEMPTS {
-            match action().await {
-                Ok(value) => return Ok((value, attempt)),
-                Err(err) if attempt < REPAIR_ATTEMPTS => {
-                    warn!(
-                        ?err,
-                        %attempt,
-                        "archive index operation failed, purging local cache and retrying"
-                    );
-                    self.purge(archive_path, latest_build_id).await?;
-                }
-                Err(err) => return Err(err),
-            }
-        }
-
-        unreachable!("archive index retry loop exited unexpectedly");
-    }
-
     pub(crate) async fn find_index<D: Downloader + Sync>(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         downloader: &D,
     ) -> Result<Index> {
-        let (index, _) = self
-            .retry_with_purge(archive_path, latest_build_id, || {
-                self.find_index_inner(archive_path, latest_build_id, downloader)
-            })
-            .await?;
-        Ok(index)
+        self.find_index_inner(archive_path, latest_build_id, downloader)
+            .await
+            .map(|(index, _downloaded)| index)
     }
 
+    /// Return the index and whether this call downloaded it. A fresh download
+    /// must not trigger another download if querying it also fails.
     async fn find_index_inner<D: Downloader + Sync>(
         &self,
         archive_path: &str,
         latest_build_id: Option<BuildId>,
         downloader: &D,
-    ) -> Result<Index> {
+    ) -> Result<(Index, bool)> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
 
         // An open immutable connection survives unlinking. Refresh recency on
@@ -612,43 +579,40 @@ impl Cache {
         if let Ok(index) = Index::open(&local_index_path).await
             && self.manager.get(&local_index_path).await.is_some()
         {
-            return Ok(index);
+            return Ok((index, false));
         }
 
         let guard = self.path_locks.lock(&local_index_path).await;
 
         // Recheck after locking: another request may already have repaired it.
-        let index = match Index::open(&local_index_path).await {
-            Ok(index) => index,
+        let (index, downloaded_size) = match Index::open(&local_index_path).await {
+            Ok(index) => (index, None),
             Err(err) => {
                 debug!(?err, "archive index open failed, will try repair.");
                 self.manager.invalidate(&local_index_path).await;
                 Self::remove_local_index(&guard).await?;
                 let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-                self.download_archive_index(
-                    downloader,
-                    &local_index_path,
-                    &remote_index_path,
-                    &guard,
-                )
-                .await?;
-                Index::open(&local_index_path).await?
+                let size = self
+                    .download_archive_index(downloader, &remote_index_path, &guard)
+                    .await?;
+                (Index::open(&local_index_path).await?, Some(size))
             }
         };
 
-        // The path lock coalesces downloads and protects publication through
-        // registration and opening SQLite. On Unix, the immutable connection
-        // keeps reading its open file even if cleanup later unlinks the path.
-        if self.manager.get(&local_index_path).await.is_none() {
+        // Registration and publication share the path lock with cleanup.
+        if let Some(size) = downloaded_size {
+            self.manager
+                .insert(local_index_path, Arc::new(Entry::from_size(size)))
+                .await;
+        } else if self.manager.get(&local_index_path).await.is_none() {
             let entry = Arc::new(Entry::from_path(&local_index_path).await);
             self.manager.insert(local_index_path, entry).await;
         }
-        Ok(index)
+        Ok((index, downloaded_size.is_some()))
     }
 
-    /// Find the file metadata needed to fetch a certain path inside a remote archive.
-    /// Will try to use a local cache of the index file, and otherwise download it
-    /// from storage.
+    /// Find file metadata, repairing an unusable local index once. Download
+    /// failures and errors from a freshly downloaded index are returned directly.
     #[instrument(skip(self, downloader))]
     pub(crate) async fn find<D: Downloader + Sync>(
         &self,
@@ -657,37 +621,35 @@ impl Cache {
         path_in_archive: &str,
         downloader: &D,
     ) -> Result<Option<FileInfo>> {
-        let result = self
-            .retry_with_purge(archive_path, latest_build_id, || async {
-                let mut index = self
-                    .find_index_inner(archive_path, latest_build_id, downloader)
-                    .await?;
-                index.find(path_in_archive).await
-            })
-            .await;
-
-        match result {
-            Ok((file_info, attempt)) => {
-                self.metrics.find_calls.add(
-                    1,
-                    &[
-                        KeyValue::new("attempt", attempt.to_string()),
-                        KeyValue::new("outcome", "success"),
-                    ],
-                );
-                return Ok(file_info);
-            }
-            Err(err) => {
-                self.metrics.find_calls.add(
-                    1,
-                    &[
-                        KeyValue::new("attempt", REPAIR_ATTEMPTS.to_string()),
-                        KeyValue::new("outcome", "error"),
-                    ],
-                );
-                return Err(err);
+        let mut attempt = 1;
+        let result = async {
+            let (mut index, downloaded) = self
+                .find_index_inner(archive_path, latest_build_id, downloader)
+                .await?;
+            match index.find(path_in_archive).await {
+                Err(err) if !downloaded => {
+                    warn!(?err, "cached archive index query failed, repairing once");
+                    drop(index);
+                    attempt = 2;
+                    self.purge(archive_path, latest_build_id).await?;
+                    let mut replacement = self
+                        .find_index(archive_path, latest_build_id, downloader)
+                        .await?;
+                    replacement.find(path_in_archive).await
+                }
+                result => result,
             }
         }
+        .await;
+
+        self.metrics.find_calls.add(
+            1,
+            &[
+                KeyValue::new("attempt", attempt.to_string()),
+                KeyValue::new("outcome", if result.is_ok() { "success" } else { "error" }),
+            ],
+        );
+        result
     }
 
     /// Caller must hold the path lock through publication and cache registration.
@@ -695,10 +657,10 @@ impl Cache {
     async fn download_archive_index(
         &self,
         downloader: &impl Downloader,
-        local_index_path: &Path,
         remote_index_path: &str,
         guard: &Arc<PathGuard>,
     ) -> Result<u64> {
+        let local_index_path = &guard.path;
         let parent = local_index_path
             .parent()
             .ok_or_else(|| anyhow!("index path without parent"))?
@@ -1424,11 +1386,11 @@ mod tests {
             fs::remove_file(&local_index).await?;
         }
 
-        // Repair must happen within one attempt, even though Moka still has an
-        // entry. Calling the inner method excludes the outer purge/retry loop.
-        let mut index = cache
+        // Repair must happen within one attempt, even though Moka still has an entry.
+        let (mut index, downloaded) = cache
             .find_index_inner(ARCHIVE_NAME, BUILD_ID, &downloader)
             .await?;
+        assert!(downloaded);
         assert!(index.find("testfile0").await?.is_some());
         assert_eq!(downloader.download_count(&remote_index_path), 1);
         assert!(cache.manager.get(&local_index).await.is_some());
@@ -1480,7 +1442,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn find_retries_then_errors() -> Result<()> {
+    async fn find_returns_corrupt_download_error_without_retrying() -> Result<()> {
         let cache = test_cache().await?;
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(7));
         const ARCHIVE_NAME: &str = "test.zip";
@@ -1507,16 +1469,64 @@ mod tests {
                 .message(),
             "file is not a database"
         );
-        assert_eq!(
-            downloader.download_count(&remote_index_path),
-            REPAIR_ATTEMPTS
-        );
+        assert_eq!(downloader.download_count(&remote_index_path), 1);
 
         Ok(())
     }
 
+    #[test_case::test_case(true, false; "repair cached query failure")]
+    #[test_case::test_case(false, true; "return fresh query failure")]
+    #[test_case::test_case(true, true; "return replacement query failure")]
     #[tokio::test]
-    async fn corrupted_local_index_uses_first_attempt_for_redownload() -> Result<()> {
+    async fn query_failure_downloads_at_most_once(
+        cached: bool,
+        invalid_remote: bool,
+    ) -> Result<()> {
+        let cache = test_cache().await?;
+        let fixture = tempfile::NamedTempFile::new()?.into_temp_path();
+        let mut conn = sqlite_create(&fixture).await?;
+        sqlx::query("CREATE TABLE unrelated (id INTEGER)")
+            .execute(&mut conn)
+            .await?;
+        conn.close().await?;
+        let invalid_index = fs::read(&fixture).await?;
+        let path = cache.local_index_path("query-failure.zip", None);
+        if cached {
+            fs::write(&path, &invalid_index).await?;
+            // Prove this fixture opens successfully; failure occurs at query time.
+            cache
+                .find_index("query-failure.zip", None, &FakeDownloader::new())
+                .await?;
+        }
+        let mut downloader = FakeDownloader::new();
+        downloader.indices.insert(
+            "query-failure.zip.index".into(),
+            if invalid_remote {
+                invalid_index
+            } else {
+                create_index_bytes(1).await?
+            },
+        );
+
+        let result = cache
+            .find("query-failure.zip", None, "testfile0", &downloader)
+            .await;
+        if invalid_remote {
+            let err = result.unwrap_err();
+            assert!(err.is::<sqlx::Error>());
+            assert!(
+                format!("{err:#}").contains("no such table: files"),
+                "{err:#}"
+            );
+        } else {
+            assert!(result?.is_some());
+        }
+        assert_eq!(downloader.download_count("query-failure.zip.index"), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn corrupted_local_index_returns_download_failure_without_retrying() -> Result<()> {
         let cache = test_cache().await?;
         const LATEST_BUILD_ID: Option<BuildId> = Some(BuildId(808));
         const ARCHIVE_NAME: &str = "corrupt-first-attempt-redownload.zip";
@@ -1527,17 +1537,14 @@ mod tests {
         fs::write(&cache_file, b"not-an-sqlite-index").await?;
 
         let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-        let downloader = FlakyDownloader::new(
-            remote_index_path,
-            create_index_bytes(1).await?,
-            REPAIR_ATTEMPTS - 1,
-        );
+        let downloader = FlakyDownloader::new(remote_index_path, create_index_bytes(1).await?, 1);
 
         let result = cache
             .find(ARCHIVE_NAME, LATEST_BUILD_ID, FILE_IN_ARCHIVE, &downloader)
-            .await?;
-        assert!(result.is_some());
-        assert_eq!(downloader.fetch_count(), REPAIR_ATTEMPTS);
+            .await
+            .unwrap_err();
+        assert_eq!(result.to_string(), "synthetic download failure 1");
+        assert_eq!(downloader.fetch_count(), 1);
 
         Ok(())
     }
@@ -1937,7 +1944,7 @@ mod tests {
             .insert(remote_index_path.to_string(), create_index_bytes(1).await?);
 
         cache
-            .download_archive_index(&downloader, &local_index, remote_index_path, &_guard)
+            .download_archive_index(&downloader, remote_index_path, &_guard)
             .await?;
 
         let written = fs::read(&local_index).await?;
