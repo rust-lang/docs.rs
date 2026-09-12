@@ -179,8 +179,18 @@ $ just run-tests
 ```
 
 This starts PostgreSQL and S3, builds tests for every workspace member, and runs
-`cargo test --workspace --locked --no-fail-fast` with the required test
+`cargo nextest run --workspace --locked --no-fail-fast` with the required test
 environment. Plain `cargo test` only tests the workspace's default members.
+
+At the start of each nextest run, the test setup rebuilds a template schema by
+applying every migration, captures its DDL with `pg_dump`, then uses that DDL to
+create an isolated schema for each test. PostgreSQL 18 client tools are required
+when tests run on the host. If installing them is not practical, use the
+`pg_dump` bundled in the local Compose database container instead:
+
+```console
+$ DOCSRS_TEST_PG_DUMP_FROM_COMPOSE=true just run-tests
+```
 
 Run the ignored builder tests separately with:
 

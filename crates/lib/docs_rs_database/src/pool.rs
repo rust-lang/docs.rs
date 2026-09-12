@@ -80,7 +80,7 @@ impl Pool {
         }
 
         let async_pool = options
-            .connect_lazy(&config.database_url)
+            .connect_lazy(config.database_url.as_str())
             .map_err(PoolError::AsyncPoolCreationFailed)?;
 
         Ok(Pool {
