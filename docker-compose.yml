@@ -73,6 +73,7 @@ x-environment: &environment
     DOCSRS_MIN_POOL_SIZE: 2
     DOCSRS_MAX_POOL_SIZE: 10
     DOCSRS_STORAGE_BACKEND: s3
+    DOCSRS_S3_BUCKET: ${DOCSRS_S3_BUCKET:-rust-docs-rs}
     S3_ENDPOINT: http://s3:9000
     AWS_ACCESS_KEY_ID: cratesfyi
     AWS_SECRET_ACCESS_KEY: secret_key
@@ -279,13 +280,13 @@ services:
             AWS_SECRET_ACCESS_KEY: secret_key
             AWS_DEFAULT_REGION: us-east-1
             AWS_EC2_METADATA_DISABLED: true
-            S3_BUCKET: ${DOCSRS_S3_BUCKET:-rust-docs-rs}
+            DOCSRS_S3_BUCKET: ${DOCSRS_S3_BUCKET:-rust-docs-rs}
         entrypoint: /bin/sh
         command:
             - -c
             - >-
-                aws --endpoint-url http://s3:9000 s3api head-bucket --bucket "$$S3_BUCKET"
-                || aws --endpoint-url http://s3:9000 s3api create-bucket --bucket "$$S3_BUCKET"
+                aws --endpoint-url http://s3:9000 s3api head-bucket --bucket "$$DOCSRS_S3_BUCKET"
+                || aws --endpoint-url http://s3:9000 s3api create-bucket --bucket "$$DOCSRS_S3_BUCKET"
         profiles:
             - manual
 
