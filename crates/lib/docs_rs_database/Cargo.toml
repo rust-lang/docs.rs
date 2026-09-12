@@ -5,8 +5,18 @@ repository.workspace = true
 edition.workspace = true
 build = "build.rs"
 
+[[bin]]
+name = "nextest-setup"
+path = "src/bin/nextest-setup.rs"
+required-features = ["testing"]
+
 [features]
-testing = ["dep:rand", "docs_rs_config/testing", "docs_rs_opentelemetry/testing"]
+testing = [
+    "dep:rand",
+    "dep:tempfile",
+    "docs_rs_config/testing",
+    "docs_rs_opentelemetry/testing",
+]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -28,9 +38,11 @@ serde_json = { workspace = true }
 slug = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true }
+tempfile = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata", features = ["testing"] }
@@ -40,6 +52,7 @@ docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 rand = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
+url = { workspace = true }
 
 [lints]
 workspace = true

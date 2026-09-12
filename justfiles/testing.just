@@ -70,7 +70,7 @@ _build-test-binaries:
     set -euo pipefail
 
     export SQLX_OFFLINE=1
-    cargo test --no-run --workspace --locked
+    cargo nextest run --no-run --workspace --locked
 
 # Build and run the complete Rust workspace test suite.
 [group('testing')]
@@ -87,7 +87,7 @@ run-tests: compose-up-resources _build-test-binaries
     export AWS_SECRET_ACCESS_KEY=secret_key
     export S3_ENDPOINT=http://localhost:9000
 
-    cargo test --workspace --locked --no-fail-fast
+    cargo nextest run --workspace --locked --no-fail-fast
 
 # Run ignored builder integration tests serially.
 [group('testing')]
@@ -101,7 +101,24 @@ run-builder-tests: compose-up-resources
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
 
-    cargo test --locked -- --ignored --test-threads=1
+    cargo nextest run --locked --run-ignored only --test-threads=1
+
+# Remove the migrated template and any schemas left behind by interrupted test runs.
+[group('testing')]
+clean-test-db-schema: compose-up-resources
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    psql "$DOCSRS_DATABASE_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+        DROP SCHEMA IF EXISTS docs_rs_test_template CASCADE;
+
+        -- `\gexec` takes the SQL statements found in the result of
+        -- the query, and executes them.
+        SELECT format('DROP SCHEMA IF EXISTS %I CASCADE;', schema_name)
+        FROM information_schema.schemata
+        WHERE schema_name ~ '^docs_rs_test_schema_'
+        \gexec
+    SQL
 
 # Test migrations with both SQLx CLI and docs_rs_admin.
 [group('testing')]

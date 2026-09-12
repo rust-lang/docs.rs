@@ -48,7 +48,7 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           version: 2026.9.1
-          install_args: --jobs=1 just
+          install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -59,6 +59,10 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: run tests
+        env:
+          # `pg_dump` in the gh action runner is too old for our postgres
+          # version, so we run it through `docker compose exec`.
+          DOCSRS_TEST_PG_DUMP_FROM_COMPOSE: "true"
         run: just run-tests run-builder-tests
 
       - name: shut down test environment
