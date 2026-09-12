@@ -48,4 +48,5 @@ rustdoc-args = ["--example-rustdoc-arg"]
 # List of command line arguments for `cargo`.
 #
 # These cannot be a subcommand, they may only be options.
+# Of the unstable flags, only `bindeps` also reaches host-side cargo commands.
 cargo-args = ["-Z", "build-std"]
