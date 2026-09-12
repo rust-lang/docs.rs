@@ -269,13 +269,10 @@ impl Cache {
             .max_capacity(config.max_size_mb * 1024)
             // the eviction listener is called when moka evicts a cache entry.
             // In this case we want to delete the corresponding local files.
-            .eviction_listener(move |path, entry, reason| {
+            .async_eviction_listener(move |path, entry, reason| {
                 let path = path.to_path_buf();
                 let metrics = metrics_for_eviction.clone();
-                // The spawned task means file deletion is deferred. See the
-                // "benign race with the eviction listener" comment in `find_index_inner`
-                // for why this is acceptable.
-                tokio::spawn(async move {
+                Box::pin(async move {
                     let evicted_bytes = entry.file_size_kib as u64 * 1024;
                     let reason_attr = [KeyValue::new("cause", format!("{reason:?}"))];
 
@@ -285,7 +282,8 @@ impl Cache {
                         .evicted_entry_size
                         .record(evicted_bytes, &reason_attr);
 
-                    // `purge` already removed explicitly invalidated files.
+                    // Explicit invalidation leaves file cleanup to the caller
+                    // (`purge` or the repair initializer in `find_index_inner`).
                     // Deleting again could remove a newly downloaded replacement.
                     if reason == RemovalCause::Explicit {
                         return;
@@ -304,7 +302,7 @@ impl Cache {
                             "failed to remove local archive index file on cache eviction"
                         );
                     }
-                });
+                })
             })
             .build();
 
@@ -515,6 +513,12 @@ impl Cache {
             }
         };
 
+        // An existing manager entry would skip the initializer even though its
+        // file could not be opened. Invalidate it so this attempt can repair it.
+        // Explicit invalidation does not delete files; cleanup and download are
+        // performed by the coalesced initializer below.
+        self.manager.invalidate(&local_index_path).await;
+
         let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
 
         // moka will coalesce all concurrent calls to try_get_with_by_ref with the same key
@@ -524,23 +528,9 @@ impl Cache {
         // missing archive index.
         self.manager
             .try_get_with_by_ref(&local_index_path, async {
-                // NOTE: benign race with the eviction listener.
-                //
-                // When moka evicts an entry (time/size pressure), it removes it from the
-                // cache immediately but runs the eviction listener later (via a spawned
-                // tokio task that deletes the local file).
-                //
-                // If a new request arrives between the cache removal and the file deletion:
-                //   1. Cache miss → we enter this closure.
-                //   2. `try_exists` → true (file not deleted yet).
-                //   3. We re-insert the existing file into the cache.
-                //   4. The eviction listener's spawned task then runs and deletes the file
-                //      out from under us.
-                //   5. The next `find` call fails on the fast path (file gone), falls back
-                //      into this closure, sees `try_exists` → false, and re-downloads.
-                //
-                // Net impact: one request pays the cost of an extra S3 download. No error
-                // is visible to the user since the self-repair logic handles it.
+                // The initializer's filesystem operations can still overlap eviction
+                // cleanup. The final open validates the file after initialization;
+                // the caller's bounded retry loop handles any remaining race.
                 let entry = if !force_redownload && fs::try_exists(&local_index_path).await? {
                     // after server startup we might have local indexes that don't
                     // yet exist in our cache manager.
@@ -1331,6 +1321,45 @@ mod tests {
         Ok(())
     }
 
+    #[test_case::test_case(false; "missing file")]
+    #[test_case::test_case(true; "corrupt file")]
+    #[tokio::test]
+    async fn find_index_inner_repairs_stale_manager_entry(corrupt: bool) -> Result<()> {
+        let cache = test_cache().await?;
+        const BUILD_ID: Option<BuildId> = Some(BuildId(7));
+        const ARCHIVE_NAME: &str = "stale-manager.zip";
+        let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
+        let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+        let index_bytes = create_index_bytes(1).await?;
+        fs::write(&local_index, &index_bytes).await?;
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert(remote_index_path.clone(), index_bytes);
+
+        cache
+            .find(ARCHIVE_NAME, BUILD_ID, "testfile0", &downloader)
+            .await?;
+        assert_eq!(downloader.download_count(&remote_index_path), 0);
+        assert!(cache.manager.get(&local_index).await.is_some());
+
+        if corrupt {
+            fs::write(&local_index, b"not-a-sqlite-index").await?;
+        } else {
+            fs::remove_file(&local_index).await?;
+        }
+
+        // Repair must happen within one attempt, even though Moka still has an
+        // entry. Calling the inner method excludes the outer purge/retry loop.
+        let mut index = cache
+            .find_index_inner(ARCHIVE_NAME, BUILD_ID, &downloader)
+            .await?;
+        assert!(index.find("testfile0").await?.is_some());
+        assert_eq!(downloader.download_count(&remote_index_path), 1);
+        assert!(cache.manager.get(&local_index).await.is_some());
+        Ok(())
+    }
+
     #[tokio::test]
     async fn find_downloads_when_local_cache_missing() -> Result<()> {
         let cache = test_cache().await?;
@@ -1471,7 +1500,7 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn manager_capacity_eviction_removes_index_wal_and_shm() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("listener-remove.zip", Some(BuildId(17)));
@@ -1494,9 +1523,6 @@ mod tests {
             .await;
 
         cache.flush().await?;
-        // The eviction listener deletes files in a spawned task;
-        // give it time to complete on the multi-thread runtime.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         assert!(!fs::try_exists(&local_index).await?);
         assert!(!fs::try_exists(&wal).await?);
@@ -1507,13 +1533,7 @@ mod tests {
 
     #[tokio::test]
     async fn purge_eviction_listener_does_not_remove_replacement() -> Result<()> {
-        let mut cache = test_cache().await?;
-        // Drive maintenance explicitly so the only remaining spawned tasks
-        // belong to the eviction listener and can be drained below.
-        for task in cache.cache.background_tasks.drain(..) {
-            task.abort();
-            let _ = task.await;
-        }
+        let cache = test_cache().await?;
         const BUILD_ID: Option<BuildId> = Some(BuildId(17));
         const ARCHIVE_NAME: &str = "purge-replacement.zip";
         let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
@@ -1527,21 +1547,10 @@ mod tests {
             .await;
 
         cache.purge(ARCHIVE_NAME, BUILD_ID).await?;
+        fs::write(&local_index, b"replacement index").await?;
+        fs::write(&wal, b"replacement wal").await?;
+        fs::write(&shm, b"replacement shm").await?;
         cache.flush().await?;
-
-        // Publish without yielding on this single-thread runtime, before any
-        // deletion task spawned by the eviction listener can finish.
-        std::fs::write(&local_index, b"replacement index")?;
-        std::fs::write(&wal, b"replacement wal")?;
-        std::fs::write(&shm, b"replacement shm")?;
-
-        let runtime_metrics = tokio::runtime::Handle::current().metrics();
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while runtime_metrics.num_alive_tasks() > 0 {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await?;
 
         assert_eq!(fs::read(&local_index).await?, b"replacement index");
         assert_eq!(fs::read(&wal).await?, b"replacement wal");
