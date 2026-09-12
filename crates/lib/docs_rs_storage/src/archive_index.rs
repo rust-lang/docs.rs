@@ -606,8 +606,18 @@ impl Cache {
         downloader: &D,
     ) -> Result<Index> {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
+
+        // An open immutable connection survives unlinking. Refresh recency on
+        // a cache hit, but leave registration and repair to the locked path.
+        if let Ok(index) = Index::open(&local_index_path).await
+            && self.manager.get(&local_index_path).await.is_some()
+        {
+            return Ok(index);
+        }
+
         let guard = self.path_locks.lock(&local_index_path).await;
 
+        // Recheck after locking: another request may already have repaired it.
         let index = match Index::open(&local_index_path).await {
             Ok(index) => index,
             Err(err) => {
@@ -1595,6 +1605,27 @@ mod tests {
         assert_eq!(fs::read(&path).await?, b"replacement");
         assert!(cache.manager.contains_key(&path));
         assert!(cache.path_locks.0.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cached_lookup_does_not_wait_for_path_lock() -> Result<()> {
+        let cache = test_cache().await?;
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert("fast-path.zip.index".into(), create_index_bytes(1).await?);
+        cache.find_index("fast-path.zip", None, &downloader).await?;
+
+        let path = cache.local_index_path("fast-path.zip", None);
+        let _guard = cache.path_locks.lock(&path).await;
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            cache.find("fast-path.zip", None, "testfile0", &downloader),
+        )
+        .await??;
+        assert!(result.is_some());
+        assert_eq!(downloader.download_count("fast-path.zip.index"), 1);
         Ok(())
     }
 
