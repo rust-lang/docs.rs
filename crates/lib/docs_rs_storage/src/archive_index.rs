@@ -589,21 +589,7 @@ impl Cache {
             Ok(index) => (index, None),
             Err(err) => {
                 debug!(?err, "archive index open failed, will try repair.");
-                self.manager.invalidate(&local_index_path).await;
-                Self::remove_local_index(&guard).await?;
-                let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
-                let size = self
-                    .download_archive_index(downloader, &remote_index_path, &guard)
-                    .await?;
-                let index = match Index::open(&local_index_path).await {
-                    Ok(index) => index,
-                    Err(err) => {
-                        // The download was published but is not tracked by Moka
-                        // yet. Remove it before releasing the path lock.
-                        Self::remove_local_index(&guard).await?;
-                        return Err(err);
-                    }
-                };
+                let (index, size) = self.replace_index(archive_path, downloader, &guard).await?;
                 (index, Some(size))
             }
         };
@@ -640,11 +626,13 @@ impl Cache {
                     warn!(?err, "cached archive index query failed, repairing once");
                     drop(index);
                     attempt = 2;
-                    self.purge(archive_path, latest_build_id).await?;
-                    let mut replacement = self
-                        .find_index(archive_path, latest_build_id, downloader)
-                        .await?;
-                    replacement.find(path_in_archive).await
+                    self.recheck_and_repair_query(
+                        archive_path,
+                        latest_build_id,
+                        path_in_archive,
+                        downloader,
+                    )
+                    .await
                 }
                 result => result,
             }
@@ -659,6 +647,60 @@ impl Cache {
             ],
         );
         result
+    }
+
+    async fn recheck_and_repair_query<D: Downloader + Sync>(
+        &self,
+        archive_path: &str,
+        latest_build_id: Option<BuildId>,
+        path_in_archive: &str,
+        downloader: &D,
+    ) -> Result<Option<FileInfo>> {
+        let path = self.local_index_path(archive_path, latest_build_id);
+        let guard = self.path_locks.lock(&path).await;
+        // The failed connection may refer to an old, unlinked file. Validate
+        // the current file before deleting anything, including an Ok(None).
+        if let Ok(mut current) = Index::open(&path).await
+            && let Ok(result) = current.find(path_in_archive).await
+        {
+            if self.manager.get(&path).await.is_none() {
+                self.manager
+                    .insert(path.clone(), Arc::new(Entry::from_path(&path).await))
+                    .await;
+            }
+            return Ok(result);
+        }
+
+        // Keep the lock through repair and the final query. Calling purge() or
+        // find_index() here would attempt to acquire the same lock again.
+        let (mut replacement, size) = self.replace_index(archive_path, downloader, &guard).await?;
+        self.manager
+            .insert(path, Arc::new(Entry::from_size(size)))
+            .await;
+        replacement.find(path_in_archive).await
+    }
+
+    /// Replace and open an unusable index while the caller holds its path lock.
+    async fn replace_index(
+        &self,
+        archive_path: &str,
+        downloader: &impl Downloader,
+        guard: &Arc<PathGuard>,
+    ) -> Result<(Index, u64)> {
+        self.manager.invalidate(&guard.path).await;
+        Self::remove_local_index(guard).await?;
+        let remote_index_path = format!("{archive_path}.{ARCHIVE_INDEX_FILE_EXTENSION}");
+        let size = self
+            .download_archive_index(downloader, &remote_index_path, guard)
+            .await?;
+        match Index::open(&guard.path).await {
+            Ok(index) => Ok((index, size)),
+            Err(err) => {
+                // Publication succeeded but registration has not happened yet.
+                Self::remove_local_index(guard).await?;
+                Err(err)
+            }
+        }
     }
 
     /// Caller must hold the path lock through publication and cache registration.
@@ -1534,6 +1576,71 @@ mod tests {
             assert!(result?.is_some());
         }
         assert_eq!(downloader.download_count("query-failure.zip.index"), 1);
+        Ok(())
+    }
+
+    #[test_case::test_case("testfile0", true; "replacement contains requested file")]
+    #[test_case::test_case("missing", false; "replacement lacks requested file")]
+    #[tokio::test]
+    async fn stale_query_failure_preserves_concurrent_replacement(
+        requested: &'static str,
+        expected_found: bool,
+    ) -> Result<()> {
+        let cache = Arc::new(test_cache().await?);
+        let path = cache.local_index_path("stale-query.zip", None);
+        let mut conn = sqlite_create(&path).await?;
+        sqlx::query("CREATE TABLE unrelated (id INTEGER)")
+            .execute(&mut conn)
+            .await?;
+        conn.close().await?;
+        cache
+            .find_index("stale-query.zip", None, &FakeDownloader::new())
+            .await?;
+
+        let mut downloader = FakeDownloader::new();
+        downloader
+            .indices
+            .insert("stale-query.zip.index".into(), create_index_bytes(1).await?);
+        let downloader = Arc::new(downloader);
+        let guard = cache.path_locks.lock(&path).await;
+        let lookup = tokio::spawn({
+            let cache = cache.clone();
+            let downloader = downloader.clone();
+            async move {
+                cache
+                    .find("stale-query.zip", None, requested, downloader.as_ref())
+                    .await
+            }
+        });
+
+        // The optimistic query fails against the old schema, then waits for
+        // our lock. The registry and our owned guard account for two references.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let waiting = Arc::strong_count(cache.path_locks.0.get(&path).unwrap().value()) > 2;
+                if waiting {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+
+        let (replacement, size) = cache
+            .replace_index("stale-query.zip", downloader.as_ref(), &guard)
+            .await?;
+        drop(replacement);
+        cache
+            .manager
+            .insert(path.clone(), Arc::new(Entry::from_size(size)))
+            .await;
+        drop(guard);
+
+        let result = tokio::time::timeout(Duration::from_secs(5), lookup).await???;
+        assert_eq!(result.is_some(), expected_found);
+        assert_eq!(downloader.download_count("stale-query.zip.index"), 1);
+        assert!(fs::try_exists(&path).await?);
+        assert!(cache.manager.contains_key(&path));
         Ok(())
     }
 
