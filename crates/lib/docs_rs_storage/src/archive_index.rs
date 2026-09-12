@@ -175,12 +175,6 @@ type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 #[derive(Default)]
 struct PathLocks(DashMap<PathBuf, Arc<Mutex<()>>>);
 
-struct PathGuard {
-    registry: Arc<PathLocks>,
-    path: PathBuf,
-    guard: Option<OwnedMutexGuard<()>>,
-}
-
 impl PathLocks {
     async fn lock(self: &Arc<Self>, path: &Path) -> Arc<PathGuard> {
         let lock = {
@@ -196,6 +190,15 @@ impl PathLocks {
         lease.guard = Some(lock.lock_owned().await);
         Arc::new(lease)
     }
+}
+
+/// a small guard, holding the mutex/lock for a single path.
+/// Will remove itself from the registry / dashmap when the
+/// last lock is given back.
+struct PathGuard {
+    registry: Arc<PathLocks>,
+    path: PathBuf,
+    guard: Option<OwnedMutexGuard<()>>,
 }
 
 impl Drop for PathGuard {
