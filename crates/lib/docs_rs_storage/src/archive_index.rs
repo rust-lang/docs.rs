@@ -595,7 +595,16 @@ impl Cache {
                 let size = self
                     .download_archive_index(downloader, &remote_index_path, &guard)
                     .await?;
-                (Index::open(&local_index_path).await?, Some(size))
+                let index = match Index::open(&local_index_path).await {
+                    Ok(index) => index,
+                    Err(err) => {
+                        // The download was published but is not tracked by Moka
+                        // yet. Remove it before releasing the path lock.
+                        Self::remove_local_index(&guard).await?;
+                        return Err(err);
+                    }
+                };
+                (index, Some(size))
             }
         };
 
@@ -1470,6 +1479,9 @@ mod tests {
             "file is not a database"
         );
         assert_eq!(downloader.download_count(&remote_index_path), 1);
+        let local_index = cache.local_index_path(ARCHIVE_NAME, LATEST_BUILD_ID);
+        assert!(!fs::try_exists(&local_index).await?);
+        assert!(!cache.manager.contains_key(&local_index));
 
         Ok(())
     }
