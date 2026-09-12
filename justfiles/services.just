@@ -1,8 +1,11 @@
 # Start the PostgreSQL and S3 resources used by local development.
 [group('compose')]
 compose-up-resources: _touch-docker-env
-    # this just start up the "default" resources from `docker-compose.yml`
-    docker compose up --detach --wait --remove-orphans
+    # Keep the persistent resources as the default Compose services. The
+    # bucket provisioner is a one-shot command, which `--wait` would otherwise
+    # treat as a failed (exited) service.
+    docker compose up --detach --wait --remove-orphans db s3
+    docker compose run --rm --no-deps s3-init
 
 # Apply migrations, then start the requested Compose profiles.
 [group('compose')]
