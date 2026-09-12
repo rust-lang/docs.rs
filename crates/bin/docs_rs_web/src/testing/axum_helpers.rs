@@ -93,6 +93,13 @@ pub(crate) trait AxumRouterTestExt {
         config: &Config,
     ) -> Result<AxumResponse>;
     async fn assert_not_found(&self, path: &str) -> Result<()>;
+    async fn assert_cached_not_found(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<()>;
+
     async fn assert_conditional_get(
         &self,
         initial_path: &str,
@@ -213,6 +220,19 @@ impl AxumRouterTestExt for axum::Router {
 
         // for now, 404s should always have `no-cache`
         assert_cache_headers_eq(&response, &cache::NO_CACHING);
+
+        assert_eq!(response.status(), 404, "GET {path} should have been a 404");
+        Ok(())
+    }
+
+    async fn assert_cached_not_found(
+        &self,
+        path: &str,
+        cache_policy: cache::CachePolicy,
+        config: &Config,
+    ) -> Result<()> {
+        let response = self.get(path).await?;
+        response.assert_cache_control(cache_policy, config);
 
         assert_eq!(response.status(), 404, "GET {path} should have been a 404");
         Ok(())
