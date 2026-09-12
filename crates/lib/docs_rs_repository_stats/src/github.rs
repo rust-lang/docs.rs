@@ -1,7 +1,7 @@
 use crate::{
     RateLimitReached,
     config::Config,
-    retry::NoRateLimitRetryStrategy,
+    retry::RepositoryForgeRetryStrategy,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 use anyhow::{Result, anyhow, bail};
@@ -84,7 +84,7 @@ impl GitHub {
         )
         .with(RetryTransientMiddleware::new_with_policy_and_strategy(
             ExponentialBackoff::builder().build_with_max_retries(config.github_api_retries),
-            NoRateLimitRetryStrategy,
+            RepositoryForgeRetryStrategy,
         ))
         .build();
 
@@ -309,6 +309,7 @@ mod tests {
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
     use reqwest::header::AUTHORIZATION;
+    use test_case::test_case;
 
     const TEST_TOKEN: &str = "qsjdnfqdq";
 
@@ -426,7 +427,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retries_server_errors() -> Result<()> {
+    #[test_case(499)]
+    #[test_case(500)]
+    async fn retries_server_errors(status_code: usize) -> Result<()> {
         const RETRIES: u32 = 2;
 
         let mut config = github_config()?;
@@ -436,7 +439,7 @@ mod tests {
         let mock = server
             .mock("POST", "/graphql")
             .with_header("content-type", "application/json")
-            .with_status(500)
+            .with_status(status_code)
             .expect((RETRIES + 1) as usize)
             .create();
 
@@ -447,7 +450,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(err.to_string().contains("500 Internal Server Error"));
+        assert!(err.to_string().contains(&status_code.to_string()));
         mock.assert();
 
         Ok(())

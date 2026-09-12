@@ -34,6 +34,7 @@ docs_rs_test_fakes = { path = "../docs_rs_test_fakes" }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 mockito = { workspace = true }
 pretty_assertions = { workspace = true }
+test-case = { workspace = true }
 tokio = { workspace = true }
 
 [lints]
