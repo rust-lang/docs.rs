@@ -173,7 +173,7 @@ type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
 
 /// Only active operations and waiters retain a lock, not every cached file.
 #[derive(Default)]
-struct PathLocks(DashMap<PathBuf, (Arc<Mutex<()>>, usize)>);
+struct PathLocks(DashMap<PathBuf, Arc<Mutex<()>>>);
 
 struct PathGuard {
     registry: Arc<PathLocks>,
@@ -184,10 +184,8 @@ struct PathGuard {
 impl PathLocks {
     async fn lock(self: &Arc<Self>, path: &Path) -> Arc<PathGuard> {
         let lock = {
-            let mut entry = self.0.entry(path.to_owned()).or_default();
-            let (lock, users) = entry.value_mut();
-            *users += 1;
-            lock.clone()
+            let entry = self.0.entry(path.to_owned()).or_default();
+            Arc::clone(entry.value())
         };
         // Construct the lease before awaiting so cancellation also unregisters it.
         let mut lease = PathGuard {
@@ -203,12 +201,11 @@ impl PathLocks {
 impl Drop for PathGuard {
     fn drop(&mut self) {
         drop(self.guard.take());
-        // Decrement and remove under the same shard lock as acquisition, so a
-        // new waiter cannot register between the last-user check and removal.
-        self.registry.0.remove_if_mut(&self.path, |_, (_, users)| {
-            *users -= 1;
-            *users == 0
-        });
+        // The registry owns one reference; waiters and owned guards own the
+        // others. Check under the same shard lock used to clone on acquisition.
+        self.registry
+            .0
+            .remove_if(&self.path, |_, lock| Arc::strong_count(lock) == 1);
     }
 }
 
@@ -1673,17 +1670,25 @@ mod tests {
         Ok(())
     }
 
+    #[test_case::test_case(false; "waiter cancelled before holder drops")]
+    #[test_case::test_case(true; "last waiter cancelled after holder drops")]
     #[tokio::test]
-    async fn path_locks_release_cancelled_waiters() {
+    async fn path_locks_release_cancelled_waiters(holder_drops_first: bool) {
         let locks = Arc::new(PathLocks::default());
         let path = Path::new("index");
         let guard = locks.lock(path).await;
         let mut waiter = Box::pin(locks.lock(path));
         assert!(futures_util::poll!(waiter.as_mut()).is_pending());
-        assert_eq!(locks.0.get(path).unwrap().1, 2);
-        drop(waiter);
-        assert_eq!(locks.0.get(path).unwrap().1, 1);
-        drop(guard);
+        assert!(locks.0.contains_key(path));
+        if holder_drops_first {
+            drop(guard);
+            assert!(locks.0.contains_key(path));
+            drop(waiter);
+        } else {
+            drop(waiter);
+            assert!(locks.0.contains_key(path));
+            drop(guard);
+        }
         assert!(locks.0.is_empty());
     }
 
