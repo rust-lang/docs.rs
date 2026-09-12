@@ -607,7 +607,7 @@ impl Cache {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
         let guard = self.path_locks.lock(&local_index_path).await;
 
-        let mut index = match Index::open(&local_index_path).await {
+        let index = match Index::open(&local_index_path).await {
             Ok(index) => index,
             Err(err) => {
                 debug!(?err, "archive index open failed, will try repair.");
@@ -626,12 +626,12 @@ impl Cache {
         };
 
         // The path lock coalesces downloads and protects publication through
-        // registration. Cleanup cannot delete this file while the Index is alive.
+        // registration and opening SQLite. On Unix, the immutable connection
+        // keeps reading its open file even if cleanup later unlinks the path.
         if self.manager.get(&local_index_path).await.is_none() {
             let entry = Arc::new(Entry::from_path(&local_index_path).await);
             self.manager.insert(local_index_path, entry).await;
         }
-        index._path_guard = Some(guard);
         Ok(index)
     }
 
@@ -881,8 +881,6 @@ where
 
 pub struct Index {
     conn: sqlx::SqliteConnection,
-    // Retain protection for callers that stream queries after find_index returns.
-    _path_guard: Option<Arc<PathGuard>>,
 }
 
 impl Index {
@@ -892,10 +890,7 @@ impl Index {
     {
         let archive_index_path = archive_index_path.as_ref().to_path_buf();
         let conn = sqlite_open(&archive_index_path).await?;
-        Ok(Self {
-            conn,
-            _path_guard: None,
-        })
+        Ok(Self { conn })
     }
 
     #[instrument(skip(self))]
@@ -1603,36 +1598,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn active_index_blocks_cleanup_but_not_other_paths() -> Result<()> {
+    async fn active_index_survives_cleanup_and_replacement() -> Result<()> {
         let cache = test_cache().await?;
         let path = cache.local_index_path("active.zip", None);
         let mut downloader = FakeDownloader::new();
-        let bytes = create_index_bytes(1).await?;
         downloader
             .indices
-            .insert("active.zip.index".into(), bytes.clone());
-        downloader.indices.insert("other.zip.index".into(), bytes);
+            .insert("active.zip.index".into(), create_index_bytes(1).await?);
         let mut index = cache.find_index("active.zip", None, &downloader).await?;
         cache.manager.invalidate(&path).await;
         // Simulate an eviction queued while the returned Index is still in use.
         cache
             .cleanup
             .send(Cleanup::Evicted(Arc::new(path.clone())))?;
-        let mut cleanup = Box::pin(cache.flush());
-        assert!(futures_util::poll!(cleanup.as_mut()).is_pending());
-        assert!(index.find("testfile0").await?.is_some());
-        assert!(
-            tokio::time::timeout(
-                Duration::from_secs(5),
-                cache.find("other.zip", None, "testfile0", &downloader)
-            )
-            .await??
-            .is_some()
-        );
-        assert!(fs::try_exists(&path).await?);
-        drop(index);
-        tokio::time::timeout(Duration::from_secs(5), cleanup).await??;
+        tokio::time::timeout(Duration::from_secs(5), cache.flush()).await??;
         assert!(!fs::try_exists(&path).await?);
+        assert!(index.find("testfile0").await?.is_some());
+
+        // A second lookup of the same archive must not wait for the first
+        // connection to be dropped, and must see the newly downloaded index.
+        downloader
+            .indices
+            .insert("active.zip.index".into(), create_index_bytes(2).await?);
+        let mut replacement = tokio::time::timeout(
+            Duration::from_secs(5),
+            cache.find_index("active.zip", None, &downloader),
+        )
+        .await??;
+        assert!(replacement.find("testfile1").await?.is_some());
+        assert!(index.find("testfile1").await?.is_none());
+        assert!(index.find("testfile0").await?.is_some());
+        assert!(fs::try_exists(&path).await?);
+        assert_eq!(downloader.download_count("active.zip.index"), 2);
         assert!(cache.path_locks.0.lock().unwrap().is_empty());
         Ok(())
     }
