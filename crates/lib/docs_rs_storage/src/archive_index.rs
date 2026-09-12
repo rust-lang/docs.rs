@@ -9,7 +9,7 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{Stream, TryStreamExt as _};
-use moka::future::Cache as MokaCache;
+use moka::{future::Cache as MokaCache, notification::RemovalCause};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Gauge, Histogram},
@@ -276,15 +276,20 @@ impl Cache {
                 // "benign race with the eviction listener" comment in `find_index_inner`
                 // for why this is acceptable.
                 tokio::spawn(async move {
-                    let reason = format!("{reason:?}");
                     let evicted_bytes = entry.file_size_kib as u64 * 1024;
-                    let reason_attr = [KeyValue::new("cause", reason.clone())];
+                    let reason_attr = [KeyValue::new("cause", format!("{reason:?}"))];
 
                     metrics.evicted_entries.add(1, &reason_attr);
                     metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
                     metrics
                         .evicted_entry_size
                         .record(evicted_bytes, &reason_attr);
+
+                    // `purge` already removed explicitly invalidated files.
+                    // Deleting again could remove a newly downloaded replacement.
+                    if reason == RemovalCause::Explicit {
+                        return;
+                    }
 
                     trace!(
                         ?path,
@@ -1467,7 +1472,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn manager_invalidate_removes_index_wal_and_shm_via_eviction_listener() -> Result<()> {
+    async fn manager_capacity_eviction_removes_index_wal_and_shm() -> Result<()> {
         let cache = test_cache().await?;
         let local_index = cache.local_index_path("listener-remove.zip", Some(BuildId(17)));
         let wal = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-wal"));
@@ -1480,10 +1485,14 @@ mod tests {
 
         cache
             .manager
-            .insert(local_index.clone(), Arc::new(Entry::from_size(5)))
+            .insert(
+                local_index.clone(),
+                Arc::new(Entry::from_size(
+                    (cache.config.max_size_mb + 1) * 1024 * 1024,
+                )),
+            )
             .await;
 
-        cache.manager.invalidate(&local_index).await;
         cache.flush().await?;
         // The eviction listener deletes files in a spawned task;
         // give it time to complete on the multi-thread runtime.
@@ -1493,6 +1502,50 @@ mod tests {
         assert!(!fs::try_exists(&wal).await?);
         assert!(!fs::try_exists(&shm).await?);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn purge_eviction_listener_does_not_remove_replacement() -> Result<()> {
+        let mut cache = test_cache().await?;
+        // Drive maintenance explicitly so the only remaining spawned tasks
+        // belong to the eviction listener and can be drained below.
+        for task in cache.cache.background_tasks.drain(..) {
+            task.abort();
+            let _ = task.await;
+        }
+        const BUILD_ID: Option<BuildId> = Some(BuildId(17));
+        const ARCHIVE_NAME: &str = "purge-replacement.zip";
+        let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
+        let wal = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-wal"));
+        let shm = local_index.with_extension(format!("{ARCHIVE_INDEX_FILE_EXTENSION}-shm"));
+
+        fs::write(&local_index, b"old index").await?;
+        cache
+            .manager
+            .insert(local_index.clone(), Arc::new(Entry::from_size(9)))
+            .await;
+
+        cache.purge(ARCHIVE_NAME, BUILD_ID).await?;
+        cache.flush().await?;
+
+        // Publish without yielding on this single-thread runtime, before any
+        // deletion task spawned by the eviction listener can finish.
+        std::fs::write(&local_index, b"replacement index")?;
+        std::fs::write(&wal, b"replacement wal")?;
+        std::fs::write(&shm, b"replacement shm")?;
+
+        let runtime_metrics = tokio::runtime::Handle::current().metrics();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while runtime_metrics.num_alive_tasks() > 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+
+        assert_eq!(fs::read(&local_index).await?, b"replacement index");
+        assert_eq!(fs::read(&wal).await?, b"replacement wal");
+        assert_eq!(fs::read(&shm).await?, b"replacement shm");
         Ok(())
     }
 
