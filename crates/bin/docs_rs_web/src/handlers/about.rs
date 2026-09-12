@@ -83,6 +83,9 @@ pub(crate) async fn about_handler(subpage: Option<Path<String>>) -> AxumResult<i
                 message: msg.into(),
                 status: StatusCode::NOT_FOUND,
                 recovery: Vec::new(),
+                cache_policy: Some(CachePolicy::ForeverInCdn(
+                    SURROGATE_KEY_DOCSRS_STATIC.into(),
+                )),
             };
             page.into_response()
         }
@@ -126,6 +129,20 @@ mod tests {
             }
         }
         web.assert_success("/about").await?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_about_page_is_cached() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let response = env.web_app().await.get("/about/does-not-exist").await?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        response.assert_cache_control(
+            CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+            env.config(),
+        );
+
         Ok(())
     }
 }
