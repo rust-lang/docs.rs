@@ -12,7 +12,7 @@ use tracing::warn;
 
 use crate::{
     RateLimitReached,
-    retry::NoRateLimitRetryStrategy,
+    retry::RepositoryForgeRetryStrategy,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 
@@ -88,7 +88,7 @@ impl GitLab {
         )
         .with(RetryTransientMiddleware::new_with_policy_and_strategy(
             ExponentialBackoff::builder().build_with_max_retries(api_retries),
-            NoRateLimitRetryStrategy,
+            RepositoryForgeRetryStrategy,
         ))
         .build();
 
