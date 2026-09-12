@@ -2,7 +2,7 @@
 #
 # runs & configures by default:
 # * `db` -> postgres db
-# * `s3` -> minio
+# * `s3` -> rustfs
 #
 # optional profile: `web`:
 # * `web` -> webserver
@@ -26,6 +26,7 @@
 # optional profile: `full`: all of the above.
 #
 # Services purely for manual usage with `docker compose run` are:
+# * `s3-init`: provisions the configured S3 bucket after RustFS is ready
 # * `cli`: to run simple CLI commands that only need the database & S3
 # * `builder-cli`: to run CLI commands that need the build environment.
 # * `registry-watcher-cli`: to run CLI commands that need the crates.io index.
@@ -106,8 +107,10 @@ x-builder: &builder
     # this.
     platform: "linux/amd64"
     depends_on:
-        - db
-        - s3
+        db:
+            condition: service_started
+        s3:
+            condition: service_healthy
     environment:
         <<: *builder-environment
     env_file:
@@ -118,8 +121,10 @@ x-registry-watcher: &registry-watcher
         <<: *build
         target: registry-watcher
     depends_on:
-        - db
-        - s3
+        db:
+            condition: service_started
+        s3:
+            condition: service_healthy
     volumes:
         - "./ignored/docker-registry-watcher/prefix:/opt/docsrs/prefix"
         - crates-io-index:/opt/docsrs/crates.io-index
@@ -141,8 +146,10 @@ services:
             <<: *build
             target: web-server
         depends_on:
-            - db
-            - s3
+            db:
+                condition: service_started
+            s3:
+                condition: service_healthy
         ports:
             - "3000:3000"
         environment:
@@ -213,8 +220,10 @@ services:
             # only for clarification.
             # When using "docker compose run", these dependencies are ignored,
             # we handle this in our `just` commands.
-            - db
-            - s3
+            db:
+                condition: service_started
+            s3:
+                condition: service_healthy
         environment: *environment
         volumes:
             - "./ignored/docker-cli/prefix:/opt/docsrs/prefix"
@@ -240,23 +249,45 @@ services:
             test: pg_isready --username cratesfyi
 
     s3:
-        image: minio/minio
-        entrypoint: >
-            /bin/sh -c "
-                mkdir -p /data/rust-docs-rs;
-                minio server /data --console-address ":9001";
-            "
+        image: rustfs/rustfs:latest
+        command: /data
         ports:
             - "127.0.0.1:9000:9000"
             - "127.0.0.1:9001:9001"
         volumes:
-            - minio-data:/data
+            - rustfs-data:/data
         environment:
-            MINIO_ROOT_USER: cratesfyi
-            MINIO_ROOT_PASSWORD: secret_key
+            RUSTFS_ACCESS_KEY: cratesfyi
+            RUSTFS_SECRET_KEY: secret_key
+            RUSTFS_ADDRESS: :9000
+            RUSTFS_CONSOLE_ADDRESS: :9001
+            RUSTFS_CONSOLE_ENABLE: true
+            RUSTFS_OBS_LOGGER_LEVEL: error
         healthcheck:
             <<: *healthcheck-interval
-            test: mc ready local
+            test: curl --fail http://localhost:9000/health
+
+    # RustFS starts with no buckets. Provision the application bucket before
+    # starting services that write to object storage.
+    s3-init:
+        image: amazon/aws-cli:latest
+        depends_on:
+            s3:
+                condition: service_healthy
+        environment:
+            AWS_ACCESS_KEY_ID: cratesfyi
+            AWS_SECRET_ACCESS_KEY: secret_key
+            AWS_DEFAULT_REGION: us-east-1
+            AWS_EC2_METADATA_DISABLED: true
+            S3_BUCKET: ${DOCSRS_S3_BUCKET:-rust-docs-rs}
+        entrypoint: /bin/sh
+        command:
+            - -c
+            - >-
+                aws --endpoint-url http://s3:9000 s3api head-bucket --bucket "$$S3_BUCKET"
+                || aws --endpoint-url http://s3:9000 s3api create-bucket --bucket "$$S3_BUCKET"
+        profiles:
+            - manual
 
     opentelemetry:
         build:
@@ -277,7 +308,7 @@ services:
 
 volumes:
     postgres-data: {}
-    minio-data: {}
+    rustfs-data: {}
     crates-io-index: {}
     rustwide-builder-a: {}
     rustwide-builder-b: {}
