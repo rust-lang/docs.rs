@@ -127,7 +127,7 @@ static FOREVER_IN_CDN_AND_BROWSER: ResponseCacheHeaders = ResponseCacheHeaders {
 };
 
 /// defines the wanted caching behaviour for a web response.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CachePolicy {
     /// no browser or CDN caching.
     /// In some cases the browser might still use cached content,
