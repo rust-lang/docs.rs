@@ -290,7 +290,8 @@ mod tests {
 
     #[test_case(BuildStepError::Command(CommandError::Timeout(1)), "Timeout"; "timeout")]
     #[test_case(BuildStepError::Command(CommandError::SandboxOOM), "SandboxOOM"; "sandbox oom")]
-    #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid output")), "Other"; "output processing")]
+    #[test_case(BuildStepError::Prepare(anyhow::anyhow!("target unavailable")), "InternalPrepare"; "preparation")]
+    #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid output")), "InternalOutput"; "output processing")]
     fn classifies_build_step_errors(error: BuildStepError, expected: &str) {
         assert_eq!(error.kind(), expected);
     }

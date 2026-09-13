@@ -599,48 +599,42 @@ fn find_single_output_file(
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+    use test_case::test_case;
 
-    // #[test]
-    // fn preparation_aborts_with_diagnostics_but_command_and_output_failures_continue() {
-    //     crate::logging::init(false);
-    //     for error in [
-    //         BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)),
-    //         BuildStepError::Output(anyhow::anyhow!("invalid JSON")),
-    //     ] {
-    //         let step = abort_on_prepare(capture_step::<()>(1024, || Err(error))).unwrap();
-    //         assert!(!step.successful());
-    //     }
-    //     let started = Instant::now();
-    //     let step = capture_step::<()>(1024, || {
-    //         log::info!("fetching build-std dependencies");
-    //         Err(BuildStepError::Prepare(anyhow::anyhow!(
-    //             "dependency download failed"
-    //         )))
-    //     });
-    //     assert!(step.duration > std::time::Duration::ZERO);
-    //     assert!(step.duration <= started.elapsed());
-    //     let error = abort_on_prepare(step).unwrap_err();
-    //     let failure = error.downcast_ref::<crate::FailedStep>().unwrap();
-    //     assert!(failure.log.contains("fetching build-std dependencies"));
-    //     assert!(matches!(failure.error, BuildStepError::Prepare(_)));
-    // }
+    #[test_case(BuildStepError::Prepare(anyhow::anyhow!("dependency download failed")); "prepare")]
+    #[test_case(BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)); "command")]
+    #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid JSON")); "output")]
+    fn captured_failures_preserve_diagnostics_when_propagated(error: BuildStepError) {
+        crate::logging::init(false);
+        let expected_variant = std::mem::discriminant(&error);
+        let started = Instant::now();
+        let step = capture_rustwide_step::<()>(1024, || {
+            log::info!("diagnostic before failure");
+            Err(error)
+        });
+        assert!(step.duration <= started.elapsed());
+        let duration = step.duration;
+        let log = step.log.clone();
+        let failure = step.into_result().unwrap_err();
+        assert_eq!(std::mem::discriminant(&failure.error), expected_variant);
+        assert_eq!(failure.duration, duration);
+        assert_eq!(failure.log, log);
+        assert!(failure.log().contains("diagnostic before failure"));
+    }
 
-    // #[test]
-    // fn metrics_copy_failure_is_nonfatal() -> Result<()> {
-    //     crate::logging::init(false);
-    //     let temporary = tempfile::tempdir()?;
-    //     let source = temporary.path().join("metrics");
-    //     fs::create_dir(&source)?;
-    //     fs::write(source.join("metrics.json"), "{}")?;
-    //     let destination = temporary.path().join("not-a-directory");
-    //     fs::write(&destination, "")?;
-    //     let metrics = capture_step(1024, || {
-    //         copy_compiler_metrics(&source, &destination).map_err(BuildStepError::Output)
-    //     });
-    //     let metrics = abort_on_prepare(metrics)?;
-    //     assert!(matches!(metrics.outcome, Err(BuildStepError::Output(_))));
-    //     Ok(())
-    // }
+    #[test]
+    fn metrics_copy_failure_preserves_source() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let source = temporary.path().join("metrics");
+        fs::create_dir(&source)?;
+        fs::write(source.join("metrics.json"), "{}")?;
+        let destination = temporary.path().join("not-a-directory");
+        fs::write(&destination, "")?;
+
+        assert!(copy_compiler_metrics(&source, &destination).is_err());
+        assert_eq!(fs::read_to_string(source.join("metrics.json"))?, "{}");
+        Ok(())
+    }
 
     #[test]
     fn capture_retains_preparation_failures_without_applying_policy() {
