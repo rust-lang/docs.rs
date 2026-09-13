@@ -60,7 +60,7 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
     }
 }
 
-fn capture_cargo_step<T>(
+fn capture_rustwide_step<T>(
     max_log_size: usize,
     run: impl FnOnce() -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
@@ -80,7 +80,7 @@ pub fn load_cargo_metadata<'build, 'ws>(
     build: &'build Build<'ws>,
     limits: &'build Limits,
 ) -> StepResult<CargoMetadata> {
-    capture_cargo_step(limits.max_log_size(), || {
+    capture_rustwide_step(limits.max_log_size(), || {
         let source_dir = &build.host_source_dir();
 
         debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
@@ -388,7 +388,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
-        self.capture_cargo_step(|| {
+        self.capture_rustwide_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
                 .prepare()
@@ -420,7 +420,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
-        self.capture_cargo_step(|| {
+        self.capture_rustwide_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
                 .prepare()
@@ -459,7 +459,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all, fields(target, emit))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
-        self.capture_cargo_step(|| {
+        self.capture_rustwide_step(|| {
             let mut command = self
                 .command(target)
                 .rustdoc_arg(format!("--emit={emit}"))
@@ -508,16 +508,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .then(|| self.build.host_target_dir().join("metrics"))
     }
 
-    fn capture_cargo_step<T>(
+    fn capture_rustwide_step<T>(
         &self,
         run: impl FnOnce() -> Result<T, BuildStepError>,
     ) -> StepResult<T> {
-        capture_cargo_step(self.limits.max_log_size(), run)
+        capture_rustwide_step(self.limits.max_log_size(), run)
     }
 
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> StepResult<()> {
-        self.capture_cargo_step(|| {
+        self.capture_rustwide_step(|| {
             let source_dir = self.build.host_source_dir();
             debug!("removing invalid lockfile");
             fs::remove_file(source_dir.join("Cargo.lock"))
@@ -650,7 +650,7 @@ mod tests {
     #[test]
     fn capture_retains_preparation_failures_without_applying_policy() {
         crate::logging::init(false);
-        let step = capture_cargo_step::<()>(1024, || {
+        let step = capture_rustwide_step::<()>(1024, || {
             log::info!("installing additional target");
             Err(BuildStepError::Prepare(anyhow::anyhow!(
                 "target unavailable"
