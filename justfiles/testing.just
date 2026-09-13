@@ -89,6 +89,13 @@ run-tests: compose-up-resources _build-test-binaries
 
     cargo test --workspace --locked --no-fail-fast
 
+# Run stress-tests of sub-crates that have them.
+#
+# Should be migrated to some test-tagging (with nextest?) at some point
+[group('testing')]
+run-stress-tests:
+    cargo test -p docs_rs_storage --features stress-tests archive_index::tests::stress_tests
+
 # Run ignored builder integration tests serially.
 [group('testing')]
 run-builder-tests: compose-up-resources
