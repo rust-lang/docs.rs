@@ -65,37 +65,36 @@ fn capture_step<T>(
 }
 
 /// Load Cargo metadata for a source tree with the configured toolchain.
-///
-/// This is primarily useful for local crates, where callers need the package
-/// name and version before creating a [`Crate::local`] release context.
 #[instrument(skip_all)]
 pub fn load_cargo_metadata<'build, 'ws>(
     environment: &'build BuildEnvironment,
     build: &'build Build<'ws>,
-) -> Result<CargoMetadata> {
-    let source_dir = &build.host_source_dir();
+    limits: &'build Limits,
+) -> StepResult<CargoMetadata> {
+    capture_step(limits.max_log_size(), || {
+        let source_dir = &build.host_source_dir();
 
-    debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
-    let output = Command::new(
-        environment.workspace(),
-        environment.configured_toolchain().cargo(),
-    )
-    .args(["metadata", "--format-version", "1"])
-    .current_directory(source_dir)
-    .log_output(false)
-    .run_capture()
-    .map_err(BuildStepError::Command)?;
+        debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
+        let output = Command::new(
+            environment.workspace(),
+            environment.configured_toolchain().cargo(),
+        )
+        .args(["metadata", "--format-version", "1"])
+        .current_directory(source_dir)
+        .log_output(false)
+        .run_capture()
+        .map_err(BuildStepError::Command)?;
 
-    BuildStepError::as_output(|| {
-        let [metadata] = output.stdout_lines() else {
-            bail!("invalid output returned by `cargo metadata`");
-        };
+        BuildStepError::as_output(|| {
+            let [metadata] = output.stdout_lines() else {
+                bail!("invalid output returned by `cargo metadata`");
+            };
 
-        let metadata = CargoMetadata::load_from_metadata(metadata)?;
-        debug!("Cargo metadata loaded");
-        Ok(metadata)
+            let metadata = CargoMetadata::load_from_metadata(metadata)?;
+            debug!("Cargo metadata loaded");
+            Ok(metadata)
+        })
     })
-    .map_err(Into::into)
 }
 
 /// A prepared release inside an active rustwide sandbox.
@@ -119,8 +118,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ) -> Result<Self> {
         debug!("reading docs.rs metadata");
         let docsrs_metadata = Metadata::from_crate_root(build.host_source_dir())?;
-        let cargo_metadata =
-            load_cargo_metadata(environment, build).context("error loading cargo metadata")?;
+        debug!("reading cargo metadata");
+        let cargo_metadata = load_cargo_metadata(environment, build, limits)
+            .into_result()
+            .context("error loading cargo metadata")?;
 
         let resource_suffix = environment.resource_suffix()?;
         debug!(resource_suffix, "release build prepared");
@@ -532,38 +533,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             Ok(())
         })
     }
-
-    // /// Load Cargo metadata for a source tree with the configured toolchain.
-    // ///
-    // /// This is primarily useful for local crates, where callers need the package
-    // /// name and version before creating a [`Crate::local`] release context.
-    // #[instrument(skip_all)]
-    // pub fn load_cargo_metadata(&self) -> StepResult<CargoMetadata> {
-    //     self.capture_step(|| {
-    //         let source_dir = &self.build.host_source_dir();
-
-    //         debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
-    //         let output = Command::new(
-    //             self.environment.workspace(),
-    //             self.environment.configured_toolchain().cargo(),
-    //         )
-    //         .args(["metadata", "--format-version", "1"])
-    //         .current_directory(source_dir)
-    //         .log_output(false)
-    //         .run_capture()
-    //         .map_err(BuildStepError::Command)?;
-
-    //         BuildStepError::as_output(|| {
-    //             let [metadata] = output.stdout_lines() else {
-    //                 bail!("invalid output returned by `cargo metadata`");
-    //             };
-
-    //             let metadata = CargoMetadata::load_from_metadata(metadata)?;
-    //             debug!("Cargo metadata loaded");
-    //             Ok(metadata)
-    //         })
-    //     })
-    // }
 }
 
 fn copy_compiler_metrics(source: &Path, destination: &Path) -> Result<Vec<PathBuf>> {

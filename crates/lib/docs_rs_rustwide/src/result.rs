@@ -217,6 +217,7 @@ impl TargetBuildResult {
 
     pub fn all_logs(&self) -> String {
         // FIXME: is this necessary?
+        // perhaps we merge them with titles / as sections somehow?
         self.regenerate_lockfile
             .as_ref()
             .map(|r| &r.log)
@@ -224,7 +225,7 @@ impl TargetBuildResult {
             .chain(iter::once(&&self.coverage.log))
             .chain(self.documentation.as_ref().map(|r| &r.log).iter())
             .chain(self.rustdoc_json.as_ref().map(|r| &r.log).iter())
-            .join("\n")
+            .join("\n\n")
     }
 
     pub fn coverage(&self) -> &StepResult<Option<DocCoverage>> {
