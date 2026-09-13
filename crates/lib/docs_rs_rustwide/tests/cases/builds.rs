@@ -20,29 +20,14 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let duration = build.duration();
     let release = build.into_inner();
     let target = release.default_target();
-    let steps_duration = target.coverage.duration
-        + target
-            .rustdoc_json
-            .as_ref()
-            .map(|r| r.duration)
-            .unwrap_or_default()
-        + target
-            .documentation
-            .as_ref()
-            .map(|r| r.duration)
-            .unwrap_or_default();
+    let steps_duration =
+        target.coverage.duration + target.rustdoc_json.duration + target.documentation.duration;
 
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets().map(|target| target.duration()).sum());
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(
-        release
-            .default_target()
-            .rustdoc_json
-            .as_ref()
-            .is_some_and(|r| r.successful())
-    );
+    assert!(release.default_target().rustdoc_json.successful());
     assert!(release.default_target().coverage.successful());
     assert!(
         release
@@ -56,7 +41,6 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
         release
             .default_target()
             .rustdoc_json()
-            .expect("json build was done")
             .as_ref()
             .expect("successful JSON build has an output")
             .format_version()
@@ -77,7 +61,7 @@ fn binary_crate_does_not_report_library_documentation() -> Result<()> {
         .into_inner();
 
     assert!(!release.has_docs());
-    assert!(!release.cargo_metadata.into_result()?.root().is_library());
+    assert!(!release.cargo_metadata.root().is_library());
     Ok(())
 }
 
@@ -98,14 +82,7 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().coverage.successful());
-    assert!(
-        release
-            .default_target()
-            .rustdoc_json
-            .as_ref()
-            .unwrap()
-            .successful()
-    );
+    assert!(release.default_target().rustdoc_json.successful());
     Ok(())
 }
 
@@ -139,14 +116,7 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
             .as_ref()
             .is_ok_and(Option::is_some)
     );
-    assert!(
-        release
-            .default_target()
-            .rustdoc_json
-            .as_ref()
-            .unwrap()
-            .successful()
-    );
+    assert!(release.default_target().rustdoc_json.successful());
     Ok(())
 }
 
@@ -164,14 +134,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
 
     assert!(release.build_succeeded());
     assert!(release.default_target().coverage.successful());
-    assert!(
-        release
-            .default_target()
-            .rustdoc_json
-            .as_ref()
-            .unwrap()
-            .successful()
-    );
+    assert!(release.default_target().rustdoc_json.successful());
     Ok(())
 }
 
@@ -189,13 +152,7 @@ fn collects_compiler_metrics() -> Result<()> {
         .build()?;
 
     let release = build_local(&mut environment, "hello-world")?.into_inner();
-    let metric_files = release
-        .default_target()
-        .compiler_metrics()
-        .unwrap()
-        .outcome
-        .as_ref()
-        .unwrap();
+    let metric_files = release.default_target().compiler_metrics.as_ref().unwrap();
     assert_eq!(metric_files.len(), 1);
     let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
     Ok(())
@@ -253,7 +210,6 @@ fn reports_implicit_features_for_optional_dependencies() -> Result<()> {
     assert!(
         release
             .cargo_metadata
-            .into_result()?
             .root()
             .features
             .contains_key("serde_derive")
@@ -268,7 +224,6 @@ fn excludes_implicit_features_when_dep_syntax_is_used() -> Result<()> {
     let release = build_local(&mut test.environment, "optional-dep")?.into_inner();
     let features: Vec<_> = release
         .cargo_metadata
-        .into_result()?
         .root()
         .features
         .keys()

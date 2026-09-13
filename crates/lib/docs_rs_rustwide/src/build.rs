@@ -7,7 +7,7 @@ use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
-use docsrs_metadata::{BuildTargets, Metadata};
+use docsrs_metadata::{BuildTargets, HOST_TARGET, Metadata};
 use rustwide::{
     Build,
     cmd::Command,
@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::{Span, debug, error, instrument, warn};
+use tracing::{Span, debug, error, info, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
 const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -347,10 +347,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .inspect_err(|err| error!(?err, "error collecting compiler metrics after target build"))
             .ok();
 
+        let is_default = target == self.metadata_targets().default_target;
+
+        if documentation.successful() && self.metadata().proc_macro {
+            assert!(
+                is_default && target == HOST_TARGET,
+                "can't handle cross-compiling macros"
+            );
+        }
+
         TargetBuildResult {
             duration: None,
             target: target.into(),
-            is_default: target == self.metadata_targets().default_target,
+            is_default,
             documentation,
             rustdoc_json,
             compiler_metrics,
@@ -527,6 +536,15 @@ fn copy_compiler_metrics(source: &Path, destination: &Path) -> Result<Vec<PathBu
     let mut copied = Vec::new();
     copy_dir_all(source, destination, |path| copied.push(path.to_owned()))
         .context("copying compiler metrics")?;
+
+    info!(
+        file_count = copied.len(),
+        source = %source.display(),
+        dest = %destination.display(),
+        dest_exists = destination.exists(),
+        "found & copied files in compiler metric dir",
+    );
+
     fs::remove_dir_all(source).context("removing compiler metrics directory")?;
     Ok(copied)
 }

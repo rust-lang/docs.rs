@@ -19,7 +19,7 @@ pub(crate) fn print(
         "Target total".to_owned(),
     ]];
     let mut totals = [Duration::ZERO; 4];
-    for target in &result.targets {
+    for target in result.targets() {
         rows.push([
             format!(
                 "{}{}",
@@ -56,19 +56,19 @@ pub(crate) fn print(
     }
 
     println!();
-    for target in &result.targets {
+    for target in result.targets() {
         println!("{}:", target.target);
         print_error("HTML", &target.documentation);
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);
-        print_error("compiler metrics", &target.compiler_metrics);
+        // print_error("compiler metrics", &target.compiler_metrics);
         if let Ok(path) = &target.documentation.outcome {
             println!("  HTML output: {}", path.display());
         }
         if let Ok(output) = &target.rustdoc_json.outcome {
             println!("  JSON output: {}", output.path().display());
         }
-        for path in target.compiler_metrics.outcome.iter().flatten() {
+        for path in target.compiler_metrics.iter().flatten() {
             println!("  compiler metrics: {}", path.display());
         }
     }
@@ -78,7 +78,7 @@ pub(crate) fn print(
         println!("  error: the default target produced no library documentation");
     }
 
-    let auxiliary_succeeded = result.targets.iter().all(target_fully_succeeded);
+    let auxiliary_succeeded = result.targets().all(target_fully_succeeded);
     let succeeded = build_succeeded(default_succeeded, auxiliary_succeeded, strict);
     if succeeded {
         println!("docs.rs build succeeded");

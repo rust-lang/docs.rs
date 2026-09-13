@@ -36,7 +36,7 @@ fn main() -> Result<()> {
         );
         println!(
             "  rustdoc JSON: {}",
-            target_result.rustdoc_json().unwrap().is_ok()
+            target_result.rustdoc_json.successful()
         );
         println!("  coverage: {}", target_result.coverage.successful());
     }

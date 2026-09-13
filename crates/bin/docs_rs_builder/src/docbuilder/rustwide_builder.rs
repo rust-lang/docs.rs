@@ -331,29 +331,11 @@ impl RustwideBuilder {
         for target in release_build_result.targets() {
             let successful = target.documentation_succeeded();
 
-            // if collect_metrics
-            //     && let Some(compiler_metric_target_dir) =
-            //         &self.config.compiler_metrics_collection_path
-            // {
-            //     let metric_output = build.host_target_dir().join("metrics/");
-            //     info!(
-            //         "found {} files in metric dir, copy over to {} (exists: {})",
-            //         fs::read_dir(&metric_output)?.count(),
-            //         &compiler_metric_target_dir.to_string_lossy(),
-            //         &compiler_metric_target_dir.exists(),
-            //     );
-            //     copy_dir_all(&metric_output, compiler_metric_target_dir)?;
-            //     fs::remove_dir_all(&metric_output)?;
-            // }
-
-            // backwards compatible logs, not yet structured in the files.
-            let log = iter::once(&&target.coverage.log)
-                .chain(target.documentation.as_ref().map(|r| &r.log).iter())
-                .join("\n\n");
-
             let log_name = format!("{}.txt", target.target);
-            self.blocking_storage
-                .store_one(format!("build-logs/{build_id}/{log_name}"), log)?;
+            self.blocking_storage.store_one(
+                format!("build-logs/{build_id}/{log_name}"),
+                target.documentation.log.clone(),
+            )?;
 
             build_logs.push((log_name, successful));
         }
@@ -374,8 +356,9 @@ impl RustwideBuilder {
         let build_error = release_build_result
             .default_target()
             .documentation
+            .outcome
             .as_ref()
-            .and_then(|result| result.outcome.as_ref().err());
+            .err();
 
         let rustc_version = self.environment.rustc_version()?;
         let docsrs_version = format!("docsrs {BUILDER_VERSION}");
@@ -506,10 +489,10 @@ impl RustwideBuilder {
 
         let mut build_logs = Vec::new();
 
-        for (target, json_build) in release
-            .targets()
-            .flat_map(|target| target.rustdoc_json.as_ref().map(|j| (&target.target, j)))
-        {
+        for target_result in release.targets() {
+            let target = &target_result.target;
+            let json_build = &target_result.rustdoc_json;
+
             let json_log_name = format!("{target}_json.txt");
             self.blocking_storage.store_one(
                 format!("build-logs/{build_id}/{json_log_name}"),
@@ -603,10 +586,7 @@ impl RustwideBuilder {
 
 #[instrument(skip(result))]
 fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()> {
-    let Ok(source) = result
-        .documentation()
-        .ok_or_else(|| anyhow!("missing documentation build"))?
-    else {
+    let Ok(source) = result.documentation() else {
         bail!("documentation build was unsuccessful, can't copy docs");
     };
 
