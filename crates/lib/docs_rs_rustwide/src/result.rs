@@ -161,7 +161,7 @@ impl<T> StepResult<T> {
 /// Results for all build modes of one compilation target.
 #[derive(Debug)]
 pub struct TargetBuildResult {
-    pub(crate) duration: Duration,
+    pub(crate) duration: Option<Duration>,
     /// Rust target triple.
     pub target: String,
     /// is the target the default target
@@ -182,6 +182,7 @@ impl TargetBuildResult {
     /// Elapsed time for this target, including all attempts and lockfile regeneration.
     pub fn duration(&self) -> Duration {
         self.duration
+            .expect("when library users access the duration, we always have one")
     }
 
     /// Whether rustdoc produced a documentation output directory.
@@ -259,7 +260,7 @@ pub struct ReleaseBuildResult {
     /// Metadata read from rustwide's prepared source directory.
     pub metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
-    pub cargo_metadata: StepResult<CargoMetadata>,
+    pub cargo_metadata: CargoMetadata,
     pub default_target: TargetBuildResult,
     pub other_targets: Vec<TargetBuildResult>,
 }
@@ -278,9 +279,6 @@ impl ReleaseBuildResult {
     /// Whether the default target produced documentation for this crate's library target.
     pub fn has_docs(&self) -> bool {
         self.cargo_metadata
-            .outcome
-            .as_ref()
-            .expect("we know it's Ok()")
             .root()
             .library_name()
             .is_some_and(|name| self.default_target.has_docs(&name))
@@ -311,7 +309,7 @@ mod tests {
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,
-            duration: Duration::ZERO,
+            duration: Some(Duration::ZERO),
             documentation: Some(StepResult {
                 outcome: Ok(documentation_path),
                 log: String::new(),

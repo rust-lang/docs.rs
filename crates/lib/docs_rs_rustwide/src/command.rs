@@ -75,7 +75,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         );
         let cargo_args = cargo_args(
             &self.target,
-            &self.release_build.metadata,
+            &self.release_build.docsrs_metadata,
             self.release_build.environment.cargo_jobs(),
             self.cargo_args,
             self.rustdoc_args,

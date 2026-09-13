@@ -35,7 +35,6 @@ use std::{
     collections::HashSet,
     fs::{self, File},
     io::BufReader,
-    mem,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -287,8 +286,8 @@ impl RustwideBuilder {
         let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
 
         let build_statistics = full_build_result.statistics().clone();
-        let mut release_build_result = full_build_result.into_inner()?;
-        let cargo_metadata = release_build_result.cargo_metadata.into_result()?;
+        let release_build_result = full_build_result.into_inner()?;
+        let cargo_metadata = &release_build_result.cargo_metadata;
 
         if release_build_result
             .targets()
@@ -325,7 +324,7 @@ impl RustwideBuilder {
             None
         };
 
-        self.publish_json_and_build_logs(build_id, name, version, &mut release_build_result)?;
+        self.publish_json_and_build_logs(build_id, name, version, &release_build_result)?;
 
         let build_error = release_build_result
             .default_target()
@@ -462,7 +461,7 @@ impl RustwideBuilder {
         build_id: BuildId,
         name: &KrateName,
         version: &Version,
-        release: &mut ReleaseBuildResult,
+        release: &ReleaseBuildResult,
     ) -> Result<()> {
         let mut build_logs = Vec::new();
 
@@ -593,7 +592,7 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
         .documentation()
         .ok_or_else(|| anyhow!("missing documentation build"))?
     else {
-        bail!("successful documentation build has no output directory");
+        bail!("documentation build was unsuccessful, can't copy docs");
     };
 
     let destination = if result.is_default {
@@ -603,6 +602,8 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
     };
 
     info!(
+        target= %result.target,
+        is_default = %result.is_default,
         source = %source.display(),
         destination = %destination.display(),
         "copying documentation"

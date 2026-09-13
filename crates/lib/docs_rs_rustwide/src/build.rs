@@ -2,7 +2,7 @@ use crate::{
     BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
     TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
@@ -64,11 +64,46 @@ fn capture_step<T>(
     }
 }
 
+/// Load Cargo metadata for a source tree with the configured toolchain.
+///
+/// This is primarily useful for local crates, where callers need the package
+/// name and version before creating a [`Crate::local`] release context.
+#[instrument(skip_all)]
+pub fn load_cargo_metadata<'build, 'ws>(
+    environment: &'build BuildEnvironment,
+    build: &'build Build<'ws>,
+) -> Result<CargoMetadata> {
+    let source_dir = &build.host_source_dir();
+
+    debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
+    let output = Command::new(
+        environment.workspace(),
+        environment.configured_toolchain().cargo(),
+    )
+    .args(["metadata", "--format-version", "1"])
+    .current_directory(source_dir)
+    .log_output(false)
+    .run_capture()
+    .map_err(BuildStepError::Command)?;
+
+    BuildStepError::as_output(|| {
+        let [metadata] = output.stdout_lines() else {
+            bail!("invalid output returned by `cargo metadata`");
+        };
+
+        let metadata = CargoMetadata::load_from_metadata(metadata)?;
+        debug!("Cargo metadata loaded");
+        Ok(metadata)
+    })
+    .map_err(Into::into)
+}
+
 /// A prepared release inside an active rustwide sandbox.
 pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) environment: &'build BuildEnvironment,
     pub(crate) build: &'build Build<'ws>,
-    pub(crate) metadata: Metadata,
+    pub(crate) docsrs_metadata: Metadata,
+    pub(crate) cargo_metadata: CargoMetadata,
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
@@ -83,14 +118,18 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         limits: &'build Limits,
     ) -> Result<Self> {
         debug!("reading docs.rs metadata");
-        let metadata = Metadata::from_crate_root(build.host_source_dir())?;
+        let docsrs_metadata = Metadata::from_crate_root(build.host_source_dir())?;
+        let cargo_metadata =
+            load_cargo_metadata(environment, build).context("error loading cargo metadata")?;
+
         let resource_suffix = environment.resource_suffix()?;
         debug!(resource_suffix, "release build prepared");
 
         Ok(Self {
             environment,
             build,
-            metadata,
+            cargo_metadata,
+            docsrs_metadata,
             limits,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
@@ -104,7 +143,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .timeout(Some(self.limits.timeout()))
             .no_output_timeout(None);
 
-        for (key, value) in self.metadata.environment_variables() {
+        for (key, value) in self.docsrs_metadata.environment_variables() {
             command = command.env(key, value);
         }
         command
@@ -126,7 +165,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Cargo places proc-macro documentation in the host target directory even
     /// when a target argument is otherwise in use.
     pub fn output_dir(&self, target: &str) -> PathBuf {
-        if self.metadata.proc_macro {
+        if self.docsrs_metadata.proc_macro {
             self.build.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
         } else {
             self.build
@@ -139,7 +178,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Targets selected by this release's docs.rs metadata.
     /// Fall back to the default target list, or the host-target.
     pub fn metadata_targets(&self) -> BuildTargets<'_> {
-        self.metadata
+        self.docsrs_metadata
             .targets(self.environment.includes_default_targets())
     }
 
@@ -173,7 +212,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     /// Metadata parsed from the prepared crate source.
     pub fn metadata(&self) -> &Metadata {
-        &self.metadata
+        &self.docsrs_metadata
     }
 
     /// Limits applied to this release.
@@ -204,20 +243,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             "selected documentation targets"
         );
 
-        let cargo_metadata_result = self.load_cargo_metadata();
-        if !cargo_metadata_result.successful() {
-            return Err(anyhow!(
-                cargo_metadata_result
-                    .into_result()
-                    .expect_err("not successful means err")
-            )
-            .context("error loading cargo metadata"));
-        }
-        let Ok(cargo_metadata) = &cargo_metadata_result.outcome else {
-            unreachable!("on error we return early above");
-        };
-
-        let root_package = cargo_metadata.root();
+        let root_package = self.cargo_metadata.root();
         Span::current()
             .record("crate_name", root_package.name.as_str())
             .record(
@@ -230,7 +256,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .retry_without_lockfile(true)
             .run();
 
-        let default_has_docs = cargo_metadata
+        let default_has_docs = self
+            .cargo_metadata
             .root()
             .library_name()
             .is_some_and(|name| default_target_result.has_docs(&name));
@@ -253,8 +280,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         Ok(ReleaseBuildResult {
             statistics: self.build.statistics(),
-            metadata: self.metadata.clone(),
-            cargo_metadata: cargo_metadata_result,
+            metadata: self.docsrs_metadata.clone(),
+            cargo_metadata: self.cargo_metadata.clone(),
             default_target: default_target_result,
             other_targets: target_results,
         })
@@ -301,7 +328,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             }
         }
 
-        target_result.duration = started.elapsed();
+        target_result.duration = Some(started.elapsed());
         target_result
     }
 
@@ -313,7 +340,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let is_default = target == self.metadata_targets().default_target;
 
         let mut result = TargetBuildResult {
-            duration: std::time::Duration::ZERO,
+            duration: None,
             target: target.into(),
             is_default,
             documentation: None,
@@ -506,37 +533,37 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         })
     }
 
-    /// Load Cargo metadata for a source tree with the configured toolchain.
-    ///
-    /// This is primarily useful for local crates, where callers need the package
-    /// name and version before creating a [`Crate::local`] release context.
-    #[instrument(skip_all)]
-    pub fn load_cargo_metadata(&self) -> StepResult<CargoMetadata> {
-        self.capture_step(|| {
-            let source_dir = &self.build.host_source_dir();
+    // /// Load Cargo metadata for a source tree with the configured toolchain.
+    // ///
+    // /// This is primarily useful for local crates, where callers need the package
+    // /// name and version before creating a [`Crate::local`] release context.
+    // #[instrument(skip_all)]
+    // pub fn load_cargo_metadata(&self) -> StepResult<CargoMetadata> {
+    //     self.capture_step(|| {
+    //         let source_dir = &self.build.host_source_dir();
 
-            debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
-            let output = Command::new(
-                self.environment.workspace(),
-                self.environment.configured_toolchain().cargo(),
-            )
-            .args(["metadata", "--format-version", "1"])
-            .current_directory(source_dir)
-            .log_output(false)
-            .run_capture()
-            .map_err(BuildStepError::Command)?;
+    //         debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
+    //         let output = Command::new(
+    //             self.environment.workspace(),
+    //             self.environment.configured_toolchain().cargo(),
+    //         )
+    //         .args(["metadata", "--format-version", "1"])
+    //         .current_directory(source_dir)
+    //         .log_output(false)
+    //         .run_capture()
+    //         .map_err(BuildStepError::Command)?;
 
-            BuildStepError::as_output(|| {
-                let [metadata] = output.stdout_lines() else {
-                    bail!("invalid output returned by `cargo metadata`");
-                };
+    //         BuildStepError::as_output(|| {
+    //             let [metadata] = output.stdout_lines() else {
+    //                 bail!("invalid output returned by `cargo metadata`");
+    //             };
 
-                let metadata = CargoMetadata::load_from_metadata(metadata)?;
-                debug!("Cargo metadata loaded");
-                Ok(metadata)
-            })
-        })
-    }
+    //             let metadata = CargoMetadata::load_from_metadata(metadata)?;
+    //             debug!("Cargo metadata loaded");
+    //             Ok(metadata)
+    //         })
+    //     })
+    // }
 }
 
 fn copy_compiler_metrics(source: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
