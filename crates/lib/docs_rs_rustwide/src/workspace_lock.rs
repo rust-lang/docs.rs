@@ -68,7 +68,7 @@ mod tests {
             .build()
             .err()
             .expect("a competing environment must fail");
-        assert!(error.to_string().contains("already in use"));
+        assert!(error.to_string().contains("already in use"), "{error:#}");
         assert!(!directory.path().join("builds").exists());
         Ok(())
     }
