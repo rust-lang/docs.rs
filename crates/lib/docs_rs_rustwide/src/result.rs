@@ -166,13 +166,13 @@ pub struct TargetBuildResult {
     /// is the target the default target
     pub is_default: bool,
     /// HTML documentation output directory.
-    pub documentation: Option<StepResult<PathBuf>>,
+    pub documentation: StepResult<PathBuf>,
     /// Rustdoc JSON build result.
-    pub rustdoc_json: Option<StepResult<RustdocJsonOutput>>,
+    pub rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
     pub coverage: StepResult<Option<DocCoverage>>,
     /// Compiler metrics files copied out of this target's HTML build.
-    pub compiler_metrics: Option<StepResult<Vec<PathBuf>>>,
+    pub compiler_metrics: Option<Vec<PathBuf>>,
     /// optionally regenerate lockfile
     pub regenerate_lockfile: Option<StepResult<()>>,
 }
@@ -190,13 +190,14 @@ impl TargetBuildResult {
     /// target, so command success alone is not sufficient.
     pub fn documentation_exists(&self) -> bool {
         self.documentation
+            .outcome
             .as_ref()
-            .is_some_and(|d| d.outcome.as_ref().is_ok_and(|path| path.is_dir()))
+            .is_ok_and(|path| path.is_dir())
     }
 
     /// Whether Cargo completed the primary HTML documentation command successfully.
     pub fn build_succeeded(&self) -> bool {
-        self.documentation.as_ref().is_some_and(|d| d.successful())
+        self.documentation.successful()
     }
 
     /// Whether the primary HTML documentation build completed and produced output.
@@ -207,31 +208,23 @@ impl TargetBuildResult {
     /// Whether this target produced documentation for the crate's library target.
     pub fn has_docs(&self, library_name: &str) -> bool {
         self.documentation_succeeded()
-            && self.documentation.as_ref().is_some_and(|d| {
-                d.outcome
-                    .as_ref()
-                    .is_ok_and(|path| path.join(library_name).is_dir())
-            })
+            && self
+                .documentation
+                .outcome
+                .as_ref()
+                .is_ok_and(|path| path.join(library_name).is_dir())
     }
 
     pub fn coverage(&self) -> &Result<Option<DocCoverage>, BuildStepError> {
         &self.coverage.outcome
     }
 
-    pub fn documentation(&self) -> Option<&Result<PathBuf, BuildStepError>> {
-        self.documentation
-            .as_ref()
-            .map(|step_result| &step_result.outcome)
+    pub fn documentation(&self) -> &Result<PathBuf, BuildStepError> {
+        &self.documentation.outcome
     }
 
-    pub fn rustdoc_json(&self) -> Option<&Result<RustdocJsonOutput, BuildStepError>> {
-        self.rustdoc_json
-            .as_ref()
-            .map(|step_result| &step_result.outcome)
-    }
-
-    pub fn compiler_metrics(&self) -> Option<&StepResult<Vec<PathBuf>>> {
-        self.compiler_metrics.as_ref()
+    pub fn rustdoc_json(&self) -> &Result<RustdocJsonOutput, BuildStepError> {
+        &self.rustdoc_json.outcome
     }
 
     pub fn regenerate_lockfile(&self) -> Option<&StepResult<()>> {
@@ -312,11 +305,6 @@ mod tests {
                 log: String::new(),
                 duration: Duration::ZERO,
             },
-            compiler_metrics: Some(StepResult {
-                outcome: Ok(Vec::new()),
-                log: String::new(),
-                duration: Duration::ZERO,
-            }),
             regenerate_lockfile: None,
         }
     }

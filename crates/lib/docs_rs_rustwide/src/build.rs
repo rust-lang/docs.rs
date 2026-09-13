@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::{Span, debug, instrument, warn};
+use tracing::{Span, debug, error, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
 const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -333,40 +333,30 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         target_result
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(target))]
     fn build_target_once(&self, target: &str) -> TargetBuildResult {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage_result = self.build_coverage(target);
-        let is_default = target == self.metadata_targets().default_target;
+        let coverage = self.build_coverage(target);
 
-        let mut result = TargetBuildResult {
+        let documentation = self.build_documentation(target);
+        let rustdoc_json = self.build_rustdoc_json(target);
+
+        let compiler_metrics = self
+            .collect_compiler_metrics()
+            .inspect_err(|err| error!(?err, "error collecting compiler metrics after target build"))
+            .ok();
+
+        TargetBuildResult {
             duration: None,
             target: target.into(),
-            is_default,
-            documentation: None,
-            rustdoc_json: None,
-            coverage: coverage_result,
-            compiler_metrics: None,
+            is_default: target == self.metadata_targets().default_target,
+            documentation,
+            rustdoc_json,
+            compiler_metrics,
+            coverage,
             regenerate_lockfile: None,
-        };
-
-        // after failed coverage we assume any other doc-build will also fail,
-        // so we return early.
-        if !result.coverage.successful() {
-            return result;
         }
-
-        // We just execute & store the rustdoc json build,
-        // and continue in success or failure.
-        result.rustdoc_json = Some(self.build_rustdoc_json(target));
-
-        let documentation_result = self.build_documentation(target);
-        result.documentation = Some(documentation_result);
-
-        // we always try to collect metrics
-        result.compiler_metrics = Some(self.collect_compiler_metrics());
-        result
     }
 
     /// Collect documentation coverage for one target.
@@ -477,16 +467,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Copy compiler metrics after HTML execution. Failure does not invalidate HTML.
-    pub fn collect_compiler_metrics(&self) -> StepResult<Vec<PathBuf>> {
-        self.capture_step(|| {
-            let (Some(source), Some(destination)) = (
-                self.compiler_metrics_dir(),
-                self.environment.compiler_metrics_collection_path(),
-            ) else {
-                return Ok(Vec::new());
-            };
-            copy_compiler_metrics(&source, destination).map_err(BuildStepError::Output)
-        })
+    pub fn collect_compiler_metrics(&self) -> Result<Vec<PathBuf>> {
+        let (Some(source), Some(destination)) = (
+            self.compiler_metrics_dir(),
+            self.environment.compiler_metrics_collection_path(),
+        ) else {
+            return Ok(Vec::new());
+        };
+        copy_compiler_metrics(&source, destination)
     }
 
     fn compiler_metrics_dir(&self) -> Option<PathBuf> {
