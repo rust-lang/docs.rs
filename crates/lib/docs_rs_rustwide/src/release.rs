@@ -10,39 +10,53 @@ use std::{
 };
 use tracing::{debug, info, instrument};
 
+/// A release that has not yet been fetched into the workspace cache.
+pub struct Unfetched;
+
+/// A fetched release, carrying the start of its build lifecycle.
+pub struct Fetched {
+    started: Instant,
+}
+
 /// A crate release whose build lifecycle is managed by docs.rs.
-pub struct ReleaseContext<'release> {
+///
+/// Fetching transitions from [`Unfetched`] to [`Fetched`], enabling source copying.
+pub struct ReleaseContext<'release, State = Unfetched> {
     pub(crate) environment: &'release mut BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Option<Limits>,
+    pub(crate) state: State,
 }
 
-impl<'release> ReleaseContext<'release> {
+impl<State> ReleaseContext<'_, State> {
     /// Override the environment's default limits for this release.
     pub fn limits(mut self, limits: Limits) -> Self {
         self.limits = Some(limits);
         self
     }
+}
 
+impl<'release> ReleaseContext<'release, Unfetched> {
     /// Fetch this release into rustwide's crate cache.
     ///
     /// The returned phase allows callers to archive the fetched sources before
     /// metadata parsing or sandbox preparation can fail.
     #[instrument(skip_all)]
-    pub fn fetch(self) -> Result<FetchedRelease<'release>> {
+    pub fn fetch(self) -> Result<ReleaseContext<'release, Fetched>> {
         let started = Instant::now();
         let Self {
             environment,
             krate,
             limits,
+            state: Unfetched,
         } = self;
 
-        info!(%self.krate, "fetching crate source");
+        info!(%krate, "fetching crate source");
         krate.fetch(environment.workspace())?;
         debug!("crate source fetched");
 
-        Ok(FetchedRelease {
-            started,
+        Ok(ReleaseContext {
+            state: Fetched { started },
             environment,
             krate,
             limits,
@@ -73,15 +87,7 @@ impl<'release> ReleaseContext<'release> {
     }
 }
 
-/// A crate release fetched into rustwide's cache but not yet prepared for building.
-pub struct FetchedRelease<'release> {
-    started: Instant,
-    environment: &'release mut BuildEnvironment,
-    krate: &'release Crate,
-    limits: Option<Limits>,
-}
-
-impl FetchedRelease<'_> {
+impl ReleaseContext<'_, Fetched> {
     /// Copy the fetched crate sources into a caller-owned directory.
     ///
     /// This is intended for source archiving before the build sandbox is entered.
@@ -106,7 +112,7 @@ impl FetchedRelease<'_> {
         callback: impl for<'build, 'ws> FnOnce(ReleaseBuild<'build, 'ws>) -> Result<R>,
     ) -> Result<BuildResult<R>> {
         let Self {
-            started,
+            state: Fetched { started },
             environment,
             krate,
             limits,

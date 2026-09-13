@@ -166,7 +166,7 @@ fn main() -> Result<()> {
     println!("build duration: {:?}", build.duration());
     println!("sandbox statistics: {:#?}", build.statistics());
     let release = build.into_inner();
-    for target in release.targets {
+    for target in release.targets() {
         println!(
             "{}: documentation succeeded: {}",
             target.target,

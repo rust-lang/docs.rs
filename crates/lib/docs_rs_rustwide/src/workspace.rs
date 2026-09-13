@@ -441,6 +441,7 @@ impl BuildEnvironment {
             environment: self,
             krate,
             limits: None,
+            state: crate::release::Unfetched,
         }
     }
 

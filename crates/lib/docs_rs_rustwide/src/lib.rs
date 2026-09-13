@@ -21,7 +21,7 @@ mod workspace_lock;
 
 pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
-pub use release::{FetchedRelease, ReleaseContext};
+pub use release::{Fetched, ReleaseContext, Unfetched};
 pub use result::{
     BuildResult, BuildStepError, FailedStep, ReleaseBuildResult, RustdocJsonOutput, StepResult,
     TargetBuildResult,
