@@ -22,11 +22,13 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let target = release.default_target();
     let steps_duration = target.coverage.duration
         + target
-            .rustdoc_json()
+            .rustdoc_json
+            .as_ref()
             .map(|r| r.duration)
             .unwrap_or_default()
         + target
-            .documentation()
+            .documentation
+            .as_ref()
             .map(|r| r.duration)
             .unwrap_or_default();
 
@@ -37,7 +39,8 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     assert!(
         release
             .default_target()
-            .rustdoc_json()
+            .rustdoc_json
+            .as_ref()
             .is_some_and(|r| r.successful())
     );
     assert!(release.default_target().coverage.successful());
@@ -53,8 +56,7 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
         release
             .default_target()
             .rustdoc_json()
-            .unwrap()
-            .outcome
+            .expect("json build was done")
             .as_ref()
             .expect("successful JSON build has an output")
             .format_version()
@@ -99,7 +101,8 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     assert!(
         release
             .default_target()
-            .rustdoc_json()
+            .rustdoc_json
+            .as_ref()
             .unwrap()
             .successful()
     );
@@ -139,7 +142,8 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
     assert!(
         release
             .default_target()
-            .rustdoc_json()
+            .rustdoc_json
+            .as_ref()
             .unwrap()
             .successful()
     );
@@ -163,7 +167,8 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
     assert!(
         release
             .default_target()
-            .rustdoc_json()
+            .rustdoc_json
+            .as_ref()
             .unwrap()
             .successful()
     );

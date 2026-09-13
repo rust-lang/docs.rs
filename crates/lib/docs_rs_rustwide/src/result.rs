@@ -164,6 +164,8 @@ pub struct TargetBuildResult {
     pub(crate) duration: Duration,
     /// Rust target triple.
     pub target: String,
+    /// is the target the default target
+    pub is_default: bool,
     /// HTML documentation output directory.
     pub documentation: Option<StepResult<PathBuf>>,
     /// Rustdoc JSON build result.
@@ -228,12 +230,16 @@ impl TargetBuildResult {
         &self.coverage
     }
 
-    pub fn documentation(&self) -> Option<&StepResult<PathBuf>> {
-        self.documentation.as_ref()
+    pub fn documentation(&self) -> Option<&Result<PathBuf, BuildStepError>> {
+        self.documentation
+            .as_ref()
+            .map(|step_result| &step_result.outcome)
     }
 
-    pub fn rustdoc_json(&self) -> Option<&StepResult<RustdocJsonOutput>> {
-        self.rustdoc_json.as_ref()
+    pub fn rustdoc_json(&self) -> Option<&Result<RustdocJsonOutput, BuildStepError>> {
+        self.rustdoc_json
+            .as_ref()
+            .map(|step_result| &step_result.outcome)
     }
 
     pub fn compiler_metrics(&self) -> Option<&StepResult<Vec<PathBuf>>> {
@@ -304,6 +310,7 @@ mod tests {
     fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
+            is_default: true,
             duration: Duration::ZERO,
             documentation: Some(StepResult {
                 outcome: Ok(documentation_path),

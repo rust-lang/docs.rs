@@ -275,6 +275,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         #[builder(default = false)] retry_without_lockfile: bool,
     ) -> TargetBuildResult {
         let started = Instant::now();
+
         let mut target_result = self.build_target_once(target);
 
         if retry_without_lockfile
@@ -309,10 +310,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
         let coverage_result = self.build_coverage(target);
+        let is_default = target == self.metadata_targets().default_target;
 
         let mut result = TargetBuildResult {
             duration: std::time::Duration::ZERO,
             target: target.into(),
+            is_default,
             documentation: None,
             rustdoc_json: None,
             coverage: coverage_result,

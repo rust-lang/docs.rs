@@ -1,5 +1,5 @@
 use crate::{Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics};
-use anyhow::{Context as _, Error, Result};
+use anyhow::{Context as _, Error, Result, anyhow, bail};
 use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
@@ -589,12 +589,13 @@ impl RustwideBuilder {
 
 #[instrument(skip(result))]
 fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()> {
-    let source = result
-        .documentation
-        .outcome
-        .as_ref()
-        .ok()
-        .context("successful documentation build has no output directory")?;
+    let Ok(source) = result
+        .documentation()
+        .ok_or_else(|| anyhow!("missing documentation build"))?
+    else {
+        bail!("successful documentation build has no output directory");
+    };
+
     let destination = if result.is_default {
         destination.to_owned()
     } else {
