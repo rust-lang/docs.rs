@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
 use docs_rs_types::{BuildError, doc_coverage::DocCoverage};
@@ -248,6 +248,12 @@ impl ReleaseBuildResult {
                     .is_some_and(|dt| dt.has_docs(&name))
             })
         })
+    }
+
+    pub fn default_target(&self) -> Result<&TargetBuildResult> {
+        self.default_target
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing default target build result"))
     }
 
     pub fn targets(&self) -> impl Iterator<Item = &TargetBuildResult> {

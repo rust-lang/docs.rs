@@ -285,10 +285,11 @@ impl RustwideBuilder {
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
         let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
-        // FIXME: when cargo metadata fetch fails, we probably return here?
 
         let build_statistics = full_build_result.statistics().clone();
         let mut release_build_result = full_build_result.into_inner();
+        let cargo_metadata = release_build_result.cargo_metadata.into_result()?;
+
         if release_build_result
             .targets()
             .any(|t| t.regenerate_lockfile.is_some())
@@ -298,11 +299,15 @@ impl RustwideBuilder {
 
         let build_succeeded = release_build_result.build_succeeded();
         let has_docs = release_build_result.has_docs();
-        let default_target = release_build_result.default_target().target.clone();
+        // let default_target = release_build_result.default_target.target.clone();
 
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
-            for target in &release_build_result.targets {
+            let default_target_result = release_build_result.default_target()?;
+
+            copy_target_docs(&default_target_result, local_storage.path())?;
+
+            for target in &release_build_result.other_targets {
                 if target.documentation_succeeded() {
                     copy_target_docs(target, local_storage.path())?;
                     successful_targets.push(target.target.clone());
