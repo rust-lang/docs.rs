@@ -352,7 +352,6 @@ impl RustwideBuilder {
         self.runtime
             .block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
 
-        // FIXME: which error do we want? from which of the steps?
         let build_error = release_build_result
             .default_target()
             .documentation
