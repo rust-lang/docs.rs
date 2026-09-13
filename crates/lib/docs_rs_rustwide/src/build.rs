@@ -66,13 +66,11 @@ fn capture_cargo_step<T>(
 ) -> StepResult<T> {
     let mut storage = LogStorage::new(log::LevelFilter::Info);
     storage.set_max_size(max_log_size);
-    let started = Instant::now();
-    let outcome = logging::capture(&storage, run);
-    StepResult {
-        outcome,
-        duration: started.elapsed(),
-        log: Some(storage.to_string()),
-    }
+
+    let mut result = capture_step(|| logging::capture(&storage, run));
+    result.log = Some(storage.to_string());
+
+    result
 }
 
 /// Load Cargo metadata for a source tree with the configured toolchain.
