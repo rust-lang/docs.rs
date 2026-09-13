@@ -1,5 +1,5 @@
 use crate::{Config, docbuilder::build_error::RustwideBuildError, metrics::BuilderMetrics};
-use anyhow::{Context as _, Error, Result, anyhow, bail};
+use anyhow::{Context as _, Error, Result, bail};
 use bytes::Bytes;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
@@ -29,14 +29,12 @@ use docs_rs_types::{
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
-use itertools::Itertools as _;
 use regex::Regex;
 use rustwide::{Crate, Toolchain};
 use std::{
     collections::HashSet,
     fs::{self, File},
     io::BufReader,
-    iter,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -495,7 +493,7 @@ impl RustwideBuilder {
             let json_log_name = format!("{target}_json.txt");
             self.blocking_storage.store_one(
                 format!("build-logs/{build_id}/{json_log_name}"),
-                json_build.log.clone(),
+                json_build.log().to_string(),
             )?;
 
             build_logs.push((json_log_name, json_build.successful()));

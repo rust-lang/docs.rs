@@ -361,7 +361,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let compiler_metrics = self
             .collect_compiler_metrics()
             .inspect_err(|err| error!(?err, "error collecting compiler metrics after target build"))
-            .ok();
+            .ok()
+            .flatten();
 
         let is_default = target == self.metadata_targets().default_target;
 
@@ -492,14 +493,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Copy compiler metrics after HTML execution. Failure does not invalidate HTML.
-    pub fn collect_compiler_metrics(&self) -> Result<Vec<PathBuf>> {
+    pub fn collect_compiler_metrics(&self) -> Result<Option<Vec<PathBuf>>> {
         let (Some(source), Some(destination)) = (
             self.compiler_metrics_dir(),
             self.environment.compiler_metrics_collection_path(),
         ) else {
-            return Ok(Vec::new());
+            return Ok(None);
         };
-        copy_compiler_metrics(&source, destination)
+        copy_compiler_metrics(&source, destination).map(Some)
     }
 
     fn compiler_metrics_dir(&self) -> Option<PathBuf> {

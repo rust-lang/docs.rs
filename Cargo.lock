@@ -2130,7 +2130,6 @@ dependencies = [
  "docs_rs_utils",
  "docsrs-metadata",
  "futures-util",
- "itertools 0.15.0",
  "opentelemetry",
  "pretty_assertions",
  "regex",
