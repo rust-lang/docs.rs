@@ -1,6 +1,6 @@
 use crate::{
     UriError,
-    encode::{encode_url_path, url_decode},
+    encode::{encode_url_fragment, encode_url_path, url_decode},
     errors::Result,
 };
 use askama::filters::HtmlSafe;
@@ -189,7 +189,7 @@ impl EscapedURI {
     }
 
     pub fn with_fragment(mut self, fragment: impl AsRef<str>) -> Self {
-        self.fragment = Some(encode_url_path(fragment.as_ref()));
+        self.fragment = Some(encode_url_fragment(fragment.as_ref()));
         self
     }
 }

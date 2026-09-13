@@ -2,10 +2,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_utils::APP_USER_AGENT;
-use reqwest::{
-    Client as HttpClient,
-    header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
-};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -13,6 +12,7 @@ use tracing::warn;
 
 use crate::{
     RateLimitReached,
+    retry::NoRateLimitRetryStrategy,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 
@@ -43,24 +43,29 @@ const GRAPHQL_SINGLE: &str = "query($fullPath: ID!) {
 }";
 
 pub struct GitLab {
-    client: HttpClient,
+    client: ClientWithMiddleware,
     host: &'static str,
     endpoint: String,
 }
 
 impl GitLab {
-    pub fn new(host: &'static str, access_token: &Option<String>) -> Result<Self> {
-        Self::with_custom_endpoint(host, access_token, format!("https://{host}/api/graphql"))
+    pub fn new(host: &'static str, api_retries: u32, access_token: Option<&str>) -> Result<Self> {
+        Self::with_custom_endpoint(
+            host,
+            api_retries,
+            access_token,
+            format!("https://{host}/api/graphql"),
+        )
     }
 
     pub fn with_custom_endpoint<E: AsRef<str>>(
         host: &'static str,
-        access_token: &Option<String>,
+        api_retries: u32,
+        access_token: Option<&str>,
         endpoint: E,
     ) -> Result<Self> {
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        headers.insert(ACCEPT, mime::APPLICATION_JSON.as_ref().try_into().unwrap());
 
         if let Some(token) = access_token {
             headers.insert(
@@ -74,7 +79,19 @@ impl GitLab {
             );
         }
 
-        let client = HttpClient::builder().default_headers(headers).build()?;
+        let client = ClientBuilder::new(
+            reqwest::Client::builder()
+                .user_agent(APP_USER_AGENT)
+                .default_headers(headers)
+                .gzip(true)
+                .build()?,
+        )
+        .with(RetryTransientMiddleware::new_with_policy_and_strategy(
+            ExponentialBackoff::builder().build_with_max_retries(api_retries),
+            NoRateLimitRetryStrategy,
+        ))
+        .build();
+
         Ok(GitLab {
             client,
             host,
@@ -184,10 +201,11 @@ impl GitLab {
         let res = self
             .client
             .post(&self.endpoint)
-            .json(&serde_json::json!({
+            .header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+            .body(serde_json::to_vec(&serde_json::json!({
                 "query": query,
                 "variables": variables,
-            }))
+            }))?)
             .send()
             .await?
             .error_for_status()?;
@@ -267,11 +285,12 @@ mod tests {
     };
     use anyhow::Result;
 
-    async fn mock_server_and_gitlab() -> (mockito::ServerGuard, GitLab) {
+    async fn mock_server_and_gitlab(api_retries: u32) -> (mockito::ServerGuard, GitLab) {
         let server = mockito::Server::new_async().await;
         let updater = GitLab::with_custom_endpoint(
             "gitlab.com",
-            &None,
+            api_retries,
+            None,
             format!("{}/api/graphql", server.url()),
         )
         .expect("GitLab::new failed");
@@ -281,7 +300,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limit() -> Result<()> {
-        let (mut server, updater) = mock_server_and_gitlab().await;
+        let (mut server, updater) = mock_server_and_gitlab(0).await;
 
         let _m1 = server
             .mock("POST", "/api/graphql")
@@ -308,7 +327,7 @@ mod tests {
 
     #[tokio::test]
     async fn not_found() -> Result<()> {
-        let (mut server, updater) = mock_server_and_gitlab().await;
+        let (mut server, updater) = mock_server_and_gitlab(0).await;
 
         let _m1 = server
             .mock("POST", "/api/graphql")
@@ -328,7 +347,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_repository_info() -> Result<()> {
-        let (mut server, updater) = mock_server_and_gitlab().await;
+        let (mut server, updater) = mock_server_and_gitlab(0).await;
 
         let _m1 = server
             .mock("POST", "/api/graphql")
@@ -354,6 +373,54 @@ mod tests {
         assert_eq!(repo.stars, 10);
         assert_eq!(repo.forks, 11);
         assert_eq!(repo.issues, 12);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn retries_server_errors() -> Result<()> {
+        const RETRIES: u32 = 2;
+
+        let (mut server, updater) = mock_server_and_gitlab(RETRIES).await;
+        let mock = server
+            .mock("POST", "/api/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(500)
+            .expect((RETRIES + 1) as usize)
+            .create();
+
+        let err = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("500 Internal Server Error"));
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_rate_limit_responses() -> Result<()> {
+        let (mut server, updater) = mock_server_and_gitlab(2).await;
+        let mock = server
+            .mock("POST", "/api/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(429)
+            .expect(1)
+            .create();
+
+        let err = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("429 Too Many Requests"));
+        mock.assert();
+
         Ok(())
     }
 }

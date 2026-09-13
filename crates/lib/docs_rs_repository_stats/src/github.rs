@@ -1,6 +1,7 @@
 use crate::{
     RateLimitReached,
     config::Config,
+    retry::NoRateLimitRetryStrategy,
     updater::{FetchRepositoriesResult, Repository, RepositoryForge, RepositoryName},
 };
 use anyhow::{Result, anyhow, bail};
@@ -8,9 +9,11 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use docs_rs_utils::APP_USER_AGENT;
 use reqwest::{
-    Client as HttpClient, StatusCode,
-    header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
+    StatusCode,
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue},
 };
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
 
@@ -45,7 +48,7 @@ const GRAPHQL_SINGLE: &str = "query($owner: String!, $repo: String!) {
 
 pub struct GitHub {
     endpoint: String,
-    client: HttpClient,
+    client: ClientWithMiddleware,
     github_updater_min_rate_limit: u32,
 }
 
@@ -60,21 +63,30 @@ impl GitHub {
         config: &Config,
         endpoint: E,
     ) -> Result<Option<Self>> {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static(APP_USER_AGENT));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-
-        if let Some(ref token) = config.github_accesstoken {
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&format!("Bearer {token}"))?,
-            );
-        } else {
+        let Some(token) = &config.github_accesstoken else {
             warn!("did not collect `github.com` stats as no token was provided");
             return Ok(None);
-        }
+        };
 
-        let client = HttpClient::builder().default_headers(headers).build()?;
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, mime::APPLICATION_JSON.as_ref().try_into().unwrap());
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {token}"))?,
+        );
+
+        let client = ClientBuilder::new(
+            reqwest::Client::builder()
+                .user_agent(APP_USER_AGENT)
+                .default_headers(headers)
+                .gzip(true)
+                .build()?,
+        )
+        .with(RetryTransientMiddleware::new_with_policy_and_strategy(
+            ExponentialBackoff::builder().build_with_max_retries(config.github_api_retries),
+            NoRateLimitRetryStrategy,
+        ))
+        .build();
 
         Ok(Some(GitHub {
             client,
@@ -190,10 +202,11 @@ impl GitHub {
         let response = self
             .client
             .post(&self.endpoint)
-            .json(&serde_json::json!({
+            .header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+            .body(serde_json::to_vec(&serde_json::json!({
                 "query": query,
                 "variables": variables,
-            }))
+            }))?)
             .send()
             .await?;
 
@@ -413,6 +426,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retries_server_errors() -> Result<()> {
+        const RETRIES: u32 = 2;
+
+        let mut config = github_config()?;
+        config.github_api_retries = RETRIES;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let mock = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_status(500)
+            .expect((RETRIES + 1) as usize)
+            .create();
+
+        let err = updater
+            .fetch_repository(
+                &repository_name("https://gitlab.com/foo/bar").expect("repository_name failed"),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("500 Internal Server Error"));
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_403_error_with_body() -> Result<()> {
         let config = github_config()?;
         let (mut server, updater) = mock_server_and_github(&config).await;
@@ -481,10 +522,11 @@ mod tests {
         let config = github_config()?;
         let (mut server, updater) = mock_server_and_github(&config).await;
 
-        let _m1 = server
+        let mock = server
             .mock("POST", "/graphql")
             .with_header("content-type", "application/json")
             .with_status(429)
+            .expect(1)
             .create();
 
         assert!(
@@ -496,6 +538,7 @@ mod tests {
                 .unwrap_err()
                 .is::<RateLimitReached>()
         );
+        mock.assert();
 
         Ok(())
     }
