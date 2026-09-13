@@ -49,7 +49,18 @@ impl fmt::Display for Emit {
     }
 }
 
-fn capture_step<T>(
+fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
+    let started = Instant::now();
+    let outcome = run();
+
+    StepResult {
+        outcome,
+        duration: started.elapsed(),
+        log: None,
+    }
+}
+
+fn capture_cargo_step<T>(
     max_log_size: usize,
     run: impl FnOnce() -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
@@ -60,7 +71,7 @@ fn capture_step<T>(
     StepResult {
         outcome,
         duration: started.elapsed(),
-        log: storage.to_string(),
+        log: Some(storage.to_string()),
     }
 }
 
@@ -71,7 +82,7 @@ pub fn load_cargo_metadata<'build, 'ws>(
     build: &'build Build<'ws>,
     limits: &'build Limits,
 ) -> StepResult<CargoMetadata> {
-    capture_step(limits.max_log_size(), || {
+    capture_cargo_step(limits.max_log_size(), || {
         let source_dir = &build.host_source_dir();
 
         debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
@@ -301,10 +312,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         #[builder(start_fn)] target: &str,
         #[builder(default = false)] retry_without_lockfile: bool,
+        #[builder(default = false)] build_coverage: bool,
     ) -> TargetBuildResult {
         let started = Instant::now();
 
-        let mut target_result = self.build_target_once(target);
+        let mut target_result = self.build_target_once(target, build_coverage);
 
         if retry_without_lockfile
             // coverage is the first step in `build_target_once`,
@@ -322,7 +334,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             );
             let regenerate_lockfile_result = self.regenerate_lockfile();
             if regenerate_lockfile_result.successful() {
-                target_result = self.build_target_once(target);
+                target_result = self.build_target_once(target, build_coverage);
                 target_result.regenerate_lockfile = Some(regenerate_lockfile_result);
             } else {
                 target_result.regenerate_lockfile = Some(regenerate_lockfile_result);
@@ -334,10 +346,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all, fields(target))]
-    fn build_target_once(&self, target: &str) -> TargetBuildResult {
+    fn build_target_once(&self, target: &str, build_coverage: bool) -> TargetBuildResult {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
-        let coverage = self.build_coverage(target);
+        let coverage = if build_coverage {
+            self.build_coverage(target)
+        } else {
+            capture_step(|| Ok(None))
+        };
 
         let documentation = self.build_documentation(target);
         let rustdoc_json = self.build_rustdoc_json(target);
@@ -373,7 +389,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
-        self.capture_step(|| {
+        self.capture_cargo_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
                 .prepare()
@@ -405,7 +421,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
-        self.capture_step(|| {
+        self.capture_cargo_step(|| {
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
                 .prepare()
@@ -444,7 +460,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all, fields(target, emit))]
     fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
-        self.capture_step(|| {
+        self.capture_cargo_step(|| {
             let mut command = self
                 .command(target)
                 .rustdoc_arg(format!("--emit={emit}"))
@@ -493,13 +509,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .then(|| self.build.host_target_dir().join("metrics"))
     }
 
-    fn capture_step<T>(&self, run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
-        capture_step(self.limits.max_log_size(), run)
+    fn capture_cargo_step<T>(
+        &self,
+        run: impl FnOnce() -> Result<T, BuildStepError>,
+    ) -> StepResult<T> {
+        capture_cargo_step(self.limits.max_log_size(), run)
     }
 
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> StepResult<()> {
-        self.capture_step(|| {
+        self.capture_cargo_step(|| {
             let source_dir = self.build.host_source_dir();
             debug!("removing invalid lockfile");
             fs::remove_file(source_dir.join("Cargo.lock"))
@@ -632,7 +651,7 @@ mod tests {
     #[test]
     fn capture_retains_preparation_failures_without_applying_policy() {
         crate::logging::init(false);
-        let step = capture_step::<()>(1024, || {
+        let step = capture_cargo_step::<()>(1024, || {
             log::info!("installing additional target");
             Err(BuildStepError::Prepare(anyhow::anyhow!(
                 "target unavailable"
@@ -640,7 +659,7 @@ mod tests {
         });
         assert!(matches!(step.outcome, Err(BuildStepError::Prepare(_))));
         assert!(!step.successful());
-        assert!(step.log.contains("installing additional target"));
+        assert!(step.log().contains("installing additional target"));
     }
 
     #[test]

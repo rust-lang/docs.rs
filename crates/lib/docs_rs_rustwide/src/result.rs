@@ -73,7 +73,7 @@ impl RustdocJsonOutput {
 /// Diagnostics for a failed step that the caller chose to propagate.
 /// The duration and log cover this step, not the whole target or release.
 #[derive(Debug, thiserror::Error)]
-#[error("build step failed after {duration:?}: {error}\ncaptured build log:\n{log}")]
+#[error("build step failed after {duration:?}: {error}\ncaptured build log:\n{logs}", logs = .logs())]
 pub struct FailedStep {
     /// Failure, including its context chain.
     #[source]
@@ -81,7 +81,7 @@ pub struct FailedStep {
     /// Wall-clock time spent in the failing step before it aborted.
     pub duration: Duration,
     /// Cargo and rustdoc output captured before the step failed.
-    pub log: String,
+    pub log: Option<String>,
 }
 
 /// Failure of an individual build step.
@@ -138,13 +138,17 @@ pub struct StepResult<T> {
     /// Produced value or the phase in which the step failed.
     pub outcome: Result<T, BuildStepError>,
     /// Cargo and rustdoc output captured for this step.
-    pub log: String,
+    pub log: Option<String>,
 }
 
 impl<T> StepResult<T> {
     /// Whether this step completed successfully.
     pub fn successful(&self) -> bool {
         self.outcome.is_ok()
+    }
+
+    pub fn log(&self) -> &str {
+        self.log.as_deref().unwrap_or_default()
     }
 
     /// Propagate failure with diagnostics when this step is required by the caller.
@@ -290,19 +294,20 @@ mod tests {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,
             duration: Some(Duration::ZERO),
-            documentation: Some(StepResult {
+            compiler_metrics: None,
+            documentation: StepResult {
                 outcome: Ok(documentation_path),
-                log: String::new(),
+                log: None,
                 duration: Duration::ZERO,
-            }),
-            rustdoc_json: Some(StepResult {
+            },
+            rustdoc_json: StepResult {
                 outcome: Ok(RustdocJsonOutput::new(PathBuf::from("unused.json"))),
-                log: String::new(),
+                log: None,
                 duration: Duration::ZERO,
-            }),
+            },
             coverage: StepResult {
                 outcome: Ok(None),
-                log: String::new(),
+                log: None,
                 duration: Duration::ZERO,
             },
             regenerate_lockfile: None,

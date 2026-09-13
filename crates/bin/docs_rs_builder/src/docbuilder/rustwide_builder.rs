@@ -502,7 +502,7 @@ impl RustwideBuilder {
             build_logs.push((json_log_name, json_build.successful()));
 
             if let Ok(json) = &json_build.outcome {
-                let upload = json.format_version().and_then(|format_version| {
+                json.format_version().and_then(|format_version| {
                     self.runtime.block_on(try_join_all(
                         RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
                             self.upload_json_output(
@@ -516,13 +516,7 @@ impl RustwideBuilder {
                         }),
                     ))?;
                     Ok(())
-                });
-                if let Err(error) = upload {
-                    error!(
-                        ?error,
-                        target, "internal error while publishing rustdoc JSON output"
-                    );
-                }
+                })?;
             }
         }
 
