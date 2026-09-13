@@ -1,0 +1,13 @@
+[files]
+extend-exclude = [
+    "docs/js/*",
+    "crates/bin/docs_rs_web/vendor/",
+    "crates/bin/docs_rs_web/static/",
+    "crates/bin/docs_rs_web/assets/*",
+    "crates/bin/docs_rs_web/src/utils/licenses.rs",
+    "crates/lib/font-awesome-as-a-crate/fontawesome-free-6.2.0-desktop/",
+]
+
+[default.extend-words]
+# Fragment of the historical git hash used in rustc-version test fixtures.
+ba = "ba"

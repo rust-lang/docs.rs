@@ -457,7 +457,7 @@ pub struct RustdocPage {
 impl RustdocPage {
     /// generate an ETag for this rustdoc page, currently based on
     /// * the ETag of the original rustdoc HTML file
-    /// * the BUILD_VERION
+    /// * the BUILD_VERSION
     /// * the serialized RustdocPage struct
     ///
     /// we might not use all of the details in html rewriting, so we might
@@ -917,7 +917,7 @@ pub(crate) async fn json_download_handler(
     params = params.apply_matched_release(&matched_release);
 
     if params.doc_target().is_none() && !params.inner_path().is_empty() {
-        // an unkonwn target leads to doc-target being removed, and the target being
+        // an unknown target leads to doc-target being removed, and the target being
         // added to the inner path
         return Err(AxumNope::TargetNotFound);
     }
@@ -3088,7 +3088,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn download_specfic_version() -> Result<()> {
+    async fn download_specific_version() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         env.fake_release()
