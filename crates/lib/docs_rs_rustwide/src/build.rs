@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::{Span, debug, error, info, instrument, warn};
+use tracing::{Span, debug, error, info, instrument};
 
 /// Name of rustdoc's documentation output directory.
 const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -473,7 +473,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                     Ok(()) => {
                         command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics");
                     }
-                    Err(err) => warn!(
+                    Err(err) => error!(
                         ?err,
                         "cannot create metrics directory; building without metrics"
                     ),
