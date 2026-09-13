@@ -417,15 +417,17 @@ impl RustwideBuilder {
             ))?;
         }
 
-        if let Some(doc_coverage) = release_build_result
+        if let Some(doc_coverage) = &release_build_result
             .default_target
-            .coverage
-            .outcome
+            .coverage()
             .ok()
             .flatten()
         {
-            self.runtime
-                .block_on(add_doc_coverage(&mut async_conn, release_id, doc_coverage))?;
+            self.runtime.block_on(add_doc_coverage(
+                &mut async_conn,
+                release_id,
+                *doc_coverage.clone(),
+            ))?;
         }
 
         match self

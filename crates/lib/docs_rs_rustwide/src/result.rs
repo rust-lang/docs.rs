@@ -214,8 +214,8 @@ impl TargetBuildResult {
             })
     }
 
-    pub fn coverage(&self) -> &StepResult<Option<DocCoverage>> {
-        &self.coverage
+    pub fn coverage(&self) -> &Result<Option<DocCoverage>, BuildStepError> {
+        &self.coverage.outcome
     }
 
     pub fn documentation(&self) -> Option<&Result<PathBuf, BuildStepError>> {
