@@ -60,6 +60,8 @@ mod tests {
 
     #[test]
     fn competing_environment_fails_before_initialization() -> Result<()> {
+        crate::logging::init(false);
+
         let directory = tempfile::tempdir()?;
         let _lock = WorkspaceLock::acquire(directory.path(), false)?;
         let error = crate::BuildEnvironment::builder(directory.path())
