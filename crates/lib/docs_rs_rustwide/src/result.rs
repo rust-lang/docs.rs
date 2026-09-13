@@ -3,7 +3,6 @@ use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
 use docs_rs_types::{BuildError, doc_coverage::DocCoverage};
 use docsrs_metadata::Metadata;
-use itertools::Itertools as _;
 use rustwide::{SandboxStatistics, cmd::CommandError};
 use std::{
     fs::File,
@@ -213,19 +212,6 @@ impl TargetBuildResult {
                     .as_ref()
                     .is_ok_and(|path| path.join(library_name).is_dir())
             })
-    }
-
-    pub fn all_logs(&self) -> String {
-        // FIXME: is this necessary?
-        // perhaps we merge them with titles / as sections somehow?
-        self.regenerate_lockfile
-            .as_ref()
-            .map(|r| &r.log)
-            .iter()
-            .chain(iter::once(&&self.coverage.log))
-            .chain(self.documentation.as_ref().map(|r| &r.log).iter())
-            .chain(self.rustdoc_json.as_ref().map(|r| &r.log).iter())
-            .join("\n\n")
     }
 
     pub fn coverage(&self) -> &StepResult<Option<DocCoverage>> {

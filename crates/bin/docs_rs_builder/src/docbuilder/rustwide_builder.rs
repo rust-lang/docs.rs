@@ -29,12 +29,14 @@ use docs_rs_types::{
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
+use itertools::Itertools as _;
 use regex::Regex;
 use rustwide::{Crate, Toolchain};
 use std::{
     collections::HashSet,
     fs::{self, File},
     io::BufReader,
+    iter,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -518,7 +520,12 @@ impl RustwideBuilder {
             }
 
             let successful = target.documentation_succeeded();
-            let log = target.all_logs();
+
+            // backwards compatible logs, not yet structured in the files.
+            let log = iter::once(&&target.coverage.log)
+                .chain(target.documentation.as_ref().map(|r| &r.log).iter())
+                .join("\n\n");
+
             let log_name = format!("{}.txt", target.target);
             self.blocking_storage
                 .store_one(format!("build-logs/{build_id}/{log_name}"), log)?;
