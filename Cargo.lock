@@ -2453,6 +2453,7 @@ dependencies = [
  "docs_rs_types",
  "docs_rs_utils",
  "docsrs-metadata",
+ "itertools 0.15.0",
  "log",
  "pretty_assertions",
  "rustwide",

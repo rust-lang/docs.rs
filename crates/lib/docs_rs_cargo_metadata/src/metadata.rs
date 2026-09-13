@@ -3,6 +3,7 @@ use docs_rs_types::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, process, str};
 
+#[derive(Debug)]
 pub struct CargoMetadata {
     root: Package,
 }

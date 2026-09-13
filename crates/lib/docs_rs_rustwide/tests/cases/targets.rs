@@ -8,8 +8,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
     let mut test = TestEnvironment::with_default_targets()?;
     let release = build_local(&mut test.environment, "additional-targets")?.into_inner();
     let targets: Vec<_> = release
-        .targets
-        .iter()
+        .targets()
         .map(|result| result.target.as_str())
         .collect();
 
@@ -33,8 +32,7 @@ fn cross_compiles_non_host_default_target() -> Result<()> {
         .run(|build| build.build_docs())?
         .into_inner();
     let host = release
-        .targets
-        .iter()
+        .targets()
         .find(|result| result.target == "x86_64-unknown-linux-gnu")
         .expect("host target should be included");
 

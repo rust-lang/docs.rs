@@ -1,11 +1,13 @@
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
 use docs_rs_types::{BuildError, doc_coverage::DocCoverage};
 use docsrs_metadata::Metadata;
+use itertools::Itertools as _;
 use rustwide::{SandboxStatistics, cmd::CommandError};
 use std::{
     fs::File,
+    iter,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -209,6 +211,38 @@ impl TargetBuildResult {
                     .is_ok_and(|path| path.join(library_name).is_dir())
             })
     }
+
+    pub fn all_logs(&self) -> String {
+        // FIXME: is this necessary?
+        self.regenerate_lockfile
+            .as_ref()
+            .map(|r| &r.log)
+            .iter()
+            .chain(iter::once(&&self.coverage.log))
+            .chain(self.documentation.as_ref().map(|r| &r.log).iter())
+            .chain(self.rustdoc_json.as_ref().map(|r| &r.log).iter())
+            .join("\n")
+    }
+
+    pub fn coverage(&self) -> &StepResult<Option<DocCoverage>> {
+        &self.coverage
+    }
+
+    pub fn documentation(&self) -> Option<&StepResult<PathBuf>> {
+        self.documentation.as_ref()
+    }
+
+    pub fn rustdoc_json(&self) -> Option<&StepResult<RustdocJsonOutput>> {
+        self.rustdoc_json.as_ref()
+    }
+
+    pub fn compiler_metrics(&self) -> Option<&StepResult<Vec<PathBuf>>> {
+        self.compiler_metrics.as_ref()
+    }
+
+    pub fn regenerate_lockfile(&self) -> Option<&StepResult<()>> {
+        self.regenerate_lockfile.as_ref()
+    }
 }
 
 /// Service-independent result of building one crate release.
@@ -220,44 +254,38 @@ pub struct ReleaseBuildResult {
     pub metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
     pub cargo_metadata: StepResult<CargoMetadata>,
-    pub default_target: Option<TargetBuildResult>,
+    pub default_target: TargetBuildResult,
     pub other_targets: Vec<TargetBuildResult>,
 }
 
 impl ReleaseBuildResult {
     /// Whether Cargo completed the default HTML documentation command successfully.
     pub fn build_succeeded(&self) -> bool {
-        self.default_target
-            .as_ref()
-            .is_some_and(|dt| dt.build_succeeded())
+        self.default_target.build_succeeded()
     }
 
     /// Whether the default HTML documentation build completed and produced output.
     pub fn documentation_succeeded(&self) -> bool {
-        self.default_target
-            .as_ref()
-            .is_some_and(|dt| dt.documentation_succeeded())
+        self.default_target.documentation_succeeded()
     }
 
     /// Whether the default target produced documentation for this crate's library target.
     pub fn has_docs(&self) -> bool {
-        self.cargo_metadata.outcome.as_ref().is_ok_and(|m| {
-            m.root().library_name().is_some_and(|name| {
-                self.default_target
-                    .as_ref()
-                    .is_some_and(|dt| dt.has_docs(&name))
-            })
-        })
+        self.cargo_metadata
+            .outcome
+            .as_ref()
+            .expect("we know it's Ok()")
+            .root()
+            .library_name()
+            .is_some_and(|name| self.default_target.has_docs(&name))
     }
 
-    pub fn default_target(&self) -> Result<&TargetBuildResult> {
-        self.default_target
-            .as_ref()
-            .ok_or_else(|| anyhow!("missing default target build result"))
+    pub fn default_target(&self) -> &TargetBuildResult {
+        &self.default_target
     }
 
     pub fn targets(&self) -> impl Iterator<Item = &TargetBuildResult> {
-        self.default_target.iter().chain(self.other_targets.iter())
+        iter::once(&self.default_target).chain(self.other_targets.iter())
     }
 }
 
@@ -276,7 +304,6 @@ mod tests {
     fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
-            is_default: true,
             duration: Duration::ZERO,
             documentation: Some(StepResult {
                 outcome: Ok(documentation_path),

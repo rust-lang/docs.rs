@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     println!("sandbox statistics: {:#?}", build.statistics());
     let release_result = build.into_inner();
-    for target_result in release_result.targets {
+    for target_result in release_result.targets() {
         println!("target: {}", target_result.target);
         println!(
             "  documentation: {}",
@@ -36,7 +36,7 @@ fn main() -> Result<()> {
         );
         println!(
             "  rustdoc JSON: {}",
-            target_result.rustdoc_json.successful()
+            target_result.rustdoc_json.as_ref().unwrap().successful()
         );
         println!("  coverage: {}", target_result.coverage.successful());
     }

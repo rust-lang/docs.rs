@@ -287,7 +287,7 @@ impl RustwideBuilder {
         let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
 
         let build_statistics = full_build_result.statistics().clone();
-        let mut release_build_result = full_build_result.into_inner();
+        let mut release_build_result = full_build_result.into_inner()?;
         let cargo_metadata = release_build_result.cargo_metadata.into_result()?;
 
         if release_build_result
@@ -299,13 +299,11 @@ impl RustwideBuilder {
 
         let build_succeeded = release_build_result.build_succeeded();
         let has_docs = release_build_result.has_docs();
-        // let default_target = release_build_result.default_target.target.clone();
+        let default_target = release_build_result.default_target.target.clone();
 
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
-            let default_target_result = release_build_result.default_target()?;
-
-            copy_target_docs(&default_target_result, local_storage.path())?;
+            copy_target_docs(&release_build_result.default_target, local_storage.path())?;
 
             for target in &release_build_result.other_targets {
                 if target.documentation_succeeded() {
@@ -332,9 +330,9 @@ impl RustwideBuilder {
         let build_error = release_build_result
             .default_target()
             .documentation
-            .outcome
             .as_ref()
-            .err();
+            .and_then(|result| result.outcome.as_ref().err());
+
         let rustc_version = self.environment.rustc_version()?;
         let docsrs_version = format!("docsrs {BUILDER_VERSION}");
         let mut async_conn = self.runtime.block_on(self.db.get_async())?;
@@ -355,7 +353,7 @@ impl RustwideBuilder {
 
         if build_succeeded {
             self.builder_metrics.successful_builds.add(1, &[]);
-        } else if release_build_result.cargo_metadata.root().is_library() {
+        } else if cargo_metadata.root().is_library() {
             self.builder_metrics.failed_builds.add(1, &[]);
         } else {
             self.builder_metrics.non_library_builds.add(1, &[]);
@@ -373,7 +371,7 @@ impl RustwideBuilder {
         }
         .unwrap_or_else(ReleaseData::dummy);
 
-        let cargo_metadata = release_build_result.cargo_metadata.root();
+        let cargo_metadata = cargo_metadata.root();
         let repository = self.get_repo(cargo_metadata)?;
         let current_release_build_status = self.runtime.block_on(
             sqlx::query_scalar!(
@@ -419,10 +417,11 @@ impl RustwideBuilder {
         }
 
         if let Some(doc_coverage) = release_build_result
-            .targets
-            .first_mut()
-            .and_then(|target| target.coverage.outcome.as_mut().ok())
-            .and_then(Option::take)
+            .default_target
+            .coverage
+            .outcome
+            .ok()
+            .flatten()
         {
             self.runtime
                 .block_on(add_doc_coverage(&mut async_conn, release_id, doc_coverage))?;
@@ -467,59 +466,63 @@ impl RustwideBuilder {
     ) -> Result<()> {
         let mut build_logs = Vec::new();
 
-        for target in &mut release.targets {
-            if let Err(error) = &target.compiler_metrics.outcome {
+        for target in &mut release.targets() {
+            if let Some(metrics_result) = &target.compiler_metrics
+                && let Err(error) = &metrics_result.outcome
+            {
                 warn!(
                     ?error,
                     target = target.target,
                     "failed to collect compiler metrics; continuing"
                 );
             }
-            let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
-            // FIXME: perhaps return on these errors?  so the build fails with an internal error?
-            // then we would (?) re-attempt it?
-            if let Err(error) = self
-                .blocking_storage
-                .store_one(json_log_path, mem::take(&mut target.rustdoc_json.log))
-            {
-                error!(
-                    ?error,
-                    target = target.target,
-                    "failed to publish rustdoc JSON build log"
-                );
-            }
 
-            if let Ok(json) = &target.rustdoc_json.outcome {
-                let upload = json.format_version().and_then(|format_version| {
-                    self.runtime.block_on(try_join_all(
-                        RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
-                            self.upload_json_output(
-                                name,
-                                version,
-                                &target.target,
-                                format_version,
-                                *algorithm,
-                                json.path().to_owned(),
-                            )
-                        }),
-                    ))?;
-                    Ok(())
-                });
-                if let Err(error) = upload {
+            if let Some(rustdoc_json_result) = &target.rustdoc_json {
+                let json_log_path = format!("build-logs/{build_id}/{}_json.txt", target.target);
+                // FIXME: perhaps return on these errors?  so the build fails with an internal error?
+                // then we would (?) re-attempt it?
+                if let Err(error) = self
+                    .blocking_storage
+                    .store_one(json_log_path, rustdoc_json_result.log.clone())
+                {
                     error!(
                         ?error,
                         target = target.target,
-                        "internal error while publishing rustdoc JSON output"
+                        "failed to publish rustdoc JSON build log"
                     );
+                }
+
+                if let Ok(json) = &rustdoc_json_result.outcome {
+                    let upload = json.format_version().and_then(|format_version| {
+                        self.runtime.block_on(try_join_all(
+                            RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
+                                self.upload_json_output(
+                                    name,
+                                    version,
+                                    &target.target,
+                                    format_version,
+                                    *algorithm,
+                                    json.path().to_owned(),
+                                )
+                            }),
+                        ))?;
+                        Ok(())
+                    });
+                    if let Err(error) = upload {
+                        error!(
+                            ?error,
+                            target = target.target,
+                            "internal error while publishing rustdoc JSON output"
+                        );
+                    }
                 }
             }
 
             let successful = target.documentation_succeeded();
+            let log = target.all_logs();
             let log_name = format!("{}.txt", target.target);
-            self.blocking_storage.store_one(
-                format!("build-logs/{build_id}/{log_name}"),
-                mem::take(&mut target.documentation.log),
-            )?;
+            self.blocking_storage
+                .store_one(format!("build-logs/{build_id}/{log_name}"), log)?;
             build_logs.push((log_name, successful));
         }
 

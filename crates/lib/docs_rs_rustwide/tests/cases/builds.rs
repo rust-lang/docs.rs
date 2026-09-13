@@ -20,13 +20,26 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let duration = build.duration();
     let release = build.into_inner();
     let target = release.default_target();
-    let steps_duration =
-        target.coverage.duration + target.rustdoc_json.duration + target.documentation.duration;
+    let steps_duration = target.coverage.duration
+        + target
+            .rustdoc_json()
+            .map(|r| r.duration)
+            .unwrap_or_default()
+        + target
+            .documentation()
+            .map(|r| r.duration)
+            .unwrap_or_default();
+
     assert!(target.duration() >= steps_duration);
-    assert!(duration >= release.targets.iter().map(|target| target.duration()).sum());
+    assert!(duration >= release.targets().map(|target| target.duration()).sum());
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(
+        release
+            .default_target()
+            .rustdoc_json()
+            .is_some_and(|r| r.successful())
+    );
     assert!(release.default_target().coverage.successful());
     assert!(
         release
@@ -39,7 +52,8 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     assert!(
         release
             .default_target()
-            .rustdoc_json
+            .rustdoc_json()
+            .unwrap()
             .outcome
             .as_ref()
             .expect("successful JSON build has an output")
@@ -60,8 +74,8 @@ fn binary_crate_does_not_report_library_documentation() -> Result<()> {
         .run(|build| build.build_docs())?
         .into_inner();
 
-    assert!(!release.cargo_metadata.root().is_library());
     assert!(!release.has_docs());
+    assert!(!release.cargo_metadata.into_result()?.root().is_library());
     Ok(())
 }
 
@@ -82,7 +96,13 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().coverage.successful());
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(
+        release
+            .default_target()
+            .rustdoc_json()
+            .unwrap()
+            .successful()
+    );
     Ok(())
 }
 
@@ -116,7 +136,13 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
             .as_ref()
             .is_ok_and(Option::is_some)
     );
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(
+        release
+            .default_target()
+            .rustdoc_json()
+            .unwrap()
+            .successful()
+    );
     Ok(())
 }
 
@@ -134,7 +160,13 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
 
     assert!(release.build_succeeded());
     assert!(release.default_target().coverage.successful());
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(
+        release
+            .default_target()
+            .rustdoc_json()
+            .unwrap()
+            .successful()
+    );
     Ok(())
 }
 
@@ -154,7 +186,8 @@ fn collects_compiler_metrics() -> Result<()> {
     let release = build_local(&mut environment, "hello-world")?.into_inner();
     let metric_files = release
         .default_target()
-        .compiler_metrics
+        .compiler_metrics()
+        .unwrap()
         .outcome
         .as_ref()
         .unwrap();
@@ -215,6 +248,7 @@ fn reports_implicit_features_for_optional_dependencies() -> Result<()> {
     assert!(
         release
             .cargo_metadata
+            .into_result()?
             .root()
             .features
             .contains_key("serde_derive")
@@ -229,14 +263,15 @@ fn excludes_implicit_features_when_dep_syntax_is_used() -> Result<()> {
     let release = build_local(&mut test.environment, "optional-dep")?.into_inner();
     let features: Vec<_> = release
         .cargo_metadata
+        .into_result()?
         .root()
         .features
         .keys()
-        .map(String::as_str)
+        .map(|f| f.to_string())
         .collect();
 
     assert_eq!(features, ["alloc", "default", "optional_regex", "std"]);
-    assert!(!features.contains(&"regex"));
+    assert!(!features.contains(&"regex".to_string()));
     Ok(())
 }
 
