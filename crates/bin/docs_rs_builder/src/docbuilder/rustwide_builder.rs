@@ -334,7 +334,7 @@ impl RustwideBuilder {
             let log_name = format!("{}.txt", target.target);
             self.blocking_storage.store_one(
                 format!("build-logs/{build_id}/{log_name}"),
-                target.documentation.log.clone(),
+                target.documentation.log().to_string(),
             )?;
 
             build_logs.push((log_name, successful));

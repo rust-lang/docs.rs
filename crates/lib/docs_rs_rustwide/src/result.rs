@@ -73,7 +73,7 @@ impl RustdocJsonOutput {
 /// Diagnostics for a failed step that the caller chose to propagate.
 /// The duration and log cover this step, not the whole target or release.
 #[derive(Debug, thiserror::Error)]
-#[error("build step failed after {duration:?}: {error}\ncaptured build log:\n{logs}", logs = .logs())]
+#[error("build step failed after {duration:?}: {error}\ncaptured build log:\n{logs}", logs = self.log())]
 pub struct FailedStep {
     /// Failure, including its context chain.
     #[source]
@@ -82,6 +82,12 @@ pub struct FailedStep {
     pub duration: Duration,
     /// Cargo and rustdoc output captured before the step failed.
     pub log: Option<String>,
+}
+
+impl FailedStep {
+    pub fn log(&self) -> &str {
+        self.log.as_deref().unwrap_or_default()
+    }
 }
 
 /// Failure of an individual build step.
