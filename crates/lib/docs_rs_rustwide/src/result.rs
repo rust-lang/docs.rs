@@ -248,7 +248,7 @@ pub struct ReleaseBuildResult {
     /// Includes all targets and retry attempts in the shared sandbox.
     pub statistics: SandboxStatistics,
     /// Metadata read from rustwide's prepared source directory.
-    pub metadata: Metadata,
+    pub docsrs_metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
     pub cargo_metadata: CargoMetadata,
     pub default_target: TargetBuildResult,

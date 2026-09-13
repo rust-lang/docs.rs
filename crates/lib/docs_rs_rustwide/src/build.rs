@@ -221,7 +221,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     /// Metadata parsed from the prepared crate source.
-    pub fn metadata(&self) -> &Metadata {
+    pub fn docsrs_metadata(&self) -> &Metadata {
         &self.docsrs_metadata
     }
 
@@ -261,22 +261,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 tracing::field::display(&root_package.version),
             );
 
-        let default_target_result = self
+        let default_target_build = self
             .build_target(default_target)
             .retry_without_lockfile(true)
+            .build_coverage(true)
             .run();
 
         let default_has_docs = self
             .cargo_metadata
             .root()
             .library_name()
-            .is_some_and(|name| default_target_result.has_docs(&name));
-
-        // FIXME: where to put this check? do we still need it?
-        // let is_default = target == self.metadata_targets().default_target;
-        // if documentation_result.successful() && self.metadata.proc_macro {
-        //     debug_assert!(is_default, "proc macros only support their host target");
-        // }
+            .is_some_and(|name| default_target_build.has_docs(&name));
 
         let mut target_results = vec![];
 
@@ -285,14 +280,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 target_results.push(self.build_target(target).run());
             }
         } else {
-            debug!("default target produced no library documentation; skipping other targets");
+            info!("default target produced no library documentation; skipping other targets");
         }
 
         Ok(ReleaseBuildResult {
             statistics: self.build.statistics(),
-            metadata: self.docsrs_metadata.clone(),
+            docsrs_metadata: self.docsrs_metadata.clone(),
             cargo_metadata: self.cargo_metadata.clone(),
-            default_target: default_target_result,
+            default_target: default_target_build,
             other_targets: target_results,
         })
     }
@@ -343,7 +338,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         target_result
     }
 
-    #[instrument(skip_all, fields(target))]
+    #[instrument(skip_all, fields(target, build_coverage))]
     fn build_target_once(&self, target: &str, build_coverage: bool) -> TargetBuildResult {
         // Coverage must precede the HTML build because Cargo currently clears
         // rustdoc's target output directory between these invocations.
@@ -364,7 +359,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let is_default = target == self.metadata_targets().default_target;
 
-        if documentation.successful() && self.metadata().proc_macro {
+        if documentation.successful() && self.docsrs_metadata().proc_macro {
             assert!(
                 is_default && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
