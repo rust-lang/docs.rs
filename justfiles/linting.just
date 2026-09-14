@@ -107,7 +107,7 @@ lint: lint-rust lint-actions lint-js lint-dependencies-machete lint-mise-lock
 # Verify that mise.lock matches the tools pinned in mise.toml.
 [group('linting')]
 lint-mise-lock:
-    mise lock --upgrade --jobs=1
+    mise lock --jobs=1
     git diff --exit-code -- mise.lock
 
 # Validate GitHub Actions workflows with actionlint when installed.
