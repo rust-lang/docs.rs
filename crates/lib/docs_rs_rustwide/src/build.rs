@@ -2,7 +2,7 @@ use crate::{
     BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
     TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
@@ -437,19 +437,21 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all)]
-    pub(crate) fn build_essential_files(&self) -> Result<PathBuf> {
-        let output = self
-            .build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
-            .into_result()?;
+    pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
+        let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
 
-        let static_files = output.join("static.files");
+        let html_path = result.outcome.as_ref().ok().unwrap();
+        let static_files = html_path.join("static.files");
         if !static_files.is_dir() {
-            bail!(
+            result.outcome = Err(BuildStepError::Output(anyhow!(
                 "essential-files build did not produce {}",
                 static_files.display()
-            );
+            )));
+        } else {
+            result.outcome = Ok(static_files);
         }
-        Ok(static_files)
+
+        result
     }
 
     #[instrument(skip_all, fields(target, emit))]
