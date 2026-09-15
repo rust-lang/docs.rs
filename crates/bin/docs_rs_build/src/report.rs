@@ -1,5 +1,5 @@
 use cli_table::{Cell, Style, Table, format::Justify, print_stdout};
-use docs_rs_rustwide::{ReleaseBuildResult, StepResult, TargetBuildResult};
+use docs_rs_rustwide::{ReleaseBuildResult, StepResult, StepResultExt, TargetBuildResult};
 use humantime::format_duration;
 use std::time::Duration;
 
@@ -31,9 +31,9 @@ pub(crate) fn print(
             step_cell(&target.coverage),
             format_duration(target.duration()).to_string(),
         ]);
-        totals[0] += target.documentation.duration;
-        totals[1] += target.rustdoc_json.duration;
-        totals[2] += target.coverage.duration;
+        totals[0] += target.documentation.duration();
+        totals[1] += target.rustdoc_json.duration();
+        totals[2] += target.coverage.duration();
         totals[3] += target.duration();
     }
     rows.push([
@@ -61,11 +61,10 @@ pub(crate) fn print(
         print_error("HTML", &target.documentation);
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);
-        // print_error("compiler metrics", &target.compiler_metrics);
-        if let Ok(path) = &target.documentation.outcome {
+        if let Ok(path) = target.documentation() {
             println!("  HTML output: {}", path.display());
         }
-        if let Ok(output) = &target.rustdoc_json.outcome {
+        if let Ok(output) = target.rustdoc_json() {
             println!("  JSON output: {}", output.path().display());
         }
         for path in target.compiler_metrics.iter().flatten() {
@@ -92,8 +91,8 @@ pub(crate) fn print(
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
     target.documentation_succeeded()
-        && target.rustdoc_json.successful()
-        && target.coverage.successful()
+        && target.rustdoc_json.is_ok()
+        && target.coverage.is_ok()
 }
 
 fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: bool) -> bool {
@@ -103,17 +102,17 @@ fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: b
 fn step_cell<T>(step: &StepResult<T>) -> String {
     format!(
         "{} {}",
-        if step.successful() { "ok" } else { "FAILED" },
-        format_duration(step.duration)
+        if step.is_ok() { "ok" } else { "FAILED" },
+        format_duration(step.duration())
     )
 }
 
 fn print_error<T>(name: &str, step: &StepResult<T>) {
-    if let Err(error) = &step.outcome {
-        println!("  {name}: failed: {error:#}");
-        if !step.log().trim().is_empty() {
+    if let Err(report) = step {
+        println!("  {name}: failed: {:#}", report.value);
+        if let Some(log) = report.log.as_deref().filter(|log| !log.trim().is_empty()) {
             println!("    captured build log:");
-            for line in step.log().lines() {
+            for line in log.lines() {
                 println!("      {line}");
             }
         }
