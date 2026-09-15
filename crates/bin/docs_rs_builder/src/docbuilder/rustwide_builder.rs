@@ -358,18 +358,6 @@ impl RustwideBuilder {
         self.runtime
             .block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
 
-        // A failed regeneration is an internal failure eligible for a queue
-        // reattempt. Keep this production policy outside the build library.
-        for target in release_build_result.targets() {
-            if let Some(failure) = target.regeneration_failure() {
-                bail!(
-                    "lockfile regeneration failed for {}: {failure:#}\n{}",
-                    target.target(),
-                    failure.log().unwrap_or_default()
-                );
-            }
-        }
-
         let build_error = release_build_result
             .default_target()
             .documentation()
