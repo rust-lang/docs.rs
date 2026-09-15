@@ -1,5 +1,4 @@
 mod args;
-mod artifacts;
 mod logging;
 mod package;
 mod report;
@@ -75,9 +74,8 @@ fn run(args: &Args) -> Result<bool> {
         .context("running the docs.rs build")?;
     let duration = build.duration();
     let result = build.into_inner();
-    let artifacts = artifacts::save(&result, &workspace_path)?;
     let succeeded = report::build_succeeded(&result, args.strict);
-    report::print(&result, duration, &artifacts, succeeded, args.strict)?;
+    report::print(&result, duration, succeeded, args.strict)?;
     Ok(succeeded)
 }
 

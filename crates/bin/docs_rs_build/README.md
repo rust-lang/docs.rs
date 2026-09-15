@@ -219,10 +219,11 @@ location when necessary:
 docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
-HTML and JSON are copied into a unique `artifacts/build-*` directory under
-the workspace before the temporary build results are dropped. The exact paths
-are printed in the build summary. These exports survive command exit and later
-builds; remove old artifact directories when no longer needed. The workspace is locked
+HTML and JSON are moved into unique locations under the release build directory's
+`tmp` directory. The exact paths are printed in the build summary. Dropping build
+results or exiting the command does not delete them. Rustwide's build-directory
+cleanup removes them, so copy anything you need to retain before starting another
+build with the same workspace. The workspace is locked
 for the lifetime of the build environment; concurrent invocations must use
 different workspace directories.
 

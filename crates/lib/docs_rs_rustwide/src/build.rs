@@ -477,7 +477,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 fs::rename(&output_file, &destination)
                     .context("couldn't move output file to temp destination")?;
 
-                Ok(RustdocJsonOutput::new(destination))
+                Ok(RustdocJsonOutput::new(destination.keep()?))
             })
         })
     }
@@ -558,7 +558,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 fs::rename(&output_dir, &destination)
                     .context("couldn't move output dir to temp destination")?;
 
-                Ok(HtmlOutput::new(temp_dir, destination))
+                Ok(HtmlOutput::new(temp_dir.keep().join("docs")))
             })
         })
     }

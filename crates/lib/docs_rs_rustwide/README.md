@@ -271,7 +271,13 @@ The CLI and production builder fail with a workspace-in-use error if another
 environment owns the directory. Use a separate workspace for concurrent
 builders. Tests can opt into waiting with `.wait_for_workspace_lock(true)`.
 
-Keep the environment alive until artifacts have been consumed or copied out.
+HTML and JSON steps move their output into unique locations under the build
+directory's `tmp` directory before returning. Subsequent steps cannot overwrite
+these artifacts, and dropping output values does not delete them. Their lifetime
+is managed by Rustwide's build-directory cleanup.
+
+Keep the environment alive until artifacts have been consumed or copied out
+to prevent another process from cleaning the workspace in the meantime.
 Starting another release or refreshing the workspace purges previous build
 directories, including generated artifacts. Copy files that must survive first.
 Do not remove `.docsrs-workspace.lock` while an environment is running. The file

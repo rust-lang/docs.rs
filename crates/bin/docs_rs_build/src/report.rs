@@ -1,12 +1,11 @@
 use cli_table::{Cell, Style, Table, format::Justify, print_stdout};
 use docs_rs_rustwide::{ReleaseBuildResult, StepResult, StepResultExt, TargetBuildResult};
 use humantime::format_duration;
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 pub(crate) fn print(
     result: &ReleaseBuildResult,
     duration: Duration,
-    artifacts: &Path,
     succeeded: bool,
     strict: bool,
 ) -> anyhow::Result<()> {
@@ -64,23 +63,11 @@ pub(crate) fn print(
         if let Some(step) = target.regenerate_lockfile() {
             print_error("lockfile regeneration", step);
         }
-        if target
-            .documentation()
-            .is_ok_and(|output| output.path().is_dir())
-        {
-            println!(
-                "  HTML output: {}",
-                artifacts.join(&target.target).join("html").display()
-            );
+        if let Ok(output) = target.documentation() {
+            println!("  HTML output: {}", output.path().display());
         }
-        if target.rustdoc_json.is_ok() {
-            println!(
-                "  JSON output: {}",
-                artifacts
-                    .join(&target.target)
-                    .join("rustdoc.json")
-                    .display()
-            );
+        if let Ok(output) = target.rustdoc_json() {
+            println!("  JSON output: {}", output.path().display());
         }
         for path in target.compiler_metrics.iter().flatten() {
             println!("  compiler metrics: {}", path.display());

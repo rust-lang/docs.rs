@@ -10,7 +10,6 @@ use std::{
     fs::File,
     iter,
     path::{Path, PathBuf},
-    sync::Arc,
     time::Duration,
 };
 use step::{BuildStepError, StepResult};
@@ -40,9 +39,10 @@ impl<T> BuildResult<T> {
     }
 }
 
+/// HTML artifacts retained until the enclosing Rustwide build directory is cleaned.
+/// Dropping this value does not remove the files.
 #[derive(Clone, Debug)]
 pub struct HtmlOutput {
-    _tempdir: Arc<tempfile::TempDir>,
     pub(crate) path: PathBuf,
 }
 
@@ -53,22 +53,23 @@ impl AsRef<Path> for HtmlOutput {
 }
 
 impl HtmlOutput {
-    pub(crate) fn new(tempdir: tempfile::TempDir, path: PathBuf) -> Self {
-        let _tempdir = Arc::new(tempdir);
-
-        Self { _tempdir, path }
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self { path }
     }
 
-    /// Path to the generated rustdoc JSON file.
+    /// Path to the generated HTML documentation directory.
     pub fn path(&self) -> &Path {
         &self.path
     }
 }
 
 /// A rustdoc JSON artifact produced by a successful JSON build.
+///
+/// Retained until the enclosing Rustwide build directory is cleaned.
+/// Dropping this value does not remove the file.
 #[derive(Clone, Debug)]
 pub struct RustdocJsonOutput {
-    path: Arc<tempfile::TempPath>,
+    path: PathBuf,
 }
 
 impl AsRef<Path> for RustdocJsonOutput {
@@ -78,10 +79,8 @@ impl AsRef<Path> for RustdocJsonOutput {
 }
 
 impl RustdocJsonOutput {
-    pub(crate) fn new(path: tempfile::TempPath) -> Self {
-        Self {
-            path: Arc::new(path),
-        }
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self { path }
     }
 
     /// Path to the generated rustdoc JSON file.
@@ -249,7 +248,7 @@ mod tests {
     }
 
     fn target_result(html_output: HtmlOutput) -> TargetBuildResult {
-        let dummy_json_filename = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+        let dummy_json_filename = html_output.path().with_file_name("dummy.json");
         fs::write(&dummy_json_filename, b"{}").unwrap();
 
         TargetBuildResult {
@@ -263,7 +262,7 @@ mod tests {
                 duration: Duration::ZERO,
             }),
             rustdoc_json: Ok(StepReport {
-                value: RustdocJsonOutput::new(dummy_json_filename),
+                value: RustdocJsonOutput::new(dummy_json_filename.to_path_buf()),
                 log: None,
                 duration: Duration::ZERO,
             }),
@@ -280,7 +279,7 @@ mod tests {
     fn documentation_success_requires_documentation_directory() {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("docs");
-        let result = target_result(HtmlOutput::new(temporary, path.clone()));
+        let result = target_result(HtmlOutput::new(path.clone()));
 
         assert!(!result.documentation_exists());
         assert!(result.build_succeeded());
@@ -303,7 +302,7 @@ mod tests {
     fn reads_rustdoc_json_format_version_lazily() -> Result<()> {
         let path = tempfile::NamedTempFile::new()?;
         fs::write(&path, r#"{"format_version":42}"#)?;
-        let output = RustdocJsonOutput::new(path.into_temp_path());
+        let output = RustdocJsonOutput::new(path.path().to_owned());
 
         assert_eq!(
             output.format_version()?,
@@ -317,7 +316,7 @@ mod tests {
     fn reports_invalid_rustdoc_json_metadata(contents: &str) -> Result<()> {
         let path = tempfile::NamedTempFile::new()?;
         fs::write(&path, contents)?;
-        let output = RustdocJsonOutput::new(path.into_temp_path());
+        let output = RustdocJsonOutput::new(path.path().to_owned());
 
         assert!(output.format_version().is_err());
         Ok(())

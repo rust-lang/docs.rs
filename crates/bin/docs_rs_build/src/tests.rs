@@ -1,4 +1,4 @@
-use super::{artifacts, report};
+use super::report;
 use anyhow::Result;
 use docs_rs_rustwide::{
     BuildEnvironment, BuildStepError, SandboxImageSource, StepReport, testing::test_workspace_path,
@@ -8,7 +8,7 @@ use std::{fs, path::Path, time::Duration};
 
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
-fn exports_artifacts_and_applies_exit_policy() -> Result<()> {
+fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
     docs_rs_rustwide::logging::init(false);
     let workspace = test_workspace_path();
     let mut environment = BuildEnvironment::builder(workspace.as_path())
@@ -32,11 +32,6 @@ fn exports_artifacts_and_applies_exit_policy() -> Result<()> {
 
     assert!(report::build_succeeded(&result, false));
     assert!(report::build_succeeded(&result, true));
-    let output = tempfile::tempdir()?;
-    let first = artifacts::save(&result, output.path())?;
-    let second = artifacts::save(&result, output.path())?;
-    assert_ne!(first, second);
-    let target = result.default_target.target.clone();
     let temporary_html = result
         .default_target
         .documentation()
@@ -99,21 +94,7 @@ fn exports_artifacts_and_applies_exit_policy() -> Result<()> {
     assert!(!report::build_succeeded(&result, false));
     assert!(!report::build_succeeded(&result, true));
     drop(result);
-    assert!(!temporary_html.exists());
-    assert!(!temporary_json.exists());
-    for directory in [first, second] {
-        assert!(
-            directory
-                .join(&target)
-                .join("html")
-                .join(&library)
-                .join("index.html")
-                .is_file()
-        );
-        assert_eq!(
-            fs::read(directory.join(&target).join("rustdoc.json"))?,
-            original_json
-        );
-    }
+    assert!(temporary_html.is_dir());
+    assert_eq!(fs::read(&temporary_json)?, original_json);
     Ok(())
 }

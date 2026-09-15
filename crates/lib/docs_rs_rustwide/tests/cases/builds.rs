@@ -45,6 +45,13 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
             .format_version()
             .is_ok()
     );
+    let html = target.documentation().unwrap().path().to_owned();
+    let json = target.rustdoc_json().unwrap().path().to_owned();
+    let original_json = fs::read(&json)?;
+    let library = release.cargo_metadata.root().library_name().unwrap();
+    drop(release);
+    assert!(html.join(library).join("index.html").is_file());
+    assert_eq!(fs::read(json)?, original_json);
     Ok(())
 }
 
