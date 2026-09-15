@@ -46,6 +46,12 @@ pub struct HtmlOutput {
     pub(crate) path: PathBuf,
 }
 
+impl AsRef<Path> for HtmlOutput {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
+}
+
 impl HtmlOutput {
     pub(crate) fn new(tempdir: tempfile::TempDir, path: PathBuf) -> Self {
         let _tempdir = Arc::new(tempdir);
@@ -63,6 +69,12 @@ impl HtmlOutput {
 #[derive(Clone, Debug)]
 pub struct RustdocJsonOutput {
     path: Arc<tempfile::TempPath>,
+}
+
+impl AsRef<Path> for RustdocJsonOutput {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
 }
 
 impl RustdocJsonOutput {

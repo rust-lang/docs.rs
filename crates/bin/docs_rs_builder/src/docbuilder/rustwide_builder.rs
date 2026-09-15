@@ -606,7 +606,7 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
     info!(
         target= %result.target,
         is_default = %result.is_default,
-        source = %source.display(),
+        source = %source.path().display(),
         destination = %destination.display(),
         "copying documentation"
     );
