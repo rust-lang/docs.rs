@@ -53,7 +53,7 @@ impl AppConfig for Config {
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,
             docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
-                .map(SandboxImageSource::Remote)
+                .map(SandboxImageSource::Local)
                 .or(maybe_env("DOCSRS_DOCKER_IMAGE")?.map(SandboxImageSource::Remote)),
             build_cpu_limit,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
