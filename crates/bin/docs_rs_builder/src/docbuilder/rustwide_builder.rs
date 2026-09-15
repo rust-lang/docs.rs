@@ -60,6 +60,10 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
 
 pub struct RustwideBuilder {
     environment: BuildEnvironment,
+    #[cfg(test)]
+    before_publication: Option<fn(&ReleaseBuildResult)>,
+    #[cfg(test)]
+    before_build: Option<Box<dyn Fn()>>,
     runtime: Handle,
     config: Arc<Config>,
     db: Pool,
@@ -97,6 +101,10 @@ impl RustwideBuilder {
 
         Ok(RustwideBuilder {
             environment,
+            #[cfg(test)]
+            before_publication: None,
+            #[cfg(test)]
+            before_build: None,
             config: config.clone(),
             db: context.pool()?.clone(),
             runtime,
@@ -284,10 +292,20 @@ impl RustwideBuilder {
         algs.insert(source_stats.alg);
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
-        let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
+        let full_build_result = fetched.run(|build| {
+            #[cfg(test)]
+            if let Some(before_build) = &self.before_build {
+                before_build();
+            }
+            Ok(build.build_docs())
+        })?;
 
         let build_statistics = full_build_result.statistics().clone();
         let release_build_result = full_build_result.into_inner();
+        #[cfg(test)]
+        if let Some(before_publication) = self.before_publication {
+            before_publication(&release_build_result);
+        }
         let cargo_metadata = release_build_result.cargo_metadata();
 
         if release_build_result
@@ -628,6 +646,8 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
 
 #[cfg(test)]
 mod tests {
+    mod publication_tests;
+
     use super::*;
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
     use docs_rs_registry_api::ReleaseData;
@@ -647,12 +667,24 @@ mod tests {
         source_file: Option<&str>,
         source: &str,
     ) -> Result<()> {
+        mock_package_with_manifest(env, name, version, source_file, source, "", true)
+    }
+
+    fn mock_package_with_manifest(
+        env: &TestEnvironment,
+        name: &KrateName,
+        version: &Version,
+        source_file: Option<&str>,
+        source: &str,
+        manifest: &str,
+        index: bool,
+    ) -> Result<()> {
         let root = tempfile::tempdir()?;
         if let Some(source_file) = source_file {
             fs::write(
                 root.path().join("Cargo.toml"),
                 format!(
-                    "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
+                    "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n{manifest}"
                 ),
             )?;
             fs::create_dir(root.path().join("src"))?;
@@ -665,7 +697,7 @@ mod tests {
                 .mock_download(name, version, archive)
                 .await;
             // Fetch-stage failures never reach the release metadata lookup.
-            if source_file.is_some() {
+            if source_file.is_some() && index {
                 env.test_registry()
                     .mock_index_response(
                         name,
@@ -883,6 +915,21 @@ mod tests {
                         json_files[1],
                         format!("empty-library_1.0.0_{target}_latest.json.{ext}")
                     );
+                    let mut contents = Vec::new();
+                    for filename in &json_files {
+                        let blob = env.runtime().block_on(
+                            env.storage()?
+                                .get(&format!("{json_prefix}{filename}"), usize::MAX),
+                        )?;
+                        let bytes =
+                            docs_rs_storage::decompress(blob.content.as_slice(), *alg, usize::MAX)?;
+                        let json: serde_json::Value = serde_json::from_slice(&bytes)?;
+                        assert!(json["format_version"].is_number());
+                        assert!(json["index"].is_object());
+                        contents.push(json);
+                    }
+                    assert_eq!(contents.len(), 2);
+                    assert_eq!(contents[0], contents[1]);
                 }
 
                 if *target == default_target {
@@ -1053,6 +1100,24 @@ mod tests {
             Ok(())
         }
 
+        let storage = env.blocking_storage()?;
+        let old_docs = tempfile::tempdir()?;
+        fs::write(old_docs.path().join("index.html"), "previous documentation")?;
+        storage.store_all_in_archive(&rustdoc_archive_path(&crate_, &version), old_docs.path())?;
+        let previous_targets = block_on_async_with_conn!(env, |mut conn| async {
+            Ok(sqlx::query_scalar::<_, serde_json::Value>(
+                "SELECT doc_targets FROM releases WHERE id = $1",
+            )
+            .bind(release_id.0)
+            .fetch_one(&mut *conn)
+            .await?)
+        })?;
+        block_on_async_with_conn!(env, |mut conn| async {
+            sqlx::query("INSERT INTO doc_coverage (release_id, total_items, documented_items, total_items_needing_examples, items_with_examples) VALUES ($1, 10, 7, 3, 2)")
+                .bind(release_id.0).execute(&mut *conn).await?;
+            Ok(())
+        })?;
+
         check_rustdoc_status(&env, release_id)?;
 
         let mut builder = env.build_builder()?;
@@ -1062,6 +1127,28 @@ mod tests {
             !builder.build_package(&crate_, &version)?.successful
         );
 
+        let row = publication_tests::build_row(&env, &crate_)?;
+        use sqlx::Row as _;
+        assert_eq!(row.get::<String, _>("status"), "failure");
+        assert_eq!(
+            row.get::<serde_json::Value, _>("doc_targets"),
+            previous_targets
+        );
+        assert!(!publication_tests::logs(&env, row.get("id"))?.is_empty());
+        assert!(storage.exists_in_archive(
+            &rustdoc_archive_path(&crate_, &version),
+            None,
+            "index.html"
+        )?);
+        let coverage = block_on_async_with_conn!(env, |mut conn| async {
+            Ok(sqlx::query_scalar::<_, i32>(
+                "SELECT documented_items FROM doc_coverage WHERE release_id = $1",
+            )
+            .bind(release_id.0)
+            .fetch_one(&mut *conn)
+            .await?)
+        })?;
+        assert_eq!(coverage, 7);
         check_rustdoc_status(&env, release_id)?;
         Ok(())
     }
@@ -1071,18 +1158,17 @@ mod tests {
     fn test_sources_are_added_even_for_build_failures_before_build() -> Result<()> {
         let env = TestEnvironment::new()?;
 
-        // https://github.com/rust-lang/docs.rs/issues/2523
-        // Package whose source fails to compile.
-        // Will succeed in the crate fetch step, so sources are
-        // added. Will fail when we try to build.
+        // Fetch succeeds, but sandbox preparation cannot resolve a missing path dependency.
         let crate_ = KrateName::from_static("simple-build-failure");
         let version = V0_1;
-        mock_package(
+        mock_package_with_manifest(
             &env,
             &crate_,
             &version,
-            Some("main.rs"),
-            "fn main() { this fails; }",
+            Some("lib.rs"),
+            "pub fn example() {}",
+            "[dependencies]\nmissing-dependency = { path = \"missing\" }\n",
+            false,
         )?;
 
         let mut builder = env.build_builder()?;
@@ -1092,6 +1178,8 @@ mod tests {
 
         // `Result` is `Ok`, but the build-result is `false`
         assert!(!summary.successful);
+
+        assert!(summary.should_reattempt);
 
         // source archive exists
         let source_archive = source_archive_path(&crate_, &version);
@@ -1103,7 +1191,7 @@ mod tests {
         );
         assert!(
             storage
-                .fetch_source_file(&crate_, &version, None, "src/main.rs")
+                .fetch_source_file(&crate_, &version, None, "src/lib.rs")
                 .is_ok()
         );
 

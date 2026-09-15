@@ -62,6 +62,15 @@ impl AsyncStorage {
         })
     }
 
+    /// Reject matching uploads in the in-memory test backend.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn reject_uploads_for_testing(&self, reject: Option<fn(&str) -> bool>) {
+        let StorageBackend::Memory(backend) = &self.backend else {
+            panic!("upload failure injection requires memory storage");
+        };
+        *backend.rejected_uploads.write().unwrap() = reject;
+    }
+
     pub fn config(&self) -> &Config {
         &self.config
     }
