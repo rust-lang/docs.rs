@@ -18,7 +18,7 @@ pub(crate) fn print(
         rows.push([
             format!(
                 "{}{}",
-                target.target,
+                target.target(),
                 if target.is_default { " (default)" } else { "" }
             ),
             step_cell(&target.documentation),
@@ -56,7 +56,7 @@ pub(crate) fn print(
 
     println!();
     for target in result.targets() {
-        println!("{}:", target.target);
+        println!("{}:", target.target());
         print_error("HTML", &target.documentation);
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);

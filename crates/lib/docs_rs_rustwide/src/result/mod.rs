@@ -122,7 +122,7 @@ impl RustdocJsonOutput {
 pub struct TargetBuildResult {
     pub(crate) duration: Option<Duration>,
     /// Rust target triple.
-    pub target: String,
+    pub(crate) target: String,
     /// is the target the default target
     pub is_default: bool,
     /// HTML documentation output directory.
@@ -142,6 +142,10 @@ impl TargetBuildResult {
     pub fn duration(&self) -> Duration {
         self.duration
             .expect("when library users access the duration, we always have one")
+    }
+
+    pub fn target(&self) -> &str {
+        self.target.as_str()
     }
 
     /// Whether Cargo completed the primary HTML documentation command successfully.

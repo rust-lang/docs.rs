@@ -299,7 +299,7 @@ impl RustwideBuilder {
 
         let build_succeeded = release_build_result.build_succeeded();
         let has_docs = release_build_result.has_docs();
-        let default_target = release_build_result.default_target.target.clone();
+        let default_target = release_build_result.default_target.target().to_string();
 
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
@@ -309,7 +309,7 @@ impl RustwideBuilder {
             for target in &release_build_result.other_targets {
                 if target.documentation_succeeded() {
                     copy_target_docs(target, local_storage.path())?;
-                    successful_targets.push(target.target.clone());
+                    successful_targets.push(target.target().to_string());
                 }
             }
 
@@ -332,7 +332,7 @@ impl RustwideBuilder {
             let successful = target.documentation_succeeded();
 
             if let Some(log) = target.documentation.log() {
-                let log_name = format!("{}.txt", target.target);
+                let log_name = format!("{}.txt", target.target());
 
                 self.blocking_storage
                     .store_one(format!("build-logs/{build_id}/{log_name}"), log.to_string())?;
@@ -340,7 +340,7 @@ impl RustwideBuilder {
                 build_logs.push((log_name, successful));
             } else {
                 error!(
-                    target = target.target,
+                    target = target.target(),
                     successful, "missing build log after documentation build"
                 );
             }
@@ -495,7 +495,7 @@ impl RustwideBuilder {
         let mut build_logs = Vec::new();
 
         for target_result in release.targets() {
-            let target = &target_result.target;
+            let target = target_result.target();
             let json_build = &target_result.rustdoc_json;
 
             if let Some(log) = json_build.log() {
@@ -508,7 +508,7 @@ impl RustwideBuilder {
                 build_logs.push((json_log_name, json_build.is_ok()));
             } else {
                 error!(
-                    target = target_result.target,
+                    target = target_result.target(),
                     successful = json_build.is_ok(),
                     "missing build log after json build"
                 );
@@ -601,11 +601,11 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
     let destination = if result.is_default {
         destination.to_owned()
     } else {
-        destination.join(&result.target)
+        destination.join(result.target())
     };
 
     info!(
-        target= %result.target,
+        target= %result.target(),
         is_default = %result.is_default,
         source = %source.path().display(),
         destination = %destination.display(),
