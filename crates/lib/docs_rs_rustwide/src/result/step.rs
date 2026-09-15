@@ -1,7 +1,7 @@
 use anyhow::Result;
 use docs_rs_types::BuildError;
 use rustwide::cmd::CommandError;
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
@@ -57,16 +57,39 @@ pub struct StepReport<T> {
     pub log: Option<String>,
 }
 
+impl<T> StepReport<T> {
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+}
+
 pub type StepFailure = StepReport<BuildStepError>;
+
+impl fmt::Display for StepFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "build step failed after {:?}: {}",
+            self.duration, self.value,
+        )
+    }
+}
+
+impl std::error::Error for StepFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.value)
+    }
+}
 
 pub type StepResult<T> = Result<StepReport<T>, StepFailure>;
 
-pub trait StepResultExt {
+pub trait StepResultExt<T> {
     fn duration(&self) -> Duration;
     fn log(&self) -> Option<&str>;
+    fn into_inner(self) -> Result<T, BuildStepError>;
 }
 
-impl<T> StepResultExt for StepResult<T> {
+impl<T> StepResultExt<T> for StepResult<T> {
     fn duration(&self) -> Duration {
         match self {
             Ok(report) => report.duration,
@@ -78,6 +101,13 @@ impl<T> StepResultExt for StepResult<T> {
         match self {
             Ok(report) => report.log.as_deref(),
             Err(report) => report.log.as_deref(),
+        }
+    }
+
+    fn into_inner(self) -> Result<T, BuildStepError> {
+        match self {
+            Ok(report) => Ok(report.value),
+            Err(report) => Err(report.value),
         }
     }
 }

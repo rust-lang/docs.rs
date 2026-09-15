@@ -1,4 +1,4 @@
-use crate::{BuildResult, CpuLimit, ReleaseContext, workspace_lock::WorkspaceLock};
+use crate::{BuildResult, CpuLimit, ReleaseContext, StepResultExt, workspace_lock::WorkspaceLock};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
@@ -451,10 +451,9 @@ impl BuildEnvironment {
     /// rustwide workspace.
     #[instrument(skip_all)]
     pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
-        // FIXME: why not StepResult?
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
-            .run(|build| Ok(build.build_essential_files()?))
+            .run(|build| Ok(build.build_essential_files().into_inner()?))
     }
 
     pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {

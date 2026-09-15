@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepReport,
-    StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepFailure,
+    StepReport, StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -142,8 +142,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let docsrs_metadata = Metadata::from_crate_root(build.host_source_dir())?;
         debug!("reading cargo metadata");
         let cargo_metadata = load_cargo_metadata(environment, build, limits)
-            .outcome
-            .context("error loading cargo metadata")?;
+            .context("error loading cargo metadata")?
+            .into_inner();
 
         let resource_suffix = environment.resource_suffix()?;
         debug!(resource_suffix, "release build prepared");
@@ -325,12 +325,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let mut target_result = self.build_target_once(target, build_coverage);
 
         if retry_without_lockfile
-            // coverage is the first step in `build_target_once`,
-            // if that fails with any error from cargo, we try to regenerate
-            // the lockfile & try again.
             && matches!(
-                target_result.coverage.outcome,
-                Err(BuildStepError::Command(_))
+                &target_result.documentation,
+                Err(StepReport {
+                    value: BuildStepError::Command(_),
+                    ..
+                })
             )
             && self.build.host_source_dir().join("Cargo.lock").exists()
         {
@@ -339,7 +339,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 "target build failed; retrying with a regenerated lockfile"
             );
             let regenerate_lockfile_result = self.regenerate_lockfile();
-            if regenerate_lockfile_result.successful() {
+            if regenerate_lockfile_result.is_ok() {
                 target_result = self.build_target_once(target, build_coverage);
                 target_result.regenerate_lockfile = Some(regenerate_lockfile_result);
             } else {
@@ -372,7 +372,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let is_default = target == self.metadata_targets().default_target;
 
-        if documentation.successful() && self.docsrs_metadata().proc_macro {
+        if documentation.is_ok() && self.docsrs_metadata().proc_macro {
             assert!(
                 is_default && target == HOST_TARGET,
                 "can't handle cross-compiling macros"
@@ -451,20 +451,29 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
-        let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles);
+        let mut result = match self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
+        {
+            Ok(result) => result,
+            Err(result) => return Err(result),
+        };
 
-        let html_path = result.outcome.as_ref().ok().unwrap();
-        let static_files = html_path.join("static.files");
+        let static_files = result.value.join("static.files");
         if !static_files.is_dir() {
-            result.outcome = Err(BuildStepError::Output(anyhow!(
-                "essential-files build did not produce {}",
-                static_files.display()
-            )));
+            // keep the original duration & log from the build-html step,
+            // changing / testing the output dir doesn't change much here.
+            return Err(StepFailure {
+                duration: result.duration,
+                log: result.log,
+                value: BuildStepError::Output(anyhow!(
+                    "essential-files build did not produce {}",
+                    static_files.display()
+                )),
+            });
         } else {
-            result.outcome = Ok(static_files);
+            result.value = static_files;
         }
 
-        result
+        Ok(result)
     }
 
     #[instrument(skip_all, fields(target, emit))]

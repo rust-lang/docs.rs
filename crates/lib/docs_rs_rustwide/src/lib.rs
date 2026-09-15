@@ -23,8 +23,8 @@ pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
 pub use release::{Fetched, ReleaseContext, Unfetched};
 pub use result::{
-    BuildResult, ReleaseBuildResult, RustdocJsonOutput, StepResult, TargetBuildResult,
-    step::{BuildStepError, StepReport},
+    BuildResult, ReleaseBuildResult, RustdocJsonOutput, TargetBuildResult,
+    step::{BuildStepError, StepFailure, StepReport, StepResult, StepResultExt},
 };
 pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
 pub use workspace::{
