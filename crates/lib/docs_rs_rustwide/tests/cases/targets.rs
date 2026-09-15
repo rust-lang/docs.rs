@@ -9,14 +9,11 @@ use rustwide::Crate;
 fn builds_metadata_and_default_targets() -> Result<()> {
     let mut test = TestEnvironment::with_default_targets()?;
     let release = build_local(&mut test.environment, "additional-targets")?.into_inner();
-    let targets: Vec<_> = release
-        .targets()
-        .map(|result| result.target.as_str())
-        .collect();
+    let targets: Vec<_> = release.targets().map(|result| result.target()).collect();
 
     assert!(targets.contains(&"x86_64-apple-darwin"));
     assert!(targets.contains(&"aarch64-apple-darwin"));
-    assert_eq!(release.default_target().target, HOST_TARGET);
+    assert_eq!(release.default_target().target(), HOST_TARGET);
     assert_eq!(
         targets
             .iter()
@@ -25,26 +22,29 @@ fn builds_metadata_and_default_targets() -> Result<()> {
         1
     );
     assert_eq!(
-        release.targets().filter(|target| target.is_default).count(),
+        release
+            .targets()
+            .filter(|target| target.is_default())
+            .count(),
         1
     );
-    assert!(release.default_target().is_default);
+    assert!(release.default_target().is_default());
 
     for target in release.targets() {
         assert!(
             target.has_docs("additional_targets"),
             "{} is missing its HTML documentation: {:?}",
-            target.target,
+            target.target(),
             target.documentation,
         );
         let json = target
             .rustdoc_json
             .as_ref()
-            .unwrap_or_else(|error| panic!("{} JSON build failed: {error}", target.target));
+            .unwrap_or_else(|error| panic!("{} JSON build failed: {error}", target.target()));
         assert!(
-            json.value.format_version().is_ok(),
+            json.value().format_version().is_ok(),
             "{} JSON is unreadable",
-            target.target
+            target.target()
         );
 
         for (mode, log) in [
@@ -54,7 +54,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
             assert!(
                 log.is_some_and(|log| !log.trim().is_empty()),
                 "{} is missing its {mode} build log",
-                target.target,
+                target.target(),
             );
         }
     }
@@ -77,7 +77,7 @@ fn cross_compiles_non_host_default_target() -> Result<()> {
         .into_inner();
     let host = release
         .targets()
-        .find(|result| result.target == "x86_64-unknown-linux-gnu")
+        .find(|result| result.target() == "x86_64-unknown-linux-gnu")
         .expect("host target should be included");
 
     assert!(host.documentation_succeeded());

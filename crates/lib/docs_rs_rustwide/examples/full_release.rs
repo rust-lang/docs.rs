@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     println!("sandbox statistics: {:#?}", build.statistics());
     let release_result = build.into_inner();
     for target_result in release_result.targets() {
-        println!("target: {}", target_result.target);
+        println!("target: {}", target_result.target());
         println!(
             "  documentation: {}",
             target_result.documentation_succeeded()

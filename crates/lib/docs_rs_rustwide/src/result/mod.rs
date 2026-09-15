@@ -123,8 +123,8 @@ pub struct TargetBuildResult {
     pub(crate) duration: Option<Duration>,
     /// Rust target triple.
     pub(crate) target: String,
-    /// is the target the default target
-    pub is_default: bool,
+    /// Whether this is the release's default target.
+    pub(crate) is_default: bool,
     /// HTML documentation output directory.
     pub documentation: StepResult<HtmlOutput>,
     /// Rustdoc JSON build result.
@@ -138,6 +138,11 @@ pub struct TargetBuildResult {
 }
 
 impl TargetBuildResult {
+    /// Whether this is the release's default target.
+    pub fn is_default(&self) -> bool {
+        self.is_default
+    }
+
     /// Elapsed time for this target, including all attempts and lockfile regeneration.
     pub fn duration(&self) -> Duration {
         self.duration

@@ -24,8 +24,8 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
         .release(&krate)
         .run(|build| {
             let result = build.build_docs();
-            let mut additional = build.build_target(result.default_target.target()).run();
-            additional.is_default = false;
+            let additional = build.build_target("aarch64-unknown-linux-gnu").run();
+            assert!(!additional.is_default());
             Ok((result, additional))
         })?
         .into_inner();

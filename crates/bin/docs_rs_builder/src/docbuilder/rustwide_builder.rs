@@ -598,7 +598,7 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
         bail!("documentation build was unsuccessful, can't copy docs");
     };
 
-    let destination = if result.is_default {
+    let destination = if result.is_default() {
         destination.to_owned()
     } else {
         destination.join(result.target())
@@ -606,7 +606,7 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
 
     info!(
         target= %result.target(),
-        is_default = %result.is_default,
+        is_default = %result.is_default(),
         source = %source.path().display(),
         destination = %destination.display(),
         "copying documentation"

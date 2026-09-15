@@ -19,11 +19,15 @@ pub(crate) fn print(
             format!(
                 "{}{}",
                 target.target(),
-                if target.is_default { " (default)" } else { "" }
+                if target.is_default() {
+                    " (default)"
+                } else {
+                    ""
+                }
             ),
             step_cell(&target.documentation),
             step_cell(&target.rustdoc_json),
-            if target.is_default {
+            if target.is_default() {
                 step_cell(&target.coverage)
             } else {
                 "skipped".into()
