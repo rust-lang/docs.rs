@@ -5,6 +5,7 @@ members = ["crates/bin/*", "crates/lib/*", "integration_tests"]
 
 default-members = [
     "crates/bin/docs_rs_admin",
+    "crates/bin/docs_rs_build",
     "crates/bin/docs_rs_builder",
     "crates/bin/docs_rs_watcher",
     "crates/bin/docs_rs_web",

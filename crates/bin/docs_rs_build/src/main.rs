@@ -66,7 +66,7 @@ fn run(args: &Args) -> Result<bool> {
     let krate = Crate::local(packaged.path());
     let build = environment
         .release(&krate)
-        .run(|release| release.build_docs())
+        .run(|release| Ok(release.build_docs()))
         .context("running the docs.rs build")?;
     let duration = build.duration();
     let result = build.into_inner();
