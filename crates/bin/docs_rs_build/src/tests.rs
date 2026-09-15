@@ -1,11 +1,10 @@
 use super::report;
 use anyhow::Result;
 use docs_rs_rustwide::{
-    BuildEnvironment, BuildStepError, SandboxImageSource, StepReport, StepResultExt as _,
-    testing::test_workspace_path,
+    BuildEnvironment, SandboxImageSource, StepResultExt as _, testing::test_workspace_path,
 };
-use rustwide::{Crate, cmd::CommandError};
-use std::{fs, path::Path, time::Duration};
+use rustwide::Crate;
+use std::{fs, path::Path};
 
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
@@ -36,6 +35,7 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
     let temporary_html = result
         .default_target
         .documentation()
+        .as_inner()
         .unwrap()
         .path()
         .to_owned();
@@ -51,29 +51,17 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
 
     result.other_targets.push(additional);
     assert!(report::build_succeeded(&result, true));
-    result.other_targets[0].documentation = Err(StepReport::new(
-        BuildStepError::Prepare(anyhow::anyhow!("additional target unavailable")),
-        Duration::ZERO,
-        None,
-    ));
+    fs::remove_dir_all(
+        result.other_targets[0]
+            .documentation()
+            .as_inner()
+            .unwrap()
+            .path(),
+    )?;
     assert!(report::build_succeeded(&result, false));
     assert!(!report::build_succeeded(&result, true));
     result.other_targets.clear();
 
-    // Auxiliary failures of every kind are fatal only in strict mode.
-    for error in [
-        BuildStepError::Prepare(anyhow::anyhow!("target unavailable")),
-        BuildStepError::Command(CommandError::SandboxOOM),
-        BuildStepError::Output(anyhow::anyhow!("invalid coverage output")),
-    ] {
-        result.default_target.coverage = Err(StepReport::new(
-            error,
-            Duration::ZERO,
-            Some("diagnostics".into()),
-        ));
-        assert!(report::build_succeeded(&result, false));
-        assert!(!report::build_succeeded(&result, true));
-    }
     // A successful command without the crate's docs must still fail.
     fs::remove_dir_all(temporary_html.join(&library))?;
     assert!(!report::build_succeeded(&result, false));

@@ -25,18 +25,18 @@ pub(crate) fn print(
                     ""
                 }
             ),
-            step_cell(&target.documentation),
+            step_cell(target.documentation()),
             step_cell(target.rustdoc_json()),
             if target.is_default() {
-                step_cell(&target.coverage)
+                step_cell(target.coverage())
             } else {
                 "skipped".into()
             },
             format_duration(target.duration()).to_string(),
         ]);
-        totals[0] += target.documentation.duration();
+        totals[0] += target.documentation().duration();
         totals[1] += target.rustdoc_json().duration();
-        totals[2] += target.coverage.duration();
+        totals[2] += target.coverage().duration();
         totals[3] += target.duration();
     }
     rows.push([
@@ -61,19 +61,19 @@ pub(crate) fn print(
     println!();
     for target in result.targets() {
         println!("{}:", target.target());
-        print_error("HTML", &target.documentation);
+        print_error("HTML", target.documentation());
         print_error("rustdoc JSON", target.rustdoc_json());
-        print_error("coverage", &target.coverage);
+        print_error("coverage", target.coverage());
         if let Some(step) = target.regenerate_lockfile() {
             print_error("lockfile regeneration", step);
         }
-        if let Ok(output) = target.documentation() {
+        if let Ok(output) = target.documentation().as_inner() {
             println!("  HTML output: {}", output.path().display());
         }
         if let Ok(output) = target.rustdoc_json().as_inner() {
             println!("  JSON output: {}", output.path().display());
         }
-        for path in target.compiler_metrics.iter().flatten() {
+        for path in target.compiler_metrics().into_iter().flatten() {
             println!("  compiler metrics: {}", path.display());
         }
     }
@@ -93,11 +93,38 @@ pub(crate) fn print(
 }
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
-    target.documentation_succeeded() && target.rustdoc_json().is_ok() && target.coverage.is_ok()
+    target.documentation_succeeded()
+        && auxiliary_succeeded(target.rustdoc_json(), target.coverage())
+}
+
+fn auxiliary_succeeded<J, C>(json: &StepResult<J>, coverage: &StepResult<C>) -> bool {
+    json.is_ok() && coverage.is_ok()
 }
 
 pub(crate) fn build_succeeded(result: &ReleaseBuildResult, strict: bool) -> bool {
     result.has_docs() && (!strict || result.targets().all(target_fully_succeeded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use docs_rs_rustwide::{BuildStepError, StepReport};
+    use rustwide::cmd::CommandError;
+
+    #[test]
+    fn auxiliary_failures_include_preparation_command_and_output_errors() {
+        let success = Ok(StepReport::new((), Duration::ZERO, None));
+        assert!(auxiliary_succeeded(&success, &success));
+        for error in [
+            BuildStepError::Prepare(anyhow::anyhow!("preparation failed")),
+            BuildStepError::Command(CommandError::SandboxOOM),
+            BuildStepError::Output(anyhow::anyhow!("invalid output")),
+        ] {
+            let failure: StepResult<()> = Err(StepReport::new(error, Duration::ZERO, None));
+            assert!(!auxiliary_succeeded(&failure, &success));
+            assert!(!auxiliary_succeeded(&success, &failure));
+        }
+    }
 }
 
 fn step_cell<T>(step: &StepResult<T>) -> String {

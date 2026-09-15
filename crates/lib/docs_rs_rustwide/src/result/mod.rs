@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use step::{BuildStepError, StepResult};
+use step::{StepResult, StepResultExt as _};
 use tracing::{debug, instrument};
 
 /// Output of a completed release lifecycle, including fetch and sandbox cleanup.
@@ -126,15 +126,15 @@ pub struct TargetBuildResult {
     /// Whether this is the release's default target.
     pub(crate) is_default: bool,
     /// HTML documentation output directory.
-    pub documentation: StepResult<HtmlOutput>,
+    pub(crate) documentation: StepResult<HtmlOutput>,
     /// Rustdoc JSON build result.
     pub(crate) rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
-    pub coverage: StepResult<Option<DocCoverage>>,
+    pub(crate) coverage: StepResult<Option<DocCoverage>>,
     /// Compiler metrics files copied out of this target's HTML build.
-    pub compiler_metrics: Option<Vec<PathBuf>>,
+    pub(crate) compiler_metrics: Option<Vec<PathBuf>>,
     /// optionally regenerate lockfile
-    pub regenerate_lockfile: Option<StepResult<()>>,
+    pub(crate) regenerate_lockfile: Option<StepResult<()>>,
 }
 
 impl TargetBuildResult {
@@ -160,27 +160,28 @@ impl TargetBuildResult {
 
     /// Whether the primary HTML documentation build completed and produced output.
     pub fn documentation_succeeded(&self) -> bool {
-        self.documentation().is_ok_and(HtmlOutput::exists)
+        self.documentation()
+            .as_inner()
+            .is_ok_and(HtmlOutput::exists)
     }
 
     /// Whether this target produced documentation for the crate's library target.
     pub fn has_docs(&self, library_name: &str) -> bool {
         self.documentation()
+            .as_inner()
             .is_ok_and(|html| html.has_docs(library_name))
     }
 
-    pub fn coverage(&self) -> Result<Option<&DocCoverage>, &BuildStepError> {
-        self.coverage
-            .as_ref()
-            .map(|report| report.value.as_ref())
-            .map_err(|report| &report.value)
+    pub fn coverage(&self) -> &StepResult<Option<DocCoverage>> {
+        &self.coverage
     }
 
-    pub fn documentation(&self) -> Result<&HtmlOutput, &BuildStepError> {
-        self.documentation
-            .as_ref()
-            .map(|report| &report.value)
-            .map_err(|report| &report.value)
+    pub fn documentation(&self) -> &StepResult<HtmlOutput> {
+        &self.documentation
+    }
+
+    pub fn compiler_metrics(&self) -> Option<&[PathBuf]> {
+        self.compiler_metrics.as_deref()
     }
 
     pub fn rustdoc_json(&self) -> &StepResult<RustdocJsonOutput> {
@@ -236,7 +237,7 @@ impl ReleaseBuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StepReport;
+    use crate::{BuildStepError, StepReport};
     use docs_rs_types::BuildError as _;
     use rustwide::cmd::CommandError;
     use std::fs;
@@ -284,21 +285,27 @@ mod tests {
         let path = temporary.path().join("docs");
         let result = target_result(HtmlOutput::new(path.clone()));
 
-        assert!(!result.documentation().unwrap().exists());
+        assert!(!result.documentation().as_inner().unwrap().exists());
         assert!(result.build_succeeded());
         assert!(!result.documentation_succeeded());
         assert!(!result.has_docs("example_crate"));
 
         fs::create_dir(&path).unwrap();
 
-        assert!(result.documentation().unwrap().exists());
+        assert!(result.documentation().as_inner().unwrap().exists());
         assert!(result.build_succeeded());
         assert!(result.documentation_succeeded());
         assert!(!result.has_docs("example_crate"));
 
         fs::create_dir(path.join("example_crate")).unwrap();
 
-        assert!(result.documentation().unwrap().has_docs("example_crate"));
+        assert!(
+            result
+                .documentation()
+                .as_inner()
+                .unwrap()
+                .has_docs("example_crate")
+        );
         assert!(result.has_docs("example_crate"));
     }
 

@@ -292,7 +292,7 @@ impl RustwideBuilder {
 
         if release_build_result
             .targets()
-            .any(|t| t.regenerate_lockfile.is_some())
+            .any(|t| t.regenerate_lockfile().is_some())
         {
             self.builder_metrics.lockfile_regenerated.add(1, &[]);
         }
@@ -331,7 +331,7 @@ impl RustwideBuilder {
         for target in release_build_result.targets() {
             let successful = target.documentation_succeeded();
 
-            if let Some(log) = target.documentation.log() {
+            if let Some(log) = target.documentation().log() {
                 let log_name = format!("{}.txt", target.target());
 
                 self.blocking_storage
@@ -360,9 +360,8 @@ impl RustwideBuilder {
 
         let build_error = release_build_result
             .default_target()
-            .documentation
-            .as_ref()
-            .map_err(|report| report.value())
+            .documentation()
+            .as_inner()
             .err();
 
         let rustc_version = self.environment.rustc_version()?;
@@ -448,7 +447,7 @@ impl RustwideBuilder {
             ))?;
         }
 
-        if let Ok(Some(doc_coverage)) = release_build_result.default_target.coverage() {
+        if let Ok(Some(doc_coverage)) = release_build_result.default_target.coverage().as_inner() {
             self.runtime
                 .block_on(add_doc_coverage(&mut async_conn, release_id, *doc_coverage))?;
         }
@@ -594,7 +593,7 @@ impl RustwideBuilder {
 
 #[instrument(skip(result))]
 fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()> {
-    let Ok(source) = result.documentation() else {
+    let Ok(source) = result.documentation().as_inner() else {
         bail!("documentation build was unsuccessful, can't copy docs");
     };
 

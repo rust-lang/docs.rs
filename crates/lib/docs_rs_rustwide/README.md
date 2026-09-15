@@ -169,7 +169,7 @@ fn main() -> Result<()> {
     for target in release.targets() {
         println!(
             "{}: documentation succeeded: {}",
-            target.target,
+            target.target(),
             target.documentation_succeeded()
         );
     }

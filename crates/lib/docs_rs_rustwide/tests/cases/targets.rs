@@ -35,7 +35,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
             target.has_docs("additional_targets"),
             "{} is missing its HTML documentation: {:?}",
             target.target(),
-            target.documentation,
+            target.documentation(),
         );
         let json = target
             .rustdoc_json()
@@ -48,7 +48,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
         );
 
         for (mode, log) in [
-            ("HTML", target.documentation.log()),
+            ("HTML", target.documentation().log()),
             ("JSON", target.rustdoc_json().log()),
         ] {
             assert!(

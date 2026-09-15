@@ -20,20 +20,21 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let duration = build.duration();
     let release = build.into_inner();
     let target = release.default_target();
-    let steps_duration = target.coverage.duration()
+    let steps_duration = target.coverage().duration()
         + target.rustdoc_json().duration()
-        + target.documentation.duration();
+        + target.documentation().duration();
 
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets().map(|target| target.duration()).sum());
     assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().rustdoc_json().is_ok());
-    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().coverage().is_ok());
     assert!(
         release
             .default_target()
             .coverage()
+            .as_inner()
             .is_ok_and(|coverage| coverage.is_some())
     );
     assert!(
@@ -45,7 +46,7 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
             .format_version()
             .is_ok()
     );
-    let html = target.documentation().unwrap().path().to_owned();
+    let html = target.documentation().as_inner().unwrap().path().to_owned();
     let json = target.rustdoc_json().as_inner().unwrap().path().to_owned();
     let original_json = fs::read(&json)?;
     let library = release.cargo_metadata.root().library_name().unwrap();
@@ -87,7 +88,7 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
 
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().coverage().is_ok());
     assert!(release.default_target().rustdoc_json().is_ok());
     Ok(())
 }
@@ -113,11 +114,12 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
     let release = build_local(&mut test.environment, "with-examples")?.into_inner();
 
     assert!(release.build_succeeded());
-    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().coverage().is_ok());
     assert!(
         release
             .default_target()
             .coverage()
+            .as_inner()
             .is_ok_and(|coverage| coverage.is_some())
     );
     assert!(release.default_target().rustdoc_json().is_ok());
@@ -137,7 +139,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
         .into_inner();
 
     assert!(release.build_succeeded());
-    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().coverage().is_ok());
     assert!(release.default_target().rustdoc_json().is_ok());
     Ok(())
 }
@@ -156,7 +158,7 @@ fn collects_compiler_metrics() -> Result<()> {
         .build()?;
 
     let release = build_local(&mut environment, "hello-world")?.into_inner();
-    let metric_files = release.default_target().compiler_metrics.as_ref().unwrap();
+    let metric_files = release.default_target().compiler_metrics().unwrap();
     assert_eq!(metric_files.len(), 1);
     let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
     Ok(())
