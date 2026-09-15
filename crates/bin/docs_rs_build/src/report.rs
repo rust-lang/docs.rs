@@ -62,7 +62,7 @@ pub(crate) fn print(
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);
         if let Ok(path) = target.documentation() {
-            println!("  HTML output: {}", path.display());
+            println!("  HTML output: {}", path.path().display());
         }
         if let Ok(output) = target.rustdoc_json() {
             println!("  JSON output: {}", output.path().display());
