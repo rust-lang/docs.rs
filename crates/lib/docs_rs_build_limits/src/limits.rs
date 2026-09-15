@@ -83,7 +83,7 @@ impl Limits {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "database"))]
 mod test {
     use super::*;
     use crate::Overrides;
