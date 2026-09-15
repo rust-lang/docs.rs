@@ -181,14 +181,16 @@ For frequent builds, prefer one of these approaches:
 ## Build behavior and exit status
 
 By default, the command fails when setup, packaging, the default-target HTML
-build, or production of the crate's library documentation fails. Preparation
-failures during any default-target step also abort the build. JSON and coverage
-command/output failures, and additional-target failures including preparation,
-are reported but do not change the default exit status.
+build, or production of the crate's library documentation fails. JSON and
+coverage failures, and additional-target failures,
+are reported but do not change the default exit status. This includes
+preparation, command, and output-processing failures for those steps.
 
 A default-target HTML command failure retries once with a regenerated lockfile
-when one exists. This reruns coverage, JSON, and HTML. Lockfile regeneration or
-dependency-fetch failure aborts the build. Additional targets are built only
+when one exists. This reruns coverage, JSON, and HTML. If lockfile regeneration
+fails, its error and captured log are reported
+alongside the original failed HTML build. Release fetching and initial Cargo
+metadata failures return early. Additional targets are built only
 when the default target produces library documentation. The CLI does not have
 the production builder's queue reattempt mechanism.
 
@@ -202,9 +204,10 @@ docs_rs_build --strict
 Cargo and rustdoc build output is streamed live. When the release completes, a
 table shows HTML, JSON, and coverage status/duration for each target, totals,
 full build duration, and sandbox peak memory. Failed steps include their
-captured logs. Setup and fatal preparation errors return early with an error
-instead of the summary table. Packaging output is printed after `cargo package`
-finishes.
+captured logs. Lockfile-regeneration failures also include their captured logs.
+Coverage is shown as skipped for additional targets. Setup and release-fetch
+errors return early with an error instead of the summary table. Packaging
+output is streamed live too.
 
 ## Workspace and generated files
 
@@ -216,16 +219,18 @@ location when necessary:
 docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
-The exact artifact paths are printed in the build summary. A later invocation
-purges old release build directories, so copy artifacts needed after the CI job
-before starting another build with the same workspace. The workspace is locked
+HTML and JSON are copied into a unique `artifacts/build-*` directory under
+the workspace before the temporary build results are dropped. The exact paths
+are printed in the build summary. These exports survive command exit and later
+builds; remove old artifact directories when no longer needed. The workspace is locked
 for the lifetime of the build environment; concurrent invocations must use
 different workspace directories.
 
 ## Configuration
 
 The default toolchain is nightly and the default sandbox limits match docs.rs.
-An installed distribution toolchain is checked for updates unless
+Workspace initialization reuses installed Rustwide helper tools through fast
+initialization. An installed distribution toolchain is checked for updates unless
 `--no-update-toolchain` is set. A missing toolchain is always installed; CI
 toolchains are not automatically updated by the CLI. Documentation targets are
 selected through the crate's docs.rs metadata; toolchains, images, CPU and

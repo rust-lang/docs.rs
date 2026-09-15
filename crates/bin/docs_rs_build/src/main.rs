@@ -1,7 +1,11 @@
 mod args;
+mod artifacts;
 mod logging;
 mod package;
 mod report;
+
+#[cfg(test)]
+mod tests;
 
 use anyhow::{Context as _, Result, bail};
 use args::Args;
@@ -40,12 +44,13 @@ fn run(args: &Args) -> Result<bool> {
         .crate_path
         .canonicalize()
         .with_context(|| format!("resolving crate path {}", args.crate_path.display()))?;
-    let packaged = package::create(&crate_path, args.package.as_deref())?;
     ensure_docker_available()?;
+    let packaged = package::create(&crate_path, args.package.as_deref())?;
 
     let workspace_path = absolute_path(&args.workspace_path())?;
     info!(crate_path = %crate_path.display(), workspace = %workspace_path.display(), "initializing docs.rs build environment");
     let mut environment = BuildEnvironment::builder(workspace_path.as_path())
+        .fast_init(true)
         .toolchain(args.toolchain())
         .sandbox_image(args.sandbox_image())
         .maybe_cpu_limit(args.cpu_limit())
@@ -70,7 +75,10 @@ fn run(args: &Args) -> Result<bool> {
         .context("running the docs.rs build")?;
     let duration = build.duration();
     let result = build.into_inner();
-    report::print(&result, duration, args.strict)
+    let artifacts = artifacts::save(&result, &workspace_path)?;
+    let succeeded = report::build_succeeded(&result, args.strict);
+    report::print(&result, duration, &artifacts, succeeded, args.strict)?;
+    Ok(succeeded)
 }
 
 fn ensure_crate_path(path: &Path) -> Result<()> {

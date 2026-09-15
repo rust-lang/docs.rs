@@ -30,11 +30,9 @@ pub(crate) fn create(manifest_dir: &Path, package: Option<&str>) -> Result<Sourc
         command.args(["--package", package]);
     }
 
-    let output = command.output().context("running `cargo package`")?;
-    write_cargo_output(&output.stdout);
-    write_cargo_output(&output.stderr);
-    if !output.status.success() {
-        bail!("`cargo package` failed with {}", output.status);
+    let status = command.status().context("running `cargo package`")?;
+    if !status.success() {
+        bail!("`cargo package` failed with {status}");
     }
 
     let archive_path = find_single_archive(&cargo_target.join("package"))?;
@@ -59,12 +57,6 @@ fn require_package_for_virtual_workspace(manifest_path: &Path) -> Result<()> {
         );
     }
     Ok(())
-}
-
-fn write_cargo_output(output: &[u8]) {
-    if !output.is_empty() {
-        print!("{}", String::from_utf8_lossy(output));
-    }
 }
 
 fn find_single_archive(directory: &Path) -> Result<PathBuf> {

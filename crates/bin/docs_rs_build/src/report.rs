@@ -1,23 +1,19 @@
 use cli_table::{Cell, Style, Table, format::Justify, print_stdout};
 use docs_rs_rustwide::{ReleaseBuildResult, StepResult, StepResultExt, TargetBuildResult};
 use humantime::format_duration;
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 pub(crate) fn print(
     result: &ReleaseBuildResult,
     duration: Duration,
+    artifacts: &Path,
+    succeeded: bool,
     strict: bool,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<()> {
     println!();
     println!("docs.rs build summary");
 
-    let mut rows = vec![[
-        "Target".to_owned(),
-        "HTML".to_owned(),
-        "rustdoc JSON".to_owned(),
-        "Coverage".to_owned(),
-        "Target total".to_owned(),
-    ]];
+    let mut rows = Vec::new();
     let mut totals = [Duration::ZERO; 4];
     for target in result.targets() {
         rows.push([
@@ -28,7 +24,11 @@ pub(crate) fn print(
             ),
             step_cell(&target.documentation),
             step_cell(&target.rustdoc_json),
-            step_cell(&target.coverage),
+            if target.is_default {
+                step_cell(&target.coverage)
+            } else {
+                "skipped".into()
+            },
             format_duration(target.duration()).to_string(),
         ]);
         totals[0] += target.documentation.duration();
@@ -61,40 +61,52 @@ pub(crate) fn print(
         print_error("HTML", &target.documentation);
         print_error("rustdoc JSON", &target.rustdoc_json);
         print_error("coverage", &target.coverage);
-        if let Ok(path) = target.documentation() {
-            println!("  HTML output: {}", path.path().display());
+        if let Some(step) = target.regenerate_lockfile() {
+            print_error("lockfile regeneration", step);
         }
-        if let Ok(output) = target.rustdoc_json() {
-            println!("  JSON output: {}", output.path().display());
+        if target
+            .documentation()
+            .is_ok_and(|output| output.path().is_dir())
+        {
+            println!(
+                "  HTML output: {}",
+                artifacts.join(&target.target).join("html").display()
+            );
+        }
+        if target.rustdoc_json.is_ok() {
+            println!(
+                "  JSON output: {}",
+                artifacts
+                    .join(&target.target)
+                    .join("rustdoc.json")
+                    .display()
+            );
         }
         for path in target.compiler_metrics.iter().flatten() {
             println!("  compiler metrics: {}", path.display());
         }
     }
 
-    let default_succeeded = result.build_succeeded() && result.has_docs();
     if !result.has_docs() {
         println!("  error: the default target produced no library documentation");
     }
 
-    let auxiliary_succeeded = result.targets().all(target_fully_succeeded);
-    let succeeded = build_succeeded(default_succeeded, auxiliary_succeeded, strict);
     if succeeded {
         println!("docs.rs build succeeded");
-    } else if strict && default_succeeded {
+    } else if strict && result.has_docs() {
         println!("docs.rs build failed because --strict treats auxiliary failures as fatal");
     } else {
         println!("docs.rs build failed");
     }
-    Ok(succeeded)
+    Ok(())
 }
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
     target.documentation_succeeded() && target.rustdoc_json.is_ok() && target.coverage.is_ok()
 }
 
-fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: bool) -> bool {
-    default_succeeded && (!strict || auxiliary_succeeded)
+pub(crate) fn build_succeeded(result: &ReleaseBuildResult, strict: bool) -> bool {
+    result.has_docs() && (!strict || result.targets().all(target_fully_succeeded))
 }
 
 fn step_cell<T>(step: &StepResult<T>) -> String {
@@ -118,7 +130,8 @@ fn print_error<T>(name: &str, step: &StepResult<T>) {
 }
 
 fn print_table(rows: &[[String; 5]]) -> std::io::Result<()> {
-    let table = rows[1..]
+    let headers = ["Target", "HTML", "rustdoc JSON", "Coverage", "Target total"];
+    let table = rows
         .iter()
         .enumerate()
         .map(|(index, row)| {
@@ -132,29 +145,11 @@ fn print_table(rows: &[[String; 5]]) -> std::io::Result<()> {
                         } else {
                             Justify::Right
                         })
-                        .bold(index == rows.len() - 2)
+                        .bold(index + 1 == rows.len())
                 })
                 .collect::<Vec<_>>()
         })
         .table()
-        .title(rows[0].iter().map(|title| title.cell().bold(true)));
+        .title(headers.iter().map(|title| title.cell().bold(true)));
     print_stdout(table)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::build_succeeded;
-
-    #[test]
-    fn default_build_is_always_required() {
-        assert!(!build_succeeded(false, true, false));
-        assert!(!build_succeeded(false, true, true));
-    }
-
-    #[test]
-    fn auxiliary_failures_are_only_fatal_in_strict_mode() {
-        assert!(build_succeeded(true, false, false));
-        assert!(!build_succeeded(true, false, true));
-        assert!(build_succeeded(true, true, true));
-    }
 }
