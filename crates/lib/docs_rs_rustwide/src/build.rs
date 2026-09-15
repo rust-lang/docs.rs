@@ -29,6 +29,9 @@ use tracing::{Span, debug, error, info, instrument};
 /// Name of rustdoc's documentation output directory.
 const DOC_OUTPUT_DIR_NAME: &str = "doc";
 
+#[cfg(test)]
+mod policy_tests;
+
 #[derive(Debug)]
 pub enum Emit {
     HtmlStaticFiles,

@@ -2434,6 +2434,7 @@ dependencies = [
  "tempfile",
  "test-case",
  "thiserror",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

@@ -5,6 +5,52 @@ use rustwide::Crate;
 use std::fs;
 use test_case::test_case;
 
+#[test_case(["html", "json", "coverage"])]
+#[test_case(["json", "coverage", "html"])]
+#[test_case(["coverage", "html", "json"])]
+#[ignore = "requires Docker and a Rust toolchain"]
+fn independent_steps_preserve_artifacts_in_any_order(order: [&str; 3]) -> Result<()> {
+    let mut test = TestEnvironment::new()?;
+    let krate = Crate::local(&fixture("hello-world"));
+    test.environment.release(&krate).run(|build| {
+        let mut html = Vec::new();
+        let mut json = Vec::new();
+        // Repeat both artifact-producing steps to check that each invocation
+        // receives a unique destination, including outside build_docs().
+        for mode in order.into_iter().chain(["html", "json"]) {
+            match mode {
+                "html" => html.push(
+                    build
+                        .build_documentation(docsrs_metadata::HOST_TARGET)?
+                        .into_inner(),
+                ),
+                "json" => json.push(
+                    build
+                        .build_rustdoc_json(docsrs_metadata::HOST_TARGET)?
+                        .into_inner(),
+                ),
+                "coverage" => assert!(
+                    build
+                        .build_coverage(docsrs_metadata::HOST_TARGET)?
+                        .into_inner()
+                        .is_some()
+                ),
+                _ => unreachable!(),
+            }
+        }
+        assert_ne!(html[0].path(), html[1].path());
+        assert_ne!(json[0].path(), json[1].path());
+        for output in html {
+            assert!(output.path().join("hello_world/index.html").is_file());
+        }
+        for output in json {
+            assert!(output.format_version().is_ok());
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 #[test]
 #[ignore = "requires Docker and a Rust toolchain"]
 fn builds_library_documentation_json_and_coverage() -> Result<()> {

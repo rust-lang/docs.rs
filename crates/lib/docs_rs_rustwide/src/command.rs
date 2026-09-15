@@ -134,3 +134,116 @@ fn cargo_args(
     rustdoc_args.extend(UNCONDITIONAL_RUSTDOC_ARGS.iter().map(|arg| (*arg).into()));
     metadata.cargo_args(&additional_args, &rustdoc_args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    fn rustdoc_flags(args: &[String]) -> Vec<String> {
+        let config = args
+            .iter()
+            .find(|arg| arg.starts_with("build.rustdocflags="))
+            .unwrap();
+        let config: toml::Table = toml::from_str(config).unwrap();
+        config["build"]["rustdocflags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|flag| flag.as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test_case(false)]
+    #[test_case(true)]
+    fn keeps_target_and_rustdoc_flags_correct_for_proc_macros(proc_macro: bool) {
+        let mut metadata = Metadata::default();
+        metadata.proc_macro = proc_macro;
+        let args = cargo_args(
+            "aarch64-unknown-linux-gnu",
+            &metadata,
+            Some(2),
+            vec![],
+            vec!["--output-format".into(), "json".into()],
+        );
+        assert!(args.starts_with(&["rustdoc".into(), "--lib".into()]));
+        assert!(args.iter().any(|arg| arg == "--offline"));
+        assert!(args.iter().any(|arg| arg == "-j2"));
+        assert_eq!(
+            args.windows(2)
+                .any(|pair| pair == ["--target", "aarch64-unknown-linux-gnu"]),
+            !proc_macro
+        );
+        if proc_macro {
+            assert!(!args.iter().any(|arg| arg == "--target"));
+        }
+        assert!(args.iter().any(|arg| {
+            arg.contains("https://docs.rs/{pkg_name}/{version}/aarch64-unknown-linux-gnu")
+        }));
+        let flags = rustdoc_flags(&args);
+        assert!(flags.windows(2).any(|pair| pair == ["--cfg", "docsrs"]));
+        assert!(
+            flags
+                .windows(2)
+                .any(|pair| pair == ["--output-format", "json"])
+        );
+        assert!(
+            flags
+                .windows(2)
+                .any(|pair| pair == ["--static-root-path", "/-/rustdoc.static/"])
+        );
+        assert!(flags.windows(2).any(|pair| pair == ["--cap-lints", "warn"]));
+        assert!(
+            flags
+                .iter()
+                .any(|flag| flag == "--extern-html-root-takes-precedence")
+        );
+    }
+
+    #[test]
+    fn preserves_metadata_features_custom_flags_and_extra_cargo_arguments() {
+        let metadata: Metadata = r#"
+[package]
+name = "example"
+[package.metadata.docs.rs]
+features = ["extra", "another"]
+all-features = true
+no-default-features = true
+rustdoc-args = ["--cfg", "custom_docs"]
+rustc-args = ["--cfg", "custom_build"]
+cargo-args = ["--verbose"]
+"#
+        .parse()
+        .unwrap();
+        let args = cargo_args(
+            docsrs_metadata::HOST_TARGET,
+            &metadata,
+            None,
+            vec!["--locked".into()],
+            vec![],
+        );
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--features", "extra another"])
+        );
+        for flag in [
+            "--all-features",
+            "--no-default-features",
+            "--verbose",
+            "--locked",
+        ] {
+            assert!(args.iter().any(|arg| arg == flag), "missing {flag}");
+        }
+        assert!(!args.iter().any(|arg| arg.starts_with("-j")));
+        let flags = rustdoc_flags(&args);
+        assert!(
+            flags
+                .windows(2)
+                .any(|pair| pair == ["--cfg", "custom_docs"])
+        );
+        assert!(
+            args.iter()
+                .any(|arg| arg.starts_with("build.rustflags=") && arg.contains("custom_build"))
+        );
+    }
+}
