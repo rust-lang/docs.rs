@@ -95,28 +95,35 @@ pub fn load_cargo_metadata<'build, 'ws>(
     limits: &'build Limits,
 ) -> StepResult<CargoMetadata> {
     capture_rustwide_step(limits.max_log_size(), || {
-        let source_dir = &build.host_source_dir();
+        read_cargo_metadata(environment, build)
+    })
+}
 
-        debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
-        let output = Command::new(
-            environment.workspace(),
-            environment.configured_toolchain().cargo(),
-        )
-        .args(["metadata", "--format-version", "1"])
-        .current_directory(source_dir)
-        .log_output(false)
-        .run_capture()
-        .map_err(BuildStepError::Command)?;
+fn read_cargo_metadata(
+    environment: &BuildEnvironment,
+    build: &Build<'_>,
+) -> Result<CargoMetadata, BuildStepError> {
+    let source_dir = &build.host_source_dir();
 
-        BuildStepError::as_output(|| {
-            let [metadata] = output.stdout_lines() else {
-                bail!("invalid output returned by `cargo metadata`");
-            };
+    debug!(source_dir=%source_dir.display(), "loading Cargo metadata");
+    let output = Command::new(
+        environment.workspace(),
+        environment.configured_toolchain().cargo(),
+    )
+    .args(["metadata", "--format-version", "1"])
+    .current_directory(source_dir)
+    .log_output(false)
+    .run_capture()
+    .map_err(BuildStepError::Command)?;
 
-            let metadata = CargoMetadata::load_from_metadata(metadata)?;
-            debug!("Cargo metadata loaded");
-            Ok(metadata)
-        })
+    BuildStepError::as_output(|| {
+        let [metadata] = output.stdout_lines() else {
+            bail!("invalid output returned by `cargo metadata`");
+        };
+
+        let metadata = CargoMetadata::load_from_metadata(metadata)?;
+        debug!("Cargo metadata loaded");
+        Ok(metadata)
     })
 }
 
@@ -125,7 +132,7 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) environment: &'build BuildEnvironment,
     pub(crate) build: &'build Build<'ws>,
     pub(crate) docsrs_metadata: Metadata,
-    pub(crate) cargo_metadata: CargoMetadata,
+    pub(crate) cargo_metadata: RefCell<CargoMetadata>,
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
@@ -152,7 +159,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(Self {
             environment,
             build,
-            cargo_metadata,
+            cargo_metadata: RefCell::new(cargo_metadata),
             docsrs_metadata,
             limits,
             resource_suffix,
@@ -286,13 +293,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             "selected documentation targets"
         );
 
-        let root_package = self.cargo_metadata.root();
-        Span::current()
-            .record("crate_name", root_package.name.as_str())
-            .record(
-                "crate_version",
-                tracing::field::display(&root_package.version),
-            );
+        {
+            let metadata = self.cargo_metadata.borrow();
+            let root_package = metadata.root();
+            Span::current()
+                .record("crate_name", root_package.name.as_str())
+                .record(
+                    "crate_version",
+                    tracing::field::display(&root_package.version),
+                );
+        }
 
         let default_target_build = self
             .build_target(default_target)
@@ -302,6 +312,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let default_has_docs = self
             .cargo_metadata
+            .borrow()
             .root()
             .library_name()
             .is_some_and(|name| default_target_build.has_docs(&name));
@@ -319,7 +330,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         ReleaseBuildResult {
             statistics: self.build.statistics(),
             docsrs_metadata: self.docsrs_metadata.clone(),
-            cargo_metadata: self.cargo_metadata.clone(),
+            cargo_metadata: self.cargo_metadata.borrow().clone(),
             default_target: default_target_build,
             other_targets: target_results,
         }
@@ -612,7 +623,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .run_capture()
             .map_err(BuildStepError::Command)?;
 
-            debug!("replacement lockfile is ready");
+            debug!("refreshing Cargo metadata for the replacement lockfile");
+            let metadata = read_cargo_metadata(self.environment, self.build)?;
+            *self.cargo_metadata.borrow_mut() = metadata;
+
+            debug!("replacement lockfile and metadata are ready");
             Ok(())
         })
     }
@@ -673,6 +688,54 @@ mod tests {
     use super::*;
     use crate::StepResultExt as _;
     use std::ffi::OsStr;
+
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn refreshes_metadata_after_lockfile_regeneration() -> Result<()> {
+        crate::logging::init(false);
+        let workspace = crate::testing::test_workspace_path();
+        let mut environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
+            .fast_init(true)
+            .validate_host_resources(false)
+            .sandbox_image(crate::SandboxImageSource::linux_micro())
+            .build()?;
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hello-world");
+        let krate = rustwide::Crate::local(&fixture);
+        let release = environment
+            .release(&krate)
+            .run(|build| {
+                assert!(build.cargo_metadata.borrow().root().description.is_none());
+                let source = build.build.host_source_dir();
+                let manifest = source.join("Cargo.toml");
+                let contents = fs::read_to_string(&manifest)?;
+                fs::write(
+                    manifest,
+                    contents.replace(
+                        "[package]",
+                        "[package]\ndescription = \"updated for retry\"",
+                    ),
+                )?;
+                // The first attempt fails to parse the lockfile. Regeneration fixes
+                // it, and must refresh the initially cached package metadata too.
+                fs::write(source.join("Cargo.lock"), "[")?;
+                Ok(build.build_docs())
+            })?
+            .into_inner();
+        assert!(release.has_docs());
+        assert!(
+            release
+                .default_target()
+                .regenerate_lockfile()
+                .unwrap()
+                .is_ok()
+        );
+        assert_eq!(
+            release.cargo_metadata().root().description.as_deref(),
+            Some("updated for retry")
+        );
+        Ok(())
+    }
 
     #[test_case::test_case(false; "target")]
     #[test_case::test_case(true; "release")]
