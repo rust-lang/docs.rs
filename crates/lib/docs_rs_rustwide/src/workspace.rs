@@ -454,7 +454,7 @@ impl BuildEnvironment {
         // FIXME: why not StepResult?
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
-            .run(|build| Ok(build.build_essential_files().outcome?))
+            .run(|build| Ok(build.build_essential_files()?))
     }
 
     pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {

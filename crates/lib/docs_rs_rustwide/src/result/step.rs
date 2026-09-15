@@ -50,24 +50,34 @@ impl BuildStepError {
     }
 }
 
-/// Outcome and diagnostics of one release build step, including failures.
 #[derive(Debug)]
-pub struct StepResult<T> {
-    /// Wall-clock time spent preparing, executing, and processing this step.
+pub struct StepReport<T> {
+    pub value: T,
     pub duration: Duration,
-    /// Produced value or the phase in which the step failed.
-    pub outcome: Result<T, BuildStepError>,
-    /// Cargo and rustdoc output captured for this step.
     pub log: Option<String>,
 }
 
-impl<T> StepResult<T> {
-    /// Whether this step completed successfully.
-    pub fn successful(&self) -> bool {
-        self.outcome.is_ok()
+pub type StepFailure = StepReport<BuildStepError>;
+
+pub type StepResult<T> = Result<StepReport<T>, StepFailure>;
+
+pub trait StepResultExt {
+    fn duration(&self) -> Duration;
+    fn log(&self) -> Option<&str>;
+}
+
+impl<T> StepResultExt for StepResult<T> {
+    fn duration(&self) -> Duration {
+        match self {
+            Ok(report) => report.duration,
+            Err(report) => report.duration,
+        }
     }
 
-    pub fn log(&self) -> &str {
-        self.log.as_deref().unwrap_or_default()
+    fn log(&self) -> Option<&str> {
+        match self {
+            Ok(report) => report.log.as_deref(),
+            Err(report) => report.log.as_deref(),
+        }
     }
 }

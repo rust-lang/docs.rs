@@ -1,6 +1,6 @@
 use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
-    TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
+    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepReport,
+    StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -52,11 +52,19 @@ impl fmt::Display for Emit {
 fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResult<T> {
     let started = Instant::now();
     let outcome = run();
+    let duration = started.elapsed();
 
-    StepResult {
-        outcome,
-        duration: started.elapsed(),
-        log: None,
+    match outcome {
+        Ok(value) => Ok(StepReport {
+            value,
+            duration,
+            log: None,
+        }),
+        Err(error) => Err(StepReport {
+            value: error,
+            duration,
+            log: None,
+        }),
     }
 }
 
@@ -68,7 +76,12 @@ fn capture_rustwide_step<T>(
     storage.set_max_size(max_log_size);
 
     let mut result = capture_step(|| logging::capture(&storage, run));
-    result.log = Some(storage.to_string());
+
+    let log = Some(storage.to_string());
+    match result {
+        Ok(ref mut r) => r.log = log,
+        Err(ref mut r) => r.log = log,
+    }
 
     result
 }
