@@ -49,7 +49,7 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let html = target.documentation().as_inner().unwrap().path().to_owned();
     let json = target.rustdoc_json().as_inner().unwrap().path().to_owned();
     let original_json = fs::read(&json)?;
-    let library = release.cargo_metadata.root().library_name().unwrap();
+    let library = release.cargo_metadata().root().library_name().unwrap();
     drop(release);
     assert!(html.join(library).join("index.html").is_file());
     assert_eq!(fs::read(json)?, original_json);
@@ -68,7 +68,7 @@ fn binary_crate_does_not_report_library_documentation() -> Result<()> {
         .into_inner();
 
     assert!(!release.has_docs());
-    assert!(!release.cargo_metadata.root().is_library());
+    assert!(!release.cargo_metadata().root().is_library());
     Ok(())
 }
 
@@ -215,7 +215,7 @@ fn reports_implicit_features_for_optional_dependencies() -> Result<()> {
 
     assert!(
         release
-            .cargo_metadata
+            .cargo_metadata()
             .root()
             .features
             .contains_key("serde_derive")
@@ -229,7 +229,7 @@ fn excludes_implicit_features_when_dep_syntax_is_used() -> Result<()> {
     let mut test = TestEnvironment::new()?;
     let release = build_local(&mut test.environment, "optional-dep")?.into_inner();
     let features: Vec<_> = release
-        .cargo_metadata
+        .cargo_metadata()
         .root()
         .features
         .keys()

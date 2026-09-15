@@ -50,7 +50,7 @@ pub(crate) fn print(
     println!("Target totals include retries and work between steps.");
     println!("Full build duration: {}", format_duration(duration));
 
-    match result.statistics.memory_peak_bytes() {
+    match result.statistics().memory_peak_bytes() {
         Some(bytes) => println!(
             "  sandbox peak memory: {:.1} MiB",
             bytes as f64 / (1024.0 * 1024.0)

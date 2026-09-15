@@ -18,41 +18,36 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
         .sandbox_image(SandboxImageSource::linux_micro())
         .build()?;
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../lib/docs_rs_rustwide/tests/fixtures/hello-world");
+        .join("../../lib/docs_rs_rustwide/tests/fixtures/additional-targets");
     let krate = Crate::local(&fixture);
-    let (mut result, additional) = environment
+    let result = environment
         .release(&krate)
-        .run(|build| {
-            let result = build.build_docs();
-            let additional = build.build_target("aarch64-unknown-linux-gnu").run();
-            assert!(!additional.is_default());
-            Ok((result, additional))
-        })?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(report::build_succeeded(&result, false));
     assert!(report::build_succeeded(&result, true));
     let temporary_html = result
-        .default_target
+        .default_target()
         .documentation()
         .as_inner()
         .unwrap()
         .path()
         .to_owned();
     let temporary_json = result
-        .default_target
+        .default_target()
         .rustdoc_json()
         .as_inner()
         .unwrap()
         .path()
         .to_owned();
     let original_json = fs::read(&temporary_json)?;
-    let library = result.cargo_metadata.root().library_name().unwrap();
+    let library = result.cargo_metadata().root().library_name().unwrap();
 
-    result.other_targets.push(additional);
+    assert!(!result.other_targets().is_empty());
     assert!(report::build_succeeded(&result, true));
     fs::remove_dir_all(
-        result.other_targets[0]
+        result.other_targets()[0]
             .documentation()
             .as_inner()
             .unwrap()
@@ -60,7 +55,6 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
     )?;
     assert!(report::build_succeeded(&result, false));
     assert!(!report::build_succeeded(&result, true));
-    result.other_targets.clear();
 
     // A successful command without the crate's docs must still fail.
     fs::remove_dir_all(temporary_html.join(&library))?;

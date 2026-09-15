@@ -288,7 +288,7 @@ impl RustwideBuilder {
 
         let build_statistics = full_build_result.statistics().clone();
         let release_build_result = full_build_result.into_inner();
-        let cargo_metadata = &release_build_result.cargo_metadata;
+        let cargo_metadata = release_build_result.cargo_metadata();
 
         if release_build_result
             .targets()
@@ -299,14 +299,14 @@ impl RustwideBuilder {
 
         let build_succeeded = release_build_result.build_succeeded();
         let has_docs = release_build_result.has_docs();
-        let default_target = release_build_result.default_target.target().to_string();
+        let default_target = release_build_result.default_target().target().to_string();
 
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
-            copy_target_docs(&release_build_result.default_target, local_storage.path())?;
+            copy_target_docs(release_build_result.default_target(), local_storage.path())?;
             successful_targets.push(default_target.clone());
 
-            for target in &release_build_result.other_targets {
+            for target in release_build_result.other_targets() {
                 if target.documentation_succeeded() {
                     copy_target_docs(target, local_storage.path())?;
                     successful_targets.push(target.target().to_string());
@@ -447,7 +447,8 @@ impl RustwideBuilder {
             ))?;
         }
 
-        if let Ok(Some(doc_coverage)) = release_build_result.default_target.coverage().as_inner() {
+        if let Ok(Some(doc_coverage)) = release_build_result.default_target().coverage().as_inner()
+        {
             self.runtime
                 .block_on(add_doc_coverage(&mut async_conn, release_id, *doc_coverage))?;
         }

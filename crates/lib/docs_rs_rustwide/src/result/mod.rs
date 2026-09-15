@@ -197,16 +197,32 @@ impl TargetBuildResult {
 pub struct ReleaseBuildResult {
     /// Sandbox statistics captured after all documentation targets finished.
     /// Includes all targets and retry attempts in the shared sandbox.
-    pub statistics: SandboxStatistics,
+    pub(crate) statistics: SandboxStatistics,
     /// Metadata read from rustwide's prepared source directory.
-    pub docsrs_metadata: Metadata,
+    pub(crate) docsrs_metadata: Metadata,
     /// Cargo's resolved package metadata for the prepared source.
-    pub cargo_metadata: CargoMetadata,
-    pub default_target: TargetBuildResult,
-    pub other_targets: Vec<TargetBuildResult>,
+    pub(crate) cargo_metadata: CargoMetadata,
+    pub(crate) default_target: TargetBuildResult,
+    pub(crate) other_targets: Vec<TargetBuildResult>,
 }
 
 impl ReleaseBuildResult {
+    pub fn statistics(&self) -> &SandboxStatistics {
+        &self.statistics
+    }
+
+    pub fn docsrs_metadata(&self) -> &Metadata {
+        &self.docsrs_metadata
+    }
+
+    pub fn cargo_metadata(&self) -> &CargoMetadata {
+        &self.cargo_metadata
+    }
+
+    pub fn other_targets(&self) -> &[TargetBuildResult] {
+        &self.other_targets
+    }
+
     /// Whether Cargo completed the default HTML documentation command successfully.
     pub fn build_succeeded(&self) -> bool {
         self.default_target.build_succeeded()
