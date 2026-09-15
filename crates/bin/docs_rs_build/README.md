@@ -126,10 +126,9 @@ jobs:
 
 Omit `--package` only when Cargo's default selection produces the single package
 you intend to build and the manifest is not a virtual workspace. The cached
-`target/docsrs-build` directory preserves rustwide's rustup
-installation, toolchains, Cargo cache, and other workspace state between CI
-runs. The cache version only needs to be changed if the workspace layout becomes
-incompatible.
+`target/docsrs-build` directory preserves rustwide's rustup installation,
+toolchains, Cargo cache, and other workspace state between CI runs. The cache
+version only needs to be changed if the workspace layout becomes incompatible.
 
 The Docker image is stored as a compressed `docker save` archive because
 GitHub-hosted runners start each job with a fresh Docker daemon. On a cache hit,
@@ -187,17 +186,17 @@ For frequent builds, prefer one of these approaches:
 
 By default, the command fails when setup, packaging, the default-target HTML
 build, or production of the crate's library documentation fails. JSON and
-coverage failures, and additional-target failures,
-are reported but do not change the default exit status. This includes
-preparation, command, and output-processing failures for those steps.
+coverage failures, and additional-target failures, are reported but do not
+change the default exit status. This includes preparation, command, and
+output-processing failures for those steps.
 
 A default-target HTML command failure retries once with a regenerated lockfile
 when one exists. This reruns coverage, JSON, and HTML. If lockfile regeneration
 fails, its error and captured log are reported alongside the original failed
-HTML build. Release fetching and initial Cargo
-metadata failures return early. Additional targets are built only
-when the default target produces library documentation. The CLI does not have
-the production builder's queue reattempt mechanism.
+HTML build. Release fetching and initial Cargo metadata failures return early.
+Additional targets are built only when the default target produces library
+documentation. The CLI does not have the production builder's queue reattempt
+mechanism.
 
 Use `--strict` to make JSON, coverage, or additional-target failures affect the
 exit status:
@@ -211,8 +210,8 @@ table shows HTML, JSON, and coverage status/duration for each target, totals,
 full build duration, and sandbox peak memory. Failed steps include their
 captured logs. Lockfile-regeneration failures also include their captured logs.
 Coverage is shown as skipped for additional targets. Setup and release-fetch
-errors return early with an error instead of the summary table. Packaging
-output is streamed live too.
+errors return early with an error instead of the summary table. Packaging output
+is streamed live too.
 
 ## Workspace and generated files
 
@@ -224,22 +223,22 @@ location when necessary:
 docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
-HTML and JSON are moved into unique locations under the release build directory's
-`tmp` directory. The exact paths are printed in the build summary. Dropping build
-results or exiting the command does not delete them. Rustwide's build-directory
-cleanup removes them, so copy anything you need to retain before starting another
-build with the same workspace. The workspace is locked
-for the lifetime of the build environment; concurrent invocations must use
-different workspace directories.
+HTML and JSON are moved into unique locations under the release build
+directory's `tmp` directory. The exact paths are printed in the build summary.
+Dropping build results or exiting the command does not delete them. Rustwide's
+build-directory cleanup removes them, so copy anything you need to retain before
+starting another build with the same workspace. The workspace is locked for the
+lifetime of the build environment; concurrent invocations must use different
+workspace directories.
 
 ## Configuration
 
 The default toolchain is nightly and the default sandbox limits match docs.rs.
 Workspace initialization reuses installed Rustwide helper tools through fast
-initialization. An installed distribution toolchain is checked for updates unless
-`--no-update-toolchain` is set. A missing toolchain is always installed; CI
-toolchains are not automatically updated by the CLI. Documentation targets are
-selected through the crate's docs.rs metadata; toolchains, images, CPU and
+initialization. An installed distribution toolchain is checked for updates
+unless `--no-update-toolchain` is set. A missing toolchain is always installed;
+CI toolchains are not automatically updated by the CLI. Documentation targets
+are selected through the crate's docs.rs metadata; toolchains, images, CPU and
 memory limits, networking, timeouts, and failure policy can be adjusted through
 command-line options.
 

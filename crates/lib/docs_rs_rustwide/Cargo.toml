@@ -23,11 +23,11 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-toml = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
+toml = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt"] }
 
 [lints]

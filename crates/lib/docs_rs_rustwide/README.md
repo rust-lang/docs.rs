@@ -211,11 +211,12 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
-Individual step methods return `StepResult<T>`, a `Result<StepReport<T>, StepFailure>`.
-Both outcomes retain duration and captured logs. Errors identify the failing
-phase: `Prepare`, `Command`, or `Output`. Coverage and JSON failures remain in
-step results and HTML is still attempted. HTML command failures are eligible
-for the default-target lockfile retry. Metrics collection failures are nonfatal.
+Individual step methods return `StepResult<T>`, a
+`Result<StepReport<T>, StepFailure>`. Both outcomes retain duration and captured
+logs. Errors identify the failing phase: `Prepare`, `Command`, or `Output`.
+Coverage and JSON failures remain in step results and HTML is still attempted.
+HTML command failures are eligible for the default-target lockfile retry.
+Metrics collection failures are nonfatal.
 
 `build_target().run()` returns `TargetBuildResult`, and `build_docs()` returns
 `ReleaseBuildResult`. If lockfile regeneration or its dependency fetch fails,
@@ -227,8 +228,8 @@ decide whether a failure warrants another attempt.
 Use `?` on an individual step to propagate its `StepFailure`, or
 `step.as_inner()` to inspect its value and error without the report wrapper.
 When propagated through the release lifecycle, failures can be recovered with
-`anyhow::Error::downcast_ref::<StepFailure>()`. Their duration covers the failing
-step, not the full target or release.
+`anyhow::Error::downcast_ref::<StepFailure>()`. Their duration covers the
+failing step, not the full target or release.
 
 ## Archiving sources before a build
 
@@ -280,10 +281,9 @@ directory's `tmp` directory before returning. Subsequent steps cannot overwrite
 these artifacts, and dropping output values does not delete them. Their lifetime
 is managed by Rustwide's build-directory cleanup.
 
-Keep the environment alive until artifacts have been consumed or copied out
-to prevent another process from cleaning the workspace in the meantime.
-Starting another release or refreshing the workspace purges previous build
-directories, including generated artifacts. Copy files that must survive first.
-Do not remove `.docsrs-workspace.lock` while an environment is running. The file
-may remain after exit; ownership is released automatically when its handle
-closes.
+Keep the environment alive until artifacts have been consumed or copied out to
+prevent another process from cleaning the workspace in the meantime. Starting
+another release or refreshing the workspace purges previous build directories,
+including generated artifacts. Copy files that must survive first. Do not remove
+`.docsrs-workspace.lock` while an environment is running. The file may remain
+after exit; ownership is released automatically when its handle closes.
