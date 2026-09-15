@@ -202,24 +202,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         Ok(tempfile::tempdir_in(tmp_dir)?)
     }
 
-    pub(crate) fn move_output_to_temp_dir(
-        &self,
-        output: impl AsRef<Path>,
-    ) -> Result<(tempfile::TempDir, PathBuf)> {
-        let tempdir = self.temp_dir()?;
-
-        let output = output.as_ref();
-
-        let destination = tempdir
-            .path()
-            .join(output.file_name().expect("source always has a filename"));
-
-        // FIXME: fall back to copy when not on same fileystem?
-        fs::rename(&output, &destination)?;
-
-        Ok((tempdir, destination))
-    }
-
     /// Return the host path containing documentation for a target.
     ///
     /// Cargo places proc-macro documentation in the host target directory even
@@ -478,10 +460,23 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
             BuildStepError::as_output(|| {
                 let output_file = find_single_output_file(self.output_dir(target), "json")?;
-                let (tempdir, destination) = self
-                    .move_output_to_temp_dir(output_file)
-                    .context("couldn't move build output to tmpdir")?;
-                Ok(RustdocJsonOutput::new(tempdir, destination))
+
+                let destination = tempfile::Builder::new()
+                    .prefix(&format!(
+                        "{}.",
+                        output_file.file_stem().unwrap().to_string_lossy()
+                    ))
+                    .suffix(&format!(
+                        ".{}",
+                        output_file.extension().unwrap().to_string_lossy()
+                    ))
+                    .tempfile_in(&self.temp_dir()?)?
+                    .into_temp_path();
+
+                fs::rename(&output_file, &destination)
+                    .context("couldn't move output file to temp destination")?;
+
+                Ok(RustdocJsonOutput::new(destination))
             })
         })
     }
@@ -548,9 +543,20 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .map_err(BuildStepError::Command)?;
 
             BuildStepError::as_output(|| {
-                let (tempdir, destination) =
-                    self.move_output_to_temp_dir(self.output_dir(target))?;
-                Ok(HtmlOutput::new(tempdir, destination))
+                let output_dir = self.output_dir(target);
+
+                let temp_dir = tempfile::Builder::new()
+                    .prefix(&format!(
+                        "{}.",
+                        output_dir.file_stem().unwrap().to_string_lossy()
+                    ))
+                    .tempdir_in(&self.temp_dir()?)?;
+
+                let destination = temp_dir.path().join("docs");
+                fs::rename(&output_dir, &destination)
+                    .context("couldn't move output dir to temp destination")?;
+
+                Ok(HtmlOutput::new(temp_dir, destination))
             })
         })
     }

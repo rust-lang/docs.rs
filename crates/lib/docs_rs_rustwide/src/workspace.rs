@@ -1,4 +1,6 @@
-use crate::{BuildResult, CpuLimit, ReleaseContext, StepResultExt, workspace_lock::WorkspaceLock};
+use crate::{
+    BuildResult, CpuLimit, HtmlOutput, ReleaseContext, StepResultExt, workspace_lock::WorkspaceLock,
+};
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
@@ -450,7 +452,7 @@ impl BuildEnvironment {
     /// Like a release build, this requires exclusive access to the shared
     /// rustwide workspace.
     #[instrument(skip_all)]
-    pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
+    pub fn build_essential_files(&mut self) -> Result<BuildResult<HtmlOutput>> {
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
             .run(|build| Ok(build.build_essential_files().into_inner()?))

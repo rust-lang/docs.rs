@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     let maintenance = environment.perform_maintenance()?;
     if maintenance.toolchain_updated {
         let essential_files = environment.build_essential_files()?.into_inner();
-        println!("essential files: {}", essential_files.display());
+        println!("essential files: {}", essential_files.path().display());
     }
 
     let krate = Crate::crates_io(&name, &version);

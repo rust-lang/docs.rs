@@ -62,15 +62,14 @@ impl HtmlOutput {
 /// A rustdoc JSON artifact produced by a successful JSON build.
 #[derive(Clone, Debug)]
 pub struct RustdocJsonOutput {
-    _tempdir: Arc<tempfile::TempDir>,
-    path: PathBuf,
+    path: Arc<tempfile::TempPath>,
 }
 
 impl RustdocJsonOutput {
-    pub(crate) fn new(tempdir: tempfile::TempDir, path: PathBuf) -> Self {
-        let _tempdir = Arc::new(tempdir);
-
-        Self { _tempdir, path }
+    pub(crate) fn new(path: tempfile::TempPath) -> Self {
+        Self {
+            path: Arc::new(path),
+        }
     }
 
     /// Path to the generated rustdoc JSON file.
@@ -83,14 +82,15 @@ impl RustdocJsonOutput {
     /// Parsing is lazy so callers that only need the artifact do not pay this cost.
     #[instrument(skip_all)]
     pub fn format_version(&self) -> Result<RustdocJsonFormatVersion> {
+        let path = self.path();
         debug!(
-            path = %self.path.display(),
+            path = %path.display(),
             "reading rustdoc JSON format version"
         );
-        let file = File::open(&self.path)
-            .with_context(|| format!("opening rustdoc JSON at {}", self.path.display()))?;
+        let file = File::open(path)
+            .with_context(|| format!("opening rustdoc JSON at {}", path.display()))?;
         let version = read_format_version_from_rustdoc_json(file)
-            .with_context(|| format!("reading format version from {}", self.path.display()))?;
+            .with_context(|| format!("reading format version from {}", path.display()))?;
         debug!(?version, "read rustdoc JSON format version");
         Ok(version)
     }
@@ -225,6 +225,7 @@ mod tests {
     use crate::StepReport;
     use docs_rs_types::BuildError as _;
     use rustwide::cmd::CommandError;
+    use std::fs;
     use test_case::test_case;
 
     #[test_case(BuildStepError::Command(CommandError::Timeout(1)), "Timeout"; "timeout")]
@@ -235,20 +236,22 @@ mod tests {
         assert_eq!(error.kind(), expected);
     }
 
-    fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
-        let tempdir = tempfile::tempdir();
+    fn target_result(html_output: HtmlOutput) -> TargetBuildResult {
+        let dummy_json_filename = tempfile::NamedTempFile::new().unwrap().into_temp_path();
+        fs::write(&dummy_json_filename, b"{}").unwrap();
+
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,
             duration: Some(Duration::ZERO),
             compiler_metrics: None,
             documentation: Ok(StepReport {
-                value: documentation_path,
+                value: html_output,
                 log: None,
                 duration: Duration::ZERO,
             }),
             rustdoc_json: Ok(StepReport {
-                value: RustdocJsonOutput::new(PathBuf::from("unused.json")),
+                value: RustdocJsonOutput::new(dummy_json_filename),
                 log: None,
                 duration: Duration::ZERO,
             }),
@@ -264,28 +267,31 @@ mod tests {
     #[test]
     fn documentation_success_requires_documentation_directory() {
         let temporary = tempfile::tempdir().unwrap();
-        let missing = target_result(temporary.path().join("missing"));
-        assert!(!missing.documentation_exists());
-        assert!(missing.build_succeeded());
-        assert!(!missing.documentation_succeeded());
-        assert!(!missing.has_docs("example_crate"));
+        let path = temporary.path().join("docs");
+        let result = target_result(HtmlOutput::new(temporary, path.clone()));
 
-        let existing = target_result(temporary.path().to_owned());
-        assert!(existing.documentation_exists());
-        assert!(existing.build_succeeded());
-        assert!(existing.documentation_succeeded());
-        assert!(!existing.has_docs("example_crate"));
+        assert!(!result.documentation_exists());
+        assert!(result.build_succeeded());
+        assert!(!result.documentation_succeeded());
+        assert!(!result.has_docs("example_crate"));
 
-        std::fs::create_dir(temporary.path().join("example_crate")).unwrap();
-        assert!(existing.has_docs("example_crate"));
+        fs::create_dir(&path).unwrap();
+
+        assert!(result.documentation_exists());
+        assert!(result.build_succeeded());
+        assert!(result.documentation_succeeded());
+        assert!(!result.has_docs("example_crate"));
+
+        fs::create_dir(path.join("example_crate")).unwrap();
+
+        assert!(result.has_docs("example_crate"));
     }
 
     #[test]
     fn reads_rustdoc_json_format_version_lazily() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("crate.json");
-        std::fs::write(&path, r#"{"format_version":42}"#)?;
-        let output = RustdocJsonOutput::new(path);
+        let path = tempfile::NamedTempFile::new()?;
+        fs::write(&path, r#"{"format_version":42}"#)?;
+        let output = RustdocJsonOutput::new(path.into_temp_path());
 
         assert_eq!(
             output.format_version()?,
@@ -297,10 +303,9 @@ mod tests {
     #[test_case("not JSON"; "malformed json")]
     #[test_case("{}"; "missing format version")]
     fn reports_invalid_rustdoc_json_metadata(contents: &str) -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("crate.json");
-        std::fs::write(&path, contents)?;
-        let output = RustdocJsonOutput::new(path);
+        let path = tempfile::NamedTempFile::new()?;
+        fs::write(&path, contents)?;
+        let output = RustdocJsonOutput::new(path.into_temp_path());
 
         assert!(output.format_version().is_err());
         Ok(())
