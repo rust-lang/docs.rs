@@ -19,7 +19,8 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, TargetBuildResult, utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResultExt as _, TargetBuildResult,
+    utils::copy_dir_all,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -286,7 +287,7 @@ impl RustwideBuilder {
         let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
 
         let build_statistics = full_build_result.statistics().clone();
-        let release_build_result = full_build_result.into_inner()?;
+        let release_build_result = full_build_result.into_inner();
         let cargo_metadata = &release_build_result.cargo_metadata;
 
         if release_build_result
@@ -329,13 +330,19 @@ impl RustwideBuilder {
         for target in release_build_result.targets() {
             let successful = target.documentation_succeeded();
 
-            let log_name = format!("{}.txt", target.target);
-            self.blocking_storage.store_one(
-                format!("build-logs/{build_id}/{log_name}"),
-                target.documentation.log().to_string(),
-            )?;
+            if let Some(log) = target.documentation.log() {
+                let log_name = format!("{}.txt", target.target);
 
-            build_logs.push((log_name, successful));
+                self.blocking_storage
+                    .store_one(format!("build-logs/{build_id}/{log_name}"), log.to_string())?;
+
+                build_logs.push((log_name, successful));
+            } else {
+                error!(
+                    target = target.target,
+                    successful, "missing build log after documentation build"
+                );
+            }
         }
 
         build_logs.extend(self.publish_json_with_build_logs(
@@ -353,8 +360,8 @@ impl RustwideBuilder {
         let build_error = release_build_result
             .default_target()
             .documentation
-            .outcome
             .as_ref()
+            .map_err(|report| &report.value)
             .err();
 
         let rustc_version = self.environment.rustc_version()?;
@@ -490,22 +497,31 @@ impl RustwideBuilder {
             let target = &target_result.target;
             let json_build = &target_result.rustdoc_json;
 
-            let json_log_name = format!("{target}_json.txt");
-            self.blocking_storage.store_one(
-                format!("build-logs/{build_id}/{json_log_name}"),
-                json_build.log().to_string(),
-            )?;
+            if let Some(log) = json_build.log() {
+                let json_log_name = format!("{target}_json.txt");
+                self.blocking_storage.store_one(
+                    format!("build-logs/{build_id}/{json_log_name}"),
+                    log.to_string(),
+                )?;
 
-            build_logs.push((json_log_name, json_build.successful()));
+                build_logs.push((json_log_name, json_build.is_ok()));
+            } else {
+                error!(
+                    target = target_result.target,
+                    successful = json_build.is_ok(),
+                    "missing build log after json build"
+                );
+            }
 
-            if let Ok(json) = &json_build.outcome {
+            if let Ok(json) = json_build {
+                let json = &json.value;
                 json.format_version().and_then(|format_version| {
                     self.runtime.block_on(try_join_all(
                         RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
                             self.upload_json_output(
                                 name,
                                 version,
-                                &target,
+                                target,
                                 format_version,
                                 *algorithm,
                                 json.path().to_owned(),
