@@ -12,7 +12,11 @@ pub(crate) struct Args {
     #[arg(default_value = ".", value_name = "CRATE_PATH")]
     pub(crate) crate_path: PathBuf,
 
-    /// Package to build when the manifest belongs to a workspace.
+    /// Select one package to build; required for virtual workspaces.
+    ///
+    /// If omitted, uses Cargo's default package selection, including
+    /// workspace.default-members at a workspace root. Exactly one crate archive
+    /// must be produced; use --package if the defaults select multiple packages.
     #[arg(short, long, value_name = "SPEC")]
     pub(crate) package: Option<String>,
 

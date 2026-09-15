@@ -53,9 +53,13 @@ Cargo's `include` and `exclude` rules still apply.
 
 ## Cargo workspaces
 
-When the provided path is a workspace root that also contains a package, that
-root package is built by default. For a virtual workspace, select a member
-explicitly:
+Without `--package`, package selection follows `cargo package`. At a workspace
+root that contains a package, `workspace.default-members` can select another
+member or multiple members; otherwise Cargo selects the root package. The CLI
+requires exactly one generated crate archive and fails if multiple are produced.
+
+Use `--package` to explicitly select one package. This is required for virtual
+workspaces, even when they configure `default-members`:
 
 ```console
 docs_rs_build --package my-crate
@@ -120,8 +124,9 @@ jobs:
         run: docs_rs_build --package my-crate
 ```
 
-Omit `--package` for a repository whose root manifest is the package being
-built. The cached `target/docsrs-build` directory preserves rustwide's rustup
+Omit `--package` only when Cargo's default selection produces the single package
+you intend to build and the manifest is not a virtual workspace. The cached
+`target/docsrs-build` directory preserves rustwide's rustup
 installation, toolchains, Cargo cache, and other workspace state between CI
 runs. The cache version only needs to be changed if the workspace layout becomes
 incompatible.
