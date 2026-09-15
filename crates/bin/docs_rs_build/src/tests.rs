@@ -22,7 +22,7 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
     let krate = Crate::local(&fixture);
     let result = environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()?))?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(report::build_succeeded(&result, false));

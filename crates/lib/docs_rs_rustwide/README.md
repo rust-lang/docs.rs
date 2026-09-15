@@ -122,7 +122,7 @@ let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"
     .build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
 
-let result = environment.release(&krate).run(|build| Ok(build.build_docs()?))?;
+let result = environment.release(&krate).run(|build| Ok(build.build_docs()))?;
 # let _ = result;
 # Ok(())
 # }
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io("serde", "1.0.219");
     let build = environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()?))?;
+        .run(|build| Ok(build.build_docs()))?;
 
     // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment
     // setup.
@@ -217,10 +217,12 @@ phase: `Prepare`, `Command`, or `Output`. Coverage and JSON failures remain in
 step results and HTML is still attempted. HTML command failures are eligible
 for the default-target lockfile retry. Metrics collection failures are nonfatal.
 
-`build_target().run()` and `build_docs()` return `Result<_, StepFailure>`:
-lockfile regeneration or its dependency-fetch failure propagates immediately.
-Other build-step failures remain in the returned target results. The library
-does not schedule queue reattempts; callers decide what to do with the error.
+`build_target().run()` returns `TargetBuildResult`, and `build_docs()` returns
+`ReleaseBuildResult`. If lockfile regeneration or its dependency fetch fails,
+the target is not retried. Its original step results and the regeneration
+failure remain available together. Use `target.regeneration_failure()` to
+inspect this failure. The library does not schedule queue reattempts; callers
+decide whether a failure warrants another attempt.
 
 Use `?` on an individual step to propagate its `StepFailure`, or
 `step.as_inner()` to inspect its value and error without the report wrapper.
@@ -248,7 +250,7 @@ let fetched = environment
 
 fetched.copy_source_to("./source-archive-input")?;
 
-let result = fetched.run(|build| Ok(build.build_docs()?))?;
+let result = fetched.run(|build| Ok(build.build_docs()))?;
 
 # let _ = result;
 # Ok(())

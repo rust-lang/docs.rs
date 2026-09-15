@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-use step::{StepResult, StepResultExt as _};
+use step::{StepFailure, StepResult, StepResultExt as _};
 use tracing::{debug, instrument};
 
 /// Output of a completed release lifecycle, including fetch and sandbox cleanup.
@@ -186,6 +186,11 @@ impl TargetBuildResult {
 
     pub fn rustdoc_json(&self) -> &StepResult<RustdocJsonOutput> {
         &self.rustdoc_json
+    }
+
+    /// Failure that prevented retrying this target with a regenerated lockfile.
+    pub fn regeneration_failure(&self) -> Option<&StepFailure> {
+        self.regenerate_lockfile.as_ref()?.as_ref().err()
     }
 
     pub fn regenerate_lockfile(&self) -> Option<&StepResult<()>> {

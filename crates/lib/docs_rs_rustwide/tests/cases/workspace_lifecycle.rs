@@ -77,7 +77,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
     assert!(
         environment
             .release(&krate)
-            .run(|build| Ok(build.build_docs()?))?
+            .run(|build| Ok(build.build_docs()))?
             .into_inner()
             .build_succeeded()
     );

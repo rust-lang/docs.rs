@@ -284,7 +284,7 @@ impl RustwideBuilder {
         algs.insert(source_stats.alg);
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
-        let full_build_result = fetched.run(|build| Ok(build.build_docs()?))?;
+        let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
 
         let build_statistics = full_build_result.statistics().clone();
         let release_build_result = full_build_result.into_inner();
@@ -357,6 +357,18 @@ impl RustwideBuilder {
 
         self.runtime
             .block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
+
+        // A failed regeneration is an internal failure eligible for a queue
+        // reattempt. Keep this production policy outside the build library.
+        for target in release_build_result.targets() {
+            if let Some(failure) = target.regeneration_failure() {
+                bail!(
+                    "lockfile regeneration failed for {}: {failure:#}\n{}",
+                    target.target(),
+                    failure.log().unwrap_or_default()
+                );
+            }
+        }
 
         let build_error = release_build_result
             .default_target()
