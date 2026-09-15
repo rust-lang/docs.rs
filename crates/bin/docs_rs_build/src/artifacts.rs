@@ -15,11 +15,11 @@ pub(crate) fn save(result: &ReleaseBuildResult, workspace: &Path) -> Result<Path
     for target in result.targets() {
         let destination = directory.path().join(&target.target);
         fs::create_dir_all(&destination)?;
-        if let Ok(html) = target.documentation() {
-            if html.path().is_dir() {
-                copy_dir_all(html, destination.join("html"), |_| {})
-                    .with_context(|| format!("exporting HTML for {}", target.target))?;
-            }
+        if let Ok(html) = target.documentation()
+            && html.path().is_dir()
+        {
+            copy_dir_all(html, destination.join("html"), |_| {})
+                .with_context(|| format!("exporting HTML for {}", target.target))?;
         }
         if let Ok(json) = target.rustdoc_json() {
             fs::copy(json, destination.join("rustdoc.json"))
