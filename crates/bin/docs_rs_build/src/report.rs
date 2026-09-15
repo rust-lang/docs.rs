@@ -106,8 +106,8 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
 
 fn print_error<T>(name: &str, step: &StepResult<T>) {
     if let Err(report) = step {
-        println!("  {name}: failed: {:#}", report.value);
-        if let Some(log) = report.log.as_deref().filter(|log| !log.trim().is_empty()) {
+        println!("  {name}: failed: {:#}", report.value());
+        if let Some(log) = report.log() {
             println!("    captured build log:");
             for line in log.lines() {
                 println!("      {line}");

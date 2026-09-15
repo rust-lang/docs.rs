@@ -362,7 +362,7 @@ impl RustwideBuilder {
             .default_target()
             .documentation
             .as_ref()
-            .map_err(|report| &report.value)
+            .map_err(|report| report.value())
             .err();
 
         let rustc_version = self.environment.rustc_version()?;
@@ -515,7 +515,7 @@ impl RustwideBuilder {
             }
 
             if let Ok(json) = json_build {
-                let json = &json.value;
+                let json = json.value();
                 json.format_version().and_then(|format_version| {
                     self.runtime.block_on(try_join_all(
                         RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {

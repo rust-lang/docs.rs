@@ -52,14 +52,30 @@ impl BuildStepError {
 
 #[derive(Debug)]
 pub struct StepReport<T> {
-    pub value: T,
-    pub duration: Duration,
-    pub log: Option<String>,
+    pub(crate) value: T,
+    pub(crate) duration: Duration,
+    pub(crate) log: Option<String>,
 }
 
 impl<T> StepReport<T> {
+    pub fn new(value: T, duration: Duration, log: Option<String>) -> Self {
+        Self {
+            value,
+            duration,
+            log,
+        }
+    }
+
     pub fn into_inner(self) -> T {
         self.value
+    }
+
+    pub fn log(&self) -> Option<&str> {
+        self.log.as_deref().filter(|log| !log.trim().is_empty())
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
     }
 }
 
@@ -99,8 +115,8 @@ impl<T> StepResultExt<T> for StepResult<T> {
 
     fn log(&self) -> Option<&str> {
         match self {
-            Ok(report) => report.log.as_deref(),
-            Err(report) => report.log.as_deref(),
+            Ok(report) => report.log(),
+            Err(report) => report.log(),
         }
     }
 

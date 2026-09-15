@@ -49,22 +49,22 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
 
     result.other_targets.push(additional);
     assert!(report::build_succeeded(&result, true));
-    result.other_targets[0].documentation = Err(StepReport {
-        value: BuildStepError::Prepare(anyhow::anyhow!("additional target unavailable")),
-        duration: Duration::ZERO,
-        log: None,
-    });
+    result.other_targets[0].documentation = Err(StepReport::new(
+        BuildStepError::Prepare(anyhow::anyhow!("additional target unavailable")),
+        Duration::ZERO,
+        None,
+    ));
     assert!(report::build_succeeded(&result, false));
     assert!(!report::build_succeeded(&result, true));
     result.other_targets.clear();
 
     let successful_json = std::mem::replace(
         &mut result.default_target.rustdoc_json,
-        Err(StepReport {
-            value: BuildStepError::Output(anyhow::anyhow!("placeholder")),
-            duration: Duration::ZERO,
-            log: None,
-        }),
+        Err(StepReport::new(
+            BuildStepError::Output(anyhow::anyhow!("placeholder")),
+            Duration::ZERO,
+            None,
+        )),
     );
     // Auxiliary failures of every kind are fatal only in strict mode.
     for error in [
@@ -72,20 +72,20 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
         BuildStepError::Command(CommandError::SandboxOOM),
         BuildStepError::Output(anyhow::anyhow!("invalid JSON")),
     ] {
-        result.default_target.rustdoc_json = Err(StepReport {
-            value: error,
-            duration: Duration::ZERO,
-            log: Some("diagnostics".into()),
-        });
+        result.default_target.rustdoc_json = Err(StepReport::new(
+            error,
+            Duration::ZERO,
+            Some("diagnostics".into()),
+        ));
         assert!(report::build_succeeded(&result, false));
         assert!(!report::build_succeeded(&result, true));
     }
     result.default_target.rustdoc_json = successful_json;
-    result.default_target.coverage = Err(StepReport {
-        value: BuildStepError::Prepare(anyhow::anyhow!("coverage preparation failed")),
-        duration: Duration::ZERO,
-        log: None,
-    });
+    result.default_target.coverage = Err(StepReport::new(
+        BuildStepError::Prepare(anyhow::anyhow!("coverage preparation failed")),
+        Duration::ZERO,
+        None,
+    ));
     assert!(report::build_succeeded(&result, false));
     assert!(!report::build_succeeded(&result, true));
 
