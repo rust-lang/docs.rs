@@ -304,6 +304,7 @@ impl RustwideBuilder {
         let mut successful_targets = Vec::new();
         let documentation_size = if has_docs {
             copy_target_docs(&release_build_result.default_target, local_storage.path())?;
+            successful_targets.push(default_target.clone());
 
             for target in &release_build_result.other_targets {
                 if target.documentation_succeeded() {
@@ -750,16 +751,27 @@ mod tests {
         assert!(row.memory_peak.unwrap() > 10 * 1024 * 1024); // 10 MiB, in my test it was > 100 MiB
         let mut logs = row.logs.unwrap();
         logs.sort();
-        let mut expected = vec![
-            ("x86_64-unknown-linux-gnu.txt".to_owned(), true),
-            ("i686-pc-windows-msvc.txt".to_owned(), true),
-            ("aarch64-unknown-linux-gnu.txt".to_owned(), true),
-            ("x86_64-pc-windows-msvc.txt".to_owned(), true),
-            ("aarch64-apple-darwin.txt".to_owned(), true),
-        ];
+        let mut expected: Vec<_> = [
+            "x86_64-unknown-linux-gnu",
+            "i686-pc-windows-msvc",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-pc-windows-msvc",
+            "aarch64-apple-darwin",
+        ]
+        .into_iter()
+        .flat_map(|target| {
+            [
+                (format!("{target}.txt"), true),
+                (format!("{target}_json.txt"), true),
+            ]
+        })
+        .collect();
         expected.sort();
 
         assert_eq!(logs, expected);
+        for (filename, _) in &logs {
+            assert!(storage.exists(&format!("build-logs/{}/{filename}", row.build_id))?);
+        }
 
         let mut targets: Vec<String> = row
             .doc_targets
