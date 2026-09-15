@@ -146,6 +146,30 @@ pub struct Metadata {
     additional_targets: Vec<String>,
 }
 
+impl Metadata {
+    /// Unstable flags from `cargo_args` that may also be passed to cargo commands we run
+    /// outside the sandbox. These run with our privileges, so this is a whitelist.
+    pub fn unstable_cargo_flags(&self) -> Vec<String> {
+        let mut flags = Vec::new();
+        let mut iter = self.cargo_args.iter();
+        while let Some(arg) = iter.next() {
+            if arg == "-Z" {
+                if let Some(value) = iter.next()
+                    && value == "bindeps"
+                {
+                    flags.push("-Z".to_string());
+                    flags.push(value.clone());
+                }
+            } else if let Some(value) = arg.strip_prefix("-Z")
+                && value == "bindeps"
+            {
+                flags.push(arg.clone());
+            }
+        }
+        flags
+    }
+}
+
 /// The targets that should be built for a crate.
 ///
 /// The `default_target` is the target to be used as the home page for that crate.
@@ -552,6 +576,48 @@ mod test_parsing {
         "#;
         let metadata = Metadata::from_str(manifest).unwrap();
         assert!(!metadata.proc_macro);
+    }
+
+    #[test]
+    fn test_unstable_cargo_flags() {
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Zbindeps", "--some-other-arg"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
+
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Z", "bindeps", "--other"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Z", "bindeps"]);
+
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["-Zbindeps", "-Z", "build-std", "--offline"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert_eq!(metadata.unstable_cargo_flags(), vec!["-Zbindeps"]);
+
+        let manifest = r#"
+            [package]
+            name = "test"
+            [package.metadata.docs.rs]
+            cargo-args = ["--offline", "--locked"]
+        "#;
+        let metadata = Metadata::from_str(manifest).unwrap();
+        assert!(metadata.unstable_cargo_flags().is_empty());
+
+        let metadata = Metadata::default();
+        assert!(metadata.unstable_cargo_flags().is_empty());
     }
 }
 
