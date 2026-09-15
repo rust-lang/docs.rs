@@ -48,9 +48,9 @@ pub(crate) struct Args {
     #[arg(long, value_enum, default_value_t)]
     image_source: ImageSource,
 
-    /// The Docker runtime used for sandbox containers.
-    #[arg(long, value_enum, default_value_t)]
-    docker_runtime: DockerRuntimeArg,
+    /// The Docker runtime used for sandbox containers: default or runsc.
+    #[arg(long, default_value_t)]
+    docker_runtime: DockerRuntime,
 
     /// Do not add docs.rs's default target list when crate metadata has no targets.
     #[arg(long)]
@@ -134,10 +134,7 @@ impl Args {
     }
 
     pub(crate) fn docker_runtime(&self) -> DockerRuntime {
-        match self.docker_runtime {
-            DockerRuntimeArg::Default => DockerRuntime::Default,
-            DockerRuntimeArg::Runsc => DockerRuntime::Runsc,
-        }
+        self.docker_runtime
     }
 
     pub(crate) fn cpu_limit(&self) -> Option<CpuLimit> {
@@ -168,13 +165,6 @@ enum ImageSource {
     LocalOrRemote,
     Local,
     Remote,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum DockerRuntimeArg {
-    #[default]
-    Default,
-    Runsc,
 }
 
 fn parse_byte_size(value: &str) -> Result<usize, String> {
