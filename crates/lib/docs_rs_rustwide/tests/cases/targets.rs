@@ -38,7 +38,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
             target.documentation,
         );
         let json = target
-            .rustdoc_json
+            .rustdoc_json()
             .as_ref()
             .unwrap_or_else(|error| panic!("{} JSON build failed: {error}", target.target()));
         assert!(
@@ -49,7 +49,7 @@ fn builds_metadata_and_default_targets() -> Result<()> {
 
         for (mode, log) in [
             ("HTML", target.documentation.log()),
-            ("JSON", target.rustdoc_json.log()),
+            ("JSON", target.rustdoc_json().log()),
         ] {
             assert!(
                 log.is_some_and(|log| !log.trim().is_empty()),

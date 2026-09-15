@@ -34,7 +34,7 @@ fn main() -> Result<()> {
             "  documentation: {}",
             target_result.documentation_succeeded()
         );
-        println!("  rustdoc JSON: {}", target_result.rustdoc_json.is_ok());
+        println!("  rustdoc JSON: {}", target_result.rustdoc_json().is_ok());
         println!("  coverage: {}", target_result.coverage.is_ok());
     }
 

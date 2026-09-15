@@ -21,14 +21,14 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let release = build.into_inner();
     let target = release.default_target();
     let steps_duration = target.coverage.duration()
-        + target.rustdoc_json.duration()
+        + target.rustdoc_json().duration()
         + target.documentation.duration();
 
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets().map(|target| target.duration()).sum());
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(release.default_target().rustdoc_json.is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
     assert!(release.default_target().coverage.is_ok());
     assert!(
         release
@@ -40,13 +40,13 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
         release
             .default_target()
             .rustdoc_json()
-            .as_ref()
+            .as_inner()
             .expect("successful JSON build has an output")
             .format_version()
             .is_ok()
     );
     let html = target.documentation().unwrap().path().to_owned();
-    let json = target.rustdoc_json().unwrap().path().to_owned();
+    let json = target.rustdoc_json().as_inner().unwrap().path().to_owned();
     let original_json = fs::read(&json)?;
     let library = release.cargo_metadata.root().library_name().unwrap();
     drop(release);
@@ -88,7 +88,7 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     assert!(release.build_succeeded());
     assert!(release.has_docs());
     assert!(release.default_target().coverage.is_ok());
-    assert!(release.default_target().rustdoc_json.is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
     Ok(())
 }
 
@@ -120,7 +120,7 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
             .coverage()
             .is_ok_and(|coverage| coverage.is_some())
     );
-    assert!(release.default_target().rustdoc_json.is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
     Ok(())
 }
 
@@ -138,7 +138,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
 
     assert!(release.build_succeeded());
     assert!(release.default_target().coverage.is_ok());
-    assert!(release.default_target().rustdoc_json.is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
     Ok(())
 }
 

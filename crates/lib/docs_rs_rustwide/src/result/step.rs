@@ -103,6 +103,7 @@ pub trait StepResultExt<T> {
     fn duration(&self) -> Duration;
     fn log(&self) -> Option<&str>;
     fn into_inner(self) -> Result<T, BuildStepError>;
+    fn as_inner(&self) -> Result<&T, &BuildStepError>;
 }
 
 impl<T> StepResultExt<T> for StepResult<T> {
@@ -125,5 +126,11 @@ impl<T> StepResultExt<T> for StepResult<T> {
             Ok(report) => Ok(report.value),
             Err(report) => Err(report.value),
         }
+    }
+
+    fn as_inner(&self) -> Result<&T, &BuildStepError> {
+        self.as_ref()
+            .map(|report| &report.value)
+            .map_err(|report| &report.value)
     }
 }

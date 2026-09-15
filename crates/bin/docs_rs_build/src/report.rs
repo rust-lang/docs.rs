@@ -26,7 +26,7 @@ pub(crate) fn print(
                 }
             ),
             step_cell(&target.documentation),
-            step_cell(&target.rustdoc_json),
+            step_cell(target.rustdoc_json()),
             if target.is_default() {
                 step_cell(&target.coverage)
             } else {
@@ -35,7 +35,7 @@ pub(crate) fn print(
             format_duration(target.duration()).to_string(),
         ]);
         totals[0] += target.documentation.duration();
-        totals[1] += target.rustdoc_json.duration();
+        totals[1] += target.rustdoc_json().duration();
         totals[2] += target.coverage.duration();
         totals[3] += target.duration();
     }
@@ -62,7 +62,7 @@ pub(crate) fn print(
     for target in result.targets() {
         println!("{}:", target.target());
         print_error("HTML", &target.documentation);
-        print_error("rustdoc JSON", &target.rustdoc_json);
+        print_error("rustdoc JSON", target.rustdoc_json());
         print_error("coverage", &target.coverage);
         if let Some(step) = target.regenerate_lockfile() {
             print_error("lockfile regeneration", step);
@@ -70,7 +70,7 @@ pub(crate) fn print(
         if let Ok(output) = target.documentation() {
             println!("  HTML output: {}", output.path().display());
         }
-        if let Ok(output) = target.rustdoc_json() {
+        if let Ok(output) = target.rustdoc_json().as_inner() {
             println!("  JSON output: {}", output.path().display());
         }
         for path in target.compiler_metrics.iter().flatten() {
@@ -93,7 +93,7 @@ pub(crate) fn print(
 }
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
-    target.documentation_succeeded() && target.rustdoc_json.is_ok() && target.coverage.is_ok()
+    target.documentation_succeeded() && target.rustdoc_json().is_ok() && target.coverage.is_ok()
 }
 
 pub(crate) fn build_succeeded(result: &ReleaseBuildResult, strict: bool) -> bool {

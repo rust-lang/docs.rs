@@ -128,7 +128,7 @@ pub struct TargetBuildResult {
     /// HTML documentation output directory.
     pub documentation: StepResult<HtmlOutput>,
     /// Rustdoc JSON build result.
-    pub rustdoc_json: StepResult<RustdocJsonOutput>,
+    pub(crate) rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
     pub coverage: StepResult<Option<DocCoverage>>,
     /// Compiler metrics files copied out of this target's HTML build.
@@ -183,11 +183,8 @@ impl TargetBuildResult {
             .map_err(|report| &report.value)
     }
 
-    pub fn rustdoc_json(&self) -> Result<&RustdocJsonOutput, &BuildStepError> {
-        self.rustdoc_json
-            .as_ref()
-            .map(|report| &report.value)
-            .map_err(|report| &report.value)
+    pub fn rustdoc_json(&self) -> &StepResult<RustdocJsonOutput> {
+        &self.rustdoc_json
     }
 
     pub fn regenerate_lockfile(&self) -> Option<&StepResult<()>> {

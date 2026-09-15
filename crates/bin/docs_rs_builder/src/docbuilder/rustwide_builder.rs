@@ -496,7 +496,7 @@ impl RustwideBuilder {
 
         for target_result in release.targets() {
             let target = target_result.target();
-            let json_build = &target_result.rustdoc_json;
+            let json_build = target_result.rustdoc_json();
 
             if let Some(log) = json_build.log() {
                 let json_log_name = format!("{target}_json.txt");
