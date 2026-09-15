@@ -338,12 +338,15 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 target,
                 "target build failed; retrying with a regenerated lockfile"
             );
-            let regenerate_lockfile_result = self.regenerate_lockfile();
-            if regenerate_lockfile_result.is_ok() {
-                target_result = self.build_target_once(target, build_coverage);
-                target_result.regenerate_lockfile = Some(regenerate_lockfile_result);
-            } else {
-                target_result.regenerate_lockfile = Some(regenerate_lockfile_result);
+
+            match self.regenerate_lockfile() {
+                Ok(report) => {
+                    target_result = self.build_target_once(target, build_coverage);
+                    target_result.regenerate_lockfile = Some(Ok(report));
+                }
+                Err(report) => {
+                    target_result.regenerate_lockfile = Some(Err(report));
+                }
             }
         }
 
@@ -436,9 +439,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            BuildStepError::as_output(|| {
-                find_single_output_file(self.output_dir(target), "json").map(RustdocJsonOutput::new)
-            })
+            find_single_output_file(self.output_dir(target), "json")
+                .map(RustdocJsonOutput::new)
+                .map_err(BuildStepError::Output)
         })
     }
 
@@ -451,11 +454,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
-        let mut result = match self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)
-        {
-            Ok(result) => result,
-            Err(result) => return Err(result),
-        };
+        let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
 
         let static_files = result.value.join("static.files");
         if !static_files.is_dir() {
