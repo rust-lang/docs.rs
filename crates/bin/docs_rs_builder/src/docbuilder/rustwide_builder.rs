@@ -327,6 +327,11 @@ impl RustwideBuilder {
         };
 
         info!("uploading build logs...");
+        // NOTE: right now we only upload logs for the html build & the json build.
+        // The new library also collects logs from all other steps, I didn't dig into
+        // if these would be useful for crate developers at all, and leave them as they
+        // are right now.
+
         let mut build_logs = Vec::new();
         for target in release_build_result.targets() {
             let successful = target.documentation_succeeded();
