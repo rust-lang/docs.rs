@@ -47,7 +47,7 @@ compose-down-and-wipe:
     docker compose --env-file .docker.env --profile full --profile manual down --volumes --remove-orphans --rmi local
 
     # When testing this in CI, I had permission issues when trying to remove this folder.
-    # Likely it's related to the docker container runnning as a different (root?) user, so
+    # Likely it's related to the docker container running as a different (root?) user, so
     # these files in the `ignored/` folder belong to `root`.
 
     # so we just try if we can use passwordless `sudo`:

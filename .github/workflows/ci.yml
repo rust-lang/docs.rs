@@ -22,7 +22,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.1
+          version: 2026.9.7
           install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
@@ -47,8 +47,8 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.1
-          install_args: --jobs=1 just
+          version: 2026.9.7
+          install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2
@@ -59,6 +59,10 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: run tests
+        env:
+          # `pg_dump` in the gh action runner is too old for our postgres
+          # version, so we run it through `docker compose exec`.
+          DOCSRS_TEST_PG_DUMP_FROM_COMPOSE: "true"
         run: just run-tests run-builder-tests
 
       - name: shut down test environment
@@ -94,7 +98,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.1
+          version: 2026.9.7
           install_args: --jobs=1 just node cargo:sqlx-cli
 
       - name: Run end-to-end GUI tests
@@ -121,10 +125,10 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.1
+          version: 2026.9.7
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
-            cargo:cargo-udeps cargo:cargo-sort
+            cargo:cargo-udeps cargo:cargo-sort typos
 
       - name: restore build & cargo cache
         uses: Swatinem/rust-cache@v2

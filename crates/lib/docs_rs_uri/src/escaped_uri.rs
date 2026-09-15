@@ -288,7 +288,7 @@ mod tests {
 
     fn test_serialization_roundtrip(input: &EscapedURI) {
         let s = input.to_string();
-        assert_eq!(input, s); // tests the ParialEq<str> impl
+        assert_eq!(input, s); // tests the PartialEq<str> impl
         assert_eq!(s.parse::<EscapedURI>().unwrap(), *input);
     }
 
@@ -457,7 +457,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comparision() {
+    fn test_comparison() {
         let uri = EscapedURI::from_path("/something").with_fragment("other-fragment");
 
         test_serialization_roundtrip(&uri);

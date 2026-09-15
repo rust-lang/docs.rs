@@ -1,0 +1,11 @@
+experimental = ["setup-scripts"]
+
+[scripts.setup.docs-rs-template-db]
+# Rebuild the template database schema and capture its DDL for this test run.
+command = 'cargo run --quiet --package docs_rs_database --features testing --bin nextest-setup'
+
+[[profile.default.scripts]]
+# filter all tests / binaries that depend / use docs_rs_database anywhere
+filter = 'rdeps(docs_rs_database)'
+# run our create-template-schema script
+setup = 'docs-rs-template-db'

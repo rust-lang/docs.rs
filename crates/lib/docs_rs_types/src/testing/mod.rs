@@ -2,6 +2,7 @@ use crate::{KrateName, Version};
 
 // testing krate name constants
 pub const KRATE: KrateName = KrateName::from_static("krate");
+pub const DUMMY: KrateName = KrateName::from_static("dummy");
 pub const FOO: KrateName = KrateName::from_static("foo");
 pub const BAR: KrateName = KrateName::from_static("bar");
 pub const BAZ: KrateName = KrateName::from_static("baz");
