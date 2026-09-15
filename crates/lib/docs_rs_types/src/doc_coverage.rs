@@ -19,6 +19,12 @@ pub struct DocCoverage {
     pub items_with_examples: i32,
 }
 
+impl DocCoverage {
+    pub fn is_empty(&self) -> bool {
+        self.total_items == 0 && self.documented_items == 0
+    }
+}
+
 impl<'a> Extend<FileCoverage<'a>> for DocCoverage {
     fn extend<T: IntoIterator<Item = FileCoverage<'a>>>(&mut self, iter: T) {
         for fc in iter {

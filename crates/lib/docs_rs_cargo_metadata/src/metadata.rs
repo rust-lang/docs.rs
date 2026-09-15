@@ -3,6 +3,7 @@ use docs_rs_types::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, process, str};
 
+#[derive(Debug, Clone)]
 pub struct CargoMetadata {
     root: Package,
 }
@@ -39,7 +40,7 @@ impl CargoMetadata {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Package {
     pub id: String,
     pub name: String,
@@ -86,7 +87,7 @@ impl Package {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Target {
     pub name: String,
     #[cfg(not(feature = "testing"))]

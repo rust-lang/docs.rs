@@ -101,7 +101,7 @@ run-builder-tests: compose-up-resources
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
 
-    cargo nextest run --locked --run-ignored only --test-threads=1
+    cargo nextest run --locked --run-ignored only --workspace --test-threads=1
 
 # Remove the migrated template and any schemas left behind by interrupted test runs.
 [group('testing')]
