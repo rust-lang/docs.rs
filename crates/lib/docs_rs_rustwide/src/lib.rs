@@ -23,7 +23,7 @@ pub use build::ReleaseBuild;
 pub use command::PrepareCommand;
 pub use release::{Fetched, ReleaseContext, Unfetched};
 pub use result::{
-    BuildResult, BuildStepError, FailedStep, ReleaseBuildResult, RustdocJsonOutput, StepResult,
+    BuildResult, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepResult,
     TargetBuildResult,
 };
 pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};

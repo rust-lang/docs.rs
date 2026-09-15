@@ -451,9 +451,10 @@ impl BuildEnvironment {
     /// rustwide workspace.
     #[instrument(skip_all)]
     pub fn build_essential_files(&mut self) -> Result<BuildResult<PathBuf>> {
+        // FIXME: why not StepResult?
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
         self.release(&krate)
-            .run(|build| build.build_essential_files())
+            .run(|build| Ok(build.build_essential_files().outcome?))
     }
 
     pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {

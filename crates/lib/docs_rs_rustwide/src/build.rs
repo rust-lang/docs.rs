@@ -129,7 +129,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let docsrs_metadata = Metadata::from_crate_root(build.host_source_dir())?;
         debug!("reading cargo metadata");
         let cargo_metadata = load_cargo_metadata(environment, build, limits)
-            .into_result()
+            .outcome
             .context("error loading cargo metadata")?;
 
         let resource_suffix = environment.resource_suffix()?;
@@ -238,7 +238,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// results, as do additional-target HTML failures. Additional targets are
     /// built only when the default target produces library documentation.
     #[instrument(skip_all, fields(crate_name, crate_version))]
-    pub fn build_docs(&self) -> Result<ReleaseBuildResult> {
+    pub fn build_docs(&self) -> ReleaseBuildResult {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
         let other_targets: Vec<_> = metadata_targets
@@ -283,13 +283,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             info!("default target produced no library documentation; skipping other targets");
         }
 
-        Ok(ReleaseBuildResult {
+        ReleaseBuildResult {
             statistics: self.build.statistics(),
             docsrs_metadata: self.docsrs_metadata.clone(),
             cargo_metadata: self.cargo_metadata.clone(),
             default_target: default_target_build,
             other_targets: target_results,
-        })
+        }
     }
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
@@ -601,28 +601,6 @@ fn find_single_output_file(
 mod tests {
     use super::*;
     use std::ffi::OsStr;
-    use test_case::test_case;
-
-    #[test_case(BuildStepError::Prepare(anyhow::anyhow!("dependency download failed")); "prepare")]
-    #[test_case(BuildStepError::Command(rustwide::cmd::CommandError::Timeout(1)); "command")]
-    #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid JSON")); "output")]
-    fn captured_failures_preserve_diagnostics_when_propagated(error: BuildStepError) {
-        crate::logging::init(false);
-        let expected_variant = std::mem::discriminant(&error);
-        let started = Instant::now();
-        let step = capture_rustwide_step::<()>(1024, || {
-            log::info!("diagnostic before failure");
-            Err(error)
-        });
-        assert!(step.duration <= started.elapsed());
-        let duration = step.duration;
-        let log = step.log.clone();
-        let failure = step.into_result().unwrap_err();
-        assert_eq!(std::mem::discriminant(&failure.error), expected_variant);
-        assert_eq!(failure.duration, duration);
-        assert_eq!(failure.log, log);
-        assert!(failure.log().contains("diagnostic before failure"));
-    }
 
     #[test]
     fn metrics_copy_failure_preserves_source() -> Result<()> {
