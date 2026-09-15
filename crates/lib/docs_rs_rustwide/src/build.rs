@@ -647,9 +647,15 @@ mod tests {
                 "target unavailable"
             )))
         });
-        assert!(matches!(step.outcome, Err(BuildStepError::Prepare(_))));
-        assert!(!step.successful());
-        assert!(step.log().contains("installing additional target"));
+        let failure = step.unwrap_err();
+        assert!(matches!(failure.value, BuildStepError::Prepare(_)));
+        assert!(
+            failure
+                .log
+                .as_deref()
+                .unwrap()
+                .contains("installing additional target")
+        );
     }
 
     #[test]

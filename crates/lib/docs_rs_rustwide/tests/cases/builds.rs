@@ -1,6 +1,6 @@
 use crate::support::{TestEnvironment, build_local, fixture, test_workspace};
 use anyhow::{Context as _, Result};
-use docs_rs_rustwide::{BuildEnvironment, CpuLimit, SandboxImageSource};
+use docs_rs_rustwide::{BuildEnvironment, CpuLimit, SandboxImageSource, StepResultExt};
 use rustwide::Crate;
 use std::fs;
 use test_case::test_case;
@@ -20,22 +20,21 @@ fn builds_library_documentation_json_and_coverage() -> Result<()> {
     let duration = build.duration();
     let release = build.into_inner();
     let target = release.default_target();
-    let steps_duration =
-        target.coverage.duration + target.rustdoc_json.duration + target.documentation.duration;
+    let steps_duration = target.coverage.duration()
+        + target.rustdoc_json.duration()
+        + target.documentation.duration();
 
     assert!(target.duration() >= steps_duration);
     assert!(duration >= release.targets().map(|target| target.duration()).sum());
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(release.default_target().rustdoc_json.successful());
-    assert!(release.default_target().coverage.successful());
+    assert!(release.default_target().rustdoc_json.is_ok());
+    assert!(release.default_target().coverage.is_ok());
     assert!(
         release
             .default_target()
-            .coverage
-            .outcome
-            .as_ref()
-            .is_ok_and(Option::is_some)
+            .coverage()
+            .is_ok_and(|coverage| coverage.is_some())
     );
     assert!(
         release
@@ -57,7 +56,7 @@ fn binary_crate_does_not_report_library_documentation() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(!release.has_docs());
@@ -76,13 +75,13 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(release.build_succeeded());
     assert!(release.has_docs());
-    assert!(release.default_target().coverage.successful());
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().rustdoc_json.is_ok());
     Ok(())
 }
 
@@ -94,7 +93,7 @@ fn passes_rustflags_to_build_scripts() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
     assert!(release.build_succeeded());
     Ok(())
@@ -107,16 +106,14 @@ fn builds_coverage_and_json_for_crates_with_examples() -> Result<()> {
     let release = build_local(&mut test.environment, "with-examples")?.into_inner();
 
     assert!(release.build_succeeded());
-    assert!(release.default_target().coverage.successful());
+    assert!(release.default_target().coverage.is_ok());
     assert!(
         release
             .default_target()
-            .coverage
-            .outcome
-            .as_ref()
-            .is_ok_and(Option::is_some)
+            .coverage()
+            .is_ok_and(|coverage| coverage.is_some())
     );
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(release.default_target().rustdoc_json.is_ok());
     Ok(())
 }
 
@@ -129,12 +126,12 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
     let release = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(release.build_succeeded());
-    assert!(release.default_target().coverage.successful());
-    assert!(release.default_target().rustdoc_json.successful());
+    assert!(release.default_target().coverage.is_ok());
+    assert!(release.default_target().rustdoc_json.is_ok());
     Ok(())
 }
 
@@ -189,7 +186,7 @@ fn source_can_be_copied_before_a_failed_build() -> Result<()> {
     let fetched = test.environment.release(&krate).fetch()?;
     fetched.copy_source_to(destination.path())?;
 
-    let release = fetched.run(|build| build.build_docs())?.into_inner();
+    let release = fetched.run(|build| Ok(build.build_docs()))?.into_inner();
 
     assert!(destination.path().join("src/main.rs").is_file());
     assert!(!release.build_succeeded());
@@ -204,7 +201,7 @@ fn reports_implicit_features_for_optional_dependencies() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())?
+        .run(|build| Ok(build.build_docs()))?
         .into_inner();
 
     assert!(
@@ -243,7 +240,7 @@ fn reports_failure_before_sandbox_preparation() -> Result<()> {
     let error = test
         .environment
         .release(&krate)
-        .run(|build| build.build_docs())
+        .run(|build| Ok(build.build_docs()))
         .err()
         .context("the published crate unexpectedly built")?;
 

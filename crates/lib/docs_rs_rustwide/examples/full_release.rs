@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io(&name, &version);
     let build = environment
         .release(&krate)
-        .run(|build| build.build_docs())?;
+        .run(|build| Ok(build.build_docs()))?;
 
     println!("sandbox statistics: {:#?}", build.statistics());
     let release_result = build.into_inner();
@@ -34,11 +34,8 @@ fn main() -> Result<()> {
             "  documentation: {}",
             target_result.documentation_succeeded()
         );
-        println!(
-            "  rustdoc JSON: {}",
-            target_result.rustdoc_json.successful()
-        );
-        println!("  coverage: {}", target_result.coverage.successful());
+        println!("  rustdoc JSON: {}", target_result.rustdoc_json.is_ok());
+        println!("  coverage: {}", target_result.coverage.is_ok());
     }
 
     Ok(())

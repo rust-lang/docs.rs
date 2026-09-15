@@ -36,8 +36,8 @@ fn main() -> Result<()> {
 
     let (target, rustdoc_json, documentation) = build.into_inner();
     println!("target: {target}");
-    println!("rustdoc JSON: {}", rustdoc_json.successful());
-    println!("documentation: {}", documentation.successful());
+    println!("rustdoc JSON: {}", rustdoc_json.is_ok());
+    println!("documentation: {}", documentation.is_ok());
 
     Ok(())
 }

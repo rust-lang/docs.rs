@@ -199,6 +199,9 @@ impl ReleaseBuildResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StepReport;
+    use docs_rs_types::BuildError as _;
+    use rustwide::cmd::CommandError;
     use test_case::test_case;
 
     #[test_case(BuildStepError::Command(CommandError::Timeout(1)), "Timeout"; "timeout")]
@@ -215,21 +218,21 @@ mod tests {
             is_default: true,
             duration: Some(Duration::ZERO),
             compiler_metrics: None,
-            documentation: StepResult {
-                outcome: Ok(documentation_path),
+            documentation: Ok(StepReport {
+                value: documentation_path,
                 log: None,
                 duration: Duration::ZERO,
-            },
-            rustdoc_json: StepResult {
-                outcome: Ok(RustdocJsonOutput::new(PathBuf::from("unused.json"))),
+            }),
+            rustdoc_json: Ok(StepReport {
+                value: RustdocJsonOutput::new(PathBuf::from("unused.json")),
                 log: None,
                 duration: Duration::ZERO,
-            },
-            coverage: StepResult {
-                outcome: Ok(None),
+            }),
+            coverage: Ok(StepReport {
+                value: None,
                 log: None,
                 duration: Duration::ZERO,
-            },
+            }),
             regenerate_lockfile: None,
         }
     }

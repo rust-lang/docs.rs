@@ -75,7 +75,7 @@ impl<'release> ReleaseContext<'release, Unfetched> {
     /// let result = environment
     ///     .release(krate)
     ///     .fetch()?
-    ///     .run(|build| build.build_docs())?;
+    ///     .run(|build| Ok(build.build_docs()))?;
     /// # Ok(())
     /// # }
     /// ```

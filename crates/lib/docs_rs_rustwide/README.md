@@ -122,7 +122,7 @@ let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"
     .build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
 
-let result = environment.release(&krate).run(|build| build.build_docs())?;
+let result = environment.release(&krate).run(|build| Ok(build.build_docs()))?;
 # let _ = result;
 # Ok(())
 # }
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io("serde", "1.0.219");
     let build = environment
         .release(&krate)
-        .run(|build| build.build_docs())?;
+        .run(|build| Ok(build.build_docs()))?;
 
     // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment
     // setup.
@@ -245,7 +245,7 @@ let fetched = environment
 
 fetched.copy_source_to("./source-archive-input")?;
 
-let result = fetched.run(|build| build.build_docs())?;
+let result = fetched.run(|build| Ok(build.build_docs()))?;
 
 # let _ = result;
 # Ok(())
