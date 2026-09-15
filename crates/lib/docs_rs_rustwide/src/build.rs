@@ -492,10 +492,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub(crate) fn build_essential_files(&self) -> StepResult<HtmlOutput> {
         let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
 
+        // we keep the original duration & log from the build-html step,
+        // changing / testing the output dir doesn't change much here.
+
         let static_files = result.value.path().join("static.files");
         if !static_files.is_dir() {
-            // keep the original duration & log from the build-html step,
-            // changing / testing the output dir doesn't change much here.
             return Err(StepFailure {
                 duration: result.duration,
                 log: result.log,
