@@ -122,7 +122,7 @@ let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"
     .build()?;
 let krate = Crate::crates_io("serde", "1.0.219");
 
-let result = environment.release(&krate).run(|build| Ok(build.build_docs()))?;
+let result = environment.release(&krate).run(|build| Ok(build.build_docs()?))?;
 # let _ = result;
 # Ok(())
 # }
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
     let krate = Crate::crates_io("serde", "1.0.219");
     let build = environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?;
+        .run(|build| Ok(build.build_docs()?))?;
 
     // Includes fetch, sandbox setup/teardown, and cleanup; excludes environment
     // setup.
@@ -211,20 +211,22 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
-Individual step methods return `StepResult<T>` with a `duration`, captured
-`log`, and `outcome: Result<T, BuildStepError>`. Errors identify the failing
-phase: `Prepare`, `Command`, or `Output`. Any coverage failure aborts the
-release before that target's JSON or HTML builds run. JSON failures are retained
-and HTML is still attempted. Default-target HTML preparation failures abort the
-release; HTML command failures are eligible for the default-target lockfile
-retry. Additional-target HTML failures remain in their step results. Metrics
-collection has its own nonfatal step result and cannot invalidate successful
-HTML documentation.
+Individual step methods return `StepResult<T>`, a `Result<StepReport<T>, StepFailure>`.
+Both outcomes retain duration and captured logs. Errors identify the failing
+phase: `Prepare`, `Command`, or `Output`. Coverage and JSON failures remain in
+step results and HTML is still attempted. HTML command failures are eligible
+for the default-target lockfile retry. Metrics collection failures are nonfatal.
 
-Call `step.into_result()?` when a custom build requires a step to succeed. This
-propagates a `FailedStep` containing the error, duration, and log. Higher-level
-methods preserve it through `anyhow::Error` for `downcast_ref::<FailedStep>()`.
-Its duration covers only the failing step, not the full target or release.
+`build_target().run()` and `build_docs()` return `Result<_, StepFailure>`:
+lockfile regeneration or its dependency-fetch failure propagates immediately.
+Other build-step failures remain in the returned target results. The library
+does not schedule queue reattempts; callers decide what to do with the error.
+
+Use `?` on an individual step to propagate its `StepFailure`, or
+`step.as_inner()` to inspect its value and error without the report wrapper.
+When propagated through the release lifecycle, failures can be recovered with
+`anyhow::Error::downcast_ref::<StepFailure>()`. Their duration covers the failing
+step, not the full target or release.
 
 ## Archiving sources before a build
 
@@ -246,7 +248,7 @@ let fetched = environment
 
 fetched.copy_source_to("./source-archive-input")?;
 
-let result = fetched.run(|build| Ok(build.build_docs()))?;
+let result = fetched.run(|build| Ok(build.build_docs()?))?;
 
 # let _ = result;
 # Ok(())

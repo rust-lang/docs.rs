@@ -67,5 +67,5 @@ pub fn build_local(
     let krate = Crate::local(&fixture);
     environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))
+        .run(|build| Ok(build.build_docs()?))
 }

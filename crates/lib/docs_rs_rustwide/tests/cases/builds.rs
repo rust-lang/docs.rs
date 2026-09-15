@@ -64,7 +64,7 @@ fn binary_crate_does_not_report_library_documentation() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
 
     assert!(!release.has_docs());
@@ -83,7 +83,7 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
 
     assert!(release.build_succeeded());
@@ -101,7 +101,7 @@ fn passes_rustflags_to_build_scripts() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
     assert!(release.build_succeeded());
     Ok(())
@@ -135,7 +135,7 @@ fn handles_crates_with_custom_scrape_examples(crate_name: &str, version: &str) -
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
 
     assert!(release.build_succeeded());
@@ -195,7 +195,7 @@ fn source_can_be_copied_before_a_failed_build() -> Result<()> {
     let fetched = test.environment.release(&krate).fetch()?;
     fetched.copy_source_to(destination.path())?;
 
-    let release = fetched.run(|build| Ok(build.build_docs()))?.into_inner();
+    let release = fetched.run(|build| Ok(build.build_docs()?))?.into_inner();
 
     assert!(destination.path().join("src/main.rs").is_file());
     assert!(!release.build_succeeded());
@@ -210,7 +210,7 @@ fn reports_implicit_features_for_optional_dependencies() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
 
     assert!(
@@ -249,7 +249,7 @@ fn reports_failure_before_sandbox_preparation() -> Result<()> {
     let error = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))
+        .run(|build| Ok(build.build_docs()?))
         .err()
         .context("the published crate unexpectedly built")?;
 

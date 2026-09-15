@@ -73,7 +73,7 @@ fn cross_compiles_non_host_default_target() -> Result<()> {
     let release = test
         .environment
         .release(&krate)
-        .run(|build| Ok(build.build_docs()))?
+        .run(|build| Ok(build.build_docs()?))?
         .into_inner();
     let host = release
         .targets()

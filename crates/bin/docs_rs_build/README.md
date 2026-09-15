@@ -188,8 +188,7 @@ preparation, command, and output-processing failures for those steps.
 
 A default-target HTML command failure retries once with a regenerated lockfile
 when one exists. This reruns coverage, JSON, and HTML. If lockfile regeneration
-fails, its error and captured log are reported
-alongside the original failed HTML build. Release fetching and initial Cargo
+fails, the build returns early with its error and captured log. Release fetching and initial Cargo
 metadata failures return early. Additional targets are built only
 when the default target produces library documentation. The CLI does not have
 the production builder's queue reattempt mechanism.
@@ -205,7 +204,7 @@ Cargo and rustdoc build output is streamed live. When the release completes, a
 table shows HTML, JSON, and coverage status/duration for each target, totals,
 full build duration, and sandbox peak memory. Failed steps include their
 captured logs. Lockfile-regeneration failures also include their captured logs.
-Coverage is shown as skipped for additional targets. Setup and release-fetch
+Coverage is shown as skipped for additional targets. Setup, release-fetch, and lockfile-regeneration
 errors return early with an error instead of the summary table. Packaging
 output is streamed live too.
 

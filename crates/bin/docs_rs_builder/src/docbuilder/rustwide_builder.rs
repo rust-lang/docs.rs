@@ -284,7 +284,7 @@ impl RustwideBuilder {
         algs.insert(source_stats.alg);
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
-        let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
+        let full_build_result = fetched.run(|build| Ok(build.build_docs()?))?;
 
         let build_statistics = full_build_result.statistics().clone();
         let release_build_result = full_build_result.into_inner();
@@ -500,12 +500,13 @@ impl RustwideBuilder {
 
             if let Some(log) = json_build.log() {
                 let json_log_name = format!("{target}_json.txt");
-                self.blocking_storage.store_one(
+                match self.blocking_storage.store_one(
                     format!("build-logs/{build_id}/{json_log_name}"),
                     log.to_string(),
-                )?;
-
-                build_logs.push((json_log_name, json_build.is_ok()));
+                ) {
+                    Ok(_) => build_logs.push((json_log_name, json_build.is_ok())),
+                    Err(err) => error!(target, ?err, "could not publish JSON build log"),
+                }
             } else {
                 error!(
                     target = target_result.target(),
@@ -516,7 +517,7 @@ impl RustwideBuilder {
 
             if let Ok(json) = json_build {
                 let json = json.value();
-                json.format_version().and_then(|format_version| {
+                if let Err(err) = json.format_version().and_then(|format_version| {
                     self.runtime.block_on(try_join_all(
                         RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
                             self.upload_json_output(
@@ -530,7 +531,13 @@ impl RustwideBuilder {
                         }),
                     ))?;
                     Ok(())
-                })?;
+                }) {
+                    error!(
+                        target,
+                        ?err,
+                        "could not publish rustdoc JSON; continuing release"
+                    );
+                }
             }
         }
 

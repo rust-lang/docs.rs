@@ -38,7 +38,7 @@ fn main() -> Result<()> {
 
     let result = fetched
         // Sandbox and build preparation only start after the source copy is complete.
-        .run(|build| Ok(build.build_docs()))?;
+        .run(|build| Ok(build.build_docs()?))?;
 
     println!(
         "documentation succeeded: {}",

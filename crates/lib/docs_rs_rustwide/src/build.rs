@@ -266,12 +266,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// Build coverage, rustdoc JSON, and HTML for the full docs.rs target set.
     ///
     /// All commands execute through the same rustwide build and reusable
-    /// sandbox. Any coverage failure aborts the release, as does default-target
-    /// HTML preparation failure. JSON and metrics failures remain in their step
-    /// results, as do additional-target HTML failures. Additional targets are
-    /// built only when the default target produces library documentation.
+    /// sandbox. Step failures remain in the target results, except lockfile
+    /// regeneration failures, which propagate with their duration and logs.
+    /// Additional targets are built only when the default target produces
+    /// library documentation.
     #[instrument(skip_all, fields(crate_name, crate_version))]
-    pub fn build_docs(&self) -> ReleaseBuildResult {
+    pub fn build_docs(&self) -> Result<ReleaseBuildResult, StepFailure> {
         let metadata_targets = self.metadata_targets();
         let default_target = metadata_targets.default_target;
         let other_targets: Vec<_> = metadata_targets
@@ -298,7 +298,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             .build_target(default_target)
             .retry_without_lockfile(true)
             .build_coverage(true)
-            .run();
+            .run()?;
 
         let default_has_docs = self
             .cargo_metadata
@@ -310,28 +310,27 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         if default_has_docs {
             for target in other_targets {
-                target_results.push(self.build_target(target).run());
+                target_results.push(self.build_target(target).run()?);
             }
         } else {
             info!("default target produced no library documentation; skipping other targets");
         }
 
-        ReleaseBuildResult {
+        Ok(ReleaseBuildResult {
             statistics: self.build.statistics(),
             docsrs_metadata: self.docsrs_metadata.clone(),
             cargo_metadata: self.cargo_metadata.clone(),
             default_target: default_target_build,
             other_targets: target_results,
-        }
+        })
     }
 
     /// Build coverage, rustdoc JSON, and HTML for one target.
     ///
-    /// Any coverage failure aborts before JSON or HTML runs. JSON failures are
-    /// retained and HTML is still attempted. HTML preparation failures abort for
-    /// the metadata-selected default target. When requested, an HTML
-    /// command failure retries all steps once with a regenerated lockfile if one
-    /// exists. Lockfile regeneration failures abort with captured diagnostics.
+    /// Coverage and JSON failures are retained and HTML is still attempted.
+    /// When requested, an HTML command failure retries all steps once with a
+    /// regenerated lockfile if one exists. Lockfile regeneration failures return
+    /// an error with the failed step's duration and captured diagnostics.
     /// Metrics collection is a separate, nonfatal step after each HTML attempt.
     #[builder(finish_fn(name=run))]
     pub fn build_target(
@@ -339,7 +338,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         #[builder(start_fn)] target: &str,
         #[builder(default = false)] retry_without_lockfile: bool,
         #[builder(default = false)] build_coverage: bool,
-    ) -> TargetBuildResult {
+    ) -> Result<TargetBuildResult, StepFailure> {
         let started = Instant::now();
 
         let mut target_result = self.build_target_once(target, build_coverage);
@@ -359,19 +358,13 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 "target build failed; retrying with a regenerated lockfile"
             );
 
-            match self.regenerate_lockfile() {
-                Ok(report) => {
-                    target_result = self.build_target_once(target, build_coverage);
-                    target_result.regenerate_lockfile = Some(Ok(report));
-                }
-                Err(report) => {
-                    target_result.regenerate_lockfile = Some(Err(report));
-                }
-            }
+            let report = self.regenerate_lockfile()?;
+            target_result = self.build_target_once(target, build_coverage);
+            target_result.regenerate_lockfile = Some(Ok(report));
         }
 
         target_result.duration = Some(started.elapsed());
-        target_result
+        Ok(target_result)
     }
 
     #[instrument(skip_all, fields(target, build_coverage))]
@@ -677,6 +670,49 @@ fn find_single_output_file(
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+
+    #[test_case::test_case(false; "target")]
+    #[test_case::test_case(true; "release")]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn propagates_lockfile_regeneration_failure(build_release: bool) -> Result<()> {
+        crate::logging::init(false);
+        let workspace = crate::testing::test_workspace_path();
+        let mut environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
+            .fast_init(true)
+            .validate_host_resources(false)
+            .sandbox_image(crate::SandboxImageSource::linux_micro())
+            .build()?;
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hello-world");
+        let krate = rustwide::Crate::local(&fixture);
+        let error = environment
+            .release(&krate)
+            .run(|build| {
+                // Initial metadata succeeds. Corrupt the host manifest afterwards,
+                // so HTML and the ensuing generate-lockfile command both fail.
+                let source = build.build.host_source_dir();
+                assert!(source.join("Cargo.lock").is_file());
+                fs::write(source.join("Cargo.toml"), "[")?;
+                if build_release {
+                    build.build_docs()?;
+                } else {
+                    build
+                        .build_target(HOST_TARGET)
+                        .retry_without_lockfile(true)
+                        .run()?;
+                }
+                Ok(())
+            })
+            .err()
+            .expect("regeneration failure must propagate");
+        let failure = error
+            .downcast_ref::<StepFailure>()
+            .expect("failed step retains its diagnostics through the lifecycle");
+        assert!(matches!(failure.value(), BuildStepError::Command(_)));
+        assert!(!failure.duration.is_zero());
+        assert!(failure.log().is_some_and(|log| log.contains("Cargo.toml")));
+        Ok(())
+    }
 
     #[test]
     fn metrics_copy_failure_preserves_source() -> Result<()> {
