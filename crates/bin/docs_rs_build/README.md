@@ -201,9 +201,10 @@ docs_rs_build --strict
 
 Cargo and rustdoc build output is streamed live. When the release completes, a
 table shows HTML, JSON, and coverage status/duration for each target, totals,
-full build duration, and sandbox peak memory. Failed steps include their captured
-logs. Setup and fatal preparation errors return early with an error instead of
-the summary table. Packaging output is printed after `cargo package` finishes.
+full build duration, and sandbox peak memory. Failed steps include their
+captured logs. Setup and fatal preparation errors return early with an error
+instead of the summary table. Packaging output is printed after `cargo package`
+finishes.
 
 ## Workspace and generated files
 
@@ -226,10 +227,10 @@ different workspace directories.
 The default toolchain is nightly and the default sandbox limits match docs.rs.
 An installed distribution toolchain is checked for updates unless
 `--no-update-toolchain` is set. A missing toolchain is always installed; CI
-toolchains are not automatically updated by the CLI.
-Documentation targets are selected through the crate's docs.rs metadata;
-toolchains, images, CPU and memory limits, networking, timeouts, and failure
-policy can be adjusted through command-line options.
+toolchains are not automatically updated by the CLI. Documentation targets are
+selected through the crate's docs.rs metadata; toolchains, images, CPU and
+memory limits, networking, timeouts, and failure policy can be adjusted through
+command-line options.
 
 Run the following for the authoritative list of options and defaults:
 

@@ -90,9 +90,7 @@ pub(crate) fn print(
 }
 
 fn target_fully_succeeded(target: &TargetBuildResult) -> bool {
-    target.documentation_succeeded()
-        && target.rustdoc_json.is_ok()
-        && target.coverage.is_ok()
+    target.documentation_succeeded() && target.rustdoc_json.is_ok() && target.coverage.is_ok()
 }
 
 fn build_succeeded(default_succeeded: bool, auxiliary_succeeded: bool, strict: bool) -> bool {

@@ -16,8 +16,8 @@ logs, coverage, and sandbox statistics.
 ## Workspace lifecycle
 
 `BuildEnvironment` retains the configuration needed to recreate its rustwide
-workspace. Long-running builders should call
-`perform_maintenance` between releases:
+workspace. Long-running builders should call `perform_maintenance` between
+releases:
 
 ```rust,no_run
 # use anyhow::Result;
@@ -75,9 +75,9 @@ if environment.update_toolchain()? {
 Environment initialization installs a missing toolchain. For distribution
 toolchains it also installs the docs.rs default targets and attempts to install
 `llvm-tools-preview`, `rustc-dev`, and `rustfmt`; unavailable components produce
-warnings and do not prevent initialization. Non-default targets
-left by individual crate builds are removed before a distribution toolchain is
-updated. CI toolchains are installed and treated as changed on every update.
+warnings and do not prevent initialization. Non-default targets left by
+individual crate builds are removed before a distribution toolchain is updated.
+CI toolchains are installed and treated as changed on every update.
 
 A durable service should additionally compare `rustc_version()` with the version
 of the essential files it last published. That ensures generation and
@@ -89,9 +89,9 @@ recorded after publication succeeds.
 
 After fetching the release, when `FetchedRelease::run` starts, the environment
 verifies that the host's available memory can satisfy the effective sandbox
-limit. Callers can archive sources before this check. This check
-is enabled by default and can be disabled when the caller intentionally wants
-the sandbox or host runtime to enforce the limit:
+limit. Callers can archive sources before this check. This check is enabled by
+default and can be disabled when the caller intentionally wants the sandbox or
+host runtime to enforce the limit:
 
 ```rust,no_run
 # use anyhow::Result;
@@ -132,8 +132,8 @@ For HTML builds, the library passes rustdoc's unstable metrics directory flag
 when the metrics directory is available. `build_docs` collects metrics after
 each HTML attempt into `TargetBuildResult::compiler_metrics`, a separate
 `StepResult<Vec<PathBuf>>`. Collection failures do not invalidate HTML. Custom
-builds using `build_documentation` should call `collect_compiler_metrics` afterward
-if they need the metrics copied to the configured destination.
+builds using `build_documentation` should call `collect_compiler_metrics`
+afterward if they need the metrics copied to the configured destination.
 
 ## Complete release build
 
@@ -211,14 +211,15 @@ let selected = environment.release(&krate).run(|build| {
 
 See [`examples/custom_build.rs`](examples/custom_build.rs).
 
-Individual step methods return `StepResult<T>` with a `duration`, captured `log`,
-and `outcome: Result<T, BuildStepError>`. Errors identify the failing phase:
-`Prepare`, `Command`, or `Output`. Any coverage failure aborts the release before
-that target's JSON or HTML builds run. JSON failures are retained and HTML is
-still attempted. Default-target HTML preparation failures abort the release;
-HTML command failures are eligible for the default-target lockfile retry.
-Additional-target HTML failures remain in their step results. Metrics collection
-has its own nonfatal step result and cannot invalidate successful HTML documentation.
+Individual step methods return `StepResult<T>` with a `duration`, captured
+`log`, and `outcome: Result<T, BuildStepError>`. Errors identify the failing
+phase: `Prepare`, `Command`, or `Output`. Any coverage failure aborts the
+release before that target's JSON or HTML builds run. JSON failures are retained
+and HTML is still attempted. Default-target HTML preparation failures abort the
+release; HTML command failures are eligible for the default-target lockfile
+retry. Additional-target HTML failures remain in their step results. Metrics
+collection has its own nonfatal step result and cannot invalidate successful
+HTML documentation.
 
 Call `step.into_result()?` when a custom build requires a step to succeed. This
 propagates a `FailedStep` containing the error, duration, and log. Higher-level
@@ -267,11 +268,12 @@ Leave it at its default (`false`) when invoking the program directly on a host.
 `BuildEnvironment` holds an exclusive filesystem lock from initialization until
 it is dropped, including across workspace refreshes and toolchain maintenance.
 The CLI and production builder fail with a workspace-in-use error if another
-environment owns the directory. Use a separate workspace for concurrent builders.
-Tests can opt into waiting with `.wait_for_workspace_lock(true)`.
+environment owns the directory. Use a separate workspace for concurrent
+builders. Tests can opt into waiting with `.wait_for_workspace_lock(true)`.
 
 Keep the environment alive until artifacts have been consumed or copied out.
 Starting another release or refreshing the workspace purges previous build
 directories, including generated artifacts. Copy files that must survive first.
 Do not remove `.docsrs-workspace.lock` while an environment is running. The file
-may remain after exit; ownership is released automatically when its handle closes.
+may remain after exit; ownership is released automatically when its handle
+closes.

@@ -39,11 +39,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive", features = ["testing"] }
-serde_json = { workspace = true }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue", features = ["testing"] }
 docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
+docs_rs_crate_archive = { path = "../../lib/docs_rs_crate_archive", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_fastly = { path = "../../lib/docs_rs_fastly", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
@@ -51,6 +50,7 @@ docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 docs_rs_utils = { path = "../../lib/docs_rs_utils", features = ["testing"] }
 pretty_assertions = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true
