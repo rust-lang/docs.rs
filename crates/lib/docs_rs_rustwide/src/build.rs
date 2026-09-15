@@ -184,7 +184,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         PrepareCommand::new(self, target)
     }
 
-    pub(crate) fn temp_dir(&self) -> Result<tempfile::TempDir> {
+    pub(crate) fn temp_dir(&self) -> Result<PathBuf> {
         // first find the "build" dir rustwide manages, and doesn't expose yet.
         // It's the shared parent of `host_target_dir` and `host_source_dir`.
         //
@@ -199,7 +199,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         };
 
         fs::create_dir_all(&tmp_dir)?;
-        Ok(tempfile::tempdir_in(tmp_dir)?)
+
+        Ok(tmp_dir)
     }
 
     /// Return the host path containing documentation for a target.
