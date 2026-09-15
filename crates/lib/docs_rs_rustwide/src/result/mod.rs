@@ -10,6 +10,7 @@ use std::{
     fs::File,
     iter,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 use step::{BuildStepError, StepResult};
@@ -39,15 +40,37 @@ impl<T> BuildResult<T> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct HtmlOutput {
+    _tempdir: Arc<tempfile::TempDir>,
+    pub(crate) path: PathBuf,
+}
+
+impl HtmlOutput {
+    pub(crate) fn new(tempdir: tempfile::TempDir, path: PathBuf) -> Self {
+        let _tempdir = Arc::new(tempdir);
+
+        Self { _tempdir, path }
+    }
+
+    /// Path to the generated rustdoc JSON file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
 /// A rustdoc JSON artifact produced by a successful JSON build.
 #[derive(Clone, Debug)]
 pub struct RustdocJsonOutput {
+    _tempdir: Arc<tempfile::TempDir>,
     path: PathBuf,
 }
 
 impl RustdocJsonOutput {
-    pub(crate) fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub(crate) fn new(tempdir: tempfile::TempDir, path: PathBuf) -> Self {
+        let _tempdir = Arc::new(tempdir);
+
+        Self { _tempdir, path }
     }
 
     /// Path to the generated rustdoc JSON file.
@@ -82,7 +105,7 @@ pub struct TargetBuildResult {
     /// is the target the default target
     pub is_default: bool,
     /// HTML documentation output directory.
-    pub documentation: StepResult<PathBuf>,
+    pub documentation: StepResult<HtmlOutput>,
     /// Rustdoc JSON build result.
     pub rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
@@ -107,7 +130,7 @@ impl TargetBuildResult {
     pub fn documentation_exists(&self) -> bool {
         self.documentation
             .as_ref()
-            .is_ok_and(|report| report.value.is_dir())
+            .is_ok_and(|report| report.value.path().is_dir())
     }
 
     /// Whether Cargo completed the primary HTML documentation command successfully.
@@ -126,7 +149,7 @@ impl TargetBuildResult {
             && self
                 .documentation
                 .as_ref()
-                .is_ok_and(|report| report.value.join(library_name).is_dir())
+                .is_ok_and(|report| report.value.path.join(library_name).is_dir())
     }
 
     pub fn coverage(&self) -> Result<Option<&DocCoverage>, &BuildStepError> {
@@ -136,7 +159,7 @@ impl TargetBuildResult {
             .map_err(|report| &report.value)
     }
 
-    pub fn documentation(&self) -> Result<&PathBuf, &BuildStepError> {
+    pub fn documentation(&self) -> Result<&HtmlOutput, &BuildStepError> {
         self.documentation
             .as_ref()
             .map(|report| &report.value)
@@ -213,6 +236,7 @@ mod tests {
     }
 
     fn target_result(documentation_path: PathBuf) -> TargetBuildResult {
+        let tempdir = tempfile::tempdir();
         TargetBuildResult {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,

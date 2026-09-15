@@ -126,7 +126,7 @@ mod tests {
         fs::write(doc.join("index.html"), "<html>spooky</html>").unwrap();
         fs::write(doc.join("inner").join("index.html"), "<html>spooky</html>").unwrap();
 
-        // lets try to copy a src directory to tempdir
+        // lets try to copy a src directory to t'p'empdir
         let mut copied = Vec::new();
         copy_dir_all(source.path().join("doc"), destination.path(), |path| {
             copied.push(PathBuf::from(path));

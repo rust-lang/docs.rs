@@ -1,6 +1,7 @@
 use crate::{
-    BuildEnvironment, BuildStepError, ReleaseBuildResult, RustdocJsonOutput, StepFailure,
-    StepReport, StepResult, TargetBuildResult, command::PrepareCommand, utils::copy_dir_all,
+    BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
+    StepFailure, StepReport, StepResult, TargetBuildResult, command::PrepareCommand,
+    utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -183,11 +184,47 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         PrepareCommand::new(self, target)
     }
 
+    pub(crate) fn temp_dir(&self) -> Result<tempfile::TempDir> {
+        // first find the "build" dir rustwide manages, and doesn't expose yet.
+        // It's the shared parent of `host_target_dir` and `host_source_dir`.
+        //
+        // We don't use the system-wide tmp, so we're sure the tmp dir is on the same filesystem.
+        //
+        // We might add this to rustwide.
+
+        let tmp_dir = {
+            let host_target_dir = self.build.host_target_dir();
+            let parent = host_target_dir.parent().expect("always has a parent");
+            parent.join("tmp")
+        };
+
+        fs::create_dir_all(&tmp_dir)?;
+        Ok(tempfile::tempdir_in(tmp_dir)?)
+    }
+
+    pub(crate) fn move_output_to_temp_dir(
+        &self,
+        output: impl AsRef<Path>,
+    ) -> Result<(tempfile::TempDir, PathBuf)> {
+        let tempdir = self.temp_dir()?;
+
+        let output = output.as_ref();
+
+        let destination = tempdir
+            .path()
+            .join(output.file_name().expect("source always has a filename"));
+
+        // FIXME: fall back to copy when not on same fileystem?
+        fs::rename(&output, &destination)?;
+
+        Ok((tempdir, destination))
+    }
+
     /// Return the host path containing documentation for a target.
     ///
     /// Cargo places proc-macro documentation in the host target directory even
     /// when a target argument is otherwise in use.
-    pub fn output_dir(&self, target: &str) -> PathBuf {
+    pub(crate) fn output_dir(&self, target: &str) -> PathBuf {
         if self.docsrs_metadata.proc_macro {
             self.build.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
         } else {
@@ -364,8 +401,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             capture_step(|| Ok(None))
         };
 
-        let documentation = self.build_documentation(target);
         let rustdoc_json = self.build_rustdoc_json(target);
+        let documentation = self.build_documentation(target);
 
         let compiler_metrics = self
             .collect_compiler_metrics()
@@ -439,24 +476,28 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            find_single_output_file(self.output_dir(target), "json")
-                .map(RustdocJsonOutput::new)
-                .map_err(BuildStepError::Output)
+            BuildStepError::as_output(|| {
+                let output_file = find_single_output_file(self.output_dir(target), "json")?;
+                let (tempdir, destination) = self
+                    .move_output_to_temp_dir(output_file)
+                    .context("couldn't move build output to tmpdir")?;
+                Ok(RustdocJsonOutput::new(tempdir, destination))
+            })
         })
     }
 
     /// Build HTML documentation without emitting shared static files.
     ///
     /// All failures retain their duration and log; the caller decides whether to abort.
-    pub fn build_documentation(&self, target: &str) -> StepResult<PathBuf> {
+    pub fn build_documentation(&self, target: &str) -> StepResult<HtmlOutput> {
         self.build_html(target, Emit::HtmlNonStaticFiles)
     }
 
     #[instrument(skip_all)]
-    pub(crate) fn build_essential_files(&self) -> StepResult<PathBuf> {
+    pub(crate) fn build_essential_files(&self) -> StepResult<HtmlOutput> {
         let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
 
-        let static_files = result.value.join("static.files");
+        let static_files = result.value.path().join("static.files");
         if !static_files.is_dir() {
             // keep the original duration & log from the build-html step,
             // changing / testing the output dir doesn't change much here.
@@ -469,14 +510,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 )),
             });
         } else {
-            result.value = static_files;
+            // just change the path from the documentation root to the static.files
+            // subdirectory. We're still inside the same tempdir.
+            result.value.path = static_files;
         }
 
         Ok(result)
     }
 
     #[instrument(skip_all, fields(target, emit))]
-    fn build_html(&self, target: &str, emit: Emit) -> StepResult<PathBuf> {
+    fn build_html(&self, target: &str, emit: Emit) -> StepResult<HtmlOutput> {
         self.capture_rustwide_step(|| {
             let mut command = self
                 .command(target)
@@ -504,7 +547,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            Ok(self.output_dir(target))
+            BuildStepError::as_output(|| {
+                let (tempdir, destination) =
+                    self.move_output_to_temp_dir(self.output_dir(target))?;
+                Ok(HtmlOutput::new(tempdir, destination))
+            })
         })
     }
 
