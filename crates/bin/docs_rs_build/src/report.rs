@@ -105,28 +105,6 @@ pub(crate) fn build_succeeded(result: &ReleaseBuildResult, strict: bool) -> bool
     result.has_docs() && (!strict || result.targets().all(target_fully_succeeded))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use docs_rs_rustwide::{BuildStepError, StepReport};
-    use rustwide::cmd::CommandError;
-
-    #[test]
-    fn auxiliary_failures_include_preparation_command_and_output_errors() {
-        let success = Ok(StepReport::new((), Duration::ZERO, None));
-        assert!(auxiliary_succeeded(&success, &success));
-        for error in [
-            BuildStepError::Prepare(anyhow::anyhow!("preparation failed")),
-            BuildStepError::Command(CommandError::SandboxOOM),
-            BuildStepError::Output(anyhow::anyhow!("invalid output")),
-        ] {
-            let failure: StepResult<()> = Err(StepReport::new(error, Duration::ZERO, None));
-            assert!(!auxiliary_succeeded(&failure, &success));
-            assert!(!auxiliary_succeeded(&success, &failure));
-        }
-    }
-}
-
 fn step_cell<T>(step: &StepResult<T>) -> String {
     format!(
         "{} {}",
@@ -170,4 +148,26 @@ fn print_table(rows: &[[String; 5]]) -> std::io::Result<()> {
         .table()
         .title(headers.iter().map(|title| title.cell().bold(true)));
     print_stdout(table)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use docs_rs_rustwide::{BuildStepError, StepReport};
+    use rustwide::cmd::CommandError;
+
+    #[test]
+    fn auxiliary_failures_include_preparation_command_and_output_errors() {
+        let success = Ok(StepReport::new((), Duration::ZERO, None));
+        assert!(auxiliary_succeeded(&success, &success));
+        for error in [
+            BuildStepError::Prepare(anyhow::anyhow!("preparation failed")),
+            BuildStepError::Command(CommandError::SandboxOOM),
+            BuildStepError::Output(anyhow::anyhow!("invalid output")),
+        ] {
+            let failure: StepResult<()> = Err(StepReport::new(error, Duration::ZERO, None));
+            assert!(!auxiliary_succeeded(&failure, &success));
+            assert!(!auxiliary_succeeded(&success, &failure));
+        }
+    }
 }
