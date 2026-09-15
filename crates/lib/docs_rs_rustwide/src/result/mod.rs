@@ -61,6 +61,16 @@ impl HtmlOutput {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// Whether the HTML documentation output directory exists.
+    pub fn exists(&self) -> bool {
+        self.path.is_dir()
+    }
+
+    /// Whether documentation exists for the crate's library target.
+    pub fn has_docs(&self, library_name: &str) -> bool {
+        self.path.join(library_name).is_dir()
+    }
 }
 
 /// A rustdoc JSON artifact produced by a successful JSON build.
@@ -134,16 +144,6 @@ impl TargetBuildResult {
             .expect("when library users access the duration, we always have one")
     }
 
-    /// Whether rustdoc produced a documentation output directory.
-    ///
-    /// Cargo can exit successfully without generating documentation for a
-    /// target, so command success alone is not sufficient.
-    pub fn documentation_exists(&self) -> bool {
-        self.documentation
-            .as_ref()
-            .is_ok_and(|report| report.value.path().is_dir())
-    }
-
     /// Whether Cargo completed the primary HTML documentation command successfully.
     pub fn build_succeeded(&self) -> bool {
         self.documentation.is_ok()
@@ -151,16 +151,13 @@ impl TargetBuildResult {
 
     /// Whether the primary HTML documentation build completed and produced output.
     pub fn documentation_succeeded(&self) -> bool {
-        self.build_succeeded() && self.documentation_exists()
+        self.documentation().is_ok_and(HtmlOutput::exists)
     }
 
     /// Whether this target produced documentation for the crate's library target.
     pub fn has_docs(&self, library_name: &str) -> bool {
-        self.documentation_succeeded()
-            && self
-                .documentation
-                .as_ref()
-                .is_ok_and(|report| report.value.path.join(library_name).is_dir())
+        self.documentation()
+            .is_ok_and(|html| html.has_docs(library_name))
     }
 
     pub fn coverage(&self) -> Result<Option<&DocCoverage>, &BuildStepError> {
@@ -281,20 +278,21 @@ mod tests {
         let path = temporary.path().join("docs");
         let result = target_result(HtmlOutput::new(path.clone()));
 
-        assert!(!result.documentation_exists());
+        assert!(!result.documentation().unwrap().exists());
         assert!(result.build_succeeded());
         assert!(!result.documentation_succeeded());
         assert!(!result.has_docs("example_crate"));
 
         fs::create_dir(&path).unwrap();
 
-        assert!(result.documentation_exists());
+        assert!(result.documentation().unwrap().exists());
         assert!(result.build_succeeded());
         assert!(result.documentation_succeeded());
         assert!(!result.has_docs("example_crate"));
 
         fs::create_dir(path.join("example_crate")).unwrap();
 
+        assert!(result.documentation().unwrap().has_docs("example_crate"));
         assert!(result.has_docs("example_crate"));
     }
 
