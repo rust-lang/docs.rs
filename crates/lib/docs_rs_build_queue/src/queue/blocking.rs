@@ -181,7 +181,7 @@ mod tests {
         let env = BlockingTestEnv::new()?;
         let queue = env.queue_with_config(Config {
             build_attempts: 99,
-            delay_between_build_attempts: Duration::from_secs(1),
+            delay_between_build_attempts: Duration::from_secs(1).into(),
             ..Default::default()
         });
 
@@ -229,7 +229,7 @@ mod tests {
         let env = BlockingTestEnv::new()?;
         let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
-            delay_between_build_attempts: Duration::ZERO,
+            delay_between_build_attempts: Duration::ZERO.into(),
             ..Default::default()
         });
 
@@ -376,7 +376,7 @@ mod tests {
         let env = BlockingTestEnv::new()?;
         let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
-            delay_between_build_attempts: Duration::ZERO,
+            delay_between_build_attempts: Duration::ZERO.into(),
             ..Default::default()
         });
 
@@ -413,7 +413,7 @@ mod tests {
         let env = BlockingTestEnv::new()?;
         let queue = env.queue_with_config(Config {
             build_attempts: MAX_ATTEMPTS,
-            delay_between_build_attempts: Duration::ZERO,
+            delay_between_build_attempts: Duration::ZERO.into(),
             ..Default::default()
         });
 

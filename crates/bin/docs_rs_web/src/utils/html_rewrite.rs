@@ -10,6 +10,7 @@ use anyhow::{Context as _, anyhow};
 use askama::Template;
 use async_stream::stream;
 use axum::body::Bytes;
+use bytesize::ByteSize;
 use futures_util::{Stream, StreamExt as _};
 use lol_html::{element, errors::RewritingError};
 use std::sync::Arc;
@@ -34,11 +35,11 @@ pub(crate) enum RustdocRewritingError {
 /// render the `rustdoc/` templates with the `html`.
 /// The output is an HTML page which has not yet been UTF-8 validated.
 /// In practice, the output should always be valid UTF-8.
-#[instrument(skip_all, fields(memory_limit = max_allowed_memory_usage))]
+#[instrument(skip_all, fields(memory_limit = max_allowed_memory_usage.as_u64()))]
 pub(crate) fn rewrite_rustdoc_html_stream<R>(
     template_data: Arc<TemplateData>,
     mut reader: R,
-    max_allowed_memory_usage: usize,
+    max_allowed_memory_usage: ByteSize,
     data: Arc<RustdocPage>,
     otel_metrics: Arc<WebMetrics>,
 ) -> impl Stream<Item = Result<Bytes, RustdocRewritingError>> + Send + 'static
@@ -138,8 +139,9 @@ where
                                 ),
                             )
                             .with_memory_settings(
-                                MemorySettings::new()
-                                    .with_max_allowed_memory_usage(max_allowed_memory_usage),
+                                MemorySettings::new().with_max_allowed_memory_usage(
+                                    max_allowed_memory_usage.as_u64() as usize,
+                                ),
                             );
 
                         let mut rewriter = HtmlRewriter::new(settings, move |chunk: &[u8]| {

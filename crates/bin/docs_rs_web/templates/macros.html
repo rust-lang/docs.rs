@@ -36,7 +36,7 @@
         <tbody>
             <tr>
                 <td>Available RAM</td>
-                <td>{{ limits.memory|filesizeformat }}</td>
+                <td>{{ limits.memory.display().si()}}</td>
             </tr>
 
             <tr>
@@ -46,7 +46,7 @@
 
             <tr>
                 <td>Maximum size of a build log</td>
-                <td>{{ limits.max_log_size|filesizeformat }}</td>
+                <td>{{ limits.max_log_size.display().si() }}</td>
             </tr>
 
             <tr>

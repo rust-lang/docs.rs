@@ -1,11 +1,12 @@
 use crate::types::StorageKind;
+use bytesize::ByteSize;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
+use docs_rs_types::Duration;
 use std::{
     io,
     path::{self, Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
@@ -23,7 +24,7 @@ pub struct ArchiveIndexCacheConfig {
     pub path: PathBuf,
 
     // maximum disk space for the local archive index cache.
-    pub max_size_mb: u64,
+    pub max_size_mb: ByteSize,
 
     // TTL for the local index cache
     pub ttl: Duration,
@@ -51,14 +52,8 @@ impl AppConfig for ArchiveIndexCacheConfig {
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
             )?)?,
-            max_size_mb: env(
-                "DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE_MB",
-                50 * 1024, // 50 GiB
-            )?,
-            ttl: Duration::from_secs(env(
-                "DOCSRS_ARCHIVE_INDEX_CACHE_TTL",
-                24 * 60 * 60, // 24 hours
-            )?),
+            max_size_mb: env("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE_MB", ByteSize::gib(50))?,
+            ttl: env("DOCSRS_ARCHIVE_INDEX_CACHE_TTL", Duration::from_days(1))?,
             expected_count: env("DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT", 100_000usize)?,
         })
     }
@@ -93,8 +88,8 @@ pub struct Config {
     pub s3_bucket_is_temporary: bool,
 
     // Max size of the files served by the docs.rs frontend
-    pub max_file_size: usize,
-    pub max_file_size_html: usize,
+    pub max_file_size: ByteSize,
+    pub max_file_size_html: ByteSize,
 
     // config for the local archive index cache
     pub archive_index_cache: Arc<ArchiveIndexCacheConfig>,
@@ -114,8 +109,8 @@ impl AppConfig for Config {
             s3_region: env("S3_REGION", "us-west-1".to_string())?,
             s3_endpoint: maybe_env("S3_ENDPOINT")?,
             archive_index_cache: Arc::new(ArchiveIndexCacheConfig::from_environment()?),
-            max_file_size: env("DOCSRS_MAX_FILE_SIZE", 50 * 1024 * 1024)?,
-            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", 50 * 1024 * 1024)?,
+            max_file_size: env("DOCSRS_MAX_FILE_SIZE", ByteSize::mib(50))?,
+            max_file_size_html: env("DOCSRS_MAX_FILE_SIZE_HTML", ByteSize::mib(50))?,
             #[cfg(any(test, feature = "testing"))]
             s3_bucket_is_temporary: false,
             network_parallelism: env("DOCSRS_NETWORK_PARALLELISM", 8usize.min(cores))?.max(1),
@@ -137,7 +132,7 @@ impl Config {
         f(self)
     }
 
-    pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> usize {
+    pub fn max_file_size_for(&self, path: impl AsRef<Path>) -> ByteSize {
         static HTML: &str = "html";
 
         if let Some(ext) = path.as_ref().extension()

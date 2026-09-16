@@ -1,5 +1,6 @@
 mod build_error;
 mod build_status;
+mod byte_size;
 mod compression_algorithm;
 pub(crate) mod convert;
 pub mod doc_coverage;
@@ -14,6 +15,7 @@ mod version;
 
 pub use build_error::{BuildError, SimpleBuildError};
 pub use build_status::BuildStatus;
+pub use byte_size::ByteSizeExt;
 pub use compression_algorithm::{CompressionAlgorithm, compression_from_file_extension};
 pub use doc_coverage::{DocCoverage, RawFileCoverage};
 pub use duration::Duration;

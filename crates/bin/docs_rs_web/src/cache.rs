@@ -198,8 +198,8 @@ impl CachePolicy {
 
                 if config.cache_invalidatable_responses
                     && let Some(cache_control) =
-                        config.cache_control_stale_while_revalidate.map(|seconds| {
-                            format!("stale-while-revalidate={seconds}")
+                        config.cache_control_stale_while_revalidate.map(|duration| {
+                            format!("stale-while-revalidate={}", duration.as_secs())
                                 .parse::<HeaderValue>()
                                 .unwrap()
                         })
@@ -278,6 +278,7 @@ mod tests {
     use axum::{Router, body::Body, routing::get};
     use axum_extra::headers::CacheControl;
     use docs_rs_config::AppConfig as _;
+    use docs_rs_types::Duration;
     use http::Request;
     use test_case::{test_case, test_matrix};
     use tower::{ServiceBuilder, ServiceExt as _};
@@ -308,11 +309,11 @@ mod tests {
 
     #[test_matrix(
         [true, false],
-        [Some(86400), None]
+        [Some(Duration::from_days(1)), None]
     )]
     fn test_validate_header_syntax_for_all_possible_combinations(
         cache_invalidatable_responses: bool,
-        stale_while_revalidate: Option<u32>,
+        stale_while_revalidate: Option<Duration>,
     ) -> Result<()> {
         let config = Config::builder()
             .test_config()?
@@ -471,7 +472,7 @@ mod tests {
     fn render_stale_with_config_fastly() -> Result<()> {
         let config = Config::builder()
             .test_config()?
-            .cache_control_stale_while_revalidate(666)
+            .cache_control_stale_while_revalidate(Duration::from_secs(666))
             .build();
 
         let key = SurrogateKey::from_static("something");

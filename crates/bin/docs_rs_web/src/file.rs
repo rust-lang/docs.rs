@@ -141,6 +141,7 @@ mod tests {
     use super::*;
     use crate::{cache::STATIC_ASSET_CACHE_POLICY, testing::TestEnvironment};
     use axum_extra::headers::{ETag, HeaderMapExt as _};
+    use bytesize::ByteSize;
     use chrono::Utc;
     use docs_rs_headers::compute_etag;
     use docs_rs_storage::StorageKind;
@@ -291,8 +292,8 @@ mod tests {
                 .storage_config(
                     docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
                         |mut cfg| {
-                            cfg.max_file_size = MAX_SIZE;
-                            cfg.max_file_size_html = MAX_HTML_SIZE;
+                            cfg.max_file_size = ByteSize::b(MAX_SIZE as u64);
+                            cfg.max_file_size_html = ByteSize::b(MAX_HTML_SIZE as u64);
                             cfg
                         },
                     ),

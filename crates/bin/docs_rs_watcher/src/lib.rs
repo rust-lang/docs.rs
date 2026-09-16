@@ -50,12 +50,12 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
                 }
             }
 
-            if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+            if last_gc.elapsed() >= *config.registry_gc_interval {
                 index.run_git_gc().await;
                 last_gc = Instant::now();
             }
         }
-        time::sleep(config.delay_between_registry_fetches).await;
+        time::sleep(*config.delay_between_registry_fetches).await;
     }
 }
 
@@ -91,7 +91,7 @@ pub async fn start_background_queue_rebuild(config: Arc<Config>, context: &Conte
 
     start_async_cron(
         "background queue rebuilder",
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
         move || {
             let pool = pool.clone();
             let build_queue = build_queue.clone();
@@ -114,7 +114,7 @@ pub async fn start_background_repository_stats_updater(context: &Context) -> Res
     let updater = context.repository_stats()?.clone();
     start_async_cron(
         "repository stats updater",
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
         move || {
             let updater = updater.clone();
             async move {

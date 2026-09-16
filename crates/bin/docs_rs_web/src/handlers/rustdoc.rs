@@ -32,6 +32,7 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
+use bytesize::ByteSize;
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_database::Pool;
@@ -500,7 +501,7 @@ impl RustdocPage {
         template_data: Arc<TemplateData>,
         otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
-        max_parse_memory: usize,
+        max_parse_memory: ByteSize,
         if_none_match: Option<&IfNoneMatch>,
     ) -> AxumResponse {
         let crate_name = &self.metadata.name;
@@ -1096,7 +1097,7 @@ mod test {
     };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::{
-        Version,
+        ByteSizeExt as _, Duration, Version,
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;
@@ -1402,7 +1403,7 @@ mod test {
             .config(
                 Config::builder()
                     .test_config()?
-                    .cache_control_stale_while_revalidate(2592000)
+                    .cache_control_stale_while_revalidate(Duration::from_days(30))
                     .build(),
             )
             .build()
@@ -3595,7 +3596,7 @@ mod test {
                     FORMAT_VERSION,
                     Some(CompressionAlgorithm::Zstd),
                 ),
-                usize::MAX,
+                ByteSize::MAX,
             )
             .await?;
 

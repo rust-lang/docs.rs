@@ -1,9 +1,22 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
+<<<<<<< HEAD
 use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource};
 use rustwide::cmd::DockerRuntime;
 use std::{path::PathBuf, sync::Arc, time::Duration};
+=======
+use docs_rs_types::Duration;
+use rustwide::cmd::DockerRuntime;
+use std::{
+    num::ParseIntError,
+    ops::{Deref, RangeInclusive},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
+use thiserror::Error;
+>>>>>>> bytesize
 
 #[derive(Debug)]
 pub struct Config {
@@ -58,10 +71,10 @@ impl AppConfig for Config {
             build_cpu_limit,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
-            build_workspace_reinitialization_interval: Duration::from_secs(env(
+            build_workspace_reinitialization_interval: env(
                 "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
-                86400,
-            )?),
+                Duration::from_days(1),
+            )?,
             compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
             docker_runtime: maybe_env("DOCSRS_DOCKER_RUNTIME")?.unwrap_or_default(),
             build_limits: Arc::new(docs_rs_build_limits::Config::from_environment()?),
