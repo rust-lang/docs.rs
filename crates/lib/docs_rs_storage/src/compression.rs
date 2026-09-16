@@ -124,9 +124,8 @@ mod tests {
     use super::*;
     use crate::{StreamingBlob, errors::SizeLimitReached};
     use anyhow::Result;
-    use bytesize::ByteSize;
     use chrono::Utc;
-    use docs_rs_types::ByteSizeExt as _;
+    use docs_rs_types::ByteSize;
     use strum::IntoEnumIterator;
     use test_case::test_case;
 
