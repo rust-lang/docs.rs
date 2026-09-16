@@ -1,6 +1,6 @@
 use crate::config::Config;
 use bytesize::ByteSize;
-use docs_rs_types::Duration;
+use docs_rs_types::{ByteSize, Duration};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Limits {
@@ -135,7 +135,7 @@ mod test {
         // all limits work
         let krate = KrateName::from_static("regex");
         let limits = Limits {
-            memory: defaults.memory * 2u64,
+            memory: (defaults.memory.0 * 2).into(),
             timeout: (defaults.timeout.0 * 2).into(),
             targets: 1,
             ..defaults

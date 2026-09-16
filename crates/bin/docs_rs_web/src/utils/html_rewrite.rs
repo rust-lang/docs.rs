@@ -10,7 +10,7 @@ use anyhow::{Context as _, anyhow};
 use askama::Template;
 use async_stream::stream;
 use axum::body::Bytes;
-use bytesize::ByteSize;
+use docs_rs_types::ByteSize;
 use futures_util::{Stream, StreamExt as _};
 use lol_html::{element, errors::RewritingError};
 use std::sync::Arc;

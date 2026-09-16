@@ -1,7 +1,7 @@
 use anyhow::Result;
-use bytesize::ByteSize;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
+use docs_rs_types::ByteSize;
 
 #[derive(Debug, Default)]
 pub struct Config {

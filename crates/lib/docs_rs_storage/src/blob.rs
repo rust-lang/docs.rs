@@ -1,10 +1,9 @@
 use crate::{compression::wrap_reader_for_decompression, utils::sized_buffer::SizedBuffer};
 use anyhow::Result;
 use bytes::Bytes;
-use bytesize::ByteSize;
 use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
-use docs_rs_types::CompressionAlgorithm;
+use docs_rs_types::{ByteSize, CompressionAlgorithm};
 use mime::Mime;
 use std::{fmt, io::Cursor, path::PathBuf};
 use tokio::io::{self, AsyncBufRead, AsyncBufReadExt};
@@ -182,7 +181,6 @@ mod test {
     use super::*;
     use crate::compress_async;
     use docs_rs_headers::compute_etag;
-    use docs_rs_types::ByteSizeExt as _;
 
     const ZSTD_EOF_BYTES: [u8; 3] = [0x01, 0x00, 0x00];
 

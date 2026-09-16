@@ -26,7 +26,7 @@ use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;

@@ -17,10 +17,9 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Result};
-use bytesize::ByteSize;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
+use docs_rs_types::{BuildId, ByteSize, CompressionAlgorithm, KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{TryStreamExt as _, future, stream::BoxStream};
 use std::{
@@ -565,7 +564,6 @@ mod backend_tests {
     use crate::{PathNotFoundError, errors::SizeLimitReached};
     use docs_rs_headers::compute_etag;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use docs_rs_types::ByteSizeExt as _;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();

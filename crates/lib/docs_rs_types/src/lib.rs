@@ -15,7 +15,7 @@ mod version;
 
 pub use build_error::{BuildError, SimpleBuildError};
 pub use build_status::BuildStatus;
-pub use byte_size::ByteSizeExt;
+pub use byte_size::{ByteSize, ParseByteSizeError};
 pub use compression_algorithm::{CompressionAlgorithm, compression_from_file_extension};
 pub use doc_coverage::{DocCoverage, RawFileCoverage};
 pub use duration::Duration;

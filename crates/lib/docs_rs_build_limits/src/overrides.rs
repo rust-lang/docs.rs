@@ -1,5 +1,4 @@
-use bytesize::ByteSize;
-use docs_rs_types::{Duration, KrateName};
+use docs_rs_types::{ByteSize, Duration, KrateName};
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Overrides {
@@ -11,7 +10,7 @@ pub struct Overrides {
 macro_rules! row_to_overrides {
     ($row:expr) => {{
         Overrides {
-            memory: $row.max_memory_bytes.map(|i| ByteSize::b(i as u64)),
+            memory: $row.max_memory_bytes,
             targets: $row.max_targets.map(|i| i as usize),
             timeout: $row.timeout_seconds.map(|i| Duration::from_secs(i as u64)),
         }
@@ -26,7 +25,7 @@ impl Overrides {
             r#"
             SELECT
                 crate_name as "crate_name: KrateName",
-                max_memory_bytes,
+                max_memory_bytes as "max_memory_bytes: ByteSize",
                 timeout_seconds,
                 max_targets
             FROM sandbox_overrides
@@ -43,7 +42,12 @@ impl Overrides {
         krate: &KrateName,
     ) -> anyhow::Result<Option<Self>> {
         Ok(sqlx::query!(
-            "SELECT * FROM sandbox_overrides WHERE crate_name = $1",
+            r#"SELECT
+                crate_name as "crate_name: KrateName",
+                max_memory_bytes as "max_memory_bytes: ByteSize",
+                timeout_seconds,
+                max_targets
+            FROM sandbox_overrides WHERE crate_name = $1"#,
             krate as _
         )
         .fetch_optional(conn)
@@ -85,7 +89,7 @@ impl Overrides {
                     timeout_seconds = $4
             ",
             krate as _,
-            overrides.memory.map(|i| i.as_u64() as i64),
+            overrides.memory as _,
             overrides.targets.map(|i| i as i32),
             overrides.timeout.map(|d| d.as_secs() as i32),
         )
