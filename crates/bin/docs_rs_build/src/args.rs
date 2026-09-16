@@ -29,6 +29,8 @@ pub(crate) struct Args {
     pub(crate) package: Option<String>,
 
     /// Directory used for rustwide caches and build state.
+    ///
+    /// Defaults to <CRATE_PATH>/target/docsrs-build
     #[arg(long, value_name = "PATH")]
     pub(crate) workspace: Option<PathBuf>,
 

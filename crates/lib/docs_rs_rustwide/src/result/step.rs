@@ -1,7 +1,7 @@
 use anyhow::Result;
-use docs_rs_types::BuildError;
+use docs_rs_types::{BuildError, Duration};
 use rustwide::cmd::CommandError;
-use std::{fmt, time::Duration};
+use std::fmt;
 
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]

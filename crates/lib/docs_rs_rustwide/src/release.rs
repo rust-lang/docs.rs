@@ -140,7 +140,7 @@ impl ReleaseContext<'_, Fetched> {
         debug!("release build completed");
         Ok(BuildResult {
             inner: result,
-            duration: started.elapsed(),
+            duration: started.elapsed().into(),
         })
     }
 }

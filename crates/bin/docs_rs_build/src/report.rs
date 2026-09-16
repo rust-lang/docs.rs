@@ -1,7 +1,6 @@
 use cli_table::{Cell, Style, Table, format::Justify, print_stdout};
 use docs_rs_rustwide::{ReleaseBuildResult, StepResult, StepResultExt, TargetBuildResult};
-use humantime::format_duration;
-use std::time::Duration;
+use docs_rs_types::Duration;
 
 pub(crate) fn print(
     result: &ReleaseBuildResult,
@@ -32,7 +31,7 @@ pub(crate) fn print(
             } else {
                 "skipped".into()
             },
-            format_duration(target.duration()).to_string(),
+            target.duration().to_string(),
         ]);
         totals[0] += target.documentation().duration();
         totals[1] += target.rustdoc_json().duration();
@@ -41,14 +40,14 @@ pub(crate) fn print(
     }
     rows.push([
         "Total".to_owned(),
-        format_duration(totals[0]).to_string(),
-        format_duration(totals[1]).to_string(),
-        format_duration(totals[2]).to_string(),
-        format_duration(totals[3]).to_string(),
+        totals[0].to_string(),
+        totals[1].to_string(),
+        totals[2].to_string(),
+        totals[3].to_string(),
     ]);
     print_table(&rows)?;
     println!("Target totals include retries and work between steps.");
-    println!("Full build duration: {}", format_duration(duration));
+    println!("Full build duration: {}", duration);
 
     match result.statistics().memory_peak_bytes() {
         Some(bytes) => println!(
@@ -109,7 +108,7 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
     format!(
         "{} {}",
         if step.is_ok() { "ok" } else { "FAILED" },
-        format_duration(step.duration())
+        step.duration()
     )
 }
 

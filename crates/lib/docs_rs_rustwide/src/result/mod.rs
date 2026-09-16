@@ -3,14 +3,13 @@ pub(crate) mod step;
 use anyhow::{Context as _, Result};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_rustdoc_json::{RustdocJsonFormatVersion, read_format_version_from_rustdoc_json};
-use docs_rs_types::doc_coverage::DocCoverage;
+use docs_rs_types::{Duration, doc_coverage::DocCoverage};
 use docsrs_metadata::Metadata;
 use rustwide::SandboxStatistics;
 use std::{
     fs::File,
     iter,
     path::{Path, PathBuf},
-    time::Duration,
 };
 use step::{StepFailure, StepResult, StepResultExt as _};
 use tracing::{debug, instrument};

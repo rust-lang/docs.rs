@@ -62,12 +62,12 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
     match outcome {
         Ok(value) => Ok(StepReport {
             value,
-            duration,
+            duration: duration.into(),
             log: None,
         }),
         Err(error) => Err(StepReport {
             value: error,
-            duration,
+            duration: duration.into(),
             log: None,
         }),
     }
@@ -380,7 +380,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             target_result.regenerate_lockfile = Some(regeneration);
         }
 
-        target_result.duration = Some(started.elapsed());
+        target_result.duration = Some(started.elapsed().into());
         target_result
     }
 
