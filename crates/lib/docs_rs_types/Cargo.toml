@@ -6,13 +6,15 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [features]
-# NOTE: we could make serde & sqlx optional features, some 
+# NOTE: we could make serde & sqlx optional features, some
 # of the subcrates don't need one or both of them.
 testing = []
 
 [dependencies]
 anyhow = { workspace = true }
+bytesize = { workspace = true }
 crates_io_validation = { path = "../crates_io_validation" }
+humantime = "2.4.0"
 semver = { version = "1.0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

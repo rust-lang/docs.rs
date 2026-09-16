@@ -273,6 +273,7 @@ mod tests {
     };
     use anyhow::Result;
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
+    use bytesize::ByteSize;
     use docs_rs_headers::IfNoneMatch;
     use docs_rs_storage::StorageKind;
     use docs_rs_types::KrateName;
@@ -715,8 +716,9 @@ mod tests {
             .storage_config(
                 docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
                     |mut cfg| {
-                        cfg.max_file_size = 1;
-                        cfg.max_file_size_html = 1;
+                        let size = ByteSize::b(1);
+                        cfg.max_file_size = size;
+                        cfg.max_file_size_html = size;
                         cfg
                     },
                 ),

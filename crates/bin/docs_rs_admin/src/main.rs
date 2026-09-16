@@ -3,6 +3,7 @@ mod rebuilds;
 pub(crate) mod testing;
 
 use anyhow::{Context as _, Result, bail};
+use bytesize::ByteSize;
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
@@ -18,7 +19,7 @@ use docs_rs_database::{
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
-use docs_rs_types::{CrateId, KrateName, Version};
+use docs_rs_types::{CrateId, Duration, KrateName, Version};
 use docs_rs_uri::EscapedURI;
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
@@ -533,11 +534,11 @@ enum LimitsSubcommand {
     Set {
         crate_name: KrateName,
         #[arg(long)]
-        memory: Option<usize>,
+        memory: Option<ByteSize>,
         #[arg(long)]
         targets: Option<usize>,
         #[arg(long)]
-        timeout: Option<usize>,
+        timeout: Option<Duration>,
     },
 
     /// Remove sandbox limits overrides for a crate
@@ -571,7 +572,7 @@ impl LimitsSubcommand {
                 let overrides = Overrides {
                     memory,
                     targets,
-                    timeout: timeout.map(|timeout| std::time::Duration::from_secs(timeout as _)),
+                    timeout,
                 };
                 Overrides::save(&mut conn, &crate_name, overrides).await?;
                 let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;

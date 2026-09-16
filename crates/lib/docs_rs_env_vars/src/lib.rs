@@ -5,7 +5,7 @@ use tracing::trace;
 pub fn env<T>(var: &str, default: T) -> Result<T>
 where
     T: FromStr,
-    T::Err: Error + Send + Sync + 'static,
+    T::Err: Into<Box<dyn Error + Send + Sync>>,
 {
     Ok(maybe_env(var)?.unwrap_or(default))
 }
@@ -13,7 +13,7 @@ where
 pub fn require_env<T>(var: &str) -> Result<T>
 where
     T: FromStr,
-    <T as FromStr>::Err: Error + Send + Sync + 'static,
+    <T as FromStr>::Err: Into<Box<dyn Error + Send + Sync>>,
 {
     maybe_env(var)?.with_context(|| anyhow!("configuration variable {} is missing", var))
 }
@@ -21,12 +21,13 @@ where
 pub fn maybe_env<T>(var: &str) -> Result<Option<T>>
 where
     T: FromStr,
-    T::Err: Error + Send + Sync + 'static,
+    T::Err: Into<Box<dyn Error + Send + Sync>>,
 {
     match std::env::var(var) {
         Ok(content) => Ok(content
             .parse::<T>()
             .map(Some)
+            .map_err(|err| anyhow::Error::from_boxed(err.into()))
             .with_context(|| format!("failed to parse configuration variable {var}"))?),
         Err(VarError::NotPresent) => {
             trace!("optional configuration variable {} is not set", var);
