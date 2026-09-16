@@ -21,7 +21,6 @@ sysinfo = { version = "0.39.0", default-features = false, features = ["system"] 
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-bytesize = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

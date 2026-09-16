@@ -2014,7 +2014,6 @@ name = "docs_rs_build"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
- "bytesize",
  "clap",
  "cli-table",
  "docs_rs_build_limits",
@@ -2419,7 +2418,6 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bon",
- "bytesize",
  "docs_rs_build_limits",
  "docs_rs_cargo_metadata",
  "docs_rs_rustdoc_json",
@@ -7234,6 +7232,8 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "rustwide"
 version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2da15e4a8856f56f468ad9f2aaf85d77ecd6749cbc92b1aa11ec2053b8d2cf61"
 dependencies = [
  "anyhow",
  "attohttpc",

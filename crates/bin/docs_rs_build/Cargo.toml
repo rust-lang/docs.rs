@@ -23,7 +23,6 @@ docs_rs_types = { path = "../../lib/docs_rs_types" }
 rustwide = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
-bytesize = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["ansi", "fmt"] }
 
