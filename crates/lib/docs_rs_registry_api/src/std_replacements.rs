@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::{collections::HashMap, sync::LazyLock};
 use url::Url;
 
-const FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
+pub(crate) const FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
     Url::parse("https://rust-lang.github.io/std-replacement-data/all.json").unwrap()
 });
 
