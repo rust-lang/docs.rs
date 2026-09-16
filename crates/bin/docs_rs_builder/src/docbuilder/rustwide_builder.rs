@@ -26,7 +26,7 @@ use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
@@ -652,7 +652,8 @@ mod tests {
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
-        BuildStatus, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version, testing::V0_1,
+        BuildStatus, ByteSize, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version,
+        testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;
