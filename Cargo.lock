@@ -1157,12 +1157,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bytesize"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7354288c522e7e980fafd2075d63d1285794c3a6a16cdd492f189ea406e5f18b"
-
-[[package]]
 name = "bytestring"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1981,7 +1975,6 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bon",
- "bytesize",
  "chrono",
  "clap",
  "docs_rs_build_limits",
@@ -2010,7 +2003,6 @@ name = "docs_rs_build_limits"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "bytesize",
  "docs_rs_config",
  "docs_rs_database",
  "docs_rs_env_vars",
@@ -2056,7 +2048,6 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bytes",
- "bytesize",
  "clap",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
@@ -2407,7 +2398,6 @@ dependencies = [
  "aws-smithy-types-convert",
  "base64 0.23.1",
  "bytes",
- "bytesize",
  "bzip2",
  "chrono",
  "crc32fast",
@@ -2468,7 +2458,6 @@ name = "docs_rs_types"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytesize",
  "crates_io_validation",
  "humantime",
  "pretty_assertions",
@@ -2555,7 +2544,6 @@ dependencies = [
  "axum-extra",
  "base64 0.23.1",
  "bon",
- "bytesize",
  "chrono",
  "clap",
  "comrak",

@@ -9,7 +9,6 @@ use crate::{
 };
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use bytes::Bytes;
-use bytesize::ByteSize;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
@@ -34,7 +33,7 @@ use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
     doc_coverage::{self, DocCoverage},
 };
 use docs_rs_utils::{

@@ -1,8 +1,7 @@
 use crate::types::StorageKind;
-use bytesize::ByteSize;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
-use docs_rs_types::Duration;
+use docs_rs_types::{ByteSize, Duration};
 use std::{
     io,
     path::{self, Path, PathBuf},

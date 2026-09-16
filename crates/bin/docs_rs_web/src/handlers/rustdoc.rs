@@ -32,7 +32,6 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
-use bytesize::ByteSize;
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::Dependency;
 use docs_rs_database::Pool;
@@ -42,7 +41,7 @@ use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_storage::{
     AsyncStorage, PathNotFoundError, StreamingBlob, rustdoc_archive_path, rustdoc_json_path,
 };
-use docs_rs_types::{CompressionAlgorithm, KrateName, ReqVersion};
+use docs_rs_types::{ByteSize, CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::{Deserialize, Serialize};
@@ -1097,7 +1096,7 @@ mod test {
     };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::{
-        ByteSizeExt as _, Duration, Version,
+        ByteSize, Duration, Version,
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;

@@ -12,7 +12,6 @@ testing = []
 
 [dependencies]
 anyhow = { workspace = true }
-bytesize = { workspace = true }
 crates_io_validation = { path = "../crates_io_validation" }
 humantime = "2.4.0"
 semver = { version = "1.0.4", features = ["serde"] }

@@ -247,11 +247,10 @@ mod tests {
     };
     use anyhow::Result;
     use axum::{body::Body, http::Request};
-    use bytesize::ByteSize;
     use docs_rs_build_limits::Overrides;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus, Duration, SimpleBuildError,
+        BuildStatus, ByteSize, Duration, SimpleBuildError,
         testing::{FOO, V0_1, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;
