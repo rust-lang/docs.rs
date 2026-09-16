@@ -17,6 +17,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, Result};
+use bytesize::ByteSize;
 use docs_rs_mimes::{self as mimes, detect_mime};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, CompressionAlgorithm, KrateName, Version};
@@ -160,7 +161,7 @@ impl AsyncStorage {
 
     /// get, decompress and materialize an object from store
     #[instrument(skip(self))]
-    pub async fn get(&self, path: &str, max_size: usize) -> Result<Blob> {
+    pub async fn get(&self, path: &str, max_size: ByteSize) -> Result<Blob> {
         self.get_stream(path).await?.materialize(max_size).await
     }
 
@@ -555,6 +556,7 @@ mod backend_tests {
     use crate::{PathNotFoundError, errors::SizeLimitReached};
     use docs_rs_headers::compute_etag;
     use docs_rs_opentelemetry::testing::TestMetrics;
+    use docs_rs_types::ByteSizeExt as _;
 
     fn get_file_info(files: &[FileEntry], path: impl AsRef<Path>) -> Option<&FileEntry> {
         let path = path.as_ref();
@@ -586,7 +588,7 @@ mod backend_tests {
 
         storage.store_blobs(vec![blob.clone()]).await?;
 
-        let found = storage.get(path, usize::MAX).await?;
+        let found = storage.get(path, ByteSize::MAX).await?;
         assert_eq!(blob.mime, found.mime);
         assert_eq!(blob.content, found.content);
         // while our db backend just does MD5,
@@ -596,7 +598,7 @@ mod backend_tests {
         for path in &["bar.txt", "baz.txt", "foo/baz.txt"] {
             assert!(
                 storage
-                    .get(path, usize::MAX)
+                    .get(path, ByteSize::MAX)
                     .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()
@@ -625,7 +627,7 @@ mod backend_tests {
             let partial_blob = storage
                 .get_range_stream("foo/bar.txt", range.clone(), None)
                 .await?
-                .materialize(usize::MAX)
+                .materialize(ByteSize::MAX)
                 .await?;
             let range = (*range.start() as usize)..=(*range.end() as usize);
             assert_eq!(blob.content[range], partial_blob.content);
@@ -699,7 +701,7 @@ mod backend_tests {
 
         assert!(
             storage
-                .get(&long_filename, 42)
+                .get(&long_filename, ByteSize::b(42))
                 .await
                 .unwrap_err()
                 .is::<PathNotFoundError>()
@@ -709,18 +711,18 @@ mod backend_tests {
     }
 
     async fn test_get_too_big(storage: &AsyncStorage) -> Result<()> {
-        const MAX_SIZE: usize = 1024;
+        const MAX_SIZE: ByteSize = ByteSize::kb(1);
 
         let small_blob = BlobUpload {
             path: "small-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: [0; MAX_SIZE].as_ref().into(),
+            content: [0; MAX_SIZE.as_u64() as usize].as_ref().into(),
             compression: None,
         };
         let big_blob = BlobUpload {
             path: "big-blob.bin".into(),
             mime: mime::TEXT_PLAIN,
-            content: [0; MAX_SIZE * 2].as_ref().into(),
+            content: [0; MAX_SIZE.as_u64() as usize * 2].as_ref().into(),
             compression: None,
         };
 
@@ -767,7 +769,7 @@ mod backend_tests {
         storage.store_blobs(blobs.clone()).await.unwrap();
 
         for blob in &blobs {
-            let actual = storage.get(&blob.path, usize::MAX).await?;
+            let actual = storage.get(&blob.path, ByteSize::MAX).await?;
             assert_eq!(blob.path, actual.path);
             assert_eq!(blob.mime, actual.mime);
         }
@@ -908,12 +910,12 @@ mod backend_tests {
             "text/rust"
         );
 
-        let file = storage.get("prefix/Cargo.toml", usize::MAX).await?;
+        let file = storage.get("prefix/Cargo.toml", ByteSize::MAX).await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/toml");
         assert_eq!(file.path, "prefix/Cargo.toml");
 
-        let file = storage.get("prefix/src/main.rs", usize::MAX).await?;
+        let file = storage.get("prefix/src/main.rs", ByteSize::MAX).await?;
         assert_eq!(file.content, b"data");
         assert_eq!(file.mime, "text/rust");
         assert_eq!(file.path, "prefix/src/main.rs");
@@ -945,7 +947,7 @@ mod backend_tests {
         storage.store_blobs(uploads.clone()).await?;
 
         for blob in &uploads {
-            let stored = storage.get(&blob.path, usize::MAX).await?;
+            let stored = storage.get(&blob.path, ByteSize::MAX).await?;
             assert_eq!(&stored.content, &blob.content);
         }
 
@@ -980,7 +982,7 @@ mod backend_tests {
             .await?;
 
         assert!(storage.exists(REMOTE_PATH).await?);
-        let stored = storage.get(REMOTE_PATH, usize::MAX).await?;
+        let stored = storage.get(REMOTE_PATH, ByteSize::MAX).await?;
         assert_eq!(stored.content, content);
         storage.delete_prefix(REMOTE_PATH).await?;
 
@@ -1046,12 +1048,12 @@ mod backend_tests {
         storage.delete_prefix(prefix).await?;
 
         for existing in present {
-            assert!(storage.get(existing, usize::MAX).await.is_ok());
+            assert!(storage.get(existing, ByteSize::MAX).await.is_ok());
         }
         for missing in missing {
             assert!(
                 storage
-                    .get(missing, usize::MAX)
+                    .get(missing, ByteSize::MAX)
                     .await
                     .unwrap_err()
                     .downcast_ref::<PathNotFoundError>()

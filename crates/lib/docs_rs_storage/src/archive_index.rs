@@ -258,7 +258,7 @@ impl Cache {
             // Time to idle (TTI): A cached entry will be expired after
             // the specified duration past from get or insert.
             // We don't set TTL (time to live), which would be just time-after-insert.
-            .time_to_idle(config.ttl)
+            .time_to_idle(config.ttl.into())
             // We weigh each cache entry by the file size of the SQLite database.
             // The configured capacity is in MiB, but using KiB as moka's weight unit
             // avoids counting every index smaller than 1 MiB as if it were 1 MiB.
@@ -266,7 +266,7 @@ impl Cache {
             // max capacity
             // not entries, but _weighted entries_.
             // with the weight fn from above, the max capacity is a storage size value.
-            .max_capacity(config.max_size_mb * 1024)
+            .max_capacity(config.max_size_mb.as_kib() as u64)
             // the eviction listener is called when moka evicts a cache entry.
             // In this case we want to delete the corresponding local files.
             .eviction_listener(move |path, entry, reason| {

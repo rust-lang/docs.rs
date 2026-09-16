@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use bytes::Bytes;
+use bytesize::ByteSize;
 use docs_rs_build_limits::{Limits, blacklist::is_blacklisted};
 use docs_rs_build_queue::BuildPackageSummary;
 use docs_rs_cargo_metadata::{CargoMetadata, MetadataPackage};
@@ -165,7 +166,7 @@ impl RustwideBuilder {
     #[instrument(skip(self))]
     pub fn reinitialize_workspace_if_interval_passed(&mut self) -> Result<()> {
         let interval = self.config.build_workspace_reinitialization_interval;
-        if self.workspace_initialize_time.elapsed() >= interval {
+        if self.workspace_initialize_time.elapsed() >= *interval {
             info!("start reinitialize workspace again");
             self.workspace = build_workspace(&self.config)?;
             self.workspace_initialize_time = Instant::now();
@@ -177,7 +178,7 @@ impl RustwideBuilder {
     #[instrument(skip(self))]
     fn prepare_sandbox(&self, limits: &Limits) -> SandboxBuilder {
         let builder = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
+            .memory_limit(Some(limits.memory().as_u64() as usize))
             .enable_networking(limits.networking())
             .docker_runtime(self.config.docker_runtime);
 
@@ -593,21 +594,17 @@ impl RustwideBuilder {
                 sysinfo::RefreshKind::nothing()
                     .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
             );
-            let available = info.available_memory();
-            if limits.memory() as u64 > available {
+            let available = ByteSize::b(info.available_memory());
+            if limits.memory() > available {
                 bail!(
-                    "not enough memory to build {} {}: needed {} MiB, have {} MiB\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
+                    "not enough memory to build {} {}: needed {}, have {}\nhelp: set DOCSRS_DISABLE_MEMORY_LIMIT=true to force a build",
                     name,
                     version,
-                    limits.memory() / 1024 / 1024,
-                    available / 1024 / 1024
+                    limits.memory(),
+                    available
                 );
             } else {
-                debug!(
-                    "had enough memory: {} MiB <= {} MiB",
-                    limits.memory() / 1024 / 1024,
-                    available / 1024 / 1024
-                );
+                debug!("had enough memory: {} <= {}", limits.memory(), available,);
             }
         }
 
@@ -971,7 +968,7 @@ impl RustwideBuilder {
         let rustdoc_flags = vec!["--output-format".to_string(), "json".to_string()];
 
         let mut storage = LogStorage::new(log::LevelFilter::Info);
-        storage.set_max_size(limits.max_log_size());
+        storage.set_max_size(limits.max_log_size().as_u64() as usize);
 
         let result = logging::capture(&storage, || {
             let _span = info_span!("cargo_build_json", target = %target).entered();
@@ -1165,7 +1162,7 @@ impl RustwideBuilder {
         ]);
 
         let mut storage = LogStorage::new(log::LevelFilter::Info);
-        storage.set_max_size(limits.max_log_size());
+        storage.set_max_size(limits.max_log_size().as_u64() as usize);
 
         // we have to run coverage before the doc-build because currently it
         // deletes the doc-target folder.
@@ -1326,7 +1323,7 @@ impl RustwideBuilder {
 
         let mut command = build
             .cargo()
-            .timeout(Some(limits.timeout()))
+            .timeout(Some(limits.timeout().into()))
             .no_output_timeout(None);
 
         for (key, val) in metadata.environment_variables() {
@@ -2240,7 +2237,7 @@ mod tests {
     #[ignore]
     fn test_workspace_reinitialize_after_interval() -> Result<()> {
         let mut config = Config::test_config()?;
-        config.build_workspace_reinitialization_interval = Duration::from_secs(1);
+        config.build_workspace_reinitialization_interval = Duration::from_secs(1).into();
         let env = TestEnvironment::builder().config(config).build()?;
 
         use std::thread::sleep;

@@ -14,7 +14,7 @@ use std::{
 use tokio::sync::Mutex;
 use tracing::info;
 
-const PRIORITY_RELOAD_FREQUENCY: Duration = Duration::from_secs(300); // 5 minutes
+const PRIORITY_RELOAD_FREQUENCY: Duration = Duration::from_mins(5);
 
 /// cached crate priorities.
 ///
