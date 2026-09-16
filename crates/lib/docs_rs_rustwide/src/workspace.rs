@@ -1,5 +1,6 @@
 use crate::{
-    BuildResult, CpuLimit, HtmlOutput, ReleaseContext, StepResultExt, workspace_lock::WorkspaceLock,
+    BuildResult, CpuLimit, HtmlOutput, ReleaseContext, StepResultExt, ToolchainExt as _,
+    workspace_lock::WorkspaceLock,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -183,7 +184,7 @@ impl BuildEnvironment {
     )]
     pub fn builder(
         #[builder(start_fn)] path: &Path,
-        #[builder(default = Toolchain::dist("nightly"))] toolchain: Toolchain,
+        #[builder(default = Toolchain::default())] toolchain: Toolchain,
         #[builder(default = false)] running_inside_docker: bool,
         #[builder(default)] sandbox_image: SandboxImageSource,
         #[builder(default = false)] fast_init: bool,

@@ -8,6 +8,10 @@ use std::{path::PathBuf, sync::LazyLock};
 
 static DEFAULT_LIMITS: LazyLock<Limits> = LazyLock::new(Limits::default);
 
+fn parse_dist_toolchain(value: &str) -> Result<Toolchain, String> {
+    Ok(Toolchain::dist(value))
+}
+
 /// Run the same sandboxed documentation build used by docs.rs.
 #[derive(Debug, Parser)]
 #[command(version, max_term_width = 100)]
@@ -29,8 +33,14 @@ pub(crate) struct Args {
     pub(crate) workspace: Option<PathBuf>,
 
     /// Rustup toolchain channel or version to use.
-    #[arg(long, value_name = "CHANNEL", conflicts_with = "ci_toolchain")]
-    toolchain: Option<String>,
+    #[arg(
+        long,
+        value_name = "CHANNEL",
+        default_value_t = Toolchain::default(),
+        conflicts_with = "ci_toolchain",
+        value_parser = parse_dist_toolchain
+    )]
+    toolchain: Toolchain,
 
     /// Rust CI artifact commit SHA to use as the toolchain.
     #[arg(long, value_name = "SHA", conflicts_with = "toolchain")]
@@ -113,11 +123,7 @@ impl Args {
     pub(crate) fn toolchain(&self) -> Toolchain {
         match &self.ci_toolchain {
             Some(sha) => Toolchain::ci(sha, self.ci_alt),
-            None => self
-                .toolchain
-                .as_deref()
-                .map(Toolchain::dist)
-                .unwrap_or_else(Toolchain::default),
+            None => self.toolchain.clone(),
         }
     }
 

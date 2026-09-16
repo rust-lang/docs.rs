@@ -20,7 +20,7 @@ use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
     BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResultExt as _, TargetBuildResult,
-    utils::copy_dir_all,
+    ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
@@ -42,9 +42,9 @@ use std::{
 use tracing::{debug, error, info, info_span, instrument, warn};
 
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
-    let name: String = get_config(conn, ConfigName::Toolchain)
-        .await?
-        .unwrap_or_else(|| "nightly".into());
+    let Some(name) = get_config::<String>(conn, ConfigName::Toolchain).await? else {
+        return Ok(Toolchain::default());
+    };
 
     // If the toolchain is all hex, assume it references an artifact from
     // CI, for instance an `@bors try` build.
