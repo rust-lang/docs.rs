@@ -689,6 +689,8 @@ fn find_single_output_file(
 
 #[cfg(test)]
 mod tests {
+    use docs_rs_types::ByteSizeExt as _;
+
     use super::*;
     use crate::StepResultExt as _;
     use std::ffi::OsStr;
@@ -809,7 +811,7 @@ mod tests {
     #[test]
     fn capture_retains_preparation_failures_without_applying_policy() {
         crate::logging::init(false);
-        let step = capture_rustwide_step::<()>(1024, || {
+        let step = capture_rustwide_step::<()>(ByteSize::MAX, || {
             log::info!("installing additional target");
             Err(BuildStepError::Prepare(anyhow::anyhow!(
                 "target unavailable"

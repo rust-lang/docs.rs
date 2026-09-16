@@ -1,5 +1,5 @@
 mod duration_impl {
-    use derive_more::AddAssign;
+    use derive_more::{Add, AddAssign, Sum};
     use sqlx::postgres::types::PgInterval;
     use sqlx::{
         Postgres,
@@ -12,7 +12,7 @@ mod duration_impl {
     /// NewType around std Duration to be able to use it with sqlx.
     ///
     /// For now only for decoding intervals from the database.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq, Copy, AddAssign)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Sum, Ord, Copy, Add, AddAssign)]
     pub struct Duration(pub StdDuration);
 
     // Forward constructors returning StdDuration, wrapping their results in Self.
