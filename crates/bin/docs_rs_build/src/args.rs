@@ -1,8 +1,7 @@
-use bytesize::ByteSize;
 use clap::{ArgAction, Parser, ValueEnum};
 use docs_rs_build_limits::Limits;
 use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource, ToolchainExt as _};
-use docs_rs_types::Duration;
+use docs_rs_types::{ByteSize, Duration};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{path::PathBuf, sync::LazyLock};
 

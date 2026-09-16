@@ -1,5 +1,4 @@
 use crate::config::Config;
-use bytesize::ByteSize;
 use docs_rs_types::{ByteSize, Duration};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

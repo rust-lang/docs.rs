@@ -1,7 +1,5 @@
 use super::*;
-use bytesize::ByteSize;
 use docs_rs_config::AppConfig as _;
-use docs_rs_types::ByteSizeExt as _;
 use pretty_assertions::assert_eq;
 use sqlx::Row as _;
 

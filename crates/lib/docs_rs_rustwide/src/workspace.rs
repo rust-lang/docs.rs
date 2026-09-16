@@ -4,8 +4,8 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
-use bytesize::ByteSize;
 use docs_rs_build_limits::Limits;
+use docs_rs_types::ByteSize;
 use docs_rs_utils::{APP_USER_AGENT, retry};
 use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use rustwide::{

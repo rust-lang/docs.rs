@@ -650,11 +650,9 @@ mod tests {
 
     use super::*;
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
-    use bytesize::ByteSize;
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
-        BuildStatus, ByteSizeExt as _, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version,
-        testing::V0_1,
+        BuildStatus, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version, testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;

@@ -5,10 +5,12 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
-use bytesize::ByteSize;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
-use docs_rs_types::doc_coverage::{self, DocCoverage};
+use docs_rs_types::{
+    ByteSize,
+    doc_coverage::{self, DocCoverage},
+};
 use docsrs_metadata::{BuildTargets, HOST_TARGET, Metadata};
 use rustwide::{
     Build,
@@ -689,8 +691,6 @@ fn find_single_output_file(
 
 #[cfg(test)]
 mod tests {
-    use docs_rs_types::ByteSizeExt as _;
-
     use super::*;
     use crate::StepResultExt as _;
     use std::ffi::OsStr;
