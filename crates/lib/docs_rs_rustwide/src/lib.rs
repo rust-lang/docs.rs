@@ -12,6 +12,7 @@ mod command;
 pub mod logging;
 mod release;
 mod result;
+mod rustwide_ext;
 mod sandbox;
 #[doc(hidden)]
 pub mod testing;
@@ -26,6 +27,7 @@ pub use result::{
     BuildResult, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput, TargetBuildResult,
     step::{BuildStepError, StepFailure, StepReport, StepResult, StepResultExt},
 };
+pub use rustwide_ext::ToolchainExt;
 pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
 pub use workspace::{
     BuildEnvironment, MaintenanceResult, SANDBOX_IMAGE_LINUX, SANDBOX_IMAGE_LINUX_MICRO,

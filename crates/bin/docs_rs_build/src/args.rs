@@ -1,7 +1,7 @@
 use bytesize::ByteSize;
 use clap::{ArgAction, Parser, ValueEnum};
 use docs_rs_build_limits::Limits;
-use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource};
+use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource, ToolchainExt as _};
 use docs_rs_types::Duration;
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{path::PathBuf, sync::LazyLock};
@@ -113,7 +113,11 @@ impl Args {
     pub(crate) fn toolchain(&self) -> Toolchain {
         match &self.ci_toolchain {
             Some(sha) => Toolchain::ci(sha, self.ci_alt),
-            None => Toolchain::dist(self.toolchain.as_deref().unwrap_or("nightly")),
+            None => self
+                .toolchain
+                .as_deref()
+                .map(Toolchain::dist)
+                .unwrap_or_else(Toolchain::default),
         }
     }
 
