@@ -650,9 +650,11 @@ mod tests {
 
     use super::*;
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
+    use bytesize::ByteSize;
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_types::{
-        BuildStatus, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version, testing::V0_1,
+        BuildStatus, ByteSizeExt as _, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version,
+        testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;
@@ -919,7 +921,7 @@ mod tests {
                     for filename in &json_files {
                         let blob = env.runtime().block_on(
                             env.storage()?
-                                .get(&format!("{json_prefix}{filename}"), usize::MAX),
+                                .get(&format!("{json_prefix}{filename}"), ByteSize::MAX),
                         )?;
                         let bytes =
                             docs_rs_storage::decompress(blob.content.as_slice(), *alg, usize::MAX)?;

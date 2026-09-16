@@ -1,5 +1,7 @@
 use super::*;
+use bytesize::ByteSize;
 use docs_rs_config::AppConfig as _;
+use docs_rs_types::ByteSizeExt as _;
 use pretty_assertions::assert_eq;
 use sqlx::Row as _;
 
@@ -180,7 +182,7 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
         assert!(!success);
         let blob = env.runtime().block_on(env.storage()?.get(
             &format!("build-logs/{}/{filename}", row.get::<i32, _>("id")),
-            usize::MAX,
+            ByteSize::MAX,
         ))?;
         assert!(String::from_utf8(blob.content)?.contains("intentional compile failure"));
     }
@@ -323,7 +325,7 @@ fn regeneration_failure_does_not_request_queue_reattempt() -> Result<()> {
         assert!(!success);
         let log = env.runtime().block_on(env.storage()?.get(
             &format!("build-logs/{}/{filename}", row.get::<i32, _>("id")),
-            usize::MAX,
+            ByteSize::MAX,
         ))?;
         assert!(String::from_utf8(log.content)?.contains("Cargo.toml"));
     }

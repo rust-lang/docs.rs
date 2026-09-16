@@ -3,6 +3,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
+use bytesize::ByteSize;
 use docs_rs_build_limits::Limits;
 use docs_rs_utils::{APP_USER_AGENT, retry};
 use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
@@ -460,7 +461,7 @@ impl BuildEnvironment {
 
     pub(crate) fn sandbox_builder(&self, limits: &Limits) -> SandboxBuilder {
         let builder = SandboxBuilder::new()
-            .memory_limit(Some(limits.memory()))
+            .memory_limit(Some(limits.memory().as_u64() as usize))
             .enable_networking(limits.networking())
             .docker_runtime(self.docker_runtime);
         match &self.cpu_limit {
@@ -497,12 +498,12 @@ impl BuildEnvironment {
             sysinfo::RefreshKind::nothing()
                 .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
         );
-        let available = system.available_memory();
-        if limits.memory() as u64 > available {
+        let available = ByteSize::b(system.available_memory());
+        if limits.memory() > available {
             bail!(
-                "not enough host memory for build: needed {} MiB, have {} MiB",
-                limits.memory() / 1024 / 1024,
-                available / 1024 / 1024,
+                "not enough host memory for build: needed {}, have {}",
+                limits.memory(),
+                available,
             );
         }
         Ok(())

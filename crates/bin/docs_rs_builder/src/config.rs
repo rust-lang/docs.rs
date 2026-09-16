@@ -1,22 +1,10 @@
 use anyhow::{Result, bail};
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
-<<<<<<< HEAD
 use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource};
-use rustwide::cmd::DockerRuntime;
-use std::{path::PathBuf, sync::Arc, time::Duration};
-=======
 use docs_rs_types::Duration;
 use rustwide::cmd::DockerRuntime;
-use std::{
-    num::ParseIntError,
-    ops::{Deref, RangeInclusive},
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-};
-use thiserror::Error;
->>>>>>> bytesize
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
 pub struct Config {

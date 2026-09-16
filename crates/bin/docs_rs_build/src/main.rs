@@ -30,10 +30,10 @@ fn main() -> ExitCode {
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
             println!("error: {error:#}");
-            if let Some(failure) = error.downcast_ref::<docs_rs_rustwide::StepFailure>() {
-                if let Some(log) = failure.log() {
-                    println!("captured build log:\n{log}");
-                }
+            if let Some(failure) = error.downcast_ref::<docs_rs_rustwide::StepFailure>()
+                && let Some(log) = failure.log()
+            {
+                println!("captured build log:\n{log}");
             }
             ExitCode::FAILURE
         }

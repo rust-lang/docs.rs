@@ -5,6 +5,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
+use bytesize::ByteSize;
 use docs_rs_build_limits::Limits;
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_types::doc_coverage::{self, DocCoverage};
@@ -73,11 +74,11 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
 }
 
 fn capture_rustwide_step<T>(
-    max_log_size: usize,
+    max_log_size: ByteSize,
     run: impl FnOnce() -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
     let mut storage = LogStorage::new(log::LevelFilter::Info);
-    storage.set_max_size(max_log_size);
+    storage.set_max_size(max_log_size.as_u64() as usize);
 
     let mut result = capture_step(|| logging::capture(&storage, run));
 
@@ -174,7 +175,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let mut command = self
             .build
             .cargo()
-            .timeout(Some(self.limits.timeout()))
+            .timeout(Some(self.limits.timeout().into()))
             .no_output_timeout(None);
 
         for (key, value) in self.docsrs_metadata.environment_variables() {

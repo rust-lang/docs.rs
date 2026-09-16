@@ -1,13 +1,6 @@
-<<<<<<< HEAD
 use crate::config::Config;
-use serde::Serialize;
-use std::time::Duration;
-=======
-use crate::{config::Config, overrides::Overrides};
-use anyhow::Result;
 use bytesize::ByteSize;
-use docs_rs_types::{Duration, KrateName};
->>>>>>> bytesize
+use docs_rs_types::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Limits {

@@ -1,14 +1,5 @@
-<<<<<<< HEAD
-use docs_rs_types::KrateName;
-use std::time::Duration;
-=======
-use anyhow::Result;
 use bytesize::ByteSize;
-use docs_rs_types::Duration;
-use docs_rs_types::KrateName;
-use futures_util::stream::TryStreamExt;
-use tracing::warn;
->>>>>>> bytesize
+use docs_rs_types::{Duration, KrateName};
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Overrides {
