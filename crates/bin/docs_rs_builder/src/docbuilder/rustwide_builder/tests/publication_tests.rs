@@ -342,19 +342,45 @@ fn regeneration_failure_does_not_request_queue_reattempt() -> Result<()> {
     mock_package(&env, &name, &V0_1, Some("lib.rs"), "pub fn example() {}")?;
     let mut builder = env.build_builder()?;
     let builds = env.config().rustwide_workspace.join("builds");
-    // Corrupt the manifest only after initial metadata/fetch have succeeded.
-    // The exclusive workspace contains exactly one active release build.
-    builder.before_build = Some(Box::new(move || {
-        let sources: Vec<_> = fs::read_dir(&builds)
-            .unwrap()
-            .map(|entry| entry.unwrap().path().join("source"))
+    let limits = builder.get_limits(&name)?;
+    let krate = Crate::sparse_registry(
+        builder.registry_config.sparse_index_host.clone(),
+        name.as_str(),
+        &V0_1.to_string(),
+    )?;
+    fs::create_dir_all(&builder.config.temp_dir)?;
+    let source_dir = tempfile::tempdir_in(&builder.config.temp_dir)?;
+    let fetched = builder
+        .environment
+        .release(&krate)
+        .directory_label(format!("{name}-{V0_1}"))
+        .limits(limits)
+        .fetch()?;
+    fetched.copy_source_to(source_dir.path())?;
+    let source_stats = env.runtime().block_on(
+        env.storage()?
+            .store_all_in_archive(&source_archive_path(&name, &V0_1), &source_dir),
+    )?;
+    let full_build_result = fetched.run(|build| {
+        // The callback runs after initial metadata/fetch have succeeded.
+        // The exclusive workspace contains exactly one active release build.
+        let sources: Vec<_> = fs::read_dir(&builds)?
+            .map(|entry| entry.map(|entry| entry.path().join("source")))
+            .collect::<std::io::Result<Vec<_>>>()?
+            .into_iter()
             .filter(|path| path.is_dir())
             .collect();
         assert_eq!(sources.len(), 1);
         assert!(sources[0].join("Cargo.lock").exists());
-        fs::write(sources[0].join("Cargo.toml"), "[").unwrap();
-    }));
-    let release = builder.build_release(&name, &V0_1)?.unwrap();
+        fs::write(sources[0].join("Cargo.toml"), "[")?;
+        Ok(build.build_docs())
+    })?;
+    let release = BuiltRelease {
+        statistics: full_build_result.statistics().clone(),
+        result: full_build_result.into_inner(),
+        source_dir,
+        source_stats,
+    };
     let target = release.result.default_target();
     assert!(target.documentation().is_err());
     let failure = target

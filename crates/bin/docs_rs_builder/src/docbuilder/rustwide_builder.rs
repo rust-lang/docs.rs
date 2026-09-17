@@ -61,8 +61,6 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
 
 pub struct RustwideBuilder {
     environment: BuildEnvironment,
-    #[cfg(test)]
-    before_build: Option<Box<dyn Fn()>>,
     runtime: Handle,
     config: Arc<Config>,
     db: Pool,
@@ -110,8 +108,6 @@ impl RustwideBuilder {
 
         Ok(RustwideBuilder {
             environment,
-            #[cfg(test)]
-            before_build: None,
             config: config.clone(),
             db: context.pool()?.clone(),
             runtime,
@@ -322,13 +318,7 @@ impl RustwideBuilder {
         )?;
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
-        let full_build_result = fetched.run(|build| {
-            #[cfg(test)]
-            if let Some(before_build) = &self.before_build {
-                before_build();
-            }
-            Ok(build.build_docs())
-        })?;
+        let full_build_result = fetched.run(|build| Ok(build.build_docs()))?;
 
         Ok(Some(BuiltRelease {
             statistics: full_build_result.statistics().clone(),
