@@ -384,11 +384,11 @@ impl RustwideBuilder {
         };
 
         info!("uploading build logs...");
+
         // NOTE: right now we only upload logs for the html build & the json build.
         // The new library also collects logs from all other steps, I didn't dig into
         // if these would be useful for crate developers at all, and leave them as they
         // are right now.
-
         let mut build_logs = Vec::new();
         for target in release_build_result.targets() {
             let successful = target.documentation_succeeded();
@@ -406,14 +406,31 @@ impl RustwideBuilder {
                     successful, "missing build log after documentation build"
                 );
             }
+
+            let json_build = target.rustdoc_json();
+            if let Some(log) = json_build.log() {
+                let json_log_name = format!("{}_json.txt", target.target());
+                match self.blocking_storage.store_one(
+                    format!("build-logs/{build_id}/{json_log_name}"),
+                    log.to_string(),
+                ) {
+                    Ok(_) => build_logs.push((json_log_name, json_build.is_ok())),
+                    Err(err) => error!(
+                        target = target.target(),
+                        ?err,
+                        "could not publish JSON build log"
+                    ),
+                }
+            } else {
+                error!(
+                    target = target.target(),
+                    successful = json_build.is_ok(),
+                    "missing build log after json build"
+                );
+            }
         }
 
-        build_logs.extend(self.publish_json_with_build_logs(
-            build_id,
-            name,
-            version,
-            &release_build_result,
-        )?);
+        self.publish_json(build_id, name, version, &release_build_result)?;
 
         let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
@@ -545,65 +562,47 @@ impl RustwideBuilder {
     }
 
     #[instrument(skip(self, release))]
-    fn publish_json_with_build_logs(
+    fn publish_json(
         &self,
         build_id: BuildId,
         name: &KrateName,
         version: &Version,
         release: &ReleaseBuildResult,
-    ) -> Result<Vec<(String, bool)>> {
-        info!("uploading rustdoc json files & build logs...");
+    ) -> Result<()> {
+        info!("uploading rustdoc json files...");
 
-        let mut build_logs = Vec::new();
-
-        for target_result in release.targets() {
-            let target = target_result.target();
-            let json_build = target_result.rustdoc_json();
-
-            if let Some(log) = json_build.log() {
-                let json_log_name = format!("{target}_json.txt");
-                match self.blocking_storage.store_one(
-                    format!("build-logs/{build_id}/{json_log_name}"),
-                    log.to_string(),
-                ) {
-                    Ok(_) => build_logs.push((json_log_name, json_build.is_ok())),
-                    Err(err) => error!(target, ?err, "could not publish JSON build log"),
-                }
-            } else {
+        for (target, json) in release.targets().filter_map(|target_result| {
+            target_result
+                .rustdoc_json()
+                .as_ref()
+                .ok()
+                .map(|result| (target_result.target(), result))
+        }) {
+            let json = json.value();
+            if let Err(err) = json.format_version().and_then(|format_version| {
+                self.runtime.block_on(try_join_all(
+                    RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
+                        self.upload_json_output(
+                            name,
+                            version,
+                            target,
+                            format_version,
+                            *algorithm,
+                            json.path().to_owned(),
+                        )
+                    }),
+                ))?;
+                Ok(())
+            }) {
                 error!(
-                    target = target_result.target(),
-                    successful = json_build.is_ok(),
-                    "missing build log after json build"
+                    target,
+                    ?err,
+                    "could not publish rustdoc JSON; continuing release"
                 );
-            }
-
-            if let Ok(json) = json_build {
-                let json = json.value();
-                if let Err(err) = json.format_version().and_then(|format_version| {
-                    self.runtime.block_on(try_join_all(
-                        RUSTDOC_JSON_COMPRESSION_ALGORITHMS.iter().map(|algorithm| {
-                            self.upload_json_output(
-                                name,
-                                version,
-                                target,
-                                format_version,
-                                *algorithm,
-                                json.path().to_owned(),
-                            )
-                        }),
-                    ))?;
-                    Ok(())
-                }) {
-                    error!(
-                        target,
-                        ?err,
-                        "could not publish rustdoc JSON; continuing release"
-                    );
-                }
             }
         }
 
-        Ok(build_logs)
+        Ok(())
     }
 
     #[instrument(skip(self))]
