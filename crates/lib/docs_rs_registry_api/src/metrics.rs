@@ -1,4 +1,4 @@
-use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},
@@ -47,10 +47,12 @@ impl RegistryApiMetrics {
                 .with_description(
                     "Time to response headers or transport failure, including retries",
                 )
-                .with_boundaries(vec![
-                    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5, 3.5, 5.0,
-                    7.5, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0,
-                ])
+                .with_boundaries(
+                    RESPONSE_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
                 .with_unit("s")
                 .build(),
         }
