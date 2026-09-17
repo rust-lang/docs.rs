@@ -96,11 +96,12 @@ impl AppConfig for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{env, process::Command};
 
     #[test]
     fn toolchain_update_interval_default_and_override() {
         const EXPECTED: &str = "DOCSRS_TEST_EXPECTED_TOOLCHAIN_INTERVAL";
-        if let Ok(expected) = std::env::var(EXPECTED) {
+        if let Ok(expected) = env::var(EXPECTED) {
             let config = Config::from_environment().unwrap();
             assert_eq!(
                 config.build_toolchain_update_interval,
@@ -110,14 +111,14 @@ mod tests {
         }
         // Isolate environment changes in child processes so parallel tests are unaffected.
         for (value, expected) in [(None, "1h"), (Some("30m"), "30m"), (Some("0s"), "0s")] {
-            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            let mut command = Command::new(env::current_exe().unwrap());
             command
                 .args([
                     "--exact",
                     "config::tests::toolchain_update_interval_default_and_override",
                     "--nocapture",
                 ])
-                .env("DOCSRS_PREFIX", std::env::temp_dir())
+                .env("DOCSRS_PREFIX", env::temp_dir())
                 .env_remove("DOCSRS_BUILD_CPU_CORES")
                 .env_remove("DOCSRS_BUILD_CPU_LIMIT")
                 .env_remove("DOCSRS_BUILD_TOOLCHAIN_UPDATE_INTERVAL")
