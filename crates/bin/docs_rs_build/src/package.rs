@@ -41,6 +41,14 @@ pub(crate) fn create(manifest_dir: &Path, package: Option<&str>) -> Result<Sourc
         .with_context(|| format!("opening package archive {}", archive_path.display()))?;
     let source = unpack_crate_archive(archive)
         .with_context(|| format!("extracting package archive {}", archive_path.display()))?;
+    // Cargo removes [workspace] when packaging. Restore an empty workspace so
+    // the build copy cannot accidentally join the original checkout's workspace.
+    let manifest_path = source.path().join("Cargo.toml");
+    let mut manifest: toml::Table = toml::from_str(&fs::read_to_string(&manifest_path)?)
+        .context("parsing packaged manifest")?;
+    manifest.insert("workspace".into(), toml::Value::Table(toml::Table::new()));
+    fs::write(&manifest_path, toml::to_string(&manifest)?)
+        .context("isolating packaged crate from parent workspaces")?;
     info!(source_dir = %source.path().display(), "crate archive ready");
     Ok(source)
 }
@@ -113,6 +121,44 @@ exclude = ["not-packaged"]
         assert!(packaged.path().join("Cargo.toml").is_file());
         assert!(packaged.path().join("src/lib.rs").is_file());
         assert!(!packaged.path().join("not-packaged").exists());
+    }
+
+    #[test]
+    fn packaged_crate_is_independent_of_parent_workspace() {
+        let checkout = tempfile::tempdir().unwrap();
+        write_package(checkout.path(), "packaged-root");
+        let manifest_path = checkout.path().join("Cargo.toml");
+        let original = format!(
+            "{}\n[workspace]\nmembers = []\n",
+            fs::read_to_string(&manifest_path).unwrap()
+        );
+        fs::write(&manifest_path, &original).unwrap();
+        let packaged = create(checkout.path(), None).unwrap();
+        let nested = checkout
+            .path()
+            .join("target/docsrs-build/builds/release/source");
+        docs_rs_rustwide::utils::copy_dir_all(packaged.path(), &nested, |_| {}).unwrap();
+
+        let output = Command::new("cargo")
+            .args([
+                "metadata",
+                "--no-deps",
+                "--offline",
+                "--format-version",
+                "1",
+            ])
+            .current_dir(&nested)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let metadata: toml::Table =
+            toml::from_str(&fs::read_to_string(nested.join("Cargo.toml")).unwrap()).unwrap();
+        assert!(metadata["workspace"].as_table().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(&manifest_path).unwrap(), original);
     }
 
     #[test]
