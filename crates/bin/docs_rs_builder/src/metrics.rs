@@ -13,54 +13,47 @@ use std::time::Duration;
 ///   which would be an estimated 32 GiB of docs based on the compression
 ///   ratio above.
 /// * we don't know the distribution of these doc sizes yet.
-pub const DOCUMENTATION_SIZE_BUCKETS: &[ByteSize; 20] = &[
-    ByteSize::kib(64),
-    ByteSize::kib(128),
-    ByteSize::kib(256),
-    ByteSize::kib(512),
-    ByteSize::mib(1),
-    ByteSize::mib(2),
-    ByteSize::mib(4),
-    ByteSize::mib(8),
-    ByteSize::mib(16),
-    ByteSize::mib(32),
-    ByteSize::mib(64),
-    ByteSize::mib(128),
-    ByteSize::mib(256),
-    ByteSize::mib(512),
-    ByteSize::gib(1),
-    ByteSize::gib(2),
-    ByteSize::gib(4),
-    ByteSize::gib(8),
-    ByteSize::gib(16),
-    ByteSize::gib(32),
-];
+pub const DOCUMENTATION_SIZE_BUCKETS: &[ByteSize; 20] = &{
+    let mut buckets = [ByteSize::kib(64); 20];
+    let mut i = 1;
+    while i < buckets.len() {
+        buckets[i] = ByteSize::b(buckets[i - 1].as_u64() * 2);
+        i += 1;
+    }
+    buckets
+};
 
-/// the measured times of building crates will be put into these buckets
-pub const BUILD_TIME_HISTOGRAM_BUCKETS: &[Duration] = &[
-    Duration::from_secs(5),
-    Duration::from_secs(10),
-    Duration::from_secs(15),
-    Duration::from_secs(20),
-    Duration::from_secs(25),
-    Duration::from_secs(30),
-    Duration::from_secs(45),
-    Duration::from_mins(1),
-    Duration::from_secs(90),
-    Duration::from_mins(2),
-    Duration::from_secs(150),
-    Duration::from_mins(3),
-    Duration::from_secs(210),
-    Duration::from_mins(4),
-    Duration::from_secs(270),
-    Duration::from_mins(5),
-    Duration::from_mins(7),
-    Duration::from_mins(10),
-    Duration::from_mins(15),
-    Duration::from_mins(20),
-    Duration::from_mins(30),
-    Duration::from_mins(60),
-];
+/// Build-time buckets with finer resolution for shorter builds.
+pub const BUILD_TIME_HISTOGRAM_BUCKETS: &[Duration; 50] = &{
+    let mut buckets = [Duration::ZERO; 50];
+    let mut i = 0;
+
+    // 5 seconds through 2 minutes, in 5-second steps (24 boundaries).
+    let mut seconds = 5;
+    while seconds <= 120 {
+        buckets[i] = Duration::from_secs(seconds);
+        seconds += 5;
+        i += 1;
+    }
+
+    // Above 2 minutes through 10 minutes, in 30-second steps (16 boundaries).
+    let mut seconds = 150;
+    while seconds <= 600 {
+        buckets[i] = Duration::from_secs(seconds);
+        seconds += 30;
+        i += 1;
+    }
+
+    // Above 10 minutes through 60 minutes, in 5-minute steps (10 boundaries).
+    let mut minutes = 15;
+    while minutes <= 60 {
+        buckets[i] = Duration::from_mins(minutes);
+        minutes += 5;
+        i += 1;
+    }
+
+    buckets
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildResult {
