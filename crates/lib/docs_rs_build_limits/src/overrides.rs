@@ -1,7 +1,4 @@
-use anyhow::Result;
 use docs_rs_types::{ByteSize, Duration, KrateName};
-use futures_util::stream::TryStreamExt;
-use tracing::warn;
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Overrides {
@@ -21,7 +18,9 @@ macro_rules! row_to_overrides {
 }
 
 impl Overrides {
-    pub async fn all(conn: &mut sqlx::PgConnection) -> Result<Vec<(KrateName, Self)>> {
+    pub async fn all(conn: &mut sqlx::PgConnection) -> anyhow::Result<Vec<(KrateName, Self)>> {
+        use futures_util::stream::TryStreamExt;
+
         Ok(sqlx::query!(
             r#"
             SELECT
@@ -41,7 +40,7 @@ impl Overrides {
     pub async fn for_crate(
         conn: &mut sqlx::PgConnection,
         krate: &KrateName,
-    ) -> Result<Option<Self>> {
+    ) -> anyhow::Result<Option<Self>> {
         Ok(sqlx::query!(
             r#"SELECT
                 crate_name as "crate_name: KrateName",
@@ -60,9 +59,9 @@ impl Overrides {
         conn: &mut sqlx::PgConnection,
         krate: &KrateName,
         overrides: Self,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if overrides.timeout.is_some() && overrides.targets.is_none() {
-            warn!(
+            tracing::warn!(
                 %krate,
                 ?overrides,
                 "setting `Overrides::timeout` implies a default `Overrides::targets = 1`, prefer setting this explicitly",
@@ -74,7 +73,7 @@ impl Overrides {
             .await?
             .is_none()
         {
-            warn!(%krate, "setting overrides for unknown crate");
+            tracing::warn!(%krate, "setting overrides for unknown crate");
         }
 
         sqlx::query!(
@@ -99,7 +98,7 @@ impl Overrides {
         Ok(())
     }
 
-    pub async fn remove(conn: &mut sqlx::PgConnection, krate: &KrateName) -> Result<()> {
+    pub async fn remove(conn: &mut sqlx::PgConnection, krate: &KrateName) -> anyhow::Result<()> {
         sqlx::query!(
             "DELETE FROM sandbox_overrides WHERE crate_name = $1",
             krate as _
@@ -128,7 +127,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn retrieve_overrides() -> Result<()> {
+    async fn retrieve_overrides() -> anyhow::Result<()> {
         let db = db().await?;
         let mut conn = db.async_conn().await?;
 

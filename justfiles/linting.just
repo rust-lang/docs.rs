@@ -90,7 +90,7 @@ clippy-fix: (clippy "--fix --allow-dirty --allow-staged")
 
 # Run Rust linting, applying fixes outside CI.
 [group('linting')]
-lint-rust:
+lint-rust: compose-up-resources
     #!/usr/bin/env bash
     set -euo pipefail
 

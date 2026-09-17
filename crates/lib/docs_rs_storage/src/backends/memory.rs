@@ -14,9 +14,12 @@ use futures_util::stream::{self, BoxStream};
 use itertools::Itertools as _;
 use tokio::fs;
 
+pub(crate) type UploadRejectionPredicate = fn(&str) -> bool;
+
 pub(crate) struct MemoryBackend {
     otel_metrics: StorageMetrics,
     objects: DashMap<String, Blob>,
+    pub(crate) rejected_uploads: std::sync::RwLock<Option<UploadRejectionPredicate>>,
 }
 
 impl MemoryBackend {
@@ -24,6 +27,7 @@ impl MemoryBackend {
         Self {
             otel_metrics,
             objects: DashMap::new(),
+            rejected_uploads: Default::default(),
         }
     }
 }
@@ -55,6 +59,15 @@ impl StorageBackendMethods for MemoryBackend {
             source,
             compression,
         } = upload;
+
+        if self
+            .rejected_uploads
+            .read()
+            .unwrap()
+            .is_some_and(|reject| reject(&path))
+        {
+            anyhow::bail!("injected upload failure: {path}");
+        }
 
         let content = match source {
             StreamUploadSource::Bytes(content) => content.to_vec(),

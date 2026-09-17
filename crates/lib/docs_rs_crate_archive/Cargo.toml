@@ -12,7 +12,7 @@ testing = ["dep:docs_rs_types"]
 anyhow = { workspace = true }
 docs_rs_types = { path = "../docs_rs_types", optional = true }
 flate2 = { workspace = true }
-tar = { workspace = true }
+tar = "0.4.46"
 tempfile = { workspace = true }
 
 [dev-dependencies]

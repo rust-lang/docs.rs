@@ -13,6 +13,7 @@ target
 .rustwide-docker
 archive_cache
 .workspace
+.workspace.test-lock
 node_modules/
 docs/book/
 docs/src/generated/
