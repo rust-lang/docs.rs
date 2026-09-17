@@ -29,27 +29,42 @@ const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rust
 pub const SANDBOX_IMAGE_LINUX: &str = "ghcr.io/rust-lang/crates-build-env/linux";
 pub const SANDBOX_IMAGE_LINUX_MICRO: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
 
+/// Controls whether a named sandbox image may be pulled from its registry.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum ImagePullPolicy {
+    /// Require an image that is already present locally.
+    Local,
+    /// Pull the image even if an older version is present locally.
+    Remote,
+    /// Prefer an existing local image and pull only when it is missing.
+    #[default]
+    LocalOrRemote,
+}
+
 /// Describes how the sandbox image should be resolved whenever the workspace is initialized.
 #[derive(Clone, Debug, Default)]
 pub enum SandboxImageSource {
+    /// Use Rustwide's default image and resolution behavior.
     #[default]
     RustwideDefault,
-    /// Require an image that is already present locally.
-    Local(String),
-    /// Pull the image from its registry, even if an older version is present locally.
-    Remote(String),
-    /// Prefer an existing local image and pull it only when it is missing.
-    LocalOrRemote(String),
+    /// Resolve a named image using the selected pull policy.
+    Image {
+        name: String,
+        source: ImagePullPolicy,
+    },
 }
 
 impl SandboxImageSource {
     #[instrument(skip_all)]
     fn resolve(&self) -> Result<Option<SandboxImage>> {
-        let image = match self {
-            Self::RustwideDefault => return Ok(None),
-            Self::Local(name) => SandboxImage::local(name)?,
-            Self::Remote(name) => SandboxImage::remote(name)?,
-            Self::LocalOrRemote(name) => match SandboxImage::local(name) {
+        let Self::Image { name, source } = self else {
+            return Ok(None);
+        };
+        let image = match source {
+            ImagePullPolicy::Local => SandboxImage::local(name)?,
+            ImagePullPolicy::Remote => SandboxImage::remote(name)?,
+            ImagePullPolicy::LocalOrRemote => match SandboxImage::local(name) {
                 Ok(image) => image,
                 Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(name)?,
                 Err(error) => return Err(error.into()),
@@ -58,12 +73,33 @@ impl SandboxImageSource {
         Ok(Some(image))
     }
 
+    pub fn local(name: impl Into<String>) -> Self {
+        Self::Image {
+            name: name.into(),
+            source: ImagePullPolicy::Local,
+        }
+    }
+
+    pub fn remote(name: impl Into<String>) -> Self {
+        Self::Image {
+            name: name.into(),
+            source: ImagePullPolicy::Remote,
+        }
+    }
+
+    pub fn local_or_remote(name: impl Into<String>) -> Self {
+        Self::Image {
+            name: name.into(),
+            source: ImagePullPolicy::LocalOrRemote,
+        }
+    }
+
     pub fn linux() -> Self {
-        Self::LocalOrRemote(SANDBOX_IMAGE_LINUX.into())
+        Self::local_or_remote(SANDBOX_IMAGE_LINUX)
     }
 
     pub fn linux_micro() -> Self {
-        Self::LocalOrRemote(SANDBOX_IMAGE_LINUX_MICRO.into())
+        Self::local_or_remote(SANDBOX_IMAGE_LINUX_MICRO)
     }
 }
 
@@ -245,7 +281,7 @@ impl BuildEnvironment {
     /// cleanup retry their own failing operations. Callers should propagate a
     /// maintenance failure rather than retry the entire sequence, which may have
     /// already changed the workspace or toolchain.
-    /// Refreshing a workspace configured with [`SandboxImageSource::Remote`]
+    /// Refreshing a workspace configured with [`SandboxImageSource::remote`]
     /// resolves and pulls the image again, allowing a long-running builder to
     /// pick up newly published versions of the same remote image tag.
     ///

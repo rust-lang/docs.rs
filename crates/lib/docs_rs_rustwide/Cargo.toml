@@ -17,6 +17,7 @@ docs_rs_utils = { path = "../docs_rs_utils" }
 docsrs-metadata = { path = "../metadata" }
 log = "0.4"
 rustwide = { workspace = true }
+strum  = { workspace = true }
 sysinfo = { version = "0.39.0", default-features = false, features = ["system"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

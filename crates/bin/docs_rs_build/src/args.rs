@@ -1,6 +1,6 @@
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{ArgAction, Parser};
 use docs_rs_build_limits::Limits;
-use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, SandboxImageSource, ToolchainExt as _};
+use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, ImagePullPolicy, SandboxImageSource, ToolchainExt as _};
 use docs_rs_types::{ByteSize, Duration};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{path::PathBuf, sync::LazyLock};
@@ -59,9 +59,9 @@ pub(crate) struct Args {
     #[arg(long, value_name = "IMAGE")]
     image: Option<String>,
 
-    /// How the sandbox image is obtained.
-    #[arg(long, value_enum, default_value_t)]
-    image_source: ImageSource,
+    /// How the sandbox image is obtained: local, remote, or local-or-remote.
+    #[arg(long, default_value_t)]
+    image_source: ImagePullPolicy,
 
     /// The Docker runtime used for sandbox containers: default or runsc.
     #[arg(long, default_value_t)]
@@ -141,10 +141,9 @@ impl Args {
             }
             .into()
         });
-        match self.image_source {
-            ImageSource::LocalOrRemote => SandboxImageSource::LocalOrRemote(name),
-            ImageSource::Local => SandboxImageSource::Local(name),
-            ImageSource::Remote => SandboxImageSource::Remote(name),
+        SandboxImageSource::Image {
+            name,
+            source: self.image_source,
         }
     }
 
@@ -172,14 +171,6 @@ impl Args {
             max_log_size: self.max_captured_log_size,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-enum ImageSource {
-    #[default]
-    LocalOrRemote,
-    Local,
-    Remote,
 }
 
 #[cfg(test)]
@@ -243,12 +234,10 @@ mod tests {
                 argv.extend(&image_args);
                 let args = Args::try_parse_from(argv).unwrap();
                 let image = args.sandbox_image();
-                let name = match (source, image) {
-                    ("local", SandboxImageSource::Local(name))
-                    | ("remote", SandboxImageSource::Remote(name))
-                    | ("local-or-remote", SandboxImageSource::LocalOrRemote(name)) => name,
-                    (_, image) => panic!("unexpected policy for {source}: {image:?}"),
+                let SandboxImageSource::Image { name, source: policy } = image else {
+                    panic!("expected an explicit image");
                 };
+                assert_eq!(policy.to_string(), source);
                 assert_eq!(name, expected_name);
             }
         }

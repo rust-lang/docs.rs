@@ -2428,6 +2428,7 @@ dependencies = [
  "pretty_assertions",
  "rustwide",
  "serde_json",
+ "strum",
  "sysinfo",
  "tempfile",
  "test-case",

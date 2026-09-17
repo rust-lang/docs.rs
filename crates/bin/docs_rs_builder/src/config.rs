@@ -53,9 +53,9 @@ impl AppConfig for Config {
             prefix,
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,
             inside_docker: env("DOCSRS_DOCKER", false)?,
-            docker_image: maybe_env("DOCSRS_LOCAL_DOCKER_IMAGE")?
-                .map(SandboxImageSource::Local)
-                .or(maybe_env("DOCSRS_DOCKER_IMAGE")?.map(SandboxImageSource::Remote)),
+            docker_image: maybe_env::<String>("DOCSRS_LOCAL_DOCKER_IMAGE")?
+                .map(SandboxImageSource::local)
+                .or(maybe_env::<String>("DOCSRS_DOCKER_IMAGE")?.map(SandboxImageSource::remote)),
             build_cpu_limit,
             include_default_targets: env("DOCSRS_INCLUDE_DEFAULT_TARGETS", true)?,
             disable_memory_limit: env("DOCSRS_DISABLE_MEMORY_LIMIT", false)?,
