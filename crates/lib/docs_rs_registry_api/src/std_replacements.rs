@@ -25,6 +25,18 @@ pub struct ReplacementDetails {
     pub(crate) url: Url,
 }
 
+impl ReplacementDetails {
+    /// return the URL where you can find the std replacement
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// return the markdown description of this std replacement information
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
