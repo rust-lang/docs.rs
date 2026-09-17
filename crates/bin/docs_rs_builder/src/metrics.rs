@@ -1,6 +1,10 @@
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::ByteSize;
-use opentelemetry::metrics::{Counter, Histogram};
+use opentelemetry::{
+    KeyValue,
+    metrics::{Counter, Histogram},
+};
+use std::time::Duration;
 
 /// Buckets for documentation size in bytes, doubling from 64 KiB to 32 GiB.
 /// Base for some estimates:
@@ -33,35 +37,52 @@ pub const DOCUMENTATION_SIZE_BUCKETS: &[ByteSize; 20] = &[
 ];
 
 /// the measured times of building crates will be put into these buckets
-pub const BUILD_TIME_HISTOGRAM_BUCKETS: &[f64] = &[
-    5.0,    // 5s
-    10.0,   // 10s
-    15.0,   // 15s
-    20.0,   // 20s
-    25.0,   // 25s
-    30.0,   // 30s
-    45.0,   // 45s
-    60.0,   // 1 min
-    90.0,   // 1.5 min
-    120.0,  // 2 min
-    150.0,  // 2.5 min
-    180.0,  // 3 min
-    210.0,  // 3.5 min
-    240.0,  // 4 min
-    270.0,  // 4.5 min
-    300.0,  // 5 min
-    420.0,  // 7 min
-    600.0,  // 10 min
-    900.0,  // 15 min
-    1200.0, // 20 min
-    1800.0, // 30 min
-    3600.0, // 60 min
+pub const BUILD_TIME_HISTOGRAM_BUCKETS: &[Duration] = &[
+    Duration::from_secs(5),
+    Duration::from_secs(10),
+    Duration::from_secs(15),
+    Duration::from_secs(20),
+    Duration::from_secs(25),
+    Duration::from_secs(30),
+    Duration::from_secs(45),
+    Duration::from_mins(1),
+    Duration::from_secs(90),
+    Duration::from_mins(2),
+    Duration::from_secs(150),
+    Duration::from_mins(3),
+    Duration::from_secs(210),
+    Duration::from_mins(4),
+    Duration::from_secs(270),
+    Duration::from_mins(5),
+    Duration::from_mins(7),
+    Duration::from_mins(10),
+    Duration::from_mins(15),
+    Duration::from_mins(20),
+    Duration::from_mins(30),
+    Duration::from_mins(60),
 ];
+
+#[derive(Debug, Clone, Copy)]
+pub enum BuildResult {
+    Success,
+    Failed,
+    Error,
+}
+
+impl BuildResult {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BuildResult::Success => "success",
+            BuildResult::Failed => "failed",
+            BuildResult::Error => "error",
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct BuilderMetrics {
     pub total_builds: Counter<u64>,
-    pub build_time: Histogram<f64>,
+    build_time: Histogram<f64>,
     pub successful_builds: Counter<u64>,
     pub failed_builds: Counter<u64>,
     pub non_library_builds: Counter<u64>,
@@ -79,7 +100,12 @@ impl BuilderMetrics {
                 .build(),
             build_time: meter
                 .f64_histogram(format!("{PREFIX}.build_time"))
-                .with_boundaries(BUILD_TIME_HISTOGRAM_BUCKETS.to_vec())
+                .with_boundaries(
+                    BUILD_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(Duration::as_secs_f64)
+                        .collect(),
+                )
                 .with_unit("s")
                 .build(),
             total_builds: meter
@@ -110,5 +136,12 @@ impl BuilderMetrics {
 
     pub fn record_documentation_size(&self, size: ByteSize) {
         self.documentation_size.record(size.as_u64(), &[])
+    }
+
+    pub fn record_build_time(&self, elapsed: Duration, build_result: BuildResult) {
+        self.build_time.record(
+            elapsed.as_secs_f64(),
+            &[KeyValue::new("result", build_result.as_str())],
+        );
     }
 }

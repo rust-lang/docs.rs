@@ -1,4 +1,5 @@
 use crate::BuilderMetrics;
+use crate::metrics::BuildResult;
 use crate::{PackageKind, RustwideBuilder};
 use anyhow::Result;
 use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
@@ -6,7 +7,6 @@ use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
 use docs_rs_utils::{Handle, retry};
-use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::{error, info_span};
 
@@ -25,22 +25,18 @@ fn process_next_crate(
         let res = {
             let instant = Instant::now();
             let res = f(to_process);
-            let elapsed = instant.elapsed().as_secs_f64();
-            builder_metrics.build_time.record(
-                elapsed,
-                &[KeyValue::new(
-                    "result",
-                    match &res {
-                        Ok(summary) => {
-                            if summary.successful {
-                                "success"
-                            } else {
-                                "failed"
-                            }
+            builder_metrics.record_build_time(
+                instant.elapsed(),
+                match &res {
+                    Ok(summary) => {
+                        if summary.successful {
+                            BuildResult::Success
+                        } else {
+                            BuildResult::Failed
                         }
-                        Err(_) => "error",
-                    },
-                )],
+                    }
+                    Err(_) => BuildResult::Error,
+                },
             );
             res
         };
