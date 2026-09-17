@@ -1,5 +1,5 @@
 use crate::{
-    Config, RegistryApi, SearchCursor,
+    Config, RegistryApi, SearchCursor, StdReplacements,
     models::{ApiError, ApiErrors, SearchCrate, SearchMeta, SearchResponse},
 };
 use anyhow::Result;
@@ -18,7 +18,6 @@ struct TestRegistryInner {
     index_server: mockito::ServerGuard,
     #[allow(dead_code)]
     download_server: mockito::ServerGuard,
-    #[allow(dead_code)]
     std_replacement_server: mockito::ServerGuard,
     mocks: Vec<mockito::Mock>,
 }
@@ -26,8 +25,8 @@ struct TestRegistryInner {
 /// A local registry fixture backed by isolated mock HTTP servers.
 ///
 /// It provides a [`RegistryApi`] configured to use a temporary sparse-index cache, API server,
-/// and download server. Add only the responses required by the test; unknown sparse-index crate
-/// entries behave as not found.
+/// download server, and standard-library replacement server. Add only the responses required by
+/// the test; unknown sparse-index crate entries behave as not found.
 pub struct TestRegistry {
     #[allow(dead_code)]
     cargo_home: tempfile::TempDir,
@@ -185,6 +184,31 @@ impl TestRegistry {
             .mock("GET", url.path())
             .with_status(StatusCode::OK.as_u16().into())
             .with_body(archive)
+            .create_async()
+            .await;
+        inner.mocks.push(mock);
+    }
+
+    /// Mock a successful standard-library replacement response.
+    pub async fn mock_std_replacements(&self, replacements: StdReplacements) {
+        self.create_std_replacements_mock(move |mock| {
+            mock.with_status(StatusCode::OK.as_u16().into())
+                .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .with_body(serde_json::to_vec(&replacements).unwrap())
+        })
+        .await;
+    }
+
+    /// Create a custom mock for the standard-library replacement `GET` request.
+    ///
+    /// The closure can configure the response body, status, and expected request count.
+    /// The mock is checked by [`Self::assert_mocks`].
+    pub(crate) async fn create_std_replacements_mock<F>(&self, mut f: F)
+    where
+        F: FnMut(mockito::Mock) -> mockito::Mock,
+    {
+        let mut inner = self.inner.lock().await;
+        let mock = f(inner.std_replacement_server.mock("GET", "/"))
             .create_async()
             .await;
         inner.mocks.push(mock);
