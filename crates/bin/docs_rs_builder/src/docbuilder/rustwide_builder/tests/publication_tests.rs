@@ -108,7 +108,7 @@ fn publication_failure(kind: &str) -> Result<()> {
     } else {
         builder.build_package(&name, &V0_1)?
     };
-    let fatal = kind.starts_with("html");
+    let fatal = matches!(kind, "html" | "html-log" | "json-log");
     assert_eq!(summary.successful, !fatal);
     assert_eq!(summary.should_reattempt, fatal);
     let row = build_row(&env, &name)?;
@@ -135,7 +135,7 @@ fn publication_failure(kind: &str) -> Result<()> {
                 .iter()
                 .filter(|(p, _)| p.ends_with("_json.txt"))
                 .count(),
-            usize::from(kind != "json-log")
+            1
         );
         for (path, _) in entries {
             assert!(
@@ -143,14 +143,12 @@ fn publication_failure(kind: &str) -> Result<()> {
                     .exists(&format!("build-logs/{}/{path}", row.get::<i32, _>("id")))?
             );
         }
-        if kind != "json-log" {
-            assert!(
-                env.blocking_storage()?
-                    .list_prefix(&format!("rustdoc-json/{name}/"))
-                    .next()
-                    .is_none()
-            );
-        }
+        assert!(
+            env.blocking_storage()?
+                .list_prefix(&format!("rustdoc-json/{name}/"))
+                .next()
+                .is_none()
+        );
     }
     storage.reject_uploads_for_testing(None);
     Ok(())
@@ -167,7 +165,7 @@ macro_rules! publication_test {
 }
 publication_test!(invalid_json_format_is_nonfatal, "format");
 publication_test!(json_upload_failure_is_nonfatal, "json");
-publication_test!(json_log_upload_failure_is_nonfatal, "json-log");
+publication_test!(json_log_upload_failure_requests_reattempt, "json-log");
 publication_test!(html_upload_failure_requests_reattempt, "html");
 publication_test!(html_log_upload_failure_requests_reattempt, "html-log");
 

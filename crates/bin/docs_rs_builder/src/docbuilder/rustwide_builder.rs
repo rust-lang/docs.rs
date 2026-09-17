@@ -19,8 +19,8 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResultExt as _, TargetBuildResult,
-    ToolchainExt as _, utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResult, StepResultExt as _,
+    TargetBuildResult, ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     ArchiveStatistics, AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path,
@@ -391,43 +391,18 @@ impl RustwideBuilder {
         // are right now.
         let mut build_logs = Vec::new();
         for target in release_build_result.targets() {
-            let successful = target.documentation_succeeded();
-
-            if let Some(log) = target.documentation().log() {
-                let log_name = format!("{}.txt", target.target());
-
-                self.blocking_storage
-                    .store_one(format!("build-logs/{build_id}/{log_name}"), log.to_string())?;
-
-                build_logs.push((log_name, successful));
-            } else {
-                error!(
-                    target = target.target(),
-                    successful, "missing build log after documentation build"
-                );
-            }
-
-            let json_build = target.rustdoc_json();
-            if let Some(log) = json_build.log() {
-                let json_log_name = format!("{}_json.txt", target.target());
-                match self.blocking_storage.store_one(
-                    format!("build-logs/{build_id}/{json_log_name}"),
-                    log.to_string(),
-                ) {
-                    Ok(_) => build_logs.push((json_log_name, json_build.is_ok())),
-                    Err(err) => error!(
-                        target = target.target(),
-                        ?err,
-                        "could not publish JSON build log"
-                    ),
-                }
-            } else {
-                error!(
-                    target = target.target(),
-                    successful = json_build.is_ok(),
-                    "missing build log after json build"
-                );
-            }
+            build_logs.extend(self.publish_build_log(
+                build_id,
+                format!("{}.txt", target.target()),
+                target.documentation(),
+                target.documentation_succeeded(),
+            )?);
+            build_logs.extend(self.publish_build_log(
+                build_id,
+                format!("{}_json.txt", target.target()),
+                target.rustdoc_json(),
+                target.rustdoc_json().is_ok(),
+            )?);
         }
 
         self.publish_json(build_id, name, version, &release_build_result);
@@ -559,6 +534,23 @@ impl RustwideBuilder {
         });
         local_storage.close()?;
         Ok(build_succeeded)
+    }
+
+    fn publish_build_log<T>(
+        &self,
+        build_id: BuildId,
+        filename: String,
+        step: &StepResult<T>,
+        successful: bool,
+    ) -> Result<Option<(String, bool)>> {
+        let Some(log) = step.log() else {
+            error!(filename, successful, "missing build log");
+            return Ok(None);
+        };
+
+        self.blocking_storage
+            .store_one(format!("build-logs/{build_id}/{filename}"), log.to_owned())?;
+        Ok(Some((filename, successful)))
     }
 
     #[instrument(skip(self, release))]
