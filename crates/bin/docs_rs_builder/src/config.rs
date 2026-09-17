@@ -82,7 +82,9 @@ impl AppConfig for Config {
 
         config.include_default_targets = true;
         config.rustwide_workspace = docs_rs_rustwide::testing::test_workspace_path();
-        config.docker_image = Some(SandboxImageSource::linux_micro());
+        config.docker_image = Some(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ));
 
         Ok(config)
     }

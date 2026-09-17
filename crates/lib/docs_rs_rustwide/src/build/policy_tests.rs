@@ -10,7 +10,9 @@ fn environment() -> Result<BuildEnvironment> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            crate::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .build()
 }
 
@@ -222,7 +224,9 @@ fn metrics_collection_failure_is_nonfatal() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            crate::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .compiler_metrics_collection_path(destination.as_path())
         .build()?;
     environment.release(&fixture()).run(|build| {

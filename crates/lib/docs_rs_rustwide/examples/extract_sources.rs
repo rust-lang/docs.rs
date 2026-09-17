@@ -21,7 +21,9 @@ fn main() -> Result<()> {
     fs::create_dir_all(&source_directory)?;
 
     let mut environment = BuildEnvironment::builder(PathBuf::from("rustwide-workspace").as_path())
-        .sandbox_image(SandboxImageSource::linux())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX,
+        ))
         .build()?;
     let maintenance = environment.perform_maintenance()?;
     if maintenance.toolchain_updated {

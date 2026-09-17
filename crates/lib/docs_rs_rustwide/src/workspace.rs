@@ -92,14 +92,6 @@ impl SandboxImageSource {
             source: ImagePullPolicy::LocalOrRemote,
         }
     }
-
-    pub fn linux() -> Self {
-        Self::local_or_remote(SANDBOX_IMAGE_LINUX)
-    }
-
-    pub fn linux_micro() -> Self {
-        Self::local_or_remote(SANDBOX_IMAGE_LINUX_MICRO)
-    }
 }
 
 #[derive(Clone, Debug)]

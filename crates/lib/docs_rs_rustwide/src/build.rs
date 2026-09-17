@@ -704,7 +704,9 @@ mod tests {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(crate::SandboxImageSource::linux_micro())
+            .sandbox_image(crate::SandboxImageSource::local_or_remote(
+                crate::SANDBOX_IMAGE_LINUX_MICRO,
+            ))
             .build()?;
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hello-world");
         let krate = rustwide::Crate::local(&fixture);
@@ -753,7 +755,9 @@ mod tests {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(crate::SandboxImageSource::linux_micro())
+            .sandbox_image(crate::SandboxImageSource::local_or_remote(
+                crate::SANDBOX_IMAGE_LINUX_MICRO,
+            ))
             .build()?;
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hello-world");
         let krate = rustwide::Crate::local(&fixture);

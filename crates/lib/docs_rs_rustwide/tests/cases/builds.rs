@@ -199,7 +199,9 @@ fn collects_compiler_metrics() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .compiler_metrics_collection_path(metrics.path())
         .build()?;
 
@@ -219,7 +221,9 @@ fn builds_with_cpu_restrictions(cpu_limit: CpuLimit) -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .cpu_limit(cpu_limit)
         .build()?;
     assert!(

@@ -11,7 +11,9 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .workspace_reinitialization_interval(Duration::ZERO)
         .build()?;
 
@@ -33,7 +35,9 @@ fn refreshes_workspace_after_interval() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .workspace_reinitialization_interval(Duration::from_secs(1))
         .build()?;
 
@@ -61,7 +65,9 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(SandboxImageSource::linux_micro())
+            .sandbox_image(SandboxImageSource::local_or_remote(
+                docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+            ))
             .build()?;
         environment.rustc_version()?
     };
@@ -70,7 +76,9 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::linux_micro())
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+        ))
         .build()?;
     let fixture = fixture("hello-world");
     let krate = rustwide::Crate::local(&fixture);

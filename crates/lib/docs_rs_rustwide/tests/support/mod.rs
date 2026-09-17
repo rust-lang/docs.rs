@@ -40,7 +40,9 @@ impl TestEnvironment {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(SandboxImageSource::linux_micro())
+            .sandbox_image(SandboxImageSource::local_or_remote(
+                docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
+            ))
             .include_default_targets(include_default_targets)
             .build()?;
         Ok(Self { environment })
