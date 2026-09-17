@@ -58,19 +58,18 @@ pub enum SandboxImageSource {
 impl SandboxImageSource {
     #[instrument(skip_all)]
     fn resolve(&self) -> Result<Option<SandboxImage>> {
-        let Self::Image { name, source } = self else {
-            return Ok(None);
-        };
-        let image = match source {
-            ImagePullPolicy::Local => SandboxImage::local(name)?,
-            ImagePullPolicy::Remote => SandboxImage::remote(name)?,
-            ImagePullPolicy::LocalOrRemote => match SandboxImage::local(name) {
-                Ok(image) => image,
-                Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(name)?,
-                Err(error) => return Err(error.into()),
-            },
-        };
-        Ok(Some(image))
+        match self {
+            SandboxImageSource::RustwideDefault => Ok(None),
+            SandboxImageSource::Image { name, source } => Ok(Some(match source {
+                ImagePullPolicy::Local => SandboxImage::local(name)?,
+                ImagePullPolicy::Remote => SandboxImage::remote(name)?,
+                ImagePullPolicy::LocalOrRemote => match SandboxImage::local(name) {
+                    Ok(image) => image,
+                    Err(CommandError::SandboxImageMissing(_)) => SandboxImage::remote(name)?,
+                    Err(error) => return Err(error.into()),
+                },
+            })),
+        }
     }
 
     pub fn local(name: impl Into<String>) -> Self {
