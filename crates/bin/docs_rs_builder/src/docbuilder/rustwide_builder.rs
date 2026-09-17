@@ -163,6 +163,10 @@ impl RustwideBuilder {
             get_config::<String>(&mut conn, ConfigName::RustcVersion).await
         })?;
 
+        // A toolchain update can succeed while publishing its essential files fails.
+        // The next check then reports no update, so also compare against the version
+        // recorded only after successful publication. This retries failed uploads
+        // across maintenance passes and restarts, and handles first publication.
         if toolchain_updated || published_version.as_ref() != Some(&rustc_version) {
             debug!(
                 toolchain_updated,
