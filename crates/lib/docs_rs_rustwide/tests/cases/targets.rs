@@ -46,6 +46,14 @@ fn builds_metadata_and_default_targets() -> Result<()> {
             "{} JSON is unreadable",
             target.target()
         );
+        let artifact_dir = json.value().path().parent().unwrap();
+        assert_eq!(artifact_dir.file_name().unwrap(), target.target());
+        assert_eq!(artifact_dir.parent().unwrap().file_name().unwrap(), "tmp");
+        let html = target.documentation().as_inner().unwrap();
+        assert_eq!(
+            html.path().parent().unwrap().parent().unwrap(),
+            artifact_dir
+        );
 
         for (mode, log) in [
             ("HTML", target.documentation().log()),

@@ -194,7 +194,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         PrepareCommand::new(self, target)
     }
 
-    pub(crate) fn temp_dir(&self) -> Result<PathBuf> {
+    fn temp_dir(&self, target: &str) -> Result<PathBuf> {
         // first find the "build" dir rustwide manages, and doesn't expose yet.
         // It's the shared parent of `host_target_dir` and `host_source_dir`.
         //
@@ -205,7 +205,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         let tmp_dir = {
             let host_target_dir = self.build.host_target_dir();
             let parent = host_target_dir.parent().expect("always has a parent");
-            parent.join("tmp")
+            parent.join("tmp").join(target)
         };
 
         fs::create_dir_all(&tmp_dir)?;
@@ -480,7 +480,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                         ".{}",
                         output_file.extension().unwrap().to_string_lossy()
                     ))
-                    .tempfile_in(&self.temp_dir()?)?
+                    .tempfile_in(&self.temp_dir(target)?)?
                     .into_temp_path();
 
                 fs::rename(&output_file, &destination)
@@ -561,7 +561,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                         "{}.",
                         output_dir.file_stem().unwrap().to_string_lossy()
                     ))
-                    .tempdir_in(&self.temp_dir()?)?;
+                    .tempdir_in(&self.temp_dir(target)?)?;
 
                 let destination = temp_dir.path().join("docs");
                 fs::rename(&output_dir, &destination)
