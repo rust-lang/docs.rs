@@ -25,7 +25,7 @@ use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{
-    BuildId, BuildStatus, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
+    BuildId, BuildStatus, ByteSize, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
 };
 use futures_util::stream::TryStreamExt;
 use serde_json::Value;
@@ -68,8 +68,8 @@ pub(crate) struct CrateDetails {
     pub(crate) crate_id: CrateId,
     /// Database id for this release
     pub(crate) release_id: ReleaseId,
-    source_size: Option<i64>,
-    documentation_size: Option<i64>,
+    source_size: Option<ByteSize>,
+    documentation_size: Option<ByteSize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,8 +136,8 @@ impl CrateDetails {
                 releases.license,
                 releases.documentation_url,
                 releases.default_target,
-                releases.source_size as "source_size?",
-                builds.documentation_size as "documentation_size?",
+                releases.source_size as "source_size?: ByteSize",
+                builds.documentation_size as "documentation_size?: ByteSize",
                 -- we're using the rustc version here to set the correct CSS file
                 -- in the metadata.
                 -- So we're only interested in successful builds here.
@@ -422,8 +422,8 @@ struct CrateDetailsPage {
     is_library: Option<bool>,
     last_successful_build: Option<Version>,
     rustdoc: Option<String>, // this is description_long in database
-    source_size: Option<i64>,
-    documentation_size: Option<i64>,
+    source_size: Option<ByteSize>,
+    documentation_size: Option<ByteSize>,
     canonical_url: CanonicalUrl,
     params: RustdocParams,
 }
