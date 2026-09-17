@@ -2,10 +2,10 @@ mod duration_impl {
     use derive_more::{Add, AddAssign, Sum};
     use sqlx::postgres::types::PgInterval;
     use sqlx::{
+        Postgres,
         error::BoxDynError,
         postgres::{PgTypeInfo, PgValueRef},
         prelude::*,
-        Postgres,
     };
     use std::{fmt, ops::Deref, str::FromStr, time::Duration as StdDuration};
 
