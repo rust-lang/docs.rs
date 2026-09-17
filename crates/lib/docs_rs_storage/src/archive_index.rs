@@ -6,10 +6,10 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
 use docs_rs_mimes::detect_mime;
 use docs_rs_opentelemetry::AnyMeterProvider;
-use docs_rs_types::{BuildId, CompressionAlgorithm};
+use docs_rs_types::{BuildId, ByteSize, CompressionAlgorithm};
 use docs_rs_utils::spawn_blocking;
 use futures_util::{Stream, TryStreamExt as _};
-use moka::future::Cache as MokaCache;
+use moka::{future::Cache as MokaCache, notification::RemovalCause};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Gauge, Histogram},
@@ -39,9 +39,20 @@ use tracing::{debug, error, info, instrument, trace, warn};
 pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
 /// dummy size we assume in case of errors
-const DUMMY_FILE_SIZE: u64 = 1024 * 1024; // 1 MiB
+const DUMMY_FILE_SIZE: ByteSize = ByteSize::mib(1);
 /// self-repair attempts
 const REPAIR_ATTEMPTS: usize = 5;
+
+/// Size buckets for downloaded and evicted archive-index files, doubling from 512 KiB to 16 GiB.
+const ARCHIVE_INDEX_SIZE_BUCKETS: &[ByteSize; 16] = &{
+    let mut buckets = [ByteSize::kib(512); 16];
+    let mut i = 1;
+    while i < buckets.len() {
+        buckets[i] = ByteSize::b(buckets[i - 1].as_u64() * 2);
+        i += 1;
+    }
+    buckets
+};
 
 #[derive(Debug)]
 struct Metrics {
@@ -68,28 +79,11 @@ impl Metrics {
     fn new(meter_provider: &AnyMeterProvider) -> Self {
         let meter = meter_provider.meter("storage");
         const PREFIX: &str = "docsrs.storage.archive_index_cache";
-        const KIB: f64 = 1024.0;
-        const MIB: f64 = 1024.0 * KIB;
-        const GIB: f64 = 1024.0 * MIB;
 
-        let entry_size_boundaries = vec![
-            500.0 * KIB,
-            1.0 * MIB,
-            2.0 * MIB,
-            4.0 * MIB,
-            8.0 * MIB,
-            16.0 * MIB,
-            32.0 * MIB,
-            64.0 * MIB,
-            128.0 * MIB,
-            256.0 * MIB,
-            512.0 * MIB,
-            1.0 * GIB,
-            2.0 * GIB,
-            4.0 * GIB,
-            8.0 * GIB,
-            10.0 * GIB,
-        ];
+        let entry_size_boundaries: Vec<f64> = ARCHIVE_INDEX_SIZE_BUCKETS
+            .iter()
+            .map(|size| size.as_u64() as f64)
+            .collect();
 
         Self {
             find_calls: meter
@@ -132,6 +126,25 @@ impl Metrics {
                 .build(),
         }
     }
+
+    fn record_download(&self, size: ByteSize) {
+        let size = size.as_u64();
+        self.downloads.add(1, &[]);
+        self.downloaded_bytes.add(size, &[]);
+        self.downloaded_entry_size.record(size, &[]);
+    }
+
+    fn record_evicted_entry(&self, entry: &Entry, reason: RemovalCause) {
+        let reason = format!("{reason:?}");
+        let evicted_bytes = entry.file_size;
+        let reason_attr = [KeyValue::new("cause", reason)];
+
+        self.evicted_entries.add(1, &reason_attr);
+        self.evicted_bytes_total
+            .add(evicted_bytes.as_u64(), &reason_attr);
+        self.evicted_entry_size
+            .record(evicted_bytes.as_u64(), &reason_attr);
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -143,21 +156,24 @@ pub struct FileInfo {
 
 pub(crate) struct Entry {
     // file size of the local sqlite database.
-    // Will be used to "weigh" cache entries, so that the cache can evict based on
-    // total size of cached files instead of number of entries.
-    file_size_kib: u32,
+    file_size: ByteSize,
 }
 
 impl Entry {
-    fn from_size(file_size: u64) -> Self {
-        let file_size_kib = file_size.div_ceil(1024).max(1).min(u32::MAX as u64) as u32;
-        Self { file_size_kib }
+    // Will be used to "weigh" cache entries, so that the cache can evict based on
+    // total size of cached files instead of number of entries.
+    fn weight(&self) -> u32 {
+        self.file_size.as_kb() as u32
+    }
+
+    fn from_size(file_size: ByteSize) -> Self {
+        Self { file_size }
     }
 
     async fn from_path(path: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
         Self::from_size(match fs::metadata(&path).await {
-            Ok(meta) => meta.len(),
+            Ok(meta) => ByteSize::b(meta.len()),
             Err(err) => {
                 warn!(
                     ?err,
@@ -262,7 +278,7 @@ impl Cache {
             // We weigh each cache entry by the file size of the SQLite database.
             // The configured capacity is in MiB, but using KiB as moka's weight unit
             // avoids counting every index smaller than 1 MiB as if it were 1 MiB.
-            .weigher(|_key: &PathBuf, entry: &Arc<Entry>| -> u32 { entry.file_size_kib })
+            .weigher(|_key: &PathBuf, entry: &Arc<Entry>| -> u32 { entry.weight() })
             // max capacity
             // not entries, but _weighted entries_.
             // with the weight fn from above, the max capacity is a storage size value.
@@ -276,19 +292,11 @@ impl Cache {
                 // "benign race with the eviction listener" comment in `find_index_inner`
                 // for why this is acceptable.
                 tokio::spawn(async move {
-                    let reason = format!("{reason:?}");
-                    let evicted_bytes = entry.file_size_kib as u64 * 1024;
-                    let reason_attr = [KeyValue::new("cause", reason.clone())];
-
-                    metrics.evicted_entries.add(1, &reason_attr);
-                    metrics.evicted_bytes_total.add(evicted_bytes, &reason_attr);
-                    metrics
-                        .evicted_entry_size
-                        .record(evicted_bytes, &reason_attr);
+                    metrics.record_evicted_entry(&entry, reason);
 
                     trace!(
                         ?path,
-                        ?reason_attr,
+                        ?reason,
                         "evicting local archive index file from cache"
                     );
                     if let Err(err) = Self::remove_local_index(&path).await {
@@ -380,7 +388,7 @@ impl Cache {
                         let entry = manager
                             .entry(path)
                             .or_insert_with(async {
-                                Arc::new(Entry::from_size(item.metadata.len()))
+                                Arc::new(Entry::from_size(item.metadata.len().into()))
                             })
                             .await;
 
@@ -634,7 +642,7 @@ impl Cache {
         downloader: &impl Downloader,
         local_index_path: &Path,
         remote_index_path: &str,
-    ) -> Result<u64> {
+    ) -> Result<ByteSize> {
         let parent = local_index_path
             .parent()
             .ok_or_else(|| anyhow!("index path without parent"))?
@@ -664,11 +672,9 @@ impl Cache {
 
         temp_path.disable_cleanup(true);
 
-        self.metrics.downloads.add(1, &[]);
-        self.metrics.downloaded_bytes.add(copied, &[]);
-        self.metrics.downloaded_entry_size.record(copied, &[]);
+        self.metrics.record_download(copied.into());
 
-        Ok(copied)
+        Ok(copied.into())
     }
 }
 
@@ -1480,7 +1486,7 @@ mod tests {
 
         cache
             .manager
-            .insert(local_index.clone(), Arc::new(Entry::from_size(5)))
+            .insert(local_index.clone(), Arc::new(Entry::from_size(5u64.into())))
             .await;
 
         cache.manager.invalidate(&local_index).await;

@@ -14,6 +14,40 @@ use opentelemetry_sdk::{Resource, error::OTelSdkResult};
 use std::{sync::Arc, time::Duration};
 use tracing::info;
 
+/// response time histogram buckets from the opentelemetry semantiv conventions
+/// https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration
+///
+/// These are the default prometheus bucket sizes,
+/// https://docs.rs/prometheus/0.14.0/src/prometheus/histogram.rs.html#25-27
+/// tailored to broadly measure the response time (in seconds) of a network service.
+///
+/// Otel default buckets are not suited for that.
+pub const RESPONSE_TIME_HISTOGRAM_BUCKETS: &[Duration] = &[
+    Duration::from_millis(5),
+    Duration::from_millis(10),
+    Duration::from_millis(25),
+    Duration::from_millis(50),
+    Duration::from_millis(75),
+    Duration::from_millis(100),
+    Duration::from_millis(250),
+    Duration::from_millis(500),
+    Duration::from_millis(750),
+    Duration::from_secs(1),
+    Duration::from_millis(1500),
+    Duration::from_millis(2500),
+    Duration::from_millis(3500),
+    Duration::from_secs(5),
+    Duration::from_millis(7500),
+    Duration::from_secs(10),
+    Duration::from_secs(15),
+    Duration::from_secs(20),
+    Duration::from_secs(30),
+    Duration::from_secs(45),
+    Duration::from_mins(1),
+    Duration::from_secs(90),
+    Duration::from_mins(2),
+];
+
 /// extend the `MeterProvider` trait so we also expose
 /// the `force_flush` method for tests.
 pub trait MeterProviderWithExt: MeterProvider {
