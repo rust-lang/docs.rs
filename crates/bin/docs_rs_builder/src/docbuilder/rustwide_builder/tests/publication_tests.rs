@@ -13,16 +13,45 @@ fn environment() -> Result<TestEnvironment> {
 pub(super) fn build_row(env: &TestEnvironment, name: &KrateName) -> Result<sqlx::postgres::PgRow> {
     env.runtime().block_on(async {
         let mut conn = env.pool()?.get_async().await?;
-        Ok(sqlx::query("SELECT b.id, b.build_status::text AS status, b.errors, r.rustdoc_status, r.doc_targets FROM builds b JOIN releases r ON r.id = b.rid JOIN crates c ON c.id = r.crate_id WHERE c.name = $1 ORDER BY b.id DESC LIMIT 1")
-            .bind(name.as_str()).fetch_one(&mut *conn).await?)
+        Ok(sqlx::query(
+            r#"
+            SELECT
+                b.id,
+                b.build_status::text AS status,
+                b.errors,
+                r.rustdoc_status,
+                r.doc_targets
+            FROM builds b
+            JOIN releases r ON r.id = b.rid
+            JOIN crates c ON c.id = r.crate_id
+            WHERE
+                c.name = $1
+            ORDER BY b.id DESC
+            LIMIT 1
+        "#,
+        )
+        .bind(name.as_str())
+        .fetch_one(&mut *conn)
+        .await?)
     })
 }
 
 pub(super) fn logs(env: &TestEnvironment, build: i32) -> Result<Vec<(String, bool)>> {
     env.runtime().block_on(async {
         let mut conn = env.pool()?.get_async().await?;
-        Ok(sqlx::query_as("SELECT log_filename, success FROM builds_logs WHERE build_id = $1 ORDER BY log_filename")
-            .bind(build).fetch_all(&mut *conn).await?)
+        Ok(sqlx::query_as(
+            r#"
+            SELECT
+                log_filename,
+                success
+            FROM builds_logs
+            WHERE build_id = $1
+            ORDER BY log_filename
+        "#,
+        )
+        .bind(build)
+        .fetch_all(&mut *conn)
+        .await?)
     })
 }
 
