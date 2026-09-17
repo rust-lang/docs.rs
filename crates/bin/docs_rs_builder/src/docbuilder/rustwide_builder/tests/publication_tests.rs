@@ -55,6 +55,25 @@ pub(super) fn logs(env: &TestEnvironment, build: i32) -> Result<Vec<(String, boo
     })
 }
 
+// Exercise publication and its production error-to-reattempt mapping after a test
+// has inspected or modified the completed build's artifacts.
+fn publish_release(
+    env: &TestEnvironment,
+    builder: &RustwideBuilder,
+    name: &KrateName,
+    release: BuiltRelease,
+) -> Result<BuildPackageSummary> {
+    let (crate_id, release_id, build_id) = env.runtime().block_on(async {
+        let mut conn = env.pool()?.get_async().await?;
+        let crate_id = initialize_crate(&mut conn, name).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build_id = initialize_build(&mut conn, release_id).await?;
+        Ok::<_, Error>((crate_id, release_id, build_id))
+    })?;
+    let result = builder.publish_release(name, &V0_1, crate_id, release_id, build_id, release);
+    builder.finish_package_build(build_id, result)
+}
+
 fn publication_failure(kind: &str) -> Result<()> {
     let env = environment()?;
     let name = KrateName::from_static("publication-failure");
@@ -62,20 +81,7 @@ fn publication_failure(kind: &str) -> Result<()> {
     let storage = env.storage()?;
     let mut builder = env.build_builder()?;
     match kind {
-        "format" => {
-            builder.before_publication = Some(|release| {
-                fs::write(
-                    release
-                        .default_target()
-                        .rustdoc_json()
-                        .as_inner()
-                        .unwrap()
-                        .path(),
-                    b"{}",
-                )
-                .unwrap();
-            })
-        }
+        "format" => {}
         "json" => storage.reject_uploads_for_testing(Some(|p| p.starts_with("rustdoc-json/"))),
         "json-log" => storage.reject_uploads_for_testing(Some(|p| {
             p.starts_with("build-logs/") && p.ends_with("_json.txt")
@@ -86,7 +92,22 @@ fn publication_failure(kind: &str) -> Result<()> {
         })),
         _ => unreachable!(),
     }
-    let summary = builder.build_package(&name, &V0_1)?;
+    let summary = if kind == "format" {
+        let release = builder.build_release(&name, &V0_1)?.unwrap();
+        fs::write(
+            release
+                .result
+                .default_target()
+                .rustdoc_json()
+                .as_inner()
+                .expect("JSON build must succeed before corrupting its output")
+                .path(),
+            b"{}",
+        )?;
+        publish_release(&env, &builder, &name, release)?
+    } else {
+        builder.build_package(&name, &V0_1)?
+    };
     let fatal = kind.starts_with("html");
     assert_eq!(summary.successful, !fatal);
     assert_eq!(summary.should_reattempt, fatal);
@@ -333,15 +354,14 @@ fn regeneration_failure_does_not_request_queue_reattempt() -> Result<()> {
         assert!(sources[0].join("Cargo.lock").exists());
         fs::write(sources[0].join("Cargo.toml"), "[").unwrap();
     }));
-    builder.before_publication = Some(|release| {
-        let target = release.default_target();
-        assert!(target.documentation().is_err());
-        let failure = target
-            .regeneration_failure()
-            .expect("regeneration must actually fail");
-        assert!(failure.log().unwrap().contains("Cargo.toml"));
-    });
-    let summary = builder.build_package(&name, &V0_1)?;
+    let release = builder.build_release(&name, &V0_1)?.unwrap();
+    let target = release.result.default_target();
+    assert!(target.documentation().is_err());
+    let failure = target
+        .regeneration_failure()
+        .expect("regeneration must actually fail");
+    assert!(failure.log().unwrap().contains("Cargo.toml"));
+    let summary = publish_release(&env, &builder, &name, release)?;
     assert!(!summary.successful);
     assert!(!summary.should_reattempt);
     let row = build_row(&env, &name)?;

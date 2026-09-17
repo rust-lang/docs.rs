@@ -23,7 +23,8 @@ use docs_rs_rustwide::{
     ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
-    AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path, source_archive_path,
+    ArchiveStatistics, AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path,
+    source_archive_path,
 };
 use docs_rs_types::{
     BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
@@ -31,7 +32,7 @@ use docs_rs_types::{
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
 use regex::Regex;
-use rustwide::{Crate, Toolchain};
+use rustwide::{Crate, SandboxStatistics, Toolchain};
 use std::{
     collections::HashSet,
     fs::{self, File},
@@ -61,8 +62,6 @@ async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolc
 pub struct RustwideBuilder {
     environment: BuildEnvironment,
     #[cfg(test)]
-    before_publication: Option<fn(&ReleaseBuildResult)>,
-    #[cfg(test)]
     before_build: Option<Box<dyn Fn()>>,
     runtime: Handle,
     config: Arc<Config>,
@@ -73,6 +72,15 @@ pub struct RustwideBuilder {
     registry_config: Arc<docs_rs_registry_api::Config>,
     repository_stats: Arc<RepositoryStatsUpdater>,
     pub(crate) builder_metrics: Arc<BuilderMetrics>,
+}
+
+/// Completed build and source data needed to publish a release.
+/// Publish before another build cleans up the environment's artifact directory.
+struct BuiltRelease {
+    result: ReleaseBuildResult,
+    statistics: SandboxStatistics,
+    source_dir: tempfile::TempDir,
+    source_stats: ArchiveStatistics,
 }
 
 impl RustwideBuilder {
@@ -102,8 +110,6 @@ impl RustwideBuilder {
 
         Ok(RustwideBuilder {
             environment,
-            #[cfg(test)]
-            before_publication: None,
             #[cfg(test)]
             before_build: None,
             config: config.clone(),
@@ -223,7 +229,16 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build_id))
         })?;
 
-        match self.build_package_inner(name, version, crate_id, release_id, build_id) {
+        let result = self.build_package_inner(name, version, crate_id, release_id, build_id);
+        self.finish_package_build(build_id, result)
+    }
+
+    fn finish_package_build(
+        &self,
+        build_id: BuildId,
+        result: Result<bool>,
+    ) -> Result<BuildPackageSummary> {
+        match result {
             Ok(successful) => Ok(BuildPackageSummary {
                 successful,
                 should_reattempt: false,
@@ -256,6 +271,18 @@ impl RustwideBuilder {
         release_id: ReleaseId,
         build_id: BuildId,
     ) -> Result<bool> {
+        let Some(release) = self.build_release(name, version)? else {
+            return Ok(false);
+        };
+        self.publish_release(name, version, crate_id, release_id, build_id, release)
+    }
+
+    #[instrument(skip(self))]
+    fn build_release(
+        &mut self,
+        name: &KrateName,
+        version: &Version,
+    ) -> Result<Option<BuiltRelease>> {
         info!("building package {} {}", name, version);
 
         let is_blacklisted = self.runtime.block_on(async {
@@ -268,7 +295,7 @@ impl RustwideBuilder {
 
         if is_blacklisted {
             info!("skipping build of {}, crate has been blacklisted", name);
-            return Ok(false);
+            return Ok(None);
         }
 
         let limits = self.get_limits(name)?;
@@ -279,10 +306,8 @@ impl RustwideBuilder {
         )?;
 
         fs::create_dir_all(&self.config.temp_dir)?;
-        let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
         let source_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
-        let mut algs = HashSet::new();
         let fetched = self
             .environment
             .release(&krate)
@@ -295,7 +320,6 @@ impl RustwideBuilder {
             self.storage
                 .store_all_in_archive(&source_archive_path(name, version), &source_dir),
         )?;
-        algs.insert(source_stats.alg);
 
         // run the actual doc-build (coverage, json, html, for all configured targets)
         let full_build_result = fetched.run(|build| {
@@ -306,12 +330,34 @@ impl RustwideBuilder {
             Ok(build.build_docs())
         })?;
 
-        let build_statistics = full_build_result.statistics().clone();
-        let release_build_result = full_build_result.into_inner();
-        #[cfg(test)]
-        if let Some(before_publication) = self.before_publication {
-            before_publication(&release_build_result);
-        }
+        Ok(Some(BuiltRelease {
+            statistics: full_build_result.statistics().clone(),
+            result: full_build_result.into_inner(),
+            source_dir,
+            source_stats,
+        }))
+    }
+
+    /// Publish completed artifacts, logs, and release metadata. Sources are already archived.
+    #[instrument(skip(self, release))]
+    #[allow(clippy::too_many_arguments)]
+    fn publish_release(
+        &self,
+        name: &KrateName,
+        version: &Version,
+        crate_id: CrateId,
+        release_id: ReleaseId,
+        build_id: BuildId,
+        release: BuiltRelease,
+    ) -> Result<bool> {
+        let BuiltRelease {
+            result: release_build_result,
+            statistics: build_statistics,
+            source_dir,
+            source_stats,
+        } = release;
+        let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
+        let mut algs = HashSet::from([source_stats.alg]);
         let cargo_metadata = release_build_result.cargo_metadata();
 
         if release_build_result
