@@ -16,10 +16,12 @@ Windows, run it in a Linux VM or a Linux CI job.
 
 ## Installation
 
-Once the crate is published, install the locked release with:
+Temporarily install from Git while crates.io publication and the internal
+dependency releases are being prepared. Replace `<commit>` with a commit that
+contains `docs_rs_build`; pinning it keeps the installation reproducible.
 
 ```console
-cargo install docs_rs_build --locked
+cargo install --git https://github.com/rust-lang/docs.rs --rev "<commit>" docs_rs_build --locked
 ```
 
 When developing docs.rs itself, install the workspace copy with:
@@ -80,7 +82,8 @@ docs_rs_build crates/my-crate
 
 ## GitHub Actions
 
-A workflow template for use once `docs_rs_build` is published looks like this:
+A workflow template using the temporary Git installation looks like this.
+Replace `<commit>` with the revision to install:
 
 ```yaml
 name: docs.rs build
@@ -122,7 +125,8 @@ jobs:
           docker save "$DOCSRS_IMAGE" |
             zstd --threads=0 -3 --output "$DOCSRS_IMAGE_ARCHIVE"
       - name: Install docs.rs build runner
-        run: cargo install docs_rs_build --locked
+        # Temporary until docs_rs_build and its dependencies are published to crates.io.
+        run: cargo install --git https://github.com/rust-lang/docs.rs --rev "<commit>" docs_rs_build --locked
       - name: Build documentation as docs.rs
         run: docs_rs_build --package my-crate
 ```
