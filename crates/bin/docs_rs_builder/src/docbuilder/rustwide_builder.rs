@@ -430,7 +430,7 @@ impl RustwideBuilder {
             }
         }
 
-        self.publish_json(build_id, name, version, &release_build_result)?;
+        self.publish_json(build_id, name, version, &release_build_result);
 
         let mut async_conn = self.runtime.block_on(self.db.get_async())?;
 
@@ -568,7 +568,7 @@ impl RustwideBuilder {
         name: &KrateName,
         version: &Version,
         release: &ReleaseBuildResult,
-    ) -> Result<()> {
+    ) {
         info!("uploading rustdoc json files...");
 
         for (target, json) in release.targets().filter_map(|target_result| {
@@ -601,8 +601,6 @@ impl RustwideBuilder {
                 );
             }
         }
-
-        Ok(())
     }
 
     #[instrument(skip(self))]
