@@ -50,6 +50,7 @@ impl BuildStepError {
     }
 }
 
+/// A step's value or error together with its elapsed duration and captured log.
 #[derive(Debug)]
 pub struct StepReport<T> {
     pub(crate) value: T,
@@ -66,10 +67,12 @@ impl<T> StepReport<T> {
         }
     }
 
+    /// Return the value, discarding the duration and captured log.
     pub fn into_inner(self) -> T {
         self.value
     }
 
+    /// Return the captured log, or `None` if it is absent or contains only whitespace.
     pub fn log(&self) -> Option<&str> {
         self.log.as_deref().filter(|log| !log.trim().is_empty())
     }
@@ -79,6 +82,7 @@ impl<T> StepReport<T> {
     }
 }
 
+/// A failed step with its elapsed duration and captured log.
 pub type StepFailure = StepReport<BuildStepError>;
 
 impl fmt::Display for StepFailure {
@@ -97,12 +101,18 @@ impl std::error::Error for StepFailure {
     }
 }
 
+/// A step result that retains duration and captured logs on both success and failure.
 pub type StepResult<T> = Result<StepReport<T>, StepFailure>;
 
+/// Access diagnostics or the underlying value/error of a [`StepResult`].
 pub trait StepResultExt<T> {
+    /// Return the elapsed duration, whether the step succeeded or failed.
     fn duration(&self) -> Duration;
+    /// Return the captured log, or `None` if it is absent or contains only whitespace.
     fn log(&self) -> Option<&str>;
+    /// Consume the result, discarding duration and logs from either variant.
     fn into_inner(self) -> Result<T, BuildStepError>;
+    /// Borrow the underlying value or error without consuming the report or its diagnostics.
     fn as_inner(&self) -> Result<&T, &BuildStepError>;
 }
 

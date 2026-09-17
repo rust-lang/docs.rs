@@ -94,7 +94,7 @@ recorded after publication succeeds.
 
 ## Host resources and compiler metrics
 
-After fetching the release, when `FetchedRelease::run` starts, the environment
+After fetching the release, when `ReleaseContext<Fetched>::run` starts, the environment
 verifies that the host's available memory can satisfy the effective sandbox
 limit. Callers can archive sources before this check. This check is enabled by
 default and can be disabled when the caller intentionally wants the sandbox or
@@ -137,8 +137,9 @@ let result = environment.release(&krate).run(|build| Ok(build.build_docs()))?;
 
 For HTML builds, the library passes rustdoc's unstable metrics directory flag
 when the metrics directory is available. `build_docs` collects metrics after
-each HTML attempt into `TargetBuildResult::compiler_metrics`, a separate
-`StepResult<Vec<PathBuf>>`. Collection failures do not invalidate HTML. Custom
+each HTML attempt. `TargetBuildResult::compiler_metrics()` returns the collected
+paths as `Option<&[PathBuf]>`. If collection is disabled or fails, it returns
+`None`; collection failures are logged and do not invalidate HTML. Custom
 builds using `build_documentation` should call `collect_compiler_metrics`
 afterward if they need the metrics copied to the configured destination.
 

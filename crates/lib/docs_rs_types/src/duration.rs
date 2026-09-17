@@ -9,9 +9,11 @@ mod duration_impl {
     };
     use std::{fmt, ops::Deref, str::FromStr, time::Duration as StdDuration};
 
-    /// NewType around std Duration to be able to use it with sqlx.
+    /// A duration with human-readable parsing and display, plus SQLx interval decoding.
     ///
-    /// For now only for decoding intervals from the database.
+    /// Wraps [`std::time::Duration`]. Parses human-readable units such as `4m`,
+    /// or an unsigned integer as seconds. Display preserves full precision;
+    /// use [`Self::round_to_millis`] for rounded millisecond precision.
     #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Sum, Ord, Copy, Add, AddAssign)]
     pub struct Duration(pub StdDuration);
 

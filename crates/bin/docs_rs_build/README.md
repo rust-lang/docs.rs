@@ -46,9 +46,10 @@ docs_rs_build path/to/package
 
 Before starting the sandbox, the command runs
 `cargo package --allow-dirty --no-verify` and extracts the resulting crate
-archive. The build therefore uses the files and normalized manifest that would
-be published, rather than the whole source checkout. Packaging errors are
-treated as build failures.
+archive. The build uses the files and normalized manifest prepared for
+publication. The CLI adds an empty `[workspace]` table to the extracted manifest
+to isolate it from any surrounding workspace; the original manifest is unchanged.
+Packaging errors are treated as build failures.
 
 Dirty working trees are accepted so the command can test uncommitted changes.
 Cargo's `include` and `exclude` rules still apply.
@@ -212,13 +213,14 @@ exit status:
 docs_rs_build --strict
 ```
 
-Cargo and rustdoc build output is streamed live. When the release completes, a
-table shows HTML, JSON, and coverage status/duration for each target, totals,
-full build duration, and sandbox peak memory. Failed steps include their
-captured logs. Lockfile-regeneration failures also include their captured logs.
+Cargo and rustdoc build output is streamed live to stderr. When the release
+completes, a table on stdout shows HTML, JSON, and coverage status/duration for
+each target, totals, full build duration, and sandbox peak memory. Displayed
+durations are rounded to milliseconds. Errors and captured logs for failed
+steps, including lockfile-regeneration failures, are written to stderr.
 Coverage is shown as skipped for additional targets. Setup and release-fetch
 errors return early with an error instead of the summary table. Packaging output
-is streamed live too.
+is streamed live to stderr too.
 
 ## Workspace and generated files
 
@@ -230,8 +232,9 @@ location when necessary:
 docs_rs_build --workspace /tmp/docsrs-workspace
 ```
 
-HTML and JSON are moved into unique locations under the release build
-directory's `tmp` directory. The exact paths are printed in the build summary.
+HTML and JSON are moved into unique locations under
+`builds/<name>-<version>-<hash>/tmp/<target>/` within the workspace. The exact
+paths are printed in the build summary on stdout.
 Dropping build results or exiting the command does not delete them. Rustwide's
 build-directory cleanup removes them, so copy anything you need to retain before
 starting another build with the same workspace. The workspace is locked for the

@@ -119,6 +119,12 @@ impl ReleaseContext<'_, Fetched> {
     }
 
     /// Run selected build operations in one reusable sandbox.
+    ///
+    /// Individual step failures can be retained in the callback's return value.
+    /// Lifecycle errors, including sandbox preparation, initial Cargo metadata
+    /// loading, sandbox cleanup, and source-cache cleanup, return `Err` instead.
+    /// Cleanup can fail after the callback succeeds; in that case no
+    /// [`BuildResult`] is returned. Callback errors are also propagated.
     #[instrument(skip_all)]
     pub fn run<R>(
         self,

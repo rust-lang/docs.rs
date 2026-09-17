@@ -152,7 +152,10 @@ impl TargetBuildResult {
         self.target.as_str()
     }
 
-    /// Whether Cargo completed the primary HTML documentation command successfully.
+    /// Whether the primary HTML step succeeded, including output collection.
+    ///
+    /// This does not require a documentation directory to exist; use
+    /// [`Self::documentation_succeeded`] or [`Self::has_docs`] to check for output.
     pub fn build_succeeded(&self) -> bool {
         self.documentation.is_ok()
     }
@@ -227,7 +230,10 @@ impl ReleaseBuildResult {
         &self.other_targets
     }
 
-    /// Whether Cargo completed the default HTML documentation command successfully.
+    /// Whether the default target's HTML step succeeded, including output collection.
+    ///
+    /// This does not require a documentation directory to exist; use
+    /// [`Self::documentation_succeeded`] or [`Self::has_docs`] to check for output.
     pub fn build_succeeded(&self) -> bool {
         self.default_target.build_succeeded()
     }

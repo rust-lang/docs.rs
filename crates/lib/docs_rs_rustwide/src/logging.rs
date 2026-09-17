@@ -3,16 +3,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+/// Whether [`init`] has initialized Rustwide logging for this process.
 pub fn is_initialized() -> bool {
     // NOTE: perhaps this could move to rustwide itself
     INITIALIZED.load(Ordering::SeqCst)
 }
 
-/// initialize rustwide logging.
+/// Initialize Rustwide logging once per process, before constructing a build environment.
 ///
-/// This is necessary for every builder once.
-/// `log_build_logs` will decide if we see the cargo build output in the logs,
-/// or just collect them.
+/// When `log_build_logs` is true, forward Rustwide logs, including Cargo build
+/// output, to tracing. Build logs are captured regardless of this setting.
 pub fn init(log_build_logs: bool) {
     if log_build_logs {
         rustwide::logging::init_with(RustwideLogTracer);

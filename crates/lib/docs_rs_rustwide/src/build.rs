@@ -385,8 +385,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
     #[instrument(skip_all, fields(target, build_coverage))]
     fn build_target_once(&self, target: &str, build_coverage: bool) -> TargetBuildResult {
-        // Coverage must precede the HTML build because Cargo currently clears
-        // rustdoc's target output directory between these invocations.
+        // Each step preserves its outputs before the next invocation can clear
+        // rustdoc's target output directory, so custom builds can use any order.
         let coverage = if build_coverage {
             self.build_coverage(target)
         } else {
