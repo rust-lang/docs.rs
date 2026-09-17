@@ -180,13 +180,6 @@ impl RustwideBuilder {
         Ok(())
     }
 
-    // Retained for the existing integration tests while they transition to the
-    // public lifecycle method above.
-    #[cfg(test)]
-    fn update_toolchain(&mut self) -> Result<bool> {
-        self.environment.update_toolchain()
-    }
-
     #[instrument(skip(self))]
     fn get_limits(&self, krate: &KrateName) -> Result<Limits> {
         self.runtime.block_on({
@@ -788,7 +781,6 @@ mod tests {
         storage.store_one(&old_source_file, Vec::new())?;
 
         let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
         assert!(builder.build_package(crate_, &version)?.successful);
 
         // check release record in the db (default and other targets)
@@ -1020,7 +1012,6 @@ mod tests {
         storage.store_one(&old_source_file, Vec::new())?;
 
         let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
         assert!(!builder.build_package(&crate_, &version)?.successful);
 
         // check release record in the db (default and other targets)
@@ -1168,7 +1159,6 @@ mod tests {
         check_rustdoc_status(&env, release_id)?;
 
         let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
         assert!(
             // not successful build
             !builder.build_package(&crate_, &version)?.successful
@@ -1219,7 +1209,6 @@ mod tests {
         )?;
 
         let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
 
         let summary = builder.build_package(&crate_, &version)?;
 
@@ -1256,7 +1245,6 @@ mod tests {
         let version = Version::new(0, 1, 0);
         mock_package(&env, &crate_, &version, None, "")?;
         let mut builder = env.build_builder()?;
-        builder.update_toolchain()?;
 
         // `Result` is `Ok`, but the build-result is `false`
         let summary = builder.build_package(&crate_, &version)?;
