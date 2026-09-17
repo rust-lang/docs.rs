@@ -193,7 +193,7 @@ impl RegistryApi {
 
         if cached_replacements
             .as_mut()
-            .is_none_or(|cached_replacements| cached_replacements.fetched_at.elapsed() < CACHE_TTL)
+            .is_none_or(|cached_replacements| cached_replacements.fetched_at.elapsed() >= CACHE_TTL)
         {
             let new_replacements: StdReplacements = self
                 .metrics
