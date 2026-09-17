@@ -1,11 +1,12 @@
 use crate::{
-    Config,
+    Config, ReplacementDetails, StdReplacements,
     error::{Error, Result},
     metrics::{Operation, RegistryApiMetrics},
     models::{
         ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor,
         SearchResponse,
     },
+    std_replacements::CACHE_TTL,
 };
 use anyhow::Context as _;
 use docs_rs_crate_archive::{SourceDir, unpack_crate_archive};
@@ -17,8 +18,11 @@ use reqwest::header::ACCEPT;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{ffi::OsStr, fmt, io, path::Path};
-use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
+use std::{ffi::OsStr, fmt, io, path::Path, sync::Arc, time::Instant};
+use tokio::{
+    io::{AsyncSeekExt as _, AsyncWriteExt as _},
+    sync::Mutex,
+};
 use tracing::instrument;
 use url::Url;
 
@@ -93,6 +97,12 @@ async fn fetch_index_config(
     }
 }
 
+#[derive(Debug)]
+struct CachedStdReplacements {
+    data: Arc<StdReplacements>,
+    fetched_at: Instant,
+}
+
 /// Client for registry data.
 ///
 /// Release metadata is read from the sparse index, while endpoints not represented in the index,
@@ -103,6 +113,8 @@ pub struct RegistryApi {
     api_base: Url,
     pub(crate) sparse_index: crates_index::SparseIndex,
     client: ClientWithMiddleware,
+    std_replacements: Mutex<Option<CachedStdReplacements>>,
+    std_replacements_url: Url,
     metrics: RegistryApiMetrics,
 }
 
@@ -114,6 +126,7 @@ impl RegistryApi {
         Self::new(
             config.sparse_index_host.clone(),
             config.crates_io_api_call_retries,
+            config.std_replacements_url.clone(),
             None,
             meter_provider,
         )
@@ -128,6 +141,7 @@ impl RegistryApi {
     pub(crate) async fn new(
         sparse_base: Url,
         max_retries: u32,
+        std_replacements_url: Url,
         cargo_home: Option<&Path>,
         meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
@@ -162,8 +176,48 @@ impl RegistryApi {
             index_config,
             sparse_index,
             client,
+            std_replacements_url,
+            std_replacements: Mutex::new(None),
             metrics,
         })
+    }
+
+    /// Fetches the potential replacement of this library in our std library.
+    ///
+    /// See https://github.com/rust-lang/std-replacement-data
+    pub async fn get_std_replacement(
+        &self,
+        name: &KrateName,
+    ) -> Result<Option<Arc<ReplacementDetails>>> {
+        let mut cached_replacements = self.std_replacements.lock().await;
+
+        if cached_replacements
+            .as_mut()
+            .is_none_or(|cached_replacements| cached_replacements.fetched_at.elapsed() < CACHE_TTL)
+        {
+            let new_replacements: StdReplacements = self
+                .metrics
+                .record_request(
+                    Operation::StdReplacements,
+                    self.client.get(self.std_replacements_url.clone()).send(),
+                )
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+
+            *cached_replacements = Some(CachedStdReplacements {
+                data: Arc::new(new_replacements),
+                fetched_at: Instant::now(),
+            });
+        }
+
+        Ok(cached_replacements
+            .as_ref()
+            .expect("always exists here because we fetch above")
+            .data
+            .get(name)
+            .cloned())
     }
 
     /// Return the download URL for a crate version according to the index configuration.

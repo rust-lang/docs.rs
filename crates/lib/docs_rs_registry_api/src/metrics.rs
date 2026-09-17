@@ -12,6 +12,7 @@ pub(crate) enum Operation {
     ApiSearch,
     ApiOwners,
     Download,
+    StdReplacements,
 }
 
 impl Operation {
@@ -22,6 +23,7 @@ impl Operation {
             Self::ApiSearch => "api_search",
             Self::ApiOwners => "api_owners",
             Self::Download => "download",
+            Self::StdReplacements => "std_replacements",
         }
     }
 }
