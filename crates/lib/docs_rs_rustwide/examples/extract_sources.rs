@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
 use rustwide::Crate;
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf, time::Duration};
 
 fn main() -> Result<()> {
     docs_rs_rustwide::logging::init(false);
@@ -24,6 +24,9 @@ fn main() -> Result<()> {
         .sandbox_image(SandboxImageSource::local_or_remote(
             docs_rs_rustwide::SANDBOX_IMAGE_LINUX,
         ))
+        // Enable maintenance explicitly; both intervals are disabled by default.
+        .workspace_reinitialization_interval(Duration::from_hours(24))
+        .toolchain_update_interval(Duration::from_hours(1))
         .build()?;
     let maintenance = environment.perform_maintenance()?;
     if maintenance.toolchain_updated {

@@ -266,6 +266,17 @@ mod tests {
     }
 
     #[test]
+    fn absent_interval_disables_automatic_updates() {
+        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), None);
+        let now = Instant::now();
+        assert!(!toolchain.update_due(now));
+        toolchain.mark_updated(now);
+        assert!(!toolchain.update_due(now + Duration::from_secs(365 * 24 * 60 * 60)));
+        assert!(toolchain.select(Toolchain::dist("stable")));
+        assert!(!toolchain.update_due(now));
+    }
+
+    #[test]
     fn zero_interval_always_checks_for_updates() {
         let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), Some(Duration::ZERO));
         let now = Instant::now();

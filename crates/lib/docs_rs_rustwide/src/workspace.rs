@@ -215,7 +215,9 @@ impl BuildEnvironment {
         /// Wait for another environment to release this workspace instead of failing.
         #[builder(default = false)]
         wait_for_workspace_lock: bool,
+        /// Enable periodic workspace refreshes. Omitted means automatic refresh is disabled.
         workspace_reinitialization_interval: Option<Duration>,
+        /// Enable periodic toolchain updates. Omitted means automatic updates are disabled.
         toolchain_update_interval: Option<Duration>,
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
@@ -260,8 +262,10 @@ impl BuildEnvironment {
     /// Perform the maintenance required before starting the next release build.
     ///
     /// The workspace is refreshed and the toolchain is checked for updates only
-    /// when their independently configured intervals have elapsed. The first
-    /// maintenance call always checks for a toolchain update.
+    /// when their independently configured intervals have elapsed. Both are disabled
+    /// by default. With a toolchain update interval configured, the first maintenance
+    /// call checks for an update. Explicit `update_toolchain()` calls work regardless
+    /// of whether an interval is configured.
     /// Workspace initialization, toolchain installation, target changes, and cache
     /// cleanup retry their own failing operations. Callers should propagate a
     /// maintenance failure rather than retry the entire sequence, which may have

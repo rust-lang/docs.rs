@@ -16,8 +16,9 @@ logs, coverage, and sandbox statistics.
 ## Workspace lifecycle
 
 `BuildEnvironment` retains the configuration needed to recreate its rustwide
-workspace. Long-running builders should call `perform_maintenance` between
-releases:
+workspace. Automatic workspace refreshes and toolchain updates are disabled by
+default. Long-running builders should configure both intervals and call
+`perform_maintenance` between releases:
 
 ```rust,no_run
 # use anyhow::Result;
@@ -26,10 +27,11 @@ releases:
 # fn main() -> Result<()> {
 # docs_rs_rustwide::logging::init(true);
 let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-    .sandbox_image(SandboxImageSource::Remote(
-        "ghcr.io/rust-lang/crates-build-env/linux".into(),
+    .sandbox_image(SandboxImageSource::remote(
+        "ghcr.io/rust-lang/crates-build-env/linux",
     ))
     .workspace_reinitialization_interval(Duration::from_secs(24 * 60 * 60))
+    .toolchain_update_interval(Duration::from_secs(60 * 60))
     .build()?;
 
 let maintenance = environment.perform_maintenance()?;
@@ -43,8 +45,13 @@ let maintenance = environment.perform_maintenance()?;
 refresh. `LocalOrRemote` uses an existing local image and only pulls when it is
 missing, which is useful for locally built images. Workspace initialization and
 refresh both purge stale build directories. Toolchain changes automatically
-purge incompatible caches. Maintenance checks the toolchain at most once per
-hour by default; the first maintenance call always checks for an update.
+purge incompatible caches. The intervals above match the production builder
+defaults: one day for workspace refreshes and one hour for toolchain updates.
+Omitting either interval disables that automatic operation; omitting both makes
+`perform_maintenance` a no-op. A zero interval runs the corresponding operation
+on every maintenance call. When toolchain updates are enabled, the first call
+always checks for an update. Explicit `update_toolchain()` calls still work
+without an interval.
 
 ## Toolchain lifecycle
 
@@ -151,8 +158,8 @@ use std::path::Path;
 fn main() -> Result<()> {
     docs_rs_rustwide::logging::init(true);
     let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-        .sandbox_image(SandboxImageSource::LocalOrRemote(
-            "ghcr.io/rust-lang/crates-build-env/linux".into(),
+        .sandbox_image(SandboxImageSource::local_or_remote(
+            "ghcr.io/rust-lang/crates-build-env/linux",
         ))
         .build()?;
 
@@ -195,7 +202,7 @@ rustwide build and sandbox:
 # fn main() -> Result<()> {
 # docs_rs_rustwide::logging::init(true);
 # let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
-#     .sandbox_image(SandboxImageSource::LocalOrRemote("ghcr.io/rust-lang/crates-build-env/linux".into()))
+#     .sandbox_image(SandboxImageSource::local_or_remote("ghcr.io/rust-lang/crates-build-env/linux"))
 #     .build()?;
 # let krate = Crate::crates_io("serde", "1.0.219");
 let selected = environment.release(&krate).run(|build| {
