@@ -59,7 +59,9 @@ fn run(args: &Args) -> Result<bool> {
         .sandbox_image(args.sandbox_image())
         .maybe_cpu_limit(args.cpu_limit())
         .docker_runtime(args.docker_runtime())
-        .include_default_targets(args.include_default_targets())
+        // Build the package's configured targets without adding docs.rs's default target list.
+        // This is the production configuration.
+        .include_default_targets(false)
         .default_limits(args.limits())
         .build()
         .context("initializing the docs.rs build environment")?;

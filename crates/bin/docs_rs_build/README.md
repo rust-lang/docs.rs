@@ -51,6 +51,9 @@ treated as build failures.
 Dirty working trees are accepted so the command can test uncommitted changes.
 Cargo's `include` and `exclude` rules still apply.
 
+The CLI does not add docs.rs's default target list. Targets configured in package
+metadata still apply.
+
 ## Cargo workspaces
 
 Without `--package`, package selection follows `cargo package`. At a workspace

@@ -1,6 +1,8 @@
 use clap::{ArgAction, Parser};
 use docs_rs_build_limits::Limits;
-use docs_rs_rustwide::{BuildCores, CpuLimit, CpuQuota, ImagePullPolicy, SandboxImageSource, ToolchainExt as _};
+use docs_rs_rustwide::{
+    BuildCores, CpuLimit, CpuQuota, ImagePullPolicy, SandboxImageSource, ToolchainExt as _,
+};
 use docs_rs_types::{ByteSize, Duration};
 use rustwide::{Toolchain, cmd::DockerRuntime};
 use std::{path::PathBuf, sync::LazyLock};
@@ -69,10 +71,6 @@ pub(crate) struct Args {
     /// The Docker runtime used for sandbox containers: default or runsc.
     #[arg(long, default_value_t)]
     docker_runtime: DockerRuntime,
-
-    /// Do not add docs.rs's default target list when crate metadata has no targets.
-    #[arg(long)]
-    no_default_targets: bool,
 
     /// Do not check for a newer version of the selected dist toolchain.
     #[arg(long)]
@@ -161,10 +159,6 @@ impl Args {
             .or_else(|| self.cpu_limit.map(CpuLimit::Quota))
     }
 
-    pub(crate) fn include_default_targets(&self) -> bool {
-        !self.no_default_targets
-    }
-
     pub(crate) fn limits(&self) -> Limits {
         Limits {
             memory: self.memory,
@@ -190,7 +184,6 @@ mod tests {
             PathBuf::from("./target/docsrs-build")
         );
         assert_eq!(args.limits(), Limits::default());
-        assert!(args.include_default_targets());
     }
 
     #[test]
@@ -237,7 +230,11 @@ mod tests {
                 argv.extend(&image_args);
                 let args = Args::try_parse_from(argv).unwrap();
                 let image = args.sandbox_image();
-                let SandboxImageSource::Image { name, source: policy } = image else {
+                let SandboxImageSource::Image {
+                    name,
+                    source: policy,
+                } = image
+                else {
                     panic!("expected an explicit image");
                 };
                 assert_eq!(policy.to_string(), source);
