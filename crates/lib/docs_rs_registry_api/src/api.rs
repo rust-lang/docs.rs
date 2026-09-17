@@ -502,6 +502,173 @@ mod tests {
 
     const CHECKSUM: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+    fn std_replacements(description: &str) -> StdReplacements {
+        serde_json::from_value(serde_json::json!({
+            KRATE.as_str(): {
+                "description": description,
+                "url": "https://example.com/replacement",
+            },
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_get_std_replacement_caches_entire_response() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        env.mock_std_replacements(std_replacements("replacement"))
+            .await;
+
+        // A miss still fetches and caches the complete response.
+        assert!(
+            env.api()
+                .get_std_replacement(&KrateName::from_static("missing"))
+                .await?
+                .is_none()
+        );
+        let first = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert_eq!(
+            serde_json::to_value(&first)?,
+            serde_json::json!({
+                "description": "replacement",
+                "url": "https://example.com/replacement",
+            })
+        );
+        let second = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        env.assert_mocks().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_std_replacement_caches_empty_response() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        env.mock_std_replacements(StdReplacements::new()).await;
+
+        for _ in 0..2 {
+            assert!(env.api().get_std_replacement(&KRATE).await?.is_none());
+        }
+        env.assert_mocks().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_std_replacement_refreshes_expired_cache() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        let removed = KrateName::from_static("removed");
+        let mut initial = std_replacements("old");
+        initial.insert(removed.clone(), initial[&KRATE].clone());
+        env.mock_std_replacements(initial).await;
+        let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
+
+        env.mock_std_replacements(std_replacements("new")).await;
+        env.api()
+            .std_replacements
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .fetched_at = Instant::now() - CACHE_TTL;
+
+        let new = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert_eq!(serde_json::to_value(&new)?["description"], "new");
+        assert!(!Arc::ptr_eq(&old, &new));
+        assert_eq!(serde_json::to_value(&old)?["description"], "old");
+        assert!(env.api().get_std_replacement(&removed).await?.is_none());
+        let cached = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert!(Arc::ptr_eq(&new, &cached));
+        env.assert_mocks().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_std_replacement_concurrent_fetch() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        env.mock_std_replacements(std_replacements("replacement"))
+            .await;
+
+        let name = KRATE;
+        let (first, second) = tokio::try_join!(
+            env.api().get_std_replacement(&name),
+            env.api().get_std_replacement(&name),
+        )?;
+        assert!(Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
+        env.assert_mocks().await;
+        Ok(())
+    }
+
+    #[test_case(StatusCode::NOT_FOUND, "not found"; "http error")]
+    #[test_case(StatusCode::INTERNAL_SERVER_ERROR, "server error"; "server error")]
+    #[test_case(StatusCode::OK, "invalid json"; "malformed json")]
+    #[test_case(StatusCode::OK, r#"{"krate":{"description":"missing url"}}"#; "invalid details")]
+    #[tokio::test]
+    async fn test_get_std_replacement_failed_fetch(
+        status: StatusCode,
+        body: &str,
+    ) -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        env.create_std_replacements_mock(|mock| {
+            mock.with_status(status.as_u16().into()).with_body(body)
+        })
+        .await;
+
+        let err = env.api().get_std_replacement(&KRATE).await.unwrap_err();
+        if status.is_success() {
+            assert!(
+                matches!(err, Error::HttpError(reqwest_middleware::Error::Reqwest(ref err), _) if err.is_decode())
+            );
+        } else {
+            assert_eq!(err.status(), Some(status));
+        }
+        assert!(env.api().std_replacements.lock().await.is_none());
+
+        env.mock_std_replacements(std_replacements("recovered"))
+            .await;
+        let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert_eq!(
+            serde_json::to_value(&recovered)?["description"],
+            "recovered"
+        );
+        env.assert_mocks().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_std_replacement_failed_refresh_preserves_cache() -> anyhow::Result<()> {
+        let env = TestRegistry::new().await?;
+        env.mock_std_replacements(std_replacements("old")).await;
+        let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        let expired_at = Instant::now() - CACHE_TTL;
+        env.api()
+            .std_replacements
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .fetched_at = expired_at;
+
+        env.create_std_replacements_mock(|mock| {
+            mock.with_status(StatusCode::INTERNAL_SERVER_ERROR.as_u16().into())
+        })
+        .await;
+        assert!(env.api().get_std_replacement(&KRATE).await.is_err());
+        {
+            let cache = env.api().std_replacements.lock().await;
+            let cache = cache.as_ref().unwrap();
+            assert_eq!(cache.fetched_at, expired_at);
+            assert!(Arc::ptr_eq(&cache.data[&KRATE], &old));
+        }
+
+        env.mock_std_replacements(std_replacements("recovered"))
+            .await;
+        let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
+        assert_eq!(
+            serde_json::to_value(&recovered)?["description"],
+            "recovered"
+        );
+        env.assert_mocks().await;
+        Ok(())
+    }
+
     fn sparse_entry(version: &Version, pubtime: Option<&str>, yanked: bool) -> serde_json::Value {
         serde_json::json!({
             "name": KRATE.as_str(),

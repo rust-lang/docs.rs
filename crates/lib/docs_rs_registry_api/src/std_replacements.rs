@@ -25,6 +25,39 @@ pub struct ReplacementDetails {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
+
+    #[test]
+    fn test_parse_empty_list() -> anyhow::Result<()> {
+        let parsed: StdReplacements = serde_json::from_str("{}")?;
+        assert!(parsed.is_empty());
+        Ok(())
+    }
+
+    #[test_case(serde_json::json!({"url": "https://example.com"}); "missing description")]
+    #[test_case(serde_json::json!({"description": "replacement"}); "missing url")]
+    #[test_case(serde_json::json!({"description": "replacement", "url": "not a url"}); "invalid url")]
+    fn test_parse_invalid_details(details: serde_json::Value) {
+        assert!(
+            serde_json::from_value::<StdReplacements>(serde_json::json!({
+                "void": details,
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn test_parse_invalid_crate_name() {
+        assert!(
+            serde_json::from_value::<StdReplacements>(serde_json::json!({
+                "invalid crate name": {
+                    "description": "replacement",
+                    "url": "https://example.com",
+                },
+            }))
+            .is_err()
+        );
+    }
 
     #[test]
     fn test_parse_list() -> anyhow::Result<()> {
