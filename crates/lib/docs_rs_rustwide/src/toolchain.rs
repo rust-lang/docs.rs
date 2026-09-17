@@ -245,46 +245,4 @@ fn parse_rustc_version(version: &str) -> Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn maintenance_schedule_and_selection_changes() {
-        let interval = Duration::from_secs(60);
-        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), interval);
-        let now = Instant::now();
-        assert!(toolchain.update_due(now));
-        toolchain.mark_updated(now);
-        assert!(!toolchain.update_due(now + interval - Duration::from_nanos(1)));
-        assert!(toolchain.update_due(now + interval));
-        assert!(!toolchain.select(Toolchain::dist("nightly")));
-        assert!(!toolchain.update_due(now));
-        assert!(toolchain.select(Toolchain::dist("stable")));
-        assert!(toolchain.update_due(now));
-        assert_eq!(toolchain.get(), &Toolchain::dist("stable"));
-    }
-
-    #[test]
-    fn zero_interval_always_checks_for_updates() {
-        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), Duration::ZERO);
-        let now = Instant::now();
-        toolchain.mark_updated(now);
-        assert!(toolchain.update_due(now));
-    }
-
-    #[test]
-    fn parses_rustc_resource_version() {
-        assert_eq!(
-            parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)").unwrap(),
-            "20160523-1.10.0-nightly-57ef01513"
-        );
-    }
-
-    #[test]
-    fn creates_ci_rustc_resource_version() {
-        assert_eq!(
-            parse_rustc_version(&ci_rustc_version("0123456789abcdef")).unwrap(),
-            "29991229-1.9999.0-nightly-0123456789abcdef"
-        );
-    }
-}
+mod tests;
