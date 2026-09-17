@@ -16,7 +16,10 @@ pub(crate) const FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
 pub type StdReplacements = HashMap<KrateName, Arc<ReplacementDetails>>;
 
 #[derive(Debug, Deserialize)]
-#[cfg_attr(any(test, feature = "testing"), derive(serde::Serialize, PartialEq))]
+#[cfg_attr(
+    any(test, feature = "testing"),
+    derive(serde::Serialize, PartialEq, Clone)
+)]
 pub struct ReplacementDetails {
     pub(crate) description: String,
     pub(crate) url: Url,

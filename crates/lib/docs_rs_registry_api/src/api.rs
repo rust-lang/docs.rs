@@ -502,20 +502,28 @@ mod tests {
 
     const CHECKSUM: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
-    fn std_replacements(description: &str) -> StdReplacements {
-        StdReplacements::from_iter([(
-            KRATE.clone(),
-            Arc::new(ReplacementDetails {
-                description: description.to_string(),
-                url: "https://example.com/replacement".parse().unwrap(),
-            }),
-        )])
+    fn std_replacement(description: &str) -> ReplacementDetails {
+        ReplacementDetails {
+            description: description.to_string(),
+            url: "https://example.com/replacement".parse().unwrap(),
+        }
+    }
+
+    fn std_replacements(
+        replacements: impl IntoIterator<Item = (KrateName, ReplacementDetails)>,
+    ) -> StdReplacements {
+        StdReplacements::from_iter(
+            replacements
+                .into_iter()
+                .map(|(krate, replacement)| (krate, Arc::new(replacement))),
+        )
     }
 
     #[tokio::test]
     async fn test_get_std_replacement_caches_entire_response() -> anyhow::Result<()> {
         let env = TestRegistry::new().await?;
-        env.mock_std_replacements(std_replacements("replacement"))
+        let details = std_replacement("replacement");
+        env.mock_std_replacements(std_replacements([(KRATE, details.clone())]))
             .await;
 
         // A miss still fetches and caches the complete response.
@@ -526,14 +534,7 @@ mod tests {
                 .is_none()
         );
         let first = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(
-            first,
-            ReplacementDetails {
-                description: "replacement".to_string(),
-                url: "https://example.com/replacement".parse().unwrap(),
-            }
-            .into()
-        );
+        assert_eq!(first, details.into());
         let second = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert!(Arc::ptr_eq(&first, &second));
         env.assert_mocks().await;
@@ -555,13 +556,18 @@ mod tests {
     #[tokio::test]
     async fn test_get_std_replacement_refreshes_expired_cache() -> anyhow::Result<()> {
         let env = TestRegistry::new().await?;
+
         let removed = KrateName::from_static("removed");
-        let mut initial = std_replacements("old");
-        initial.insert(removed.clone(), initial[&KRATE].clone());
-        env.mock_std_replacements(initial).await;
+        env.mock_std_replacements(std_replacements([(
+            removed.clone(),
+            std_replacement("old"),
+        )]))
+        .await;
+
         let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
 
-        env.mock_std_replacements(std_replacements("new")).await;
+        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("new"))]))
+            .await;
         env.api()
             .std_replacements
             .lock()
@@ -584,7 +590,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_std_replacement_concurrent_fetch() -> anyhow::Result<()> {
         let env = TestRegistry::new().await?;
-        env.mock_std_replacements(std_replacements("replacement"))
+        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("replacement"))]))
             .await;
 
         let name = KRATE;
@@ -622,7 +628,7 @@ mod tests {
         }
         assert!(env.api().std_replacements.lock().await.is_none());
 
-        env.mock_std_replacements(std_replacements("recovered"))
+        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("recovered"))]))
             .await;
         let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert_eq!(recovered.description, "recovered");
@@ -633,7 +639,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_std_replacement_failed_refresh_preserves_cache() -> anyhow::Result<()> {
         let env = TestRegistry::new().await?;
-        env.mock_std_replacements(std_replacements("old")).await;
+        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("old"))]))
+            .await;
         let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
         let expired_at = Instant::now() - CACHE_TTL;
         env.api()
@@ -656,7 +663,7 @@ mod tests {
             assert!(Arc::ptr_eq(&cache.data[&KRATE], &old));
         }
 
-        env.mock_std_replacements(std_replacements("recovered"))
+        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("recovered"))]))
             .await;
         let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert_eq!(recovered.description, "recovered");
