@@ -1004,6 +1004,7 @@ mod tests {
         let err = RegistryApi::new(
             "https://index.example".parse().unwrap(),
             0,
+            "https://std_replacements.example".parse().unwrap(),
             Some(cargo_home.path()),
             docs_rs_opentelemetry::testing::TestMetrics::new().provider(),
         )

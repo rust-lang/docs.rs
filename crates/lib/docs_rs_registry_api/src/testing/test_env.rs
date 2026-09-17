@@ -18,6 +18,8 @@ struct TestRegistryInner {
     index_server: mockito::ServerGuard,
     #[allow(dead_code)]
     download_server: mockito::ServerGuard,
+    #[allow(dead_code)]
+    std_replacement_server: mockito::ServerGuard,
     mocks: Vec<mockito::Mock>,
 }
 
@@ -62,6 +64,7 @@ impl TestRegistry {
         let api_server = mockito::Server::new_async().await;
         let mut index_server = mockito::Server::new_async().await;
         let download_server = mockito::Server::new_async().await;
+        let std_replacement_server = mockito::Server::new_async().await;
 
         let index_config = index_config.unwrap_or_else(|| crates_index::IndexConfig {
             dl: format!("{}/crates", download_server.url()),
@@ -96,6 +99,7 @@ impl TestRegistry {
         let api = RegistryApi::new(
             index_url.clone(),
             retries,
+            std_replacement_server.url().parse().unwrap(),
             Some(cargo_home.path()),
             &meter_provider,
         )
@@ -114,6 +118,7 @@ impl TestRegistry {
                 api_server,
                 index_server,
                 download_server,
+                std_replacement_server,
                 mocks: vec![config_mock, index_object_missing_mock],
             }),
             api: Arc::new(api),
