@@ -40,6 +40,20 @@ mod duration_impl {
             // nightly only API, we already add it because it's nice.
             Self::from_hours(days * 24)
         }
+
+        /// Round to the nearest millisecond, rounding half milliseconds up.
+        /// Saturates at the largest representable whole-millisecond duration.
+        pub fn round_to_millis(self) -> Self {
+            let nanos = self.0.subsec_nanos() % 1_000_000;
+            let truncated = self.0 - StdDuration::from_nanos(u64::from(nanos));
+            Self(if nanos >= 500_000 {
+                truncated
+                    .checked_add(StdDuration::from_millis(1))
+                    .unwrap_or(truncated)
+            } else {
+                truncated
+            })
+        }
     }
 
     impl Deref for Duration {
@@ -119,6 +133,21 @@ mod tests {
     fn test_parse_secs_with_or_without_unit(input: &str) {
         let duration: Duration = input.parse().unwrap();
         assert_eq!(duration, Duration::from_secs(1234));
+    }
+
+    #[test]
+    fn rounds_to_milliseconds() {
+        for (nanos, expected) in [
+            (499_999, 0),
+            (500_000, 1_000_000),
+            (246_987_074, 247_000_000),
+            (999_500_000, 1_000_000_000),
+        ] {
+            assert_eq!(
+                Duration::from_nanos(nanos).round_to_millis(),
+                Duration::from_nanos(expected)
+            );
+        }
     }
 
     #[test]

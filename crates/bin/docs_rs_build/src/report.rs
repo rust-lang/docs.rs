@@ -31,7 +31,7 @@ pub(crate) fn print(
             } else {
                 "skipped".into()
             },
-            target.duration().to_string(),
+            target.duration().round_to_millis().to_string(),
         ]);
         totals[0] += target.documentation().duration();
         totals[1] += target.rustdoc_json().duration();
@@ -40,14 +40,14 @@ pub(crate) fn print(
     }
     rows.push([
         "Total".to_owned(),
-        totals[0].to_string(),
-        totals[1].to_string(),
-        totals[2].to_string(),
-        totals[3].to_string(),
+        totals[0].round_to_millis().to_string(),
+        totals[1].round_to_millis().to_string(),
+        totals[2].round_to_millis().to_string(),
+        totals[3].round_to_millis().to_string(),
     ]);
     print_table(&rows)?;
     println!("Target totals include retries and work between steps.");
-    println!("Full build duration: {}", duration);
+    println!("Full build duration: {}", duration.round_to_millis());
 
     match result.statistics().memory_peak_bytes() {
         Some(bytes) => println!(
@@ -108,7 +108,7 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
     format!(
         "{} {}",
         if step.is_ok() { "ok" } else { "FAILED" },
-        step.duration()
+        step.duration().round_to_millis()
     )
 }
 
