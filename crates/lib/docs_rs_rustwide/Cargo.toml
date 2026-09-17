@@ -6,9 +6,13 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[features]
+clap = ["dep:clap"]
+
 [dependencies]
 anyhow = { workspace = true }
 bon = { workspace = true }
+clap = { workspace = true, optional = true }
 docs_rs_build_limits = { path = "../docs_rs_build_limits", default-features = false }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_rustdoc_json = { path = "../docs_rs_rustdoc_json" }

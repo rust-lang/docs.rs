@@ -2418,6 +2418,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bon",
+ "clap",
  "docs_rs_build_limits",
  "docs_rs_cargo_metadata",
  "docs_rs_rustdoc_json",

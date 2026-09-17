@@ -31,6 +31,7 @@ pub const SANDBOX_IMAGE_LINUX_MICRO: &str = "ghcr.io/rust-lang/crates-build-env/
 
 /// Controls whether a named sandbox image may be pulled from its registry.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[strum(serialize_all = "kebab-case")]
 pub enum ImagePullPolicy {
     /// Require an image that is already present locally.

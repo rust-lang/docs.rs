@@ -59,8 +59,8 @@ pub(crate) struct Args {
     #[arg(long, value_name = "IMAGE")]
     image: Option<String>,
 
-    /// How the sandbox image is obtained: local, remote, or local-or-remote.
-    #[arg(long, default_value_t)]
+    /// How the sandbox image is obtained.
+    #[arg(long, value_enum, default_value_t)]
     image_source: ImagePullPolicy,
 
     /// The Docker runtime used for sandbox containers: default or runsc.
