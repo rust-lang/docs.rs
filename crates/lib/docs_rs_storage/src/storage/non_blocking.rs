@@ -324,7 +324,7 @@ impl AsyncStorage {
                             io::copy(&mut file, &mut zip)?;
 
                         stats.file_count +=1 ;
-                        stats.original_size +=  file.metadata()?.len();
+                        stats.original_size += file.metadata()?.len();
                         }
 
                         let mut zip_file = zip.finish()?.into_inner()?;

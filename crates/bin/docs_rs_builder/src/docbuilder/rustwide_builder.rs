@@ -742,7 +742,7 @@ impl RustwideBuilder {
                             &rustdoc_archive_path(name, version),
                             local_storage.path(),
                         ))?;
-                    self.builder_metrics.documentation_size.record(doc_stats.original_size, &[]);
+                    self.builder_metrics.record_documentation_size(doc_stats.original_size);
                     algs.insert(doc_stats.alg);
                     Some(doc_stats.original_size)
                 } else {
@@ -1842,7 +1842,7 @@ mod tests {
                 false,
                 iter::once(CompressionAlgorithm::Deflate),
                 None,
-                42,
+                42usize.into(),
             )
             .await?;
 
