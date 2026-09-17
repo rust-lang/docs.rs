@@ -16,6 +16,7 @@ mod rustwide_ext;
 mod sandbox;
 #[doc(hidden)]
 pub mod testing;
+mod toolchain;
 pub mod utils;
 mod workspace;
 mod workspace_lock;
@@ -30,8 +31,8 @@ pub use result::{
 pub use rustwide_ext::ToolchainExt;
 pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
 pub use workspace::{
-    BuildEnvironment, MaintenanceResult, SANDBOX_IMAGE_LINUX, SANDBOX_IMAGE_LINUX_MICRO,
-    ImagePullPolicy, SandboxImageSource,
+    BuildEnvironment, ImagePullPolicy, MaintenanceResult, SANDBOX_IMAGE_LINUX,
+    SANDBOX_IMAGE_LINUX_MICRO, SandboxImageSource,
 };
 
 /// Version of docs.rs whose build behavior this crate implements.

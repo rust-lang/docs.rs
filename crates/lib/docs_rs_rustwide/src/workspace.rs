@@ -1,30 +1,26 @@
 use crate::{
     BuildResult, CpuLimit, HtmlOutput, ReleaseContext, StepResultExt, ToolchainExt as _,
+    toolchain::{DEFAULT_TOOLCHAIN_UPDATE_INTERVAL, ManagedToolchain},
     workspace_lock::WorkspaceLock,
 };
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Result, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_types::ByteSize;
 use docs_rs_utils::{APP_USER_AGENT, retry};
-use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use rustwide::{
     Crate, Toolchain, Workspace, WorkspaceBuilder,
-    cmd::{Command, CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
-    toolchain::ToolchainError,
+    cmd::{CommandError, DockerRuntime, SandboxBuilder, SandboxImage},
 };
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
 const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
-const DEFAULT_TOOLCHAIN_UPDATE_INTERVAL: Duration = Duration::from_secs(60 * 60);
-const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 
 pub const SANDBOX_IMAGE_LINUX: &str = "ghcr.io/rust-lang/crates-build-env/linux";
 pub const SANDBOX_IMAGE_LINUX_MICRO: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
@@ -190,9 +186,7 @@ pub struct MaintenanceResult {
 /// its build artifacts have been consumed or copied out of the workspace.
 pub struct BuildEnvironment {
     workspace: ManagedWorkspace,
-    toolchain: Toolchain,
-    toolchain_update_interval: Duration,
-    toolchain_last_update_check: Option<Instant>,
+    toolchain: ManagedToolchain,
     cpu_limit: Option<CpuLimit>,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
@@ -249,9 +243,7 @@ impl BuildEnvironment {
 
         let mut environment = Self {
             workspace,
-            toolchain,
-            toolchain_update_interval,
-            toolchain_last_update_check: None,
+            toolchain: ManagedToolchain::new(toolchain, toolchain_update_interval),
             cpu_limit,
             docker_runtime,
             include_default_targets,
@@ -294,9 +286,7 @@ impl BuildEnvironment {
             debug!("ensuring toolchain readiness after workspace refresh");
             self.ensure_toolchain_ready()?;
         }
-        let toolchain_update_due = self
-            .toolchain_last_update_check
-            .is_none_or(|last_check| last_check.elapsed() >= self.toolchain_update_interval);
+        let toolchain_update_due = self.toolchain.update_due(Instant::now());
         let toolchain_updated = if toolchain_update_due {
             debug!("toolchain update check is due");
             self.update_toolchain()?
@@ -330,11 +320,7 @@ impl BuildEnvironment {
     /// result reports whether the toolchain itself had to be installed.
     #[instrument(skip_all)]
     pub fn set_toolchain(&mut self, toolchain: Toolchain) -> Result<bool> {
-        let selection_changed = self.toolchain != toolchain;
-        self.toolchain = toolchain;
-        if selection_changed {
-            self.toolchain_last_update_check = None;
-        }
+        let selection_changed = self.toolchain.select(toolchain);
         let installed = self.ensure_toolchain_ready()?;
         if selection_changed && !installed {
             self.purge_caches()?;
@@ -345,61 +331,14 @@ impl BuildEnvironment {
 
     /// Return the toolchain currently selected for builds.
     pub fn toolchain(&self) -> &Toolchain {
-        &self.toolchain
+        self.toolchain.get()
     }
 
-    fn is_toolchain_installed(&self) -> Result<bool> {
-        if self.toolchain.as_dist().is_some() {
-            return match self.toolchain.installed_targets(self.workspace()) {
-                Ok(_) => Ok(true),
-                Err(error)
-                    if matches!(
-                        error.downcast_ref::<ToolchainError>(),
-                        Some(ToolchainError::NotInstalled)
-                    ) =>
-                {
-                    Ok(false)
-                }
-                Err(error) => Err(error),
-            };
-        }
-
-        Ok(self
-            .workspace()
-            .installed_toolchains()?
-            .contains(&self.toolchain))
-    }
-
-    #[instrument(skip_all)]
-    fn ensure_toolchain_installed(&mut self) -> Result<bool> {
-        if self.is_toolchain_installed()? {
-            debug!("toolchain is already installed");
-            return Ok(false);
-        }
-
-        debug!("installing toolchain");
-        retry(|| self.toolchain.install(self.workspace()), 3)?;
-        debug!("toolchain installed");
-        Ok(true)
-    }
-
-    // Establish the toolchain invariant for this environment without checking
-    // whether an installed distribution toolchain can be updated. Unmanaged
-    // targets are preserved here and only cleaned up by `update_toolchain`.
-    #[instrument(skip_all)]
     fn ensure_toolchain_ready(&mut self) -> Result<bool> {
-        let installed = self.ensure_toolchain_installed()?;
-
-        if self.toolchain.as_ci().is_none() {
-            let installed_targets = self.toolchain.installed_targets(self.workspace())?;
-            self.ensure_required_toolchain_targets(&installed_targets)?;
-            self.ensure_toolchain_components();
-        }
-
+        let installed = self.toolchain.ensure_ready(self.workspace())?;
         if installed {
             self.purge_caches()?;
         }
-        debug!(installed, "toolchain is ready");
         Ok(installed)
     }
 
@@ -413,50 +352,11 @@ impl BuildEnvironment {
     /// through rustup reliably.
     #[instrument(skip_all)]
     pub fn update_toolchain(&mut self) -> Result<bool> {
-        if self.toolchain.as_ci().is_some() {
-            debug!("reinstalling CI toolchain");
-            retry(|| self.toolchain.install(self.workspace()), 3)?;
-            self.purge_caches()?;
-            self.toolchain_last_update_check = Some(Instant::now());
-            return Ok(true);
-        }
-
-        // Version detection is allowed to fail when the toolchain is not installed yet.
-        let old_version = self.rustc_version().ok();
-        let installed_targets = match self.toolchain.installed_targets(self.workspace()) {
-            Ok(targets) => targets,
-            Err(error)
-                if matches!(
-                    error.downcast_ref::<ToolchainError>(),
-                    Some(ToolchainError::NotInstalled)
-                ) =>
-            {
-                Vec::new()
-            }
-            Err(error) => return Err(error),
-        };
-
-        // Remove no-longer-managed targets before updating. Otherwise rustup can
-        // refuse an update when one of those targets disappeared upstream.
-        let managed_targets = Self::managed_toolchain_targets();
-        for target in &installed_targets {
-            if !managed_targets.contains(target) {
-                debug!(target, "removing unmanaged target before toolchain update");
-                retry(|| self.toolchain.remove_target(self.workspace(), target), 3)?;
-            }
-        }
-
-        debug!(old_version, "installing or updating toolchain");
-        retry(|| self.toolchain.install(self.workspace()), 3)?;
-        self.ensure_toolchain_ready()?;
-
-        let new_version = self.rustc_version()?;
-        let changed = old_version.as_ref() != Some(&new_version);
-        debug!(changed, new_version, "toolchain update complete");
+        let changed = self.toolchain.update(self.workspace())?;
         if changed {
             self.purge_caches()?;
         }
-        self.toolchain_last_update_check = Some(Instant::now());
+        self.toolchain.mark_updated(Instant::now());
         Ok(changed)
     }
 
@@ -505,7 +405,7 @@ impl BuildEnvironment {
     }
 
     pub(crate) fn configured_toolchain(&self) -> &Toolchain {
-        &self.toolchain
+        self.toolchain.get()
     }
 
     pub(crate) fn cargo_jobs(&self) -> Option<usize> {
@@ -547,7 +447,7 @@ impl BuildEnvironment {
     }
 
     pub(crate) fn resource_suffix(&self) -> Result<String> {
-        Ok(format!("-{}", parse_rustc_version(&self.rustc_version()?)?))
+        self.toolchain.resource_suffix(self.workspace())
     }
 
     /// Return the version reported by the configured Rust compiler.
@@ -556,110 +456,11 @@ impl BuildEnvironment {
     /// `+toolchain` invocation cannot address CI artifacts.
     #[instrument(skip_all)]
     pub fn rustc_version(&self) -> Result<String> {
-        if let Some(ci) = self.toolchain.as_ci() {
-            let version = ci_rustc_version(ci.sha());
-            debug!(version, "using synthetic CI rustc version");
-            return Ok(version);
-        }
-
-        debug!("detecting rustc version");
-        let output = Command::new(self.workspace(), self.toolchain.rustc())
-            .arg("--version")
-            .log_output(false)
-            .run_capture()?;
-        let [version] = output.stdout_lines() else {
-            bail!("invalid output returned by `rustc --version`");
-        };
-        debug!(version, "detected rustc version");
-        Ok(version.clone())
+        self.toolchain.rustc_version(self.workspace())
     }
 
-    #[instrument(skip_all)]
     pub(crate) fn ensure_target_installed(&self, target: impl AsRef<str>) -> Result<()> {
-        let target = target.as_ref();
-        debug!("ensuring target is installed");
-        self.configured_toolchain()
-            .add_target(self.workspace(), target)
-            .context("error adding non-default target to toolchain")?;
-
-        Ok(())
-    }
-
-    fn ensure_toolchain_components(&mut self) {
-        for component in TOOLCHAIN_COMPONENTS {
-            debug!(component, "ensuring toolchain component is installed");
-            if let Err(error) = self.toolchain.add_component(self.workspace(), component) {
-                // A newly published nightly can temporarily lack a component. Builds
-                // that do not need it should still be allowed to proceed.
-                warn!("failed to install toolchain component {component}: {error}");
-            }
-        }
-    }
-
-    fn managed_toolchain_targets() -> HashSet<String> {
-        DEFAULT_TARGETS
-            .iter()
-            .chain([&HOST_TARGET])
-            .map(|target| (*target).to_owned())
-            .collect()
-    }
-
-    fn ensure_required_toolchain_targets(&mut self, installed_targets: &[String]) -> Result<()> {
-        let mut targets_to_install = Self::managed_toolchain_targets();
-
-        for target in installed_targets {
-            targets_to_install.remove(target);
-        }
-        for target in targets_to_install {
-            debug!(target, "installing required toolchain target");
-            retry(|| self.toolchain.add_target(self.workspace(), &target), 3)?;
-        }
-        Ok(())
-    }
-}
-
-fn ci_rustc_version(sha: &str) -> String {
-    format!("rustc 1.9999.0-nightly ({sha} 2999-12-29)")
-}
-
-fn parse_rustc_version(version: &str) -> Result<String> {
-    let mut outer = version.splitn(3, ' ');
-    let _binary = outer.next();
-    let release = outer
-        .next()
-        .ok_or_else(|| anyhow!("missing release in rustc version `{version}`"))?;
-    let details = outer
-        .next()
-        .and_then(|value| value.strip_prefix('('))
-        .and_then(|value| value.strip_suffix(')'))
-        .ok_or_else(|| anyhow!("missing details in rustc version `{version}`"))?;
-    let mut details = details.split_whitespace();
-    let commit = details
-        .next()
-        .ok_or_else(|| anyhow!("missing commit in rustc version `{version}`"))?;
-    let date = details
-        .next()
-        .ok_or_else(|| anyhow!("missing date in rustc version `{version}`"))?;
-    Ok(format!("{}-{release}-{commit}", date.replace('-', "")))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_rustc_resource_version() {
-        assert_eq!(
-            parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)").unwrap(),
-            "20160523-1.10.0-nightly-57ef01513"
-        );
-    }
-
-    #[test]
-    fn creates_ci_rustc_resource_version() {
-        assert_eq!(
-            parse_rustc_version(&ci_rustc_version("0123456789abcdef")).unwrap(),
-            "29991229-1.9999.0-nightly-0123456789abcdef"
-        );
+        self.toolchain
+            .ensure_target_installed(self.workspace(), target)
     }
 }
