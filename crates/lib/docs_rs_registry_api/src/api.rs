@@ -558,10 +558,10 @@ mod tests {
         let env = TestRegistry::new().await?;
 
         let removed = KrateName::from_static("removed");
-        env.mock_std_replacements(std_replacements([(
-            removed.clone(),
-            std_replacement("old"),
-        )]))
+        env.mock_std_replacements(std_replacements([
+            (KRATE, std_replacement("old")),
+            (removed.clone(), std_replacement("removed")),
+        ]))
         .await;
 
         let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
