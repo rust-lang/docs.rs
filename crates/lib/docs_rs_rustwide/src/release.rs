@@ -25,10 +25,21 @@ pub struct ReleaseContext<'release, State = Unfetched> {
     pub(crate) environment: &'release mut BuildEnvironment,
     pub(crate) krate: &'release Crate,
     pub(crate) limits: Option<Limits>,
+    pub(crate) directory_label: Option<String>,
     pub(crate) state: State,
 }
 
 impl<State> ReleaseContext<'_, State> {
+    /// Add a human-readable label to the build directory, such as `headers-0.4.1`.
+    ///
+    /// Characters other than ASCII letters, digits, dots, hyphens, and underscores
+    /// are replaced with underscores. A crate hash is always appended; an empty
+    /// label uses the default `release` prefix. This does not change package selection.
+    pub fn directory_label(mut self, label: impl Into<String>) -> Self {
+        self.directory_label = Some(label.into());
+        self
+    }
+
     /// Override the environment's default limits for this release.
     pub fn limits(mut self, limits: Limits) -> Self {
         self.limits = Some(limits);
@@ -48,6 +59,7 @@ impl<'release> ReleaseContext<'release, Unfetched> {
             environment,
             krate,
             limits,
+            directory_label,
             state: Unfetched,
         } = self;
 
@@ -60,6 +72,7 @@ impl<'release> ReleaseContext<'release, Unfetched> {
             environment,
             krate,
             limits,
+            directory_label,
         })
     }
 
@@ -116,6 +129,7 @@ impl ReleaseContext<'_, Fetched> {
             environment,
             krate,
             limits,
+            directory_label,
         } = self;
 
         let effective_limits = limits.unwrap_or_else(|| environment.default_limits().clone());
@@ -124,7 +138,7 @@ impl ReleaseContext<'_, Fetched> {
         debug!("purging stale release build directories");
         environment.workspace().purge_all_build_dirs()?;
 
-        let build_dir_name = build_dir_name(krate);
+        let build_dir_name = build_dir_name(krate, directory_label.as_deref());
         debug!(build_dir_name, "preparing release build directory");
         let mut build_dir = environment.workspace().build_dir(&build_dir_name);
 
@@ -145,8 +159,41 @@ impl ReleaseContext<'_, Fetched> {
     }
 }
 
-fn build_dir_name(krate: &Crate) -> String {
+fn build_dir_name(krate: &Crate, label: Option<&str>) -> String {
     let mut hasher = DefaultHasher::new();
     krate.to_string().hash(&mut hasher);
-    format!("release-{:016x}", hasher.finish())
+    let label: String = label
+        .unwrap_or("release")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(128)
+        .collect();
+    let label = if label.is_empty() { "release" } else { &label };
+    format!("{label}-{:016x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn directory_labels_are_safe_and_preserve_the_hash() {
+        let krate = Crate::crates_io("example", "1.0.0");
+        let fallback = build_dir_name(&krate, None);
+        let hash = fallback.strip_prefix("release-").unwrap();
+        assert_eq!(
+            build_dir_name(&krate, Some("headers-0.4.1")),
+            format!("headers-0.4.1-{hash}")
+        );
+        assert_eq!(build_dir_name(&krate, Some("")), fallback);
+        let unsafe_label = build_dir_name(&krate, Some("../../test/name\\version"));
+        assert_eq!(Path::new(&unsafe_label).components().count(), 1);
+        assert!(unsafe_label.ends_with(hash));
+    }
 }

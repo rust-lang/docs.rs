@@ -282,7 +282,12 @@ impl RustwideBuilder {
         let source_dir = tempfile::tempdir_in(&self.config.temp_dir)?;
 
         let mut algs = HashSet::new();
-        let fetched = self.environment.release(&krate).limits(limits).fetch()?;
+        let fetched = self
+            .environment
+            .release(&krate)
+            .directory_label(format!("{name}-{version}"))
+            .limits(limits)
+            .fetch()?;
         fetched.copy_source_to(source_dir.path())?;
 
         let source_stats = self.runtime.block_on(

@@ -7,9 +7,15 @@ use std::{
 };
 use tracing::{debug, info, instrument};
 
+#[derive(Debug)]
+pub(crate) struct PackagedCrate {
+    pub(crate) source: SourceDir,
+    pub(crate) directory_label: String,
+}
+
 /// Package a local crate and unpack its `.crate` archive into a temporary source directory.
 #[instrument(fields(manifest_dir = %manifest_dir.display(), package))]
-pub(crate) fn create(manifest_dir: &Path, package: Option<&str>) -> Result<SourceDir> {
+pub(crate) fn create(manifest_dir: &Path, package: Option<&str>) -> Result<PackagedCrate> {
     let temporary = tempfile::tempdir().context("creating temporary packaging directory")?;
     let cargo_target = temporary.path().join("cargo-target");
     let manifest_path = manifest_dir.join("Cargo.toml");
@@ -46,11 +52,31 @@ pub(crate) fn create(manifest_dir: &Path, package: Option<&str>) -> Result<Sourc
     let manifest_path = source.path().join("Cargo.toml");
     let mut manifest: toml::Table = toml::from_str(&fs::read_to_string(&manifest_path)?)
         .context("parsing packaged manifest")?;
+    let directory_label = directory_label(&manifest)?;
     manifest.insert("workspace".into(), toml::Value::Table(toml::Table::new()));
     fs::write(&manifest_path, toml::to_string(&manifest)?)
         .context("isolating packaged crate from parent workspaces")?;
     info!(source_dir = %source.path().display(), "crate archive ready");
-    Ok(source)
+    Ok(PackagedCrate {
+        source,
+        directory_label,
+    })
+}
+
+/// Read the resolved identity from Cargo's normalized package manifest.
+fn directory_label(manifest: &toml::Table) -> Result<String> {
+    let package = manifest
+        .get("package")
+        .context("packaged manifest has no package")?;
+    let name = package
+        .get("name")
+        .and_then(toml::Value::as_str)
+        .context("packaged manifest has no package name")?;
+    let version = package
+        .get("version")
+        .and_then(toml::Value::as_str)
+        .context("packaged manifest has no package version")?;
+    Ok(format!("{name}-{version}"))
 }
 
 fn require_package_for_virtual_workspace(manifest_path: &Path) -> Result<()> {
@@ -118,9 +144,9 @@ exclude = ["not-packaged"]
 
         let packaged = create(checkout.path(), None).unwrap();
 
-        assert!(packaged.path().join("Cargo.toml").is_file());
-        assert!(packaged.path().join("src/lib.rs").is_file());
-        assert!(!packaged.path().join("not-packaged").exists());
+        assert!(packaged.source.path().join("Cargo.toml").is_file());
+        assert!(packaged.source.path().join("src/lib.rs").is_file());
+        assert!(!packaged.source.path().join("not-packaged").exists());
     }
 
     #[test]
@@ -137,7 +163,7 @@ exclude = ["not-packaged"]
         let nested = checkout
             .path()
             .join("target/docsrs-build/builds/release/source");
-        docs_rs_rustwide::utils::copy_dir_all(packaged.path(), &nested, |_| {}).unwrap();
+        docs_rs_rustwide::utils::copy_dir_all(packaged.source.path(), &nested, |_| {}).unwrap();
 
         let output = Command::new("cargo")
             .args([
@@ -173,7 +199,8 @@ exclude = ["not-packaged"]
 
         let packaged = create(checkout.path(), Some("selected-member")).unwrap();
 
-        let manifest = fs::read_to_string(packaged.path().join("Cargo.toml")).unwrap();
+        assert_eq!(packaged.directory_label, "selected-member-1.2.3");
+        let manifest = fs::read_to_string(packaged.source.path().join("Cargo.toml")).unwrap();
         assert!(manifest.contains("name = \"selected-member\""));
     }
 

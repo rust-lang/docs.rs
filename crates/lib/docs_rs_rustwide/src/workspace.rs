@@ -373,6 +373,7 @@ impl BuildEnvironment {
             environment: self,
             krate,
             limits: None,
+            directory_label: None,
             state: crate::release::Unfetched,
         }
     }

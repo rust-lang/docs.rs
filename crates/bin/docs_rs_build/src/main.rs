@@ -74,9 +74,10 @@ fn run(args: &Args) -> Result<bool> {
     }
 
     info!("starting docs.rs build");
-    let krate = Crate::local(packaged.path());
+    let krate = Crate::local(packaged.source.path());
     let build = environment
         .release(&krate)
+        .directory_label(packaged.directory_label)
         .run(|release| Ok(release.build_docs()))
         .context("running the docs.rs build")?;
     let duration = build.duration();
