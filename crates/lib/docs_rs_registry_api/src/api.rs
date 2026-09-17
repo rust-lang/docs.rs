@@ -503,13 +503,13 @@ mod tests {
     const CHECKSUM: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
     fn std_replacements(description: &str) -> StdReplacements {
-        serde_json::from_value(serde_json::json!({
-            KRATE.as_str(): {
-                "description": description,
-                "url": "https://example.com/replacement",
-            },
-        }))
-        .unwrap()
+        StdReplacements::from_iter([(
+            KRATE.clone(),
+            Arc::new(ReplacementDetails {
+                description: description.to_string(),
+                url: "https://example.com/replacement".parse().unwrap(),
+            }),
+        )])
     }
 
     #[tokio::test]
@@ -527,11 +527,12 @@ mod tests {
         );
         let first = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert_eq!(
-            serde_json::to_value(&first)?,
-            serde_json::json!({
-                "description": "replacement",
-                "url": "https://example.com/replacement",
-            })
+            first,
+            ReplacementDetails {
+                description: "replacement".to_string(),
+                url: "https://example.com/replacement".parse().unwrap(),
+            }
+            .into()
         );
         let second = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert!(Arc::ptr_eq(&first, &second));
@@ -570,9 +571,9 @@ mod tests {
             .fetched_at = Instant::now() - CACHE_TTL;
 
         let new = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(serde_json::to_value(&new)?["description"], "new");
+        assert_eq!(new.description, "new");
         assert!(!Arc::ptr_eq(&old, &new));
-        assert_eq!(serde_json::to_value(&old)?["description"], "old");
+        assert_eq!(old.description, "old");
         assert!(env.api().get_std_replacement(&removed).await?.is_none());
         let cached = env.api().get_std_replacement(&KRATE).await?.unwrap();
         assert!(Arc::ptr_eq(&new, &cached));
@@ -624,10 +625,7 @@ mod tests {
         env.mock_std_replacements(std_replacements("recovered"))
             .await;
         let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(
-            serde_json::to_value(&recovered)?["description"],
-            "recovered"
-        );
+        assert_eq!(recovered.description, "recovered");
         env.assert_mocks().await;
         Ok(())
     }
@@ -661,10 +659,7 @@ mod tests {
         env.mock_std_replacements(std_replacements("recovered"))
             .await;
         let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(
-            serde_json::to_value(&recovered)?["description"],
-            "recovered"
-        );
+        assert_eq!(recovered.description, "recovered");
         env.assert_mocks().await;
         Ok(())
     }
