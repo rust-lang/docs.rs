@@ -1,5 +1,6 @@
 mod database;
 mod display;
+mod ops;
 mod parse;
 
 pub use self::display::Display;

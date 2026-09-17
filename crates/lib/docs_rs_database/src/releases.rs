@@ -3,8 +3,8 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, CompressionAlgorithm, CrateId, DocCoverage, Feature,
-    KrateName, ReleaseId, Version,
+    BuildError, BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, DocCoverage,
+    Feature, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
@@ -35,7 +35,7 @@ pub async fn finish_release(
     has_examples: bool,
     compression_algorithms: impl IntoIterator<Item = CompressionAlgorithm>,
     repository_id: Option<i32>,
-    source_size: u64,
+    source_size: ByteSize,
 ) -> Result<()> {
     let source_dir = source_dir.as_ref();
     debug!("updating release data");
@@ -99,7 +99,7 @@ pub async fn finish_release(
         default_target,
         features as Vec<Feature>,
         repository_id,
-        source_size as i64,
+        source_size as _,
     )
     .execute(&mut *conn)
     .await?;
@@ -220,7 +220,7 @@ pub async fn finish_build<E>(
     rustc_version: &str,
     docsrs_version: &str,
     build_status: BuildStatus,
-    documentation_size: Option<u64>,
+    documentation_size: Option<ByteSize>,
     memory_peak: Option<u64>,
     build_error: Option<&E>,
 ) -> Result<()>
@@ -265,7 +265,7 @@ where
         build_status as BuildStatus,
         hostname.to_str().unwrap_or(""),
         build_error.map(|err| err.to_string()),
-        documentation_size.map(|v| v as i64),
+        documentation_size as _,
         rustc_date,
         build_error.map(|err| err.kind()),
         memory_peak.map(|v| v as i64),
@@ -699,7 +699,7 @@ mod test {
             false,
             iter::empty(),
             None,
-            24,
+            24u64.into(),
         )
         .await?;
 
@@ -870,7 +870,7 @@ mod test {
             "rustc_version",
             "docsrs_version",
             BuildStatus::Success,
-            Some(42),
+            Some(42u64.into()),
             Some(23),
             None::<&SimpleBuildError>,
         )
@@ -1558,7 +1558,7 @@ mod test {
             false,
             iter::empty(),
             None,
-            24,
+            24u64.into(),
         )
         .await?;
 
