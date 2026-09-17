@@ -1,7 +1,6 @@
 use crate::{
     BuildResult, CpuLimit, HtmlOutput, ReleaseContext, StepResultExt, ToolchainExt as _,
-    toolchain::{DEFAULT_TOOLCHAIN_UPDATE_INTERVAL, ManagedToolchain},
-    workspace_lock::WorkspaceLock,
+    toolchain::ManagedToolchain, workspace_lock::WorkspaceLock,
 };
 use anyhow::{Result, bail};
 use bon::bon;
@@ -20,7 +19,6 @@ use tracing::{debug, instrument};
 
 const DUMMY_CRATE_NAME: &str = "empty-library";
 const DUMMY_CRATE_VERSION: &str = "1.0.0";
-const DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub const SANDBOX_IMAGE_LINUX: &str = "ghcr.io/rust-lang/crates-build-env/linux";
 pub const SANDBOX_IMAGE_LINUX_MICRO: &str = "ghcr.io/rust-lang/crates-build-env/linux-micro";
@@ -97,7 +95,7 @@ struct WorkspaceConfiguration {
     running_inside_docker: bool,
     sandbox_image: SandboxImageSource,
     fast_init: bool,
-    reinitialization_interval: Duration,
+    reinitialization_interval: Option<Duration>,
 }
 
 impl WorkspaceConfiguration {
@@ -150,8 +148,12 @@ impl ManagedWorkspace {
 
     #[instrument(skip_all)]
     fn refresh_if_due(&mut self) -> Result<bool> {
+        let Some(reinitialization_interval) = self.configuration.reinitialization_interval else {
+            return Ok(false);
+        };
+
         let elapsed = self.initialized_at.elapsed();
-        if elapsed < self.configuration.reinitialization_interval {
+        if elapsed < reinitialization_interval {
             debug!(?elapsed, "workspace refresh is not due");
             return Ok(false);
         }
@@ -213,9 +215,8 @@ impl BuildEnvironment {
         /// Wait for another environment to release this workspace instead of failing.
         #[builder(default = false)]
         wait_for_workspace_lock: bool,
-        #[builder(default = DEFAULT_WORKSPACE_REINITIALIZATION_INTERVAL)]
-        workspace_reinitialization_interval: Duration,
-        #[builder(default = DEFAULT_TOOLCHAIN_UPDATE_INTERVAL)] toolchain_update_interval: Duration,
+        workspace_reinitialization_interval: Option<Duration>,
+        toolchain_update_interval: Option<Duration>,
         cpu_limit: Option<CpuLimit>,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,

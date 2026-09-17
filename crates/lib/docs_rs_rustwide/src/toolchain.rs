@@ -8,18 +8,17 @@ use std::{
 };
 use tracing::{debug, instrument, warn};
 
-pub(crate) const DEFAULT_TOOLCHAIN_UPDATE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const TOOLCHAIN_COMPONENTS: &[&str] = &["llvm-tools-preview", "rustc-dev", "rustfmt"];
 
 /// Toolchain lifecycle state. The workspace is supplied per operation because it can be recreated.
 pub(crate) struct ManagedToolchain {
     toolchain: Toolchain,
-    update_interval: Duration,
+    update_interval: Option<Duration>,
     last_update_check: Option<Instant>,
 }
 
 impl ManagedToolchain {
-    pub(crate) fn new(toolchain: Toolchain, update_interval: Duration) -> Self {
+    pub(crate) fn new(toolchain: Toolchain, update_interval: Option<Duration>) -> Self {
         Self {
             toolchain,
             update_interval,
@@ -41,8 +40,10 @@ impl ManagedToolchain {
     }
 
     pub(crate) fn update_due(&self, now: Instant) -> bool {
-        self.last_update_check
-            .is_none_or(|last| now.duration_since(last) >= self.update_interval)
+        self.update_interval.is_some_and(|update_interval| {
+            self.last_update_check
+                .is_none_or(|last| now.duration_since(last) >= update_interval)
+        })
     }
 
     // Called by BuildEnvironment only after any required cache purge succeeds.
@@ -251,7 +252,7 @@ mod tests {
     #[test]
     fn maintenance_schedule_and_selection_changes() {
         let interval = Duration::from_secs(60);
-        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), interval);
+        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), Some(interval));
         let now = Instant::now();
         assert!(toolchain.update_due(now));
         toolchain.mark_updated(now);
@@ -266,7 +267,7 @@ mod tests {
 
     #[test]
     fn zero_interval_always_checks_for_updates() {
-        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), Duration::ZERO);
+        let mut toolchain = ManagedToolchain::new(Toolchain::dist("nightly"), Some(Duration::ZERO));
         let now = Instant::now();
         toolchain.mark_updated(now);
         assert!(toolchain.update_due(now));
@@ -303,10 +304,7 @@ mod tests {
     #[ignore = "requires Docker, network access, and a Rust toolchain"]
     fn readiness_reuses_installed_toolchain() -> Result<()> {
         let environment = environment()?;
-        let toolchain = ManagedToolchain::new(
-            environment.toolchain().clone(),
-            DEFAULT_TOOLCHAIN_UPDATE_INTERVAL,
-        );
+        let toolchain = ManagedToolchain::new(environment.toolchain().clone(), None);
         let workspace = environment.workspace();
         assert!(toolchain.is_toolchain_installed(workspace)?);
         assert!(
@@ -324,10 +322,7 @@ mod tests {
     #[ignore = "requires Docker, network access, and a Rust toolchain"]
     fn readiness_installs_required_targets() -> Result<()> {
         let environment = environment()?;
-        let toolchain = ManagedToolchain::new(
-            environment.toolchain().clone(),
-            DEFAULT_TOOLCHAIN_UPDATE_INTERVAL,
-        );
+        let toolchain = ManagedToolchain::new(environment.toolchain().clone(), None);
         let workspace = environment.workspace();
         // Remove a managed non-host target to exercise restoration, rather than merely
         // asserting the setup performed by BuildEnvironment.
@@ -364,10 +359,7 @@ mod tests {
     #[ignore = "requires Docker, network access, and a Rust toolchain"]
     fn detects_installed_compiler_version() -> Result<()> {
         let environment = environment()?;
-        let toolchain = ManagedToolchain::new(
-            environment.toolchain().clone(),
-            DEFAULT_TOOLCHAIN_UPDATE_INTERVAL,
-        );
+        let toolchain = ManagedToolchain::new(environment.toolchain().clone(), None);
         let workspace = environment.workspace();
         let version = toolchain.rustc_version(workspace)?;
         let verbose = Command::new(workspace, toolchain.get().rustc())
