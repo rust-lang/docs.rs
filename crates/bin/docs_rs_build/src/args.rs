@@ -34,6 +34,9 @@ pub(crate) struct Args {
     pub(crate) workspace: Option<PathBuf>,
 
     /// Rustup toolchain channel or version to use.
+    ///
+    /// docs.rs uses the latest nightly toolchain.
+    /// Examples: nightly, beta, stable, nightly-2026-09-01, or 1.90.0.
     #[arg(
         long,
         value_name = "CHANNEL",
