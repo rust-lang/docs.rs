@@ -21,7 +21,7 @@ use tracing::info;
 fn main() -> ExitCode {
     let args = Args::parse();
     if let Err(error) = logging::init(args.verbose) {
-        println!("error: {error:#}");
+        eprintln!("error: {error:#}");
         return ExitCode::FAILURE;
     }
 
@@ -29,11 +29,11 @@ fn main() -> ExitCode {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
-            println!("error: {error:#}");
+            eprintln!("error: {error:#}");
             if let Some(failure) = error.downcast_ref::<docs_rs_rustwide::StepFailure>()
                 && let Some(log) = failure.log()
             {
-                println!("captured build log:\n{log}");
+                eprintln!("captured build log:\n{log}");
             }
             ExitCode::FAILURE
         }

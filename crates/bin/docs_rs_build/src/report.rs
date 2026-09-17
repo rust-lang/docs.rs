@@ -60,11 +60,11 @@ pub(crate) fn print(
     println!();
     for target in result.targets() {
         println!("{}:", target.target());
-        print_error("HTML", target.documentation());
-        print_error("rustdoc JSON", target.rustdoc_json());
-        print_error("coverage", target.coverage());
+        print_error(target.target(), "HTML", target.documentation());
+        print_error(target.target(), "rustdoc JSON", target.rustdoc_json());
+        print_error(target.target(), "coverage", target.coverage());
         if let Some(step) = target.regenerate_lockfile() {
-            print_error("lockfile regeneration", step);
+            print_error(target.target(), "lockfile regeneration", step);
         }
         if let Ok(output) = target.documentation().as_inner() {
             println!("  HTML output: {}", output.path().display());
@@ -78,7 +78,7 @@ pub(crate) fn print(
     }
 
     if !result.has_docs() {
-        println!("  error: the default target produced no library documentation");
+        eprintln!("  error: the default target produced no library documentation");
     }
 
     if succeeded {
@@ -112,13 +112,13 @@ fn step_cell<T>(step: &StepResult<T>) -> String {
     )
 }
 
-fn print_error<T>(name: &str, step: &StepResult<T>) {
+fn print_error<T>(target: &str, name: &str, step: &StepResult<T>) {
     if let Err(report) = step {
-        println!("  {name}: failed: {:#}", report.value());
+        eprintln!("  {target} {name}: failed: {:#}", report.value());
         if let Some(log) = report.log() {
-            println!("    captured build log:");
+            eprintln!("    captured build log:");
             for line in log.lines() {
-                println!("      {line}");
+                eprintln!("      {line}");
             }
         }
     }

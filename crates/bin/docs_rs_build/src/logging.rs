@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use std::io::stdout;
+use std::io::{IsTerminal as _, stderr};
 use tracing::level_filters::LevelFilter;
 
 pub(crate) fn init(verbosity: u8) -> Result<()> {
@@ -13,8 +13,8 @@ pub(crate) fn init(verbosity: u8) -> Result<()> {
         .compact()
         .with_max_level(level)
         .with_target(verbosity > 0)
-        .with_ansi(true)
-        .with_writer(stdout)
+        .with_ansi(stderr().is_terminal())
+        .with_writer(stderr)
         .try_init()
         .map_err(|error| anyhow!("initializing tracing output: {error}"))?;
 
