@@ -1,7 +1,4 @@
-use anyhow::Result;
-use rustwide::cmd::{CommandError, SandboxImage};
 use std::{fs, io, path::Path};
-use tracing::{debug, instrument};
 
 /// cp -r src dst
 ///
@@ -65,23 +62,6 @@ fn unstable_feature_matches(value: &str, feature: &str) -> bool {
         || value
             .strip_prefix(feature)
             .is_some_and(|suffix| suffix.starts_with('='))
-}
-
-/// Resolve a sandbox image name, preferring an existing local image and
-/// falling back to a remote image that rustwide will pull when needed.
-#[instrument(skip_all, fields(image = name))]
-pub fn resolve_sandbox_image(name: &str) -> Result<SandboxImage> {
-    match SandboxImage::local(name) {
-        Ok(image) => {
-            debug!("using local sandbox image");
-            Ok(image)
-        }
-        Err(CommandError::SandboxImageMissing(_)) => {
-            debug!("local sandbox image is missing; resolving remote image");
-            Ok(SandboxImage::remote(name)?)
-        }
-        Err(error) => Err(error.into()),
-    }
 }
 
 #[cfg(test)]
