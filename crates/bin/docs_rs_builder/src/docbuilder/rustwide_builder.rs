@@ -91,6 +91,7 @@ impl RustwideBuilder {
             .wait_for_workspace_lock(cfg!(test))
             .fast_init(cfg!(test))
             .workspace_reinitialization_interval(config.build_workspace_reinitialization_interval)
+            .toolchain_update_interval(config.build_toolchain_update_interval)
             .maybe_cpu_limit(config.build_cpu_limit.clone())
             .docker_runtime(config.docker_runtime)
             .include_default_targets(config.include_default_targets)

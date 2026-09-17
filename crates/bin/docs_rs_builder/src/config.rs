@@ -16,6 +16,7 @@ pub struct Config {
     pub compiler_metrics_collection_path: Option<PathBuf>,
 
     pub build_workspace_reinitialization_interval: Duration,
+    pub build_toolchain_update_interval: Duration,
 
     // Build params
     pub rustwide_workspace: PathBuf,
@@ -62,6 +63,10 @@ impl AppConfig for Config {
             build_workspace_reinitialization_interval: env(
                 "DOCSRS_BUILD_WORKSPACE_REINITIALIZATION_INTERVAL",
                 Duration::from_days(1),
+            )?,
+            build_toolchain_update_interval: env(
+                "DOCSRS_BUILD_TOOLCHAIN_UPDATE_INTERVAL",
+                Duration::from_hours(1),
             )?,
             compiler_metrics_collection_path: maybe_env("DOCSRS_COMPILER_METRICS_PATH")?,
             docker_runtime: maybe_env("DOCSRS_DOCKER_RUNTIME")?.unwrap_or_default(),
