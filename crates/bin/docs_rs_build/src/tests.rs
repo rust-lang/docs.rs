@@ -1,8 +1,6 @@
 use super::report;
 use anyhow::Result;
-use docs_rs_rustwide::{
-    BuildEnvironment, SandboxImageSource, StepResultExt as _, testing::test_workspace_path,
-};
+use docs_rs_rustwide::{BuildEnvironment, StepResultExt as _, testing::test_workspace_path};
 use rustwide::Crate;
 use std::{fs, path::Path};
 
@@ -15,9 +13,7 @@ fn retains_artifacts_and_applies_exit_policy() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
         .build()?;
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../lib/docs_rs_rustwide/tests/fixtures/additional-targets");

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{SandboxImageSource, StepResultExt as _};
+use crate::StepResultExt as _;
 use std::os::unix::fs::PermissionsExt as _;
 use test_case::test_case;
 
@@ -10,9 +10,7 @@ fn environment() -> Result<BuildEnvironment> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            crate::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(crate::testing::test_sandbox_image())
         .build()
 }
 
@@ -224,9 +222,7 @@ fn metrics_collection_failure_is_nonfatal() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            crate::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(crate::testing::test_sandbox_image())
         .compiler_metrics_collection_path(destination.as_path())
         .build()?;
     environment.release(&fixture()).run(|build| {

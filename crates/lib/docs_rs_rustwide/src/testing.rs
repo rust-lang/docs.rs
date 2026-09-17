@@ -15,3 +15,9 @@ pub fn test_workspace_path() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join(".workspace"))
 }
+
+/// Use the small test image, pulling it only when it is missing locally.
+/// Cached images are not refreshed when the workspace is reinitialized.
+pub fn test_sandbox_image() -> crate::SandboxImageSource {
+    crate::SandboxImageSource::local_or_remote(crate::SANDBOX_IMAGE_LINUX_MICRO)
+}

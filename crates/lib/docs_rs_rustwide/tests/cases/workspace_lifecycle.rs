@@ -1,6 +1,6 @@
 use crate::support::{build_local, fixture, test_workspace};
 use anyhow::Result;
-use docs_rs_rustwide::{BuildEnvironment, SandboxImageSource};
+use docs_rs_rustwide::BuildEnvironment;
 use std::time::Duration;
 
 #[test]
@@ -11,9 +11,7 @@ fn refreshes_workspace_when_interval_is_zero() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
         .workspace_reinitialization_interval(Duration::ZERO)
         .build()?;
 
@@ -35,9 +33,7 @@ fn refreshes_workspace_after_interval() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
         .workspace_reinitialization_interval(Duration::from_secs(1))
         .build()?;
 
@@ -65,9 +61,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
             .wait_for_workspace_lock(true)
             .fast_init(true)
             .validate_host_resources(false)
-            .sandbox_image(SandboxImageSource::local_or_remote(
-                docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
-            ))
+            .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
             .build()?;
         environment.rustc_version()?
     };
@@ -76,9 +70,7 @@ fn recreated_environment_uses_existing_toolchain() -> Result<()> {
         .wait_for_workspace_lock(true)
         .fast_init(true)
         .validate_host_resources(false)
-        .sandbox_image(SandboxImageSource::local_or_remote(
-            docs_rs_rustwide::SANDBOX_IMAGE_LINUX_MICRO,
-        ))
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
         .build()?;
     let fixture = fixture("hello-world");
     let krate = rustwide::Crate::local(&fixture);
