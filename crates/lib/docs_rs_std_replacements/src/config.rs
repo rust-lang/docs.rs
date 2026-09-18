@@ -1,13 +1,18 @@
 use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
+use std::sync::LazyLock;
 use url::Url;
+
+static FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
+    Url::parse("https://rust-lang.github.io/std-replacement-data/all.json").unwrap()
+});
 
 /// Configuration for the standard-library replacement client.
 #[derive(Debug, bon::Builder)]
 pub struct Config {
     /// URL of the complete replacement dataset.
-    #[builder(default = crate::models::FETCH_URL.clone())]
+    #[builder(default = FETCH_URL.clone())]
     pub url: Url,
     /// Maximum number of retries for transient HTTP failures.
     #[builder(default = 3)]

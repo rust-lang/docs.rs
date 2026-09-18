@@ -1,17 +1,7 @@
 use docs_rs_types::KrateName;
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc};
 use url::Url;
-
-pub(crate) const CACHE_TTL: Duration = Duration::from_hours(1);
-
-pub(crate) const FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
-    Url::parse("https://rust-lang.github.io/std-replacement-data/all.json").unwrap()
-});
 
 pub type ReplacementMap = HashMap<KrateName, Arc<ReplacementDetails>>;
 

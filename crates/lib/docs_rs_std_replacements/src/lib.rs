@@ -9,13 +9,17 @@ mod tests;
 pub use config::Config;
 use docs_rs_types::KrateName;
 use docs_rs_utils::APP_USER_AGENT;
-use models::CACHE_TTL;
 pub use models::{ReplacementDetails, ReplacementMap};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::Mutex;
 use url::Url;
+
+const CACHE_TTL: Duration = Duration::from_hours(1);
 
 #[derive(Debug)]
 struct CachedStdReplacements {
