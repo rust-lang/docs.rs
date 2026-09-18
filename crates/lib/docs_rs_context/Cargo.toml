@@ -13,6 +13,7 @@ testing = [
     "docs_rs_logging/testing",
     "docs_rs_registry_api/testing",
     "docs_rs_storage/testing",
+    "docs_rs_std_replacements/testing",
 ]
 
 [dependencies]
@@ -27,6 +28,7 @@ docs_rs_logging = { path = "../docs_rs_logging", optional = true }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../docs_rs_registry_api" }
 docs_rs_repository_stats = { path = "../docs_rs_repository_stats" }
+docs_rs_std_replacements = { path = "../docs_rs_std_replacements" }
 docs_rs_storage = { path = "../docs_rs_storage" }
 docs_rs_test_fakes = { path = "../docs_rs_test_fakes", optional = true }
 tokio = { workspace = true }

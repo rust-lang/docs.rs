@@ -5,7 +5,6 @@ mod config;
 mod error;
 mod metrics;
 mod models;
-mod std_replacements;
 #[cfg(any(test, feature = "testing"))]
 /// Test utilities for supplying a local, fully mocked registry.
 pub mod testing;
@@ -17,4 +16,3 @@ pub use error::Error;
 pub use models::{
     CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor, SearchQuery, SearchSort,
 };
-pub use std_replacements::{ReplacementDetails, StdReplacements};

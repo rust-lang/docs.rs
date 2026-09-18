@@ -101,6 +101,7 @@ async fn apply_middleware(
             .layer(Extension(web_metrics))
             .layer(Extension(config.clone()))
             .layer(Extension(context.registry_api()?.clone()))
+            .layer(Extension(context.std_replacements()?.clone()))
             .layer(Extension(context.storage()?.clone()))
             .layer(option_layer(template_data.map(Extension)))
             .layer(middleware::from_fn(csp::csp_middleware))

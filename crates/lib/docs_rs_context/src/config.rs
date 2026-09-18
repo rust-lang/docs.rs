@@ -7,6 +7,7 @@ pub struct Config {
     pub database: Option<Arc<docs_rs_database::Config>>,
     pub storage: Option<Arc<docs_rs_storage::Config>>,
     pub registry_api: Option<Arc<docs_rs_registry_api::Config>>,
+    pub std_replacements: Option<Arc<docs_rs_std_replacements::Config>>,
     pub cdn: Option<Arc<docs_rs_fastly::Config>>,
     pub repository_stats: Option<Arc<docs_rs_repository_stats::Config>>,
     pub build_limits: Option<Arc<docs_rs_build_limits::Config>>,
@@ -42,6 +43,14 @@ impl Config {
             Ok(registry_api)
         } else {
             Err(anyhow!("registry api config is missing"))
+        }
+    }
+
+    pub fn std_replacements(&self) -> Result<&Arc<docs_rs_std_replacements::Config>> {
+        if let Some(ref std_replacements) = self.std_replacements {
+            Ok(std_replacements)
+        } else {
+            Err(anyhow!("std replacements config is missing"))
         }
     }
 

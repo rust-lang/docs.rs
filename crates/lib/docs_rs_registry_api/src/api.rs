@@ -1,12 +1,11 @@
 use crate::{
-    Config, ReplacementDetails, StdReplacements,
+    Config,
     error::{Error, Result},
     metrics::{Operation, RegistryApiMetrics},
     models::{
         ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor,
         SearchResponse,
     },
-    std_replacements::CACHE_TTL,
 };
 use anyhow::Context as _;
 use docs_rs_crate_archive::{SourceDir, unpack_crate_archive};
@@ -18,11 +17,8 @@ use reqwest::header::ACCEPT;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{ffi::OsStr, fmt, io, path::Path, sync::Arc, time::Instant};
-use tokio::{
-    io::{AsyncSeekExt as _, AsyncWriteExt as _},
-    sync::Mutex,
-};
+use std::{ffi::OsStr, fmt, io, path::Path};
+use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
 use tracing::instrument;
 use url::Url;
 
@@ -97,12 +93,6 @@ async fn fetch_index_config(
     }
 }
 
-#[derive(Debug)]
-struct CachedStdReplacements {
-    data: Arc<StdReplacements>,
-    fetched_at: Instant,
-}
-
 /// Client for registry data.
 ///
 /// Release metadata is read from the sparse index, while endpoints not represented in the index,
@@ -113,8 +103,6 @@ pub struct RegistryApi {
     api_base: Url,
     pub(crate) sparse_index: crates_index::SparseIndex,
     client: ClientWithMiddleware,
-    std_replacements: Mutex<Option<CachedStdReplacements>>,
-    std_replacements_url: Url,
     metrics: RegistryApiMetrics,
 }
 
@@ -126,7 +114,6 @@ impl RegistryApi {
         Self::new(
             config.sparse_index_host.clone(),
             config.crates_io_api_call_retries,
-            config.std_replacements_url.clone(),
             None,
             meter_provider,
         )
@@ -141,7 +128,6 @@ impl RegistryApi {
     pub(crate) async fn new(
         sparse_base: Url,
         max_retries: u32,
-        std_replacements_url: Url,
         cargo_home: Option<&Path>,
         meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
@@ -176,48 +162,8 @@ impl RegistryApi {
             index_config,
             sparse_index,
             client,
-            std_replacements_url,
-            std_replacements: Mutex::new(None),
             metrics,
         })
-    }
-
-    /// Fetches the potential replacement of this library in our std library.
-    ///
-    /// See https://github.com/rust-lang/std-replacement-data
-    pub async fn get_std_replacement(
-        &self,
-        name: &KrateName,
-    ) -> Result<Option<Arc<ReplacementDetails>>> {
-        let mut cached_replacements = self.std_replacements.lock().await;
-
-        if cached_replacements
-            .as_mut()
-            .is_none_or(|cached_replacements| cached_replacements.fetched_at.elapsed() >= CACHE_TTL)
-        {
-            let new_replacements: StdReplacements = self
-                .metrics
-                .record_request(
-                    Operation::StdReplacements,
-                    self.client.get(self.std_replacements_url.clone()).send(),
-                )
-                .await?
-                .error_for_status()?
-                .json()
-                .await?;
-
-            *cached_replacements = Some(CachedStdReplacements {
-                data: Arc::new(new_replacements),
-                fetched_at: Instant::now(),
-            });
-        }
-
-        Ok(cached_replacements
-            .as_ref()
-            .expect("always exists here because we fetch above")
-            .data
-            .get(name)
-            .cloned())
     }
 
     /// Return the download URL for a crate version according to the index configuration.
@@ -501,175 +447,6 @@ mod tests {
     use tokio::fs;
 
     const CHECKSUM: &str = "0000000000000000000000000000000000000000000000000000000000000000";
-
-    fn std_replacement(description: &str) -> ReplacementDetails {
-        ReplacementDetails {
-            description: description.to_string(),
-            url: "https://example.com/replacement".parse().unwrap(),
-        }
-    }
-
-    fn std_replacements(
-        replacements: impl IntoIterator<Item = (KrateName, ReplacementDetails)>,
-    ) -> StdReplacements {
-        StdReplacements::from_iter(
-            replacements
-                .into_iter()
-                .map(|(krate, replacement)| (krate, Arc::new(replacement))),
-        )
-    }
-
-    #[tokio::test]
-    async fn test_get_std_replacement_caches_entire_response() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-        let details = std_replacement("replacement");
-        env.mock_std_replacements(std_replacements([(KRATE, details.clone())]))
-            .await;
-
-        // A miss still fetches and caches the complete response.
-        assert!(
-            env.api()
-                .get_std_replacement(&KrateName::from_static("missing"))
-                .await?
-                .is_none()
-        );
-        let first = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(first, details.into());
-        let second = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert!(Arc::ptr_eq(&first, &second));
-        env.assert_mocks().await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_std_replacement_caches_empty_response() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-        env.mock_std_replacements(StdReplacements::new()).await;
-
-        for _ in 0..2 {
-            assert!(env.api().get_std_replacement(&KRATE).await?.is_none());
-        }
-        env.assert_mocks().await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_std_replacement_refreshes_expired_cache() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-
-        let removed = KrateName::from_static("removed");
-        env.mock_std_replacements(std_replacements([
-            (KRATE, std_replacement("old")),
-            (removed.clone(), std_replacement("removed")),
-        ]))
-        .await;
-
-        let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
-
-        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("new"))]))
-            .await;
-        env.api()
-            .std_replacements
-            .lock()
-            .await
-            .as_mut()
-            .unwrap()
-            .fetched_at = Instant::now() - CACHE_TTL;
-
-        let new = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(new.description, "new");
-        assert!(!Arc::ptr_eq(&old, &new));
-        assert_eq!(old.description, "old");
-        assert!(env.api().get_std_replacement(&removed).await?.is_none());
-        let cached = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert!(Arc::ptr_eq(&new, &cached));
-        env.assert_mocks().await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_std_replacement_concurrent_fetch() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("replacement"))]))
-            .await;
-
-        let name = KRATE;
-        let (first, second) = tokio::try_join!(
-            env.api().get_std_replacement(&name),
-            env.api().get_std_replacement(&name),
-        )?;
-        assert!(Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
-        env.assert_mocks().await;
-        Ok(())
-    }
-
-    #[test_case(StatusCode::NOT_FOUND, "not found"; "http error")]
-    #[test_case(StatusCode::INTERNAL_SERVER_ERROR, "server error"; "server error")]
-    #[test_case(StatusCode::OK, "invalid json"; "malformed json")]
-    #[test_case(StatusCode::OK, r#"{"krate":{"description":"missing url"}}"#; "invalid details")]
-    #[tokio::test]
-    async fn test_get_std_replacement_failed_fetch(
-        status: StatusCode,
-        body: &str,
-    ) -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-        env.create_std_replacements_mock(|mock| {
-            mock.with_status(status.as_u16().into()).with_body(body)
-        })
-        .await;
-
-        let err = env.api().get_std_replacement(&KRATE).await.unwrap_err();
-        if status.is_success() {
-            assert!(
-                matches!(err, Error::HttpError(reqwest_middleware::Error::Reqwest(ref err), _) if err.is_decode())
-            );
-        } else {
-            assert_eq!(err.status(), Some(status));
-        }
-        assert!(env.api().std_replacements.lock().await.is_none());
-
-        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("recovered"))]))
-            .await;
-        let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(recovered.description, "recovered");
-        env.assert_mocks().await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_get_std_replacement_failed_refresh_preserves_cache() -> anyhow::Result<()> {
-        let env = TestRegistry::new().await?;
-        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("old"))]))
-            .await;
-        let old = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        let expired_at = Instant::now() - CACHE_TTL;
-        env.api()
-            .std_replacements
-            .lock()
-            .await
-            .as_mut()
-            .unwrap()
-            .fetched_at = expired_at;
-
-        env.create_std_replacements_mock(|mock| {
-            mock.with_status(StatusCode::INTERNAL_SERVER_ERROR.as_u16().into())
-        })
-        .await;
-        assert!(env.api().get_std_replacement(&KRATE).await.is_err());
-        {
-            let cache = env.api().std_replacements.lock().await;
-            let cache = cache.as_ref().unwrap();
-            assert_eq!(cache.fetched_at, expired_at);
-            assert!(Arc::ptr_eq(&cache.data[&KRATE], &old));
-        }
-
-        env.mock_std_replacements(std_replacements([(KRATE, std_replacement("recovered"))]))
-            .await;
-        let recovered = env.api().get_std_replacement(&KRATE).await?.unwrap();
-        assert_eq!(recovered.description, "recovered");
-        env.assert_mocks().await;
-        Ok(())
-    }
 
     fn sparse_entry(version: &Version, pubtime: Option<&str>, yanked: bool) -> serde_json::Value {
         serde_json::json!({
@@ -1173,7 +950,6 @@ mod tests {
         let err = RegistryApi::new(
             "https://index.example".parse().unwrap(),
             0,
-            "https://std_replacements.example".parse().unwrap(),
             Some(cargo_home.path()),
             docs_rs_opentelemetry::testing::TestMetrics::new().provider(),
         )

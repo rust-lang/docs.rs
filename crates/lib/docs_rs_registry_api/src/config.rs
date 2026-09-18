@@ -13,14 +13,6 @@ pub struct Config {
     #[builder(default = crates_index::sparse::URL.parse().unwrap())]
     pub sparse_index_host: Url,
 
-    /// Where to fetch the crates.io std replacement data.
-    ///
-    /// See
-    /// https://github.com/rust-lang/std-replacement-data/
-    /// for more info.
-    #[builder(default = crate::std_replacements::FETCH_URL.clone())]
-    pub std_replacements_url: Url,
-
     /// Maximum number of retries for transient registry HTTP failures.
     #[builder(default = 3)]
     pub crates_io_api_call_retries: u32,
@@ -35,7 +27,6 @@ impl AppConfig for Config {
         Ok(Self::builder()
             .maybe_crates_io_api_call_retries(maybe_env("DOCSRS_CRATESIO_API_CALL_RETRIES")?)
             .maybe_sparse_index_host(maybe_env("DOCSRS_SPARSE_INDEX_HOST")?)
-            .maybe_std_replacements_url(maybe_env("DOCSRS_STD_REPLACEMENTS_URL")?)
             .build())
     }
 }

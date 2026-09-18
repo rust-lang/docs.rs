@@ -13,7 +13,7 @@ pub(crate) const FETCH_URL: LazyLock<Url> = LazyLock::new(|| {
     Url::parse("https://rust-lang.github.io/std-replacement-data/all.json").unwrap()
 });
 
-pub type StdReplacements = HashMap<KrateName, Arc<ReplacementDetails>>;
+pub type ReplacementMap = HashMap<KrateName, Arc<ReplacementDetails>>;
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(
@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_parse_empty_list() -> anyhow::Result<()> {
-        let parsed: StdReplacements = serde_json::from_str("{}")?;
+        let parsed: ReplacementMap = serde_json::from_str("{}")?;
         assert!(parsed.is_empty());
         Ok(())
     }
@@ -54,7 +54,7 @@ mod tests {
     #[test_case(serde_json::json!({"description": "replacement", "url": "not a url"}); "invalid url")]
     fn test_parse_invalid_details(details: serde_json::Value) {
         assert!(
-            serde_json::from_value::<StdReplacements>(serde_json::json!({
+            serde_json::from_value::<ReplacementMap>(serde_json::json!({
                 "void": details,
             }))
             .is_err()
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn test_parse_invalid_crate_name() {
         assert!(
-            serde_json::from_value::<StdReplacements>(serde_json::json!({
+            serde_json::from_value::<ReplacementMap>(serde_json::json!({
                 "invalid crate name": {
                     "description": "replacement",
                     "url": "https://example.com",
@@ -87,7 +87,7 @@ mod tests {
           }
         });
 
-        let parsed: StdReplacements = serde_json::from_value(data)?;
+        let parsed: ReplacementMap = serde_json::from_value(data)?;
 
         assert_eq!(parsed.len(), 2);
 

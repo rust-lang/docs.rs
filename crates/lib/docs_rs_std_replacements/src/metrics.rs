@@ -5,37 +5,16 @@ use opentelemetry::{
 };
 use std::{future::Future, time::Instant};
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Operation {
-    IndexConfig,
-    IndexCrate,
-    ApiSearch,
-    ApiOwners,
-    Download,
-}
-
-impl Operation {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::IndexConfig => "index_config",
-            Self::IndexCrate => "index_crate",
-            Self::ApiSearch => "api_search",
-            Self::ApiOwners => "api_owners",
-            Self::Download => "download",
-        }
-    }
-}
-
 #[derive(Debug)]
-pub struct RegistryApiMetrics {
+pub struct Metrics {
     requests: Counter<u64>,
     request_duration: Histogram<f64>,
 }
 
-impl RegistryApiMetrics {
+impl Metrics {
     pub fn new(meter_provider: &AnyMeterProvider) -> Self {
-        let meter = meter_provider.meter("registry_api");
-        const PREFIX: &str = "docsrs.registry_api";
+        let meter = meter_provider.meter("std_replacements");
+        const PREFIX: &str = "docsrs.std_replacements";
         Self {
             requests: meter
                 .u64_counter(format!("{PREFIX}.requests"))
@@ -60,7 +39,6 @@ impl RegistryApiMetrics {
     /// Body consumption and parsing are outside this measurement.
     pub(crate) async fn record_request(
         &self,
-        operation: Operation,
         request: impl Future<Output = reqwest_middleware::Result<reqwest::Response>>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
         let start = Instant::now();
@@ -70,10 +48,8 @@ impl RegistryApiMetrics {
             Ok(response) => response.status().as_str().to_owned(),
             Err(_) => "transport_error".to_owned(),
         };
-        let operation = KeyValue::new("operation", operation.as_str());
-        self.requests
-            .add(1, &[operation.clone(), KeyValue::new("status", status)]);
-        self.request_duration.record(duration, &[operation]);
+        self.requests.add(1, &[KeyValue::new("status", status)]);
+        self.request_duration.record(duration, &[]);
         result
     }
 }
