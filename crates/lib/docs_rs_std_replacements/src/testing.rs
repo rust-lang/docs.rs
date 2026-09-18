@@ -25,9 +25,7 @@ impl TestStdReplacements {
                 .max_retries(0)
                 .build(),
         );
-        let provider: docs_rs_opentelemetry::AnyMeterProvider =
-            Arc::new(docs_rs_opentelemetry::NoopMeterProvider::new());
-        let api = Arc::new(StdReplacements::from_config(&config, &provider)?);
+        let api = Arc::new(StdReplacements::from_config(&config)?);
         Ok(Self {
             inner: Mutex::new(Inner {
                 server,

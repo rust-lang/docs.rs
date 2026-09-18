@@ -275,10 +275,9 @@ impl<S: State> ContextBuilder<S> {
     pub fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
     where
         S::StdReplacements: IsUnset,
-        S::MeterProvider: IsSet,
     {
         let config = docs_rs_std_replacements::Config::from_environment()?;
-        let api = StdReplacements::from_config(&config, self.get_meter_provider())?;
+        let api = StdReplacements::from_config(&config)?;
 
         Ok(self.std_replacements(config.into(), api.into()))
     }

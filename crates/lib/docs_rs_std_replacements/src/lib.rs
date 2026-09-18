@@ -1,6 +1,5 @@
 //! Cached standard-library alternatives to third-party crates.
 mod config;
-mod metrics;
 mod models;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
@@ -8,10 +7,8 @@ pub mod testing;
 mod tests;
 
 pub use config::Config;
-use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::KrateName;
 use docs_rs_utils::APP_USER_AGENT;
-use metrics::Metrics;
 use models::CACHE_TTL;
 pub use models::{ReplacementDetails, ReplacementMap};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -32,12 +29,11 @@ pub struct StdReplacements {
     client: ClientWithMiddleware,
     url: Url,
     cache: Mutex<Option<CachedStdReplacements>>,
-    metrics: Metrics,
 }
 
 impl StdReplacements {
     /// Create a client without fetching data until the first lookup.
-    pub fn from_config(config: &Config, meter_provider: &AnyMeterProvider) -> anyhow::Result<Self> {
+    pub fn from_config(config: &Config) -> anyhow::Result<Self> {
         let client = ClientBuilder::new(
             reqwest::Client::builder()
                 .user_agent(APP_USER_AGENT)
@@ -52,7 +48,6 @@ impl StdReplacements {
             client,
             url: config.url.clone(),
             cache: Mutex::new(None),
-            metrics: Metrics::new(meter_provider),
         })
     }
 
@@ -71,8 +66,9 @@ impl StdReplacements {
             .is_none_or(|cached_replacements| cached_replacements.fetched_at.elapsed() >= CACHE_TTL)
         {
             let new_replacements: ReplacementMap = self
-                .metrics
-                .record_request(self.client.get(self.url.clone()).send())
+                .client
+                .get(self.url.clone())
+                .send()
                 .await?
                 .error_for_status()?
                 .json()
