@@ -7,6 +7,7 @@ use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_std_replacements::StdReplacements;
 use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime;
@@ -42,6 +43,9 @@ pub struct Context {
     #[builder(setters(vis = "", name = registry_api_internal))]
     pub registry_api: Option<Arc<RegistryApi>>,
 
+    #[builder(setters(vis = "", name = std_replacements_internal))]
+    pub std_replacements: Option<Arc<StdReplacements>>,
+
     #[builder(setters(vis = "", name = cdn_internal))]
     pub cdn: Option<Arc<Cdn>>,
 
@@ -51,7 +55,8 @@ pub struct Context {
 
 use context_builder::{
     IsComplete, IsSet, IsUnset, SetBlockingBuildQueue, SetBlockingStorage, SetBuildQueue, SetCdn,
-    SetMeterProvider, SetPool, SetRegistryApi, SetRepositoryStats, SetRuntime, SetStorage, State,
+    SetMeterProvider, SetPool, SetRegistryApi, SetRepositoryStats, SetRuntime, SetStdReplacements,
+    SetStorage, State,
 };
 
 impl<S: State> ContextBuilder<S> {
@@ -79,6 +84,10 @@ impl<S: State> ContextBuilder<S> {
 
         if ctx.config().registry_api.is_some() != ctx.registry_api.is_some() {
             bail!("registry_api config and instance mismatch");
+        }
+
+        if ctx.config().std_replacements.is_some() != ctx.std_replacements.is_some() {
+            bail!("std_replacements config and instance mismatch");
         }
 
         if ctx.cdn.is_some() && ctx.config().cdn.is_none() {
@@ -251,6 +260,28 @@ impl<S: State> ContextBuilder<S> {
         Ok(self.registry_api(config.into(), api.into()))
     }
 
+    pub fn std_replacements(
+        mut self,
+        config: Arc<docs_rs_std_replacements::Config>,
+        std_replacements: Arc<StdReplacements>,
+    ) -> ContextBuilder<SetStdReplacements<S>>
+    where
+        S::StdReplacements: IsUnset,
+    {
+        self.config.std_replacements = Some(config);
+        self.std_replacements_internal(std_replacements)
+    }
+
+    pub fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
+    where
+        S::StdReplacements: IsUnset,
+    {
+        let config = docs_rs_std_replacements::Config::from_environment()?;
+        let api = StdReplacements::from_config(&config)?;
+
+        Ok(self.std_replacements(config.into(), api.into()))
+    }
+
     pub fn repository_stats(
         mut self,
         config: Arc<docs_rs_repository_stats::Config>,
@@ -346,6 +377,14 @@ impl Context {
             Ok(registry_api)
         } else {
             Err(anyhow!("Registry API is not initialized"))
+        }
+    }
+
+    pub fn std_replacements(&self) -> Result<&Arc<StdReplacements>> {
+        if let Some(ref std_replacements) = self.std_replacements {
+            Ok(std_replacements)
+        } else {
+            Err(anyhow!("Std replacements is not initialized"))
         }
     }
 

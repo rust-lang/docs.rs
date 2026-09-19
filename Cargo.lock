@@ -2118,6 +2118,7 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
+ "docs_rs_std_replacements",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "tokio",
@@ -2387,6 +2388,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_std_replacements"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_config",
+ "docs_rs_env_vars",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "mime",
+ "mockito",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "test-case",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "docs_rs_storage"
 version = "0.0.0"
 dependencies = [
@@ -2561,6 +2584,7 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_rustdoc_json",
+ "docs_rs_std_replacements",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",

@@ -10,7 +10,7 @@ pub struct Config {
     /// Base URL of the sparse registry index, including its `sparse+` scheme.
     ///
     /// Defaults to the crates.io sparse index.
-    #[builder(default =  crates_index::sparse::URL.parse().unwrap())]
+    #[builder(default = crates_index::sparse::URL.parse().unwrap())]
     pub sparse_index_host: Url,
 
     /// Maximum number of retries for transient registry HTTP failures.

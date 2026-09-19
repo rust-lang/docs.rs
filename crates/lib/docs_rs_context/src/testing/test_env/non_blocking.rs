@@ -7,6 +7,7 @@ use docs_rs_database::{AsyncPoolClient, Config as DatabaseConfig, testing::TestD
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
 use docs_rs_registry_api::testing::TestRegistry;
+use docs_rs_std_replacements::testing::TestStdReplacements;
 use docs_rs_storage::{Config as StorageConfig, testing::TestStorage};
 use docs_rs_test_fakes::FakeRelease;
 use std::{ops::Deref, sync::Arc};
@@ -21,6 +22,7 @@ pub struct TestEnvironment<C> {
     #[allow(dead_code)] // we need to keep the storage so it can be cleaned up.
     db: TestDatabase,
     registry: TestRegistry,
+    std_replacements: TestStdReplacements,
 }
 
 impl<C: AppConfig> Deref for TestEnvironment<C> {
@@ -55,6 +57,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         });
 
         let test_registry = TestRegistry::new().await?;
+        let test_std_replacements = TestStdReplacements::new().await?;
 
         let metrics = TestMetrics::new();
 
@@ -95,6 +98,10 @@ impl<C: AppConfig> TestEnvironment<C> {
                     test_registry.test_config().clone(),
                     test_registry.api().clone(),
                 )
+                .std_replacements(
+                    test_std_replacements.test_config().clone(),
+                    test_std_replacements.api().clone(),
+                )
                 .with_repository_stats()?
                 .maybe_cdn(
                     Arc::new(docs_rs_fastly::Config::test_config()?),
@@ -106,6 +113,7 @@ impl<C: AppConfig> TestEnvironment<C> {
             db,
             storage: test_storage,
             registry: test_registry,
+            std_replacements: test_std_replacements,
             metrics,
         })
     }
@@ -126,6 +134,10 @@ impl<C: AppConfig> TestEnvironment<C> {
 
     pub fn test_registry(&self) -> &TestRegistry {
         &self.registry
+    }
+
+    pub fn test_std_replacements(&self) -> &TestStdReplacements {
+        &self.std_replacements
     }
 
     pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
