@@ -5,6 +5,7 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
+stress-tests = []
 testing = [
     "dep:rand",
     "dep:dashmap",
