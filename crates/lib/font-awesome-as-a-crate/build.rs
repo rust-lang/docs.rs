@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     env,
     fmt::Write as FmtWrite,
     fs::{read_dir, File},
@@ -22,7 +22,7 @@ fn capitalize_first_letter(s: &str) -> String {
 }
 
 fn write_fontawesome_sprite() {
-    let mut types = HashMap::new();
+    let mut types = BTreeMap::new();
     let dest_path = Path::new(&env::var("OUT_DIR").unwrap()).join("fontawesome.rs");
     let mut dest_file = File::create(dest_path).unwrap();
     dest_file
@@ -34,9 +34,14 @@ fn write_fontawesome_sprite() {
         ("solid", "Solid"),
     ] {
         let dir = read_dir(Path::new("fontawesome-free-6.2.0-desktop/svgs").join(dirname)).unwrap();
+        // `readdir` order depends on the filesystem. To make the build
+        // deterministic, sort the entries.
+        let mut entries = dir
+            .collect::<Result<Vec<_>, _>>()
+            .expect("fontawesome directory access");
+        entries.sort_by_key(|entry| entry.file_name());
         let mut data = String::new();
-        for file in dir {
-            let file = file.expect("fontawesome directory access");
+        for file in entries {
             let filename = file
                 .file_name()
                 .into_string()
