@@ -22,7 +22,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.7
+          version: 2026.9.12
           install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
@@ -47,7 +47,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.7
+          version: 2026.9.12
           install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
@@ -98,7 +98,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.7
+          version: 2026.9.12
           install_args: --jobs=1 just node cargo:sqlx-cli
 
       - name: Run end-to-end GUI tests
@@ -125,7 +125,7 @@ jobs:
 
       - uses: jdx/mise-action@v4
         with:
-          version: 2026.9.7
+          version: 2026.9.12
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
             cargo:cargo-udeps cargo:cargo-sort typos
