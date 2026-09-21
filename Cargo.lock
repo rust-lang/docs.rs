@@ -7179,9 +7179,9 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rustwide"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87cea0e47a21dd5f5462edb1e9dc65769cc9d731e637e0ce9724bc2b0bc24fb6"
+checksum = "2da15e4a8856f56f468ad9f2aaf85d77ecd6749cbc92b1aa11ec2053b8d2cf61"
 dependencies = [
  "anyhow",
  "attohttpc",
@@ -7202,6 +7202,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "tracing",
+ "url",
  "walkdir",
  "windows-sys 0.52.0",
 ]
