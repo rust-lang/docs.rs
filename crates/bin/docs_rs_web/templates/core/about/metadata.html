@@ -17,6 +17,13 @@
 	{% filter highlight("toml") %}
 		{%- include "core/Cargo.toml.example" -%}
 	{% endfilter %}
+
+	<p>
+		For security reasons, docs.rs only forwards a whitelist of unstable cargo flags to
+		host-side cargo commands (<code>cargo metadata</code>, <code>cargo fetch</code>,
+		<code>cargo generate-lockfile</code>). Currently, only <code>bindeps</code> is
+		supported (as <code>-Zbindeps</code> or <code>-Z bindeps</code>).
+	</p>
 	</div>
 	</div>
 {%- endblock body %}
