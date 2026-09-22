@@ -282,7 +282,7 @@ impl Cache {
             // max capacity
             // not entries, but _weighted entries_.
             // with the weight fn from above, the max capacity is a storage size value.
-            .max_capacity(config.max_size_mb.as_kib() as u64)
+            .max_capacity(config.max_size.as_kib() as u64)
             // the eviction listener is called when moka evicts a cache entry.
             // In this case we want to delete the corresponding local files.
             .async_eviction_listener(move |path, entry, reason| {
@@ -1682,7 +1682,7 @@ mod tests {
             .insert(
                 local_index.clone(),
                 Arc::new(Entry::from_size(ByteSize::mb(
-                    (cache.config.max_size_mb.as_mb() + 1.0) as u64,
+                    (cache.config.max_size.as_mb() + 1.0) as u64,
                 ))),
             )
             .await;

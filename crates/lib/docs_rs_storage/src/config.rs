@@ -7,6 +7,7 @@ use std::{
     path::{self, Path, PathBuf},
     sync::Arc,
 };
+use tracing::warn;
 
 fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
     if path.is_absolute() {
@@ -23,7 +24,7 @@ pub struct ArchiveIndexCacheConfig {
     pub path: PathBuf,
 
     // maximum disk space for the local archive index cache.
-    pub max_size_mb: ByteSize,
+    pub max_size: ByteSize,
 
     // TTL for the local index cache
     pub ttl: Duration,
@@ -46,12 +47,17 @@ pub struct ArchiveIndexCacheConfig {
 impl AppConfig for ArchiveIndexCacheConfig {
     fn from_environment() -> anyhow::Result<Self> {
         let prefix: PathBuf = require_env("DOCSRS_PREFIX")?;
+
+        if maybe_env::<String>("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE_MB")?.is_some() {
+            warn!("legacy config for archive index cache size. will be ignored.")
+        }
+
         Ok(Self {
             path: ensure_absolute_path(env(
                 "DOCSRS_ARCHIVE_INDEX_CACHE_PATH",
                 prefix.join("archive_cache"),
             )?)?,
-            max_size_mb: env("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE_MB", ByteSize::gib(50))?,
+            max_size: env("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE", ByteSize::gib(50))?,
             ttl: env("DOCSRS_ARCHIVE_INDEX_CACHE_TTL", Duration::from_days(1))?,
             expected_count: env("DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT", 100_000usize)?,
         })
