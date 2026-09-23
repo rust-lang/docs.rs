@@ -89,7 +89,7 @@ fn run(args: &Args) -> Result<bool> {
 
 fn ensure_crate_path(path: &Path) -> Result<()> {
     if !path.join("Cargo.toml").is_file() {
-        bail!("{} does not contain a Cargo.toml", path.display());
+        bail!("`{}` does not contain a Cargo.toml", path.display());
     }
     Ok(())
 }
