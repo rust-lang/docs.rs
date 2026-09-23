@@ -45,6 +45,7 @@ http = "1.0.0"
 itertools = "0.15.0"
 mime = "0.3.16"
 mockito = "1.0.2"
+moka = { version = "0.12.14", features = ["future"] }
 num_cpus = "1.15.0"
 opentelemetry = "0.33.0"
 opentelemetry_sdk = { version = "0.33.0", features = ["rt-tokio"] }

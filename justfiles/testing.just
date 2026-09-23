@@ -16,6 +16,8 @@ prepare-gui-tests: _ensure_db_migrated
     just _builder build crate sysinfo 0.23.4
     just _builder build crate sysinfo 0.23.5
     just _builder build crate libtest 0.0.1
+    just _builder build crate lazy_static 1.5.0
+    just _builder build crate owned-alloc 0.2.0
     just _builder build crate zbus 5.15.0
     just _builder build add-essential-files
 
