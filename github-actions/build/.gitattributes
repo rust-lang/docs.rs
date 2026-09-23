@@ -1,0 +1,2 @@
+# Preserve the action commit in source archives downloaded by GitHub Actions.
+source-commit.txt export-subst
