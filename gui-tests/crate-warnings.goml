@@ -1,0 +1,26 @@
+// The warning is loaded asynchronously into the rustdoc topbar.
+go-to: |DOC_PATH| + "/lazy_static/1.5.0/lazy_static/"
+assert: "#rustdoc_body_wrapper"
+wait-for: ".crate-warning a.warn"
+
+assert-text: (".crate-warning .title", "Std alternative")
+assert-attribute: (
+    ".crate-warning a",
+    {"href": "https://doc.rust-lang.org/std/sync/struct.LazyLock.html"},
+)
+assert-attribute: (".crate-warning a", {"title": "std::sync::LazyLock"}, CONTAINS)
+assert: ".crate-warning .fa-circle-info"
+// Keep the warning immediately after the feature-flags menu item.
+assert: "//li[a/span[text()='Feature flags']]/following-sibling::li[1][contains(@class, 'crate-warning')]"
+
+go-to: |DOC_PATH| + "/owned-alloc/0.2.0/owned_alloc/"
+assert: "#rustdoc_body_wrapper"
+wait-for: ".crate-warning a.warn"
+
+assert-text: (".crate-warning .title", "Unmaintained")
+assert-attribute: (
+    ".crate-warning a",
+    {"href": "https://rustsec.org/advisories/RUSTSEC-2026-0299.html"},
+)
+assert-attribute: (".crate-warning a", {"title": "`owned-alloc` is unmaintained"})
+assert: ".crate-warning .fa-circle-info"

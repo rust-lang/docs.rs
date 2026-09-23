@@ -30,7 +30,12 @@ impl<C: AppConfig> BlockingTestEnvironment<C> {
     }
 
     #[builder(finish_fn = build)]
-    pub fn builder(config: Option<C>, storage_config: Option<StorageConfig>) -> Result<Self> {
+    pub fn builder(
+        config: Option<C>,
+        storage_config: Option<StorageConfig>,
+        rustsec_config: Option<docs_rs_rustsec::Config>,
+        std_replacements_config: Option<docs_rs_std_replacements::Config>,
+    ) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -41,6 +46,8 @@ impl<C: AppConfig> BlockingTestEnvironment<C> {
                 TestEnvironment::builder()
                     .maybe_config(config)
                     .maybe_storage_config(storage_config)
+                    .maybe_rustsec_config(rustsec_config)
+                    .maybe_std_replacements_config(std_replacements_config)
                     .build(),
             )?,
             runtime,

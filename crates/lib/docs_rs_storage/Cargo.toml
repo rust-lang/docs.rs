@@ -43,7 +43,7 @@ futures-util = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 mime = { workspace = true }
-moka = { version = "0.12.14", features = ["future"] }
+moka = { workspace = true }
 opentelemetry = { workspace = true }
 percent-encoding = { workspace = true }
 rand = { workspace = true, optional = true }

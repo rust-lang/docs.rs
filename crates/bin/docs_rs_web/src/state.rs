@@ -5,6 +5,8 @@ use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_context::Context;
 use docs_rs_database::Pool;
 use docs_rs_registry_api::RegistryApi;
+use docs_rs_rustsec::RustsecClient;
+use docs_rs_std_replacements::StdReplacements;
 use docs_rs_storage::AsyncStorage;
 use std::sync::Arc;
 
@@ -94,4 +96,6 @@ context_services!(
     Arc<AsyncBuildQueue> => build_queue,
     Arc<RegistryApi> => registry_api,
     Arc<AsyncStorage> => storage,
+    Arc<StdReplacements> => std_replacements,
+    Arc<RustsecClient> => rustsec,
 );
