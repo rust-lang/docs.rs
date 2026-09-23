@@ -54,6 +54,12 @@ impl ByteSize {
         self.0
     }
 
+    pub fn as_usize(&self) -> usize {
+        self.0
+            .try_into()
+            .expect("u64 should fit into usize on all systems we run on")
+    }
+
     pub fn as_kb(&self) -> f64 {
         self.0 as f64 / KB as f64
     }

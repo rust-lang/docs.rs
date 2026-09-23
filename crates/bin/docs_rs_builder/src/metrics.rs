@@ -80,6 +80,7 @@ pub struct BuilderMetrics {
     pub failed_builds: Counter<u64>,
     pub non_library_builds: Counter<u64>,
     documentation_size: Histogram<u64>,
+    pub lockfile_regenerated: Counter<u64>,
 }
 
 impl BuilderMetrics {
@@ -123,6 +124,10 @@ impl BuilderMetrics {
                 )
                 .with_unit("By")
                 .with_description("size of the generated documentation in bytes")
+                .build(),
+            lockfile_regenerated: meter
+                .u64_counter(format!("{PREFIX}.lockfile_regenerated"))
+                .with_unit("1")
                 .build(),
         }
     }

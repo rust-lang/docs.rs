@@ -12,10 +12,10 @@ assert-attribute: (
 
 // We now check the builds details
 click: ".recent-releases-container a.release"
-assert-count: (".recent-releases-container li a.release", 6)
+assert-count: (".recent-releases-container li a.release", 12)
 // Half should have succeeded, the others should have failed.
-assert-count: (|success_selector|, 3)
-assert-count: (|failure_selector|, 3)
+assert-count: (|success_selector|, 6)
+assert-count: (|failure_selector|, 6)
 
 // Same checks for sysinfo.
 go-to: |DOC_PATH| + "/crate/sysinfo/0.23.5/builds"

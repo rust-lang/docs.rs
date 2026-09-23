@@ -77,8 +77,14 @@ impl TestRegistry {
             .create_async()
             .await;
 
+        // Persistent Cargo/Rustwide workspaces cache registry configuration by URL.
+        // Ports can be reused after a test exits, so include the unique fixture directory
+        // in the index URL to avoid reusing a previous registry's download endpoint.
+        let index_prefix = cargo_home.path().file_name().unwrap().to_str().unwrap();
+        let config_path = format!("/{index_prefix}/config.json");
         let config_mock = index_server
-            .mock("GET", "/config.json")
+            .mock("GET", config_path.as_str())
+            .expect_at_least(1)
             .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
             .with_body(serde_json::to_vec(&serde_json::json!({
                 "dl": index_config.dl,
@@ -89,7 +95,7 @@ impl TestRegistry {
 
         // NOTE: cargo expects the `sparse+` schema prefix so it can differentiate
         // the sparse index url from a git-http URL.
-        let index_url: Url = format!("sparse+{}", index_server.url()).parse()?;
+        let index_url: Url = format!("sparse+{}/{index_prefix}/", index_server.url()).parse()?;
 
         let meter_provider = meter_provider
             .unwrap_or_else(|| Arc::new(docs_rs_opentelemetry::NoopMeterProvider::new()));

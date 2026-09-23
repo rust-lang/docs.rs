@@ -5,6 +5,7 @@ members = ["crates/bin/*", "crates/lib/*", "integration_tests"]
 
 default-members = [
     "crates/bin/docs_rs_admin",
+    "crates/bin/docs_rs_build",
     "crates/bin/docs_rs_builder",
     "crates/bin/docs_rs_watcher",
     "crates/bin/docs_rs_web",
@@ -15,7 +16,8 @@ exclude = [
     ".workspace",
     "crates/bin/docs_rs_builder/.rustwide-docker",
     "crates/bin/docs_rs_builder/.workspace",
-    "crates/bin/docs_rs_builder/tests/crates",
+    "crates/lib/docs_rs_rustwide/.workspace",
+    "crates/lib/docs_rs_rustwide/tests/fixtures",
     "ignored",
 ]
 
@@ -54,6 +56,7 @@ regex = "1"
 reqwest = { version = "0.13", features = ["gzip", "http2", "json", "stream"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
+rustwide = { version = "0.27.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 sentry = { version = "0.49.0", features = ["backtrace", "panic", "tower-http", "tracing"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -61,7 +64,6 @@ serde_with = "3.4.0"
 slug = "0.1.1"
 sqlx = { version = "0.9", features = ["chrono", "postgres", "runtime-tokio", "sqlite"] }
 strum = { version = "0.28.0", features = ["derive"] }
-tar = "0.4.46"
 tempfile = "3.1.0"
 test-case = "3.0.0"
 thiserror = "2.0.3"

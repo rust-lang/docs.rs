@@ -106,13 +106,17 @@ The `cli` and `watcher` recipes similarly use `DOCSRS_CLI_MODE`, but default to
 `local` on every platform. Set either mode variable to `docker` to keep using
 the same high-level recipe through its corresponding Compose service.
 
-To test a local package instead:
+To test a local package on a Linux host with Docker, use the standalone build
+CLI from this repository:
 
 ```console
-$ just builder build crate --local /path/to/package
+$ cargo run --locked -p docs_rs_build -- /path/to/package
 ```
 
-Some workspace packages must first be packaged with Cargo. See
+This packages the crate automatically and does not require a docs.rs database.
+For installation, options, and output locations, see the
+[build CLI README](crates/bin/docs_rs_build/README.md). For workspace selection,
+see
 [Building workspace packages](https://rust-lang.github.io/docs.rs/development/build-workspaces.html).
 
 If you only need an existing release in your local environment, import it
