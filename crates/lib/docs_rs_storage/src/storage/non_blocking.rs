@@ -1,5 +1,5 @@
 #[cfg(any(test, feature = "testing"))]
-use crate::backends::memory::MemoryBackend;
+use crate::backends::memory::{MemoryBackend, UploadRejectionPredicate};
 use crate::{
     Config,
     archive_index::{self, ARCHIVE_INDEX_FILE_EXTENSION, Index},
@@ -60,6 +60,15 @@ impl AsyncStorage {
             },
             config,
         })
+    }
+
+    /// Reject matching uploads in the in-memory test backend.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn reject_uploads_for_testing(&self, reject: Option<UploadRejectionPredicate>) {
+        let StorageBackend::Memory(backend) = &self.backend else {
+            panic!("upload failure injection requires memory storage");
+        };
+        *backend.rejected_uploads.write().unwrap() = reject;
     }
 
     pub fn config(&self) -> &Config {

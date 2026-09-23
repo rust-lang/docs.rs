@@ -13,6 +13,7 @@ testing = []
 [dependencies]
 anyhow = { workspace = true }
 crates_io_validation = { path = "../crates_io_validation" }
+derive_more = { version = "2", features = ["add", "add_assign", "sum"] }
 humantime = "2.4.0"
 semver = { version = "1.0.4", features = ["serde"] }
 serde = { workspace = true }
