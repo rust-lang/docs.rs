@@ -1,7 +1,7 @@
 use crate::{
     cache::CachePolicy,
     error::AxumResult,
-    extractors::DbConnection,
+    extractors::{DbConnection, Path},
     impl_axum_webpage,
     page::{
         templates::{RenderBrands, RenderSolid},
@@ -15,6 +15,8 @@ use axum::{
 };
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::service_config::Abnormality;
+use docs_rs_std_replacements::{ReplacementDetails, StdReplacements};
+use docs_rs_types::KrateName;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Template)]
@@ -59,6 +61,39 @@ pub(crate) async fn abnormalities(
     .into_response())
 }
 
+#[derive(Template)]
+#[template(path = "header/crate_warnings.html")]
+struct CrateWarnings {
+    replacement: Option<Arc<ReplacementDetails>>,
+}
+
+impl_axum_webpage! {
+    CrateWarnings,
+    // NOTE: future improvements:
+    // 1. cache longer than 10 minutes, purge when the background refresh
+    //    shows changed data.
+    // 2. Have crate specific cache keys, also intelligent purge.
+    //
+    // But not right now, it would include quite some complexity.
+    cache_policy = |_| CachePolicy::LongerInCdnAndBrowser
+}
+
+/// Render crate warnings for insertion into the documentation topbar.
+///
+/// Initially just for std replacements,
+/// later also from rustsec:
+/// - "unmaintained" warnings
+/// - perhaps version specific advisories at some point too.
+pub(crate) async fn crate_warnings(
+    Extension(replacements): Extension<StdReplacements>,
+    Path(name): Path<KrateName>,
+) -> AxumResult<AxumResponse> {
+    Ok(CrateWarnings {
+        replacement: replacements.get(&name).await?,
+    }
+    .into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -70,10 +105,80 @@ mod tests {
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
     use docs_rs_database::service_config::{Abnormality, ConfigName, set_config};
+    use docs_rs_std_replacements::ReplacementDetails;
     use docs_rs_types::{KrateName, testing::V1};
     use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_partial_returns_replacement() -> Result<()> {
+        let replacement = ReplacementDetails::new(
+            "Use std::sync::LazyLock (stable since Rust 1.80).",
+            "https://doc.rust-lang.org/std/sync/struct.LazyLock.html".parse()?,
+        );
+        let env = TestEnvironment::new().await?;
+        env.std_replacements()
+            .insert("lazy_static", replacement.clone());
+
+        let web = env.web_app().await;
+
+        let response = web
+            .assert_success_cached(
+                "/-/partial/crate-warnings/lazy_static/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
+        );
+        let page = kuchikiki::parse_html().one(response.text().await?);
+        let link = page.select_first("a.pure-menu-link.warn").unwrap();
+        assert_eq!(link.text_contents().trim(), "Std alternative");
+        let attrs = link.attributes.borrow();
+        assert_eq!(
+            attrs.get("href"),
+            Some(replacement.url().to_string().as_str())
+        );
+        assert_eq!(attrs.get("title"), Some(replacement.description()));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_partial_without_replacement_is_empty() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let response = web
+            .assert_success_cached(
+                "/-/partial/crate-warnings/unknown/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?;
+        assert!(response.text().await?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn crate_warnings_escapes_description() -> Result<()> {
+        use askama::Template as _;
+        let description = "Use <std> & \"quotes\"";
+        let warnings = super::CrateWarnings {
+            replacement: Some(Arc::new(ReplacementDetails::new(
+                description,
+                "https://example.com".parse()?,
+            ))),
+        };
+        let html = warnings.render()?;
+        assert!(!html.contains("<std>"));
+        let page = kuchikiki::parse_html().one(html);
+        let link = page.select_first("a").unwrap();
+        assert_eq!(link.attributes.borrow().get("title"), Some(description));
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn abnormalities_partial_renders_configured_link() -> Result<()> {

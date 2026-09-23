@@ -1,0 +1,14 @@
+// The warning is loaded asynchronously into the rustdoc topbar.
+go-to: |DOC_PATH| + "/lazy_static/1.5.0/lazy_static/"
+assert: "#rustdoc_body_wrapper"
+wait-for: "#crate-warnings:not(.hidden) a.warn"
+
+assert-text: ("#crate-warnings .title", "Std alternative")
+assert-attribute: (
+    "#crate-warnings a",
+    {"href": "https://doc.rust-lang.org/std/sync/struct.LazyLock.html"},
+)
+assert-attribute: ("#crate-warnings a", {"title": "std::sync::LazyLock"}, CONTAINS)
+assert: "#crate-warnings .fa-circle-info"
+// Keep the warning immediately after the feature-flags menu item.
+assert: "//li[a/span[text()='Feature flags']]/following-sibling::li[1][@id='crate-warnings']"

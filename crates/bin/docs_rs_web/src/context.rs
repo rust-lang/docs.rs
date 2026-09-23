@@ -15,6 +15,7 @@ pub async fn build_context() -> Result<Arc<Context>> {
             .await?
             .with_registry_api()
             .await?
+            .with_std_replacements()?
             .with_build_limits()?
             .build()?,
     ))

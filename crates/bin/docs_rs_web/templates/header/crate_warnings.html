@@ -1,0 +1,6 @@
+{%- if let Some(replacement) = replacement -%}
+<a href="{{ replacement.url() }}" class="pure-menu-link warn" title="{{ replacement.description() }}">
+    {{- crate::icons::IconCircleInfo.render_solid(false, false, "") }}
+    <span class="title">Std alternative</span>
+</a>
+{%- endif -%}

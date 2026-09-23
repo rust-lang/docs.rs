@@ -7,7 +7,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait  = "0.1.89"
+async-trait  = { workspace = true }
 chrono = { workspace = true }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
 docs_rs_config = { path = "../docs_rs_config" }

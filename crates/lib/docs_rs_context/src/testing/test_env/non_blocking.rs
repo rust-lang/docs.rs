@@ -7,6 +7,7 @@ use docs_rs_database::{AsyncPoolClient, Config as DatabaseConfig, testing::TestD
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
 use docs_rs_registry_api::testing::TestRegistry;
+use docs_rs_std_replacements::testing::MockStdReplacements;
 use docs_rs_storage::{Config as StorageConfig, testing::TestStorage};
 use docs_rs_test_fakes::FakeRelease;
 use std::{ops::Deref, sync::Arc};
@@ -21,6 +22,7 @@ pub struct TestEnvironment<C> {
     #[allow(dead_code)] // we need to keep the storage so it can be cleaned up.
     db: TestDatabase,
     registry: TestRegistry,
+    mock_std_replacements: Arc<MockStdReplacements>,
 }
 
 impl<C: AppConfig> Deref for TestEnvironment<C> {
@@ -82,6 +84,8 @@ impl<C: AppConfig> TestEnvironment<C> {
             metrics.provider(),
         ));
 
+        let mock_std_replacements = Arc::new(MockStdReplacements::new());
+
         Ok(Self {
             config: app_config,
             context: Context::builder()
@@ -100,12 +104,14 @@ impl<C: AppConfig> TestEnvironment<C> {
                     Arc::new(docs_rs_fastly::Config::test_config()?),
                     Some(Cdn::mock().into()),
                 )
+                .std_replacements(mock_std_replacements.clone())
                 .with_build_limits()?
                 .build()?
                 .into(),
             db,
             storage: test_storage,
             registry: test_registry,
+            mock_std_replacements,
             metrics,
         })
     }
@@ -126,6 +132,10 @@ impl<C: AppConfig> TestEnvironment<C> {
 
     pub fn test_registry(&self) -> &TestRegistry {
         &self.registry
+    }
+
+    pub fn std_replacements(&self) -> &Arc<MockStdReplacements> {
+        &self.mock_std_replacements
     }
 
     pub async fn async_conn(&self) -> Result<AsyncPoolClient> {
