@@ -88,7 +88,7 @@ fn require_package_for_virtual_workspace(manifest_path: &Path) -> Result<()> {
         .with_context(|| format!("parsing manifest {}", manifest_path.display()))?;
     if manifest.get("workspace").is_some() && manifest.get("package").is_none() {
         bail!(
-            "{} is a virtual workspace; select a member with `--package <SPEC>`",
+            "`{}` is a virtual workspace; select a member with `--package <SPEC>`",
             manifest_path.display()
         );
     }
@@ -109,7 +109,7 @@ fn find_single_archive(directory: &Path) -> Result<PathBuf> {
     match archives.as_slice() {
         [archive] => Ok(archive.clone()),
         _ => bail!(
-            "expected exactly one crate archive in {}, found {}",
+            "expected exactly one crate archive in `{}`, found {}",
             directory.display(),
             archives.len()
         ),
