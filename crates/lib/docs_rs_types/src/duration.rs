@@ -33,6 +33,7 @@ mod duration_impl {
 
         duration_constructors! {
             from_nanos(nanos: u64);
+            from_millis(millis: u64);
             from_secs(secs: u64);
             from_mins(mins: u64);
             from_hours(hours: u64);
@@ -119,6 +120,18 @@ mod duration_impl {
     impl fmt::Display for Duration {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             humantime::format_duration(self.0).fmt(f)
+        }
+    }
+
+    impl PartialEq<StdDuration> for Duration {
+        fn eq(&self, other: &StdDuration) -> bool {
+            self.0.eq(other)
+        }
+    }
+
+    impl PartialEq<Duration> for StdDuration {
+        fn eq(&self, other: &Duration) -> bool {
+            self.eq(&other.0)
         }
     }
 }

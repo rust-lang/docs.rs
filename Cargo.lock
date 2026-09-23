@@ -2145,6 +2145,8 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_repository_stats",
+ "docs_rs_rustsec",
+ "docs_rs_std_replacements",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "tokio",
@@ -2402,6 +2404,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs_rs_reqwest"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_headers",
+ "docs_rs_utils",
+ "mockito",
+ "moka",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "test-case",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "docs_rs_rustdoc_json"
 version = "0.0.0"
 dependencies = [
@@ -2411,6 +2434,29 @@ dependencies = [
  "serde_json",
  "strum",
  "test-case",
+]
+
+[[package]]
+name = "docs_rs_rustsec"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_config",
+ "docs_rs_env_vars",
+ "docs_rs_headers",
+ "docs_rs_reqwest",
+ "docs_rs_types",
+ "docs_rs_utils",
+ "http 1.5.0",
+ "mockito",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "test-case",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -2438,6 +2484,26 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "docs_rs_std_replacements"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "bon",
+ "docs_rs_config",
+ "docs_rs_env_vars",
+ "docs_rs_headers",
+ "docs_rs_reqwest",
+ "docs_rs_types",
+ "http 1.5.0",
+ "mockito",
+ "serde",
+ "serde_json",
+ "test-case",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -2616,6 +2682,8 @@ dependencies = [
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_rustdoc_json",
+ "docs_rs_rustsec",
+ "docs_rs_std_replacements",
  "docs_rs_storage",
  "docs_rs_test_fakes",
  "docs_rs_types",
@@ -2632,6 +2700,7 @@ dependencies = [
  "lol_html",
  "md5",
  "mime",
+ "mockito",
  "num_cpus",
  "opentelemetry",
  "opentelemetry_sdk",

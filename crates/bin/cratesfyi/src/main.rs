@@ -49,6 +49,8 @@ impl CommandLine {
                 .with_build_queue()?
                 .with_registry_api()
                 .await?
+                .with_std_replacements()?
+                .with_rustsec()?
                 .with_repository_stats()?
                 .with_build_limits()?
                 .build()

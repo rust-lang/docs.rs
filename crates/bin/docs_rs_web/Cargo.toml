@@ -39,6 +39,8 @@ docs_rs_mimes = { path = "../../lib/docs_rs_mimes" }
 docs_rs_opentelemetry = { path = "../../lib/docs_rs_opentelemetry" }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api" }
 docs_rs_rustdoc_json = { path = "../../lib/docs_rs_rustdoc_json" }
+docs_rs_rustsec = { path = "../../lib/docs_rs_rustsec" }
+docs_rs_std_replacements = { path = "../../lib/docs_rs_std_replacements" }
 docs_rs_storage = { path = "../../lib/docs_rs_storage" }
 docs_rs_types = { path = "../../lib/docs_rs_types" }
 docs_rs_uri = { path = "../../lib/docs_rs_uri" }
@@ -84,12 +86,15 @@ docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
 docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api", features = ["testing"] }
+docs_rs_rustsec = { path = "../../lib/docs_rs_rustsec", features = ["testing"] }
+docs_rs_std_replacements = { path = "../../lib/docs_rs_std_replacements", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 http-body-util = "0.1.0"
 indoc = "2.0.0"
 kuchikiki = "0.8"
+mockito = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
 reqwest = { workspace = true }

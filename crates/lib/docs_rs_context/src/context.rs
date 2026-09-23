@@ -7,6 +7,8 @@ use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::{AnyMeterProvider, get_meter_provider};
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
+use docs_rs_rustsec::RustsecClient;
+use docs_rs_std_replacements::StdReplacements;
 use docs_rs_storage::{AsyncStorage, Storage};
 use std::sync::Arc;
 use tokio::runtime;
@@ -42,6 +44,10 @@ pub struct Context {
     #[builder(setters(vis = "", name = registry_api_internal))]
     pub registry_api: Option<Arc<RegistryApi>>,
 
+    pub std_replacements: Option<Arc<StdReplacements>>,
+
+    pub rustsec: Option<Arc<RustsecClient>>,
+
     #[builder(setters(vis = "", name = cdn_internal))]
     pub cdn: Option<Arc<Cdn>>,
 
@@ -51,7 +57,8 @@ pub struct Context {
 
 use context_builder::{
     IsComplete, IsSet, IsUnset, SetBlockingBuildQueue, SetBlockingStorage, SetBuildQueue, SetCdn,
-    SetMeterProvider, SetPool, SetRegistryApi, SetRepositoryStats, SetRuntime, SetStorage, State,
+    SetMeterProvider, SetPool, SetRegistryApi, SetRepositoryStats, SetRuntime, SetRustsec,
+    SetStdReplacements, SetStorage, State,
 };
 
 impl<S: State> ContextBuilder<S> {
@@ -251,6 +258,24 @@ impl<S: State> ContextBuilder<S> {
         Ok(self.registry_api(config.into(), api.into()))
     }
 
+    pub fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
+    where
+        S::StdReplacements: IsUnset,
+    {
+        let config = docs_rs_std_replacements::Config::from_environment()?;
+        let api = StdReplacements::from_config(&config)?;
+
+        Ok(self.std_replacements(Arc::new(api)))
+    }
+
+    pub fn with_rustsec(self) -> Result<ContextBuilder<SetRustsec<S>>>
+    where
+        S::Rustsec: IsUnset,
+    {
+        let config = docs_rs_rustsec::Config::from_environment()?;
+        Ok(self.rustsec(Arc::new(RustsecClient::from_config(&config)?)))
+    }
+
     pub fn repository_stats(
         mut self,
         config: Arc<docs_rs_repository_stats::Config>,
@@ -347,6 +372,16 @@ impl Context {
         } else {
             Err(anyhow!("Registry API is not initialized"))
         }
+    }
+
+    /// Return the client to query the std-replacement database.
+    pub fn std_replacements(&self) -> Option<&Arc<StdReplacements>> {
+        self.std_replacements.as_ref()
+    }
+
+    /// Return the RustSec client when configured.
+    pub fn rustsec(&self) -> Option<&Arc<RustsecClient>> {
+        self.rustsec.as_ref()
     }
 
     /// return configured CDN or None.

@@ -45,6 +45,8 @@ impl<C: AppConfig> TestEnvironment<C> {
         config: Option<C>,
         storage_config: Option<StorageConfig>,
         build_queue_config: Option<docs_rs_build_queue::Config>,
+        rustsec_config: Option<docs_rs_rustsec::Config>,
+        std_replacements_config: Option<docs_rs_std_replacements::Config>,
     ) -> Result<Self> {
         docs_rs_logging::testing::init();
 
@@ -99,6 +101,20 @@ impl<C: AppConfig> TestEnvironment<C> {
                 .maybe_cdn(
                     Arc::new(docs_rs_fastly::Config::test_config()?),
                     Some(Cdn::mock().into()),
+                )
+                .maybe_std_replacements(
+                    std_replacements_config
+                        .as_ref()
+                        .map(docs_rs_std_replacements::StdReplacements::from_config)
+                        .transpose()?
+                        .map(Arc::new),
+                )
+                .maybe_rustsec(
+                    rustsec_config
+                        .as_ref()
+                        .map(docs_rs_rustsec::RustsecClient::from_config)
+                        .transpose()?
+                        .map(Arc::new),
                 )
                 .with_build_limits()?
                 .build()?
