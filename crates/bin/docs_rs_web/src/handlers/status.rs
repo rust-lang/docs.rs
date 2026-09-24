@@ -10,7 +10,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{
-    extract::Extension,
+    extract::State,
     response::{IntoResponse, Response as AxumResponse},
 };
 use docs_rs_build_queue::AsyncBuildQueue;
@@ -41,7 +41,7 @@ impl_axum_webpage! {
 }
 
 pub(crate) async fn status_handler(
-    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
+    State(build_queue): State<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutStatus {
@@ -50,7 +50,7 @@ pub(crate) async fn status_handler(
 }
 
 pub(crate) async fn abnormalities(
-    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
+    State(build_queue): State<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     Ok(Abnormalities {

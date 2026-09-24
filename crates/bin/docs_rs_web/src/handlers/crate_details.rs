@@ -15,7 +15,7 @@ use crate::{
 use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
-    extract::Extension,
+    extract::State,
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
@@ -443,7 +443,7 @@ impl_axum_webpage! {
 #[tracing::instrument(skip(conn, storage))]
 pub(crate) async fn crate_details_handler(
     params: RustdocParams,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let matched_release = match_version(&mut conn, params.name(), params.req_version())

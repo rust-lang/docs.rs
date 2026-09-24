@@ -7,71 +7,87 @@ use crate::{
         statics::{build_static_router, static_root_dir},
         status,
     },
-    metrics::request_recorder,
+    metrics::{WebMetrics, request_recorder},
+    state::AppState,
 };
 use anyhow::Result;
 use askama::Template;
 use axum::{
     Extension, Router as AxumRouter,
-    extract::Request as AxumHttpRequest,
+    extract::{Request as AxumHttpRequest, State},
     handler::Handler as AxumHandler,
     middleware::{self, Next},
     response::{IntoResponse, Redirect},
     routing::{MethodRouter, get, post},
 };
 use axum_extra::routing::RouterExt;
-use std::convert::Infallible;
+use std::{convert::Infallible, sync::Arc};
 use tracing::{debug, instrument};
 
 const INTERNAL_PREFIXES: &[&str] = &["-", "about", "crate", "releases", "sitemap.xml"];
 
 #[instrument(skip_all)]
-pub(crate) fn get_static<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
+pub(crate) fn get_static<H, T, S>(
+    metrics: &Arc<WebMetrics>,
+    handler: H,
+) -> MethodRouter<S, Infallible>
 where
     H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
-    get(handler).route_layer(middleware::from_fn(|request, next| async {
-        request_recorder(request, next, Some("static resource")).await
-    }))
+    get(handler).route_layer(middleware::from_fn_with_state(
+        metrics.clone(),
+        |State(metrics), request, next| async {
+            request_recorder(metrics, request, next, Some("static resource")).await
+        },
+    ))
 }
 
 #[instrument(skip_all)]
-fn get_internal<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
+fn get_internal<H, T, S>(metrics: &Arc<WebMetrics>, handler: H) -> MethodRouter<S, Infallible>
 where
     H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
-    get(handler).route_layer(middleware::from_fn(|request, next| async {
-        request_recorder(request, next, None).await
-    }))
+    get(handler).route_layer(middleware::from_fn_with_state(
+        metrics.clone(),
+        |State(metrics), request, next| async {
+            request_recorder(metrics, request, next, None).await
+        },
+    ))
 }
 
 #[instrument(skip_all)]
-fn post_internal<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
+fn post_internal<H, T, S>(metrics: &Arc<WebMetrics>, handler: H) -> MethodRouter<S, Infallible>
 where
     H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
-    post(handler).route_layer(middleware::from_fn(|request, next| async {
-        request_recorder(request, next, None).await
-    }))
+    post(handler).route_layer(middleware::from_fn_with_state(
+        metrics.clone(),
+        |State(metrics), request, next| async {
+            request_recorder(metrics, request, next, None).await
+        },
+    ))
 }
 
 #[instrument(skip_all)]
-fn get_rustdoc<H, T, S>(handler: H) -> MethodRouter<S, Infallible>
+fn get_rustdoc<H, T, S>(metrics: &Arc<WebMetrics>, handler: H) -> MethodRouter<S, Infallible>
 where
     H: AxumHandler<T, S>,
     T: 'static,
     S: Clone + Send + Sync + 'static,
 {
     get(handler)
-        .route_layer(middleware::from_fn(|request, next| async {
-            request_recorder(request, next, Some("rustdoc page")).await
-        }))
+        .route_layer(middleware::from_fn_with_state(
+            metrics.clone(),
+            |State(metrics), request, next| async {
+                request_recorder(metrics, request, next, Some("rustdoc page")).await
+            },
+        ))
         .layer(middleware::from_fn(block_blacklisted_prefixes_middleware))
 }
 
@@ -101,7 +117,7 @@ fn cached_permanent_redirect(uri: &str) -> impl IntoResponse {
     )
 }
 
-pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
+pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<AppState>> {
     // hint for naming axum routes:
     // when routes overlap, the route parameters at the same position
     // have to use the same name:
@@ -122,151 +138,178 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         //   https://support.google.com/webmasters/answer/183668?hl=en
         .route(
             "/robots.txt",
-            get_static(|| async { cached_permanent_redirect("/-/static/robots.txt") }),
+            get_static(metrics, || async {
+                cached_permanent_redirect("/-/static/robots.txt")
+            }),
         )
         .route(
             "/favicon.ico",
-            get_static(|| async { cached_permanent_redirect("/-/static/favicon.ico") }),
+            get_static(metrics, || async {
+                cached_permanent_redirect("/-/static/favicon.ico")
+            }),
         )
         // `.nest` with fallbacks is currently broken, `.nest_service works
         // https://github.com/tokio-rs/axum/issues/3138
-        .nest_service("/-/static", build_static_router(static_root_dir()?))
+        .nest_service(
+            "/-/static",
+            build_static_router(static_root_dir()?, metrics),
+        )
         .route(
             "/opensearch.xml",
-            get_static(|| async { cached_permanent_redirect("/-/static/opensearch.xml") }),
+            get_static(metrics, || async {
+                cached_permanent_redirect("/-/static/opensearch.xml")
+            }),
         )
-        .route_with_tsr("/sitemap.xml", get_internal(sitemap::sitemapindex_handler))
+        .route_with_tsr(
+            "/sitemap.xml",
+            get_internal(metrics, sitemap::sitemapindex_handler),
+        )
         .route_with_tsr(
             "/-/sitemap/recent/{date}/sitemap.xml",
-            get_internal(sitemap::recent_sitemap_handler),
+            get_internal(metrics, sitemap::recent_sitemap_handler),
         )
         .route_with_tsr(
             "/-/sitemap/{letter}/sitemap.xml",
-            get_internal(sitemap::sitemap_handler),
+            get_internal(metrics, sitemap::sitemap_handler),
         )
-        .route_with_tsr("/-/status/", get_internal(status::status_handler))
-        .route_with_tsr("/about/builds", get_internal(about::about_builds_handler))
-        .route_with_tsr("/about", get_internal(about::about_handler))
-        .route_with_tsr("/about/{subpage}", get_internal(about::about_handler))
-        .route("/", get_internal(releases::home_page))
-        .route_with_tsr("/releases", get_internal(releases::recent_releases_handler))
+        .route_with_tsr("/-/status/", get_internal(metrics, status::status_handler))
+        .route_with_tsr(
+            "/about/builds",
+            get_internal(metrics, about::about_builds_handler),
+        )
+        .route_with_tsr("/about", get_internal(metrics, about::about_handler))
+        .route_with_tsr(
+            "/about/{subpage}",
+            get_internal(metrics, about::about_handler),
+        )
+        .route("/", get_internal(metrics, releases::home_page))
+        .route_with_tsr(
+            "/releases",
+            get_internal(metrics, releases::recent_releases_handler),
+        )
         .route_with_tsr(
             "/releases/recent/{page}",
-            get_internal(releases::recent_releases_handler),
+            get_internal(metrics, releases::recent_releases_handler),
         )
         .route_with_tsr(
             "/releases/stars",
-            get_internal(releases::releases_by_stars_handler),
+            get_internal(metrics, releases::releases_by_stars_handler),
         )
         .route_with_tsr(
             "/releases/stars/{page}",
-            get_internal(releases::releases_by_stars_handler),
+            get_internal(metrics, releases::releases_by_stars_handler),
         )
         .route_with_tsr(
             "/releases/recent-failures",
-            get_internal(releases::releases_recent_failures_handler),
+            get_internal(metrics, releases::releases_recent_failures_handler),
         )
         .route_with_tsr(
             "/releases/recent-failures/{page}",
-            get_internal(releases::releases_recent_failures_handler),
+            get_internal(metrics, releases::releases_recent_failures_handler),
         )
         .route_with_tsr(
             "/releases/failures",
-            get_internal(releases::releases_failures_by_stars_handler),
+            get_internal(metrics, releases::releases_failures_by_stars_handler),
         )
         .route_with_tsr(
             "/releases/failures/{page}",
-            get_internal(releases::releases_failures_by_stars_handler),
+            get_internal(metrics, releases::releases_failures_by_stars_handler),
         )
         .route(
             "/crate/{name}",
-            get_internal(crate_details::crate_details_handler),
+            get_internal(metrics, crate_details::crate_details_handler),
         )
         .route(
             "/crate/{name}/",
-            get_internal(crate_details::crate_details_handler),
+            get_internal(metrics, crate_details::crate_details_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}",
-            get_internal(crate_details::crate_details_handler),
+            get_internal(metrics, crate_details::crate_details_handler),
         )
         .route_with_tsr(
             "/releases/feed",
-            get_internal(releases::releases_feed_handler),
+            get_internal(metrics, releases::releases_feed_handler),
         )
-        .route_with_tsr("/releases/{owner}", get_internal(releases::owner_handler))
+        .route_with_tsr(
+            "/releases/{owner}",
+            get_internal(metrics, releases::owner_handler),
+        )
         .route_with_tsr(
             "/releases/{owner}/{page}",
-            get_internal(releases::owner_handler),
+            get_internal(metrics, releases::owner_handler),
         )
         .route_with_tsr(
             "/releases/activity",
-            get_internal(releases::activity_handler),
+            get_internal(metrics, releases::activity_handler),
         )
-        .route_with_tsr("/releases/search", get_internal(releases::search_handler))
+        .route_with_tsr(
+            "/releases/search",
+            get_internal(metrics, releases::search_handler),
+        )
         .route_with_tsr(
             "/releases/queue",
-            get_internal(releases::build_queue_handler),
+            get_internal(metrics, releases::build_queue_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/builds",
-            get_internal(builds::build_list_handler),
+            get_internal(metrics, builds::build_list_handler),
         )
         .route(
             "/crate/{name}/{version}/rebuild",
-            post_internal(builds::build_trigger_rebuild_handler),
+            post_internal(metrics, builds::build_trigger_rebuild_handler),
         )
         .route(
             "/crate/{name}/{version}/status.json",
-            get_internal(build_status::status_handler),
+            get_internal(metrics, build_status::status_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/builds/{id}",
-            get_internal(build_details::build_details_handler),
+            get_internal(metrics, build_details::build_details_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/builds/{id}/{filename}",
-            get_internal(build_details::build_details_handler),
+            get_internal(metrics, build_details::build_details_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/features",
-            get_internal(features::build_features_handler),
+            get_internal(metrics, features::build_features_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/source/",
-            get_internal(source::source_browser_handler),
+            get_internal(metrics, source::source_browser_handler),
         )
         .route(
             "/crate/{name}/{version}/source/{*path}",
-            get_internal(source::source_browser_handler),
+            get_internal(metrics, source::source_browser_handler),
         )
         .route(
             "/crate/{name}/{version}/menus/platforms/{target}/",
-            get_internal(crate_details::get_all_platforms),
+            get_internal(metrics, crate_details::get_all_platforms),
         )
         .route(
             "/crate/{name}/{version}/menus/platforms/{target}/{*path}",
-            get_internal(crate_details::get_all_platforms),
+            get_internal(metrics, crate_details::get_all_platforms),
         )
         .route(
             "/crate/{name}/{version}/menus/platforms/",
-            get_internal(crate_details::get_all_platforms_root),
+            get_internal(metrics, crate_details::get_all_platforms_root),
         )
         .route(
             "/crate/{name}/{version}/menus/releases/{*path}",
-            get_internal(crate_details::get_all_releases),
+            get_internal(metrics, crate_details::get_all_releases),
         )
         .route(
             "/-/partial/abnormalities/",
-            get_internal(status::abnormalities),
+            get_internal(metrics, status::abnormalities),
         )
         .route(
             "/-/rustdoc.static/{*path}",
-            get_internal(rustdoc::static_asset_handler),
+            get_internal(metrics, rustdoc::static_asset_handler),
         )
         .route(
             "/-/storage-change-detection.html",
-            get_internal(|| async {
+            get_internal(metrics, || async {
                 #[derive(Template)]
                 #[template(path = "storage-change-detection.html")]
                 #[derive(Debug, Clone)]
@@ -280,82 +323,91 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
         )
         .route_with_tsr(
             "/crate/{name}/{version}/download",
-            get_internal(rustdoc::download_handler),
+            get_internal(metrics, rustdoc::download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/json.gz",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/json.zst",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/json",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/json/{format_version}",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route(
             "/crate/{name}/{version}/target-redirect/{*path}",
-            get_internal(rustdoc::target_redirect_handler),
+            get_internal(metrics, rustdoc::target_redirect_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/{target}/json.gz",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/{target}/json.zst",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/{target}/json",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
         .route_with_tsr(
             "/crate/{name}/{version}/{target}/json/{format_version}",
-            get_internal(rustdoc::json_download_handler),
+            get_internal(metrics, rustdoc::json_download_handler),
         )
-        .route("/{name}/badge.svg", get_internal(rustdoc::badge_handler))
-        .route("/{name}", get_rustdoc(rustdoc::rustdoc_redirector_handler))
-        .route("/{name}/", get_rustdoc(rustdoc::rustdoc_redirector_handler))
+        .route(
+            "/{name}/badge.svg",
+            get_internal(metrics, rustdoc::badge_handler),
+        )
+        .route(
+            "/{name}",
+            get_rustdoc(metrics, rustdoc::rustdoc_redirector_handler),
+        )
+        .route(
+            "/{name}/",
+            get_rustdoc(metrics, rustdoc::rustdoc_redirector_handler),
+        )
         .route(
             "/{name}/{version}",
-            get_rustdoc(rustdoc::rustdoc_redirector_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_redirector_handler),
         )
         .route(
             "/{name}/{version}/",
-            get_rustdoc(rustdoc::rustdoc_redirector_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_redirector_handler),
         )
         .route(
             "/{name}/{version}/all.html",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .route(
             "/{name}/{version}/help.html",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .route(
             "/{name}/{version}/settings.html",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .route(
             "/{name}/{version}/scrape-examples-help.html",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .route(
             "/{name}/{version}/{target}",
-            get_rustdoc(rustdoc::rustdoc_redirector_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_redirector_handler),
         )
         .route(
             "/{name}/{version}/{target}/",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .route(
             "/{name}/{version}/{target}/{*path}",
-            get_rustdoc(rustdoc::rustdoc_html_server_handler),
+            get_rustdoc(metrics, rustdoc::rustdoc_html_server_handler),
         )
         .fallback(fallback))
 }

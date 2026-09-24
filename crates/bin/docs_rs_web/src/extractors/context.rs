@@ -1,10 +1,8 @@
 //! a collection of custom extractors related to our app-context (context::Context)
 
 use crate::error::AxumNope;
-use anyhow::Context as _;
 use axum::{
-    RequestPartsExt,
-    extract::{Extension, FromRequestParts},
+    extract::{FromRef, FromRequestParts},
     http::request::Parts,
 };
 use docs_rs_database::{AsyncPoolClient, Pool};
@@ -23,14 +21,12 @@ pub(crate) struct DbConnection(AsyncPoolClient);
 impl<S> FromRequestParts<S> for DbConnection
 where
     S: Send + Sync,
+    Pool: FromRef<S>,
 {
     type Rejection = AxumNope;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let Extension(pool) = parts
-            .extract::<Extension<Pool>>()
-            .await
-            .context("could not extract pool extension")?;
+    async fn from_request_parts(_parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let pool = Pool::from_ref(state);
 
         Ok(Self(pool.get_async().await?))
     }

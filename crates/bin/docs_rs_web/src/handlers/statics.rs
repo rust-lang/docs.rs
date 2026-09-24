@@ -1,11 +1,13 @@
 use crate::{
-    cache::CachePolicy, cache::STATIC_ASSET_CACHE_POLICY, metrics::request_recorder,
+    cache::CachePolicy,
+    cache::STATIC_ASSET_CACHE_POLICY,
+    metrics::{WebMetrics, request_recorder},
     routes::get_static,
 };
 use anyhow::{Result, bail};
 use axum::{
     Router as AxumRouter,
-    extract::{Extension, Request},
+    extract::{Extension, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get_service,
@@ -20,6 +22,7 @@ use http::{StatusCode, Uri};
 use std::{
     env,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use tower_http::services::ServeDir;
 
@@ -153,28 +156,34 @@ async fn conditional_get(
     res
 }
 
-pub(crate) fn build_static_router(root: impl AsRef<Path>) -> AxumRouter {
+pub(crate) fn build_static_router(root: impl AsRef<Path>, metrics: &Arc<WebMetrics>) -> AxumRouter {
     let root = root.as_ref();
     AxumRouter::new()
         .route(
             "/vendored.css",
-            get_static(|| async { build_static_css_response(VENDORED_CSS) }),
+            get_static(metrics, || async {
+                build_static_css_response(VENDORED_CSS)
+            }),
         )
         .route(
             "/style.css",
-            get_static(|| async { build_static_css_response(STYLE_CSS) }),
+            get_static(metrics, || async { build_static_css_response(STYLE_CSS) }),
         )
         .route(
             "/rustdoc.css",
-            get_static(|| async { build_static_css_response(RUSTDOC_CSS) }),
+            get_static(metrics, || async { build_static_css_response(RUSTDOC_CSS) }),
         )
         .route(
             "/rustdoc-2021-12-05.css",
-            get_static(|| async { build_static_css_response(RUSTDOC_2021_12_05_CSS) }),
+            get_static(metrics, || async {
+                build_static_css_response(RUSTDOC_2021_12_05_CSS)
+            }),
         )
         .route(
             "/rustdoc-2025-08-20.css",
-            get_static(|| async { build_static_css_response(RUSTDOC_2025_08_20_CSS) }),
+            get_static(metrics, || async {
+                build_static_css_response(RUSTDOC_2025_08_20_CSS)
+            }),
         )
         .fallback_service(
             get_service(
@@ -182,9 +191,12 @@ pub(crate) fn build_static_router(root: impl AsRef<Path>) -> AxumRouter {
                     .fallback(ServeDir::new(root.join(VENDOR_DIR_NAME))),
             )
             .layer(middleware::from_fn(set_needed_static_headers))
-            .layer(middleware::from_fn(|request, next| async {
-                request_recorder(request, next, Some("static resource")).await
-            })),
+            .layer(middleware::from_fn_with_state(
+                metrics.clone(),
+                |State(metrics), request, next| async {
+                    request_recorder(metrics, request, next, Some("static resource")).await
+                },
+            )),
         )
         .layer(middleware::from_fn(conditional_get))
 }
@@ -411,13 +423,15 @@ mod tests {
         /// build a small axum app with middleware, but just with the static router only.
         async fn build_static_app(env: &TestEnvironment, root: impl AsRef<Path>) -> Result<Router> {
             let template_data = Arc::new(TemplateData::new(1).unwrap());
-            apply_middleware(
-                build_static_router(root),
+            let state = crate::state::AppState::new(
                 env.config().clone(),
                 env.context().clone(),
-                Some(template_data),
-            )
-            .await
+                template_data,
+            )?;
+            Ok(apply_middleware(
+                build_static_router(root, &state.metrics).with_state(()),
+                state,
+            ))
         }
 
         const PATH: &str = "/menu.js";
