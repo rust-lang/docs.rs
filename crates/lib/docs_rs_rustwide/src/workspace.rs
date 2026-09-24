@@ -177,6 +177,34 @@ pub struct MaintenanceResult {
     pub toolchain_updated: bool,
 }
 
+/// Rustdoc lint policy selected by the environment builder.
+///
+/// Later we have to improve this because we have to allow the
+/// `--allow` / `--deny` etc combinations.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RustdocLints(Vec<String>);
+
+impl RustdocLints {
+    /// Proposed docs.rs lint defaults. This policy may change between releases.
+    pub fn experimental() -> Self {
+        Self::default().deny("rustdoc::invalid_html_tags")
+    }
+
+    /// Deny certain warnings and make them errors.
+    pub fn deny<S: Into<String>>(mut self, lint: S) -> Self {
+        self.0.push(lint.into());
+        self
+    }
+
+    pub(crate) fn args(&self) -> impl Iterator<Item = &str> {
+        (!self.0.is_empty())
+            .then_some("unknown_lints")
+            .into_iter()
+            .chain(self.0.iter().map(String::as_str))
+            .flat_map(|lint| ["-D", lint])
+    }
+}
+
 /// Shared rustwide workspace and toolchain configuration for docs.rs builds.
 ///
 /// Holds an exclusive filesystem lock until dropped, including during maintenance.
@@ -187,6 +215,7 @@ pub struct BuildEnvironment {
     workspace: ManagedWorkspace,
     toolchain: ManagedToolchain,
     cpu_limit: Option<CpuLimit>,
+    rustdoc_lints: RustdocLints,
     docker_runtime: DockerRuntime,
     include_default_targets: bool,
     validate_host_resources: bool,
@@ -217,6 +246,7 @@ impl BuildEnvironment {
         /// Enable periodic toolchain updates. Omitted means automatic updates are disabled.
         toolchain_update_interval: Option<Duration>,
         cpu_limit: Option<CpuLimit>,
+        #[builder(default)] rustdoc_lints: RustdocLints,
         #[builder(default)] docker_runtime: DockerRuntime,
         #[builder(default = false)] include_default_targets: bool,
         #[builder(default = true)] validate_host_resources: bool,
@@ -245,6 +275,7 @@ impl BuildEnvironment {
             workspace,
             toolchain: ManagedToolchain::new(toolchain, toolchain_update_interval),
             cpu_limit,
+            rustdoc_lints,
             docker_runtime,
             include_default_targets,
             validate_host_resources,
@@ -409,6 +440,10 @@ impl BuildEnvironment {
 
     pub(crate) fn configured_toolchain(&self) -> &Toolchain {
         self.toolchain.get()
+    }
+
+    pub(crate) fn rustdoc_lints(&self) -> &RustdocLints {
+        &self.rustdoc_lints
     }
 
     pub(crate) fn cargo_jobs(&self) -> Option<usize> {

@@ -1,5 +1,6 @@
 //! Pure Cargo command construction. No sandbox or toolchain operations.
 
+use crate::RustdocLints;
 use docsrs_metadata::Metadata;
 use std::iter;
 
@@ -13,6 +14,7 @@ pub(super) struct CommandArgs<'a> {
     docsrs_metadata: &'a Metadata,
     target: String,
     jobs: Option<usize>,
+    rustdoc_lints: &'a RustdocLints,
     // Explicit caller arguments, preserved in insertion order.
     cargo_args: Vec<String>,
     rustdoc_args: Vec<String>,
@@ -23,9 +25,11 @@ impl<'a> CommandArgs<'a> {
         docsrs_metadata: &'a Metadata,
         target: impl Into<String>,
         jobs: Option<usize>,
+        rustdoc_lints: &'a RustdocLints,
     ) -> Self {
         Self {
             docsrs_metadata,
+            rustdoc_lints,
             target: target.into(),
             jobs,
             cargo_args: Vec::new(),
@@ -79,6 +83,7 @@ impl<'a> CommandArgs<'a> {
         // Defaults → metadata → caller → unconditional flags.
         ["--cfg", "docsrs"]
             .into_iter()
+            .chain(self.rustdoc_lints.args())
             .chain(self.docsrs_metadata.rustdoc_args.iter().map(String::as_str))
             .chain(self.rustdoc_args.iter().map(String::as_str))
             .chain(UNCONDITIONAL_RUSTDOC_ARGS.iter().copied())
@@ -209,6 +214,7 @@ mod tests {
         rustdoc: Vec<String>,
     ) -> Vec<String> {
         CommandArgs::new(metadata, target, jobs)
+        CommandArgs::new(metadata, target, jobs, &RustdocLints::default())
             .cargo_args(cargo)
             .rustdoc_args(rustdoc)
             .finish()
@@ -276,8 +282,19 @@ mod tests {
         );
     }
 
+    #[test_case(RustdocLints::default(), vec![])]
+    #[test_case(RustdocLints::experimental(), vec!["-D", "unknown_lints", "-D", "rustdoc::invalid_html_tags"])]
+    #[test_case(RustdocLints::default().deny("missing_docs").deny("rustdoc::broken_intra_doc_links"), vec!["-D", "unknown_lints", "-D", "missing_docs", "-D", "rustdoc::broken_intra_doc_links"])]
+    fn applies_environment_lints(policy: RustdocLints, expected: Vec<&str>) {
+        let args = CommandArgs::new(&Metadata::default(), "target", None, &policy).finish();
+        let mut expected_flags = vec!["--cfg", "docsrs"];
+        expected_flags.extend(expected);
+        expected_flags.extend(UNCONDITIONAL_RUSTDOC_ARGS);
+        assert_eq!(rustdoc_flags(&args), expected_flags);
+    }
+
     #[test]
-    fn metadata_lints_precede_caller_overrides() {
+    fn lint_defaults_precede_metadata_and_caller_overrides() {
         let metadata: Metadata = r#"
 [package]
 name = "example"
@@ -286,16 +303,21 @@ rustdoc-args = ["-A", "rustdoc::invalid_html_tags", "-W", "missing_docs"]
 "#
         .parse()
         .unwrap();
-        let args = cargo_args(
-            docsrs_metadata::HOST_TARGET,
+        let args = CommandArgs::new(
             &metadata,
+            docsrs_metadata::HOST_TARGET,
             None,
-            vec![],
-            vec!["-D".into(), "missing_docs".into()],
-        );
+            &RustdocLints::experimental(),
+        )
+        .rustdoc_args(["-D", "missing_docs"])
+        .finish();
         let mut expected = vec![
             "--cfg",
             "docsrs",
+            "-D",
+            "unknown_lints",
+            "-D",
+            "rustdoc::invalid_html_tags",
             "-A",
             "rustdoc::invalid_html_tags",
             "-W",
@@ -367,7 +389,8 @@ cargo-args = ["--verbose"]
             metadata.features = features.clone();
             metadata.all_features = all_features;
             metadata.no_default_features = no_default_features;
-            let args = CommandArgs::new(&metadata, "target", None).finish();
+            let args =
+                CommandArgs::new(&metadata, "target", None, &RustdocLints::default()).finish();
             let feature_position = args.iter().position(|arg| arg == "--features");
             assert_eq!(
                 feature_position.map(|index| &args[index + 1]),
@@ -388,7 +411,7 @@ cargo-args = ["--verbose"]
         metadata.proc_macro = proc_macro;
         metadata.rustc_args = vec!["--cfg".into(), r#"label="a value with spaces""#.into()];
         metadata.rustdoc_args = vec!["--cfg".into(), "custom_docs".into()];
-        let args = CommandArgs::new(&metadata, "target", None)
+        let args = CommandArgs::new(&metadata, "target", None, &RustdocLints::default())
             .rustdoc_args(["--output-format", "json"])
             .finish();
         assert_eq!(args.iter().any(|arg| arg == "--target"), !proc_macro);
@@ -435,7 +458,7 @@ cargo-args = ["--verbose"]
             "--config=build.jobs=3".into(),
             "-Z".into(),
         ]);
-        let args = CommandArgs::new(&metadata, "target", Some(1))
+        let args = CommandArgs::new(&metadata, "target", Some(1), &RustdocLints::default())
             .cargo_arg("--config=build.jobs=2")
             .cargo_args(["--locked"])
             .finish();
@@ -462,13 +485,14 @@ cargo-args = ["--verbose"]
     #[test_case(vec!["-Z", "rustdoc-scrape-examples"])]
     fn preserves_caller_scraping_while_filtering_metadata(scrape_args: Vec<&str>) {
         let mut metadata = Metadata::default();
-        let mut expected = CommandArgs::new(&metadata, "target", None).finish();
+        let mut expected =
+            CommandArgs::new(&metadata, "target", None, &RustdocLints::default()).finish();
         expected.extend(scrape_args.iter().copied().map(String::from));
         expected.push("--locked".into());
 
         metadata.cargo_args = scrape_args.iter().copied().map(String::from).collect();
         metadata.cargo_args.push("--locked".into());
-        let args = CommandArgs::new(&metadata, "target", None)
+        let args = CommandArgs::new(&metadata, "target", None, &RustdocLints::default())
             .cargo_args(scrape_args)
             .finish();
 
@@ -477,10 +501,15 @@ cargo-args = ["--verbose"]
 
     #[test]
     fn default_command_and_caller_rustdoc_flags_keep_their_order() {
-        let args = CommandArgs::new(&Metadata::default(), "target", None)
-            .rustdoc_arg("--cfg")
-            .rustdoc_args([r#"label="a value with spaces""#])
-            .finish();
+        let args = CommandArgs::new(
+            &Metadata::default(),
+            "target",
+            None,
+            &RustdocLints::default(),
+        )
+        .rustdoc_arg("--cfg")
+        .rustdoc_args([r#"label="a value with spaces""#])
+        .finish();
         assert_eq!(
             &args[..4],
             ["rustdoc", "--lib", "-Zrustdoc-map", "--config"]

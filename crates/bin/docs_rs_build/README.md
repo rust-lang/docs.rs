@@ -242,6 +242,20 @@ environment; concurrent invocations must use different workspace directories.
 
 ## Configuration
 
+Use `--experimental` to opt into proposed docs.rs build defaults. Currently this
+denies `rustdoc::invalid_html_tags` and checks unknown lint names. The
+experimental defaults may change between releases; without the flag they are not
+enabled.
+
+```console
+docs_rs_build --experimental
+```
+
+To enforce individual lints, configure them in your crate, for example with
+`#![deny(rustdoc::invalid_html_tags)]` in `src/lib.rs`. Experimental lint
+defaults affect rustdoc, not rustc compilation of dependencies. By default, no
+lint flags are added.
+
 The default toolchain is nightly and the default sandbox limits match docs.rs.
 Workspace initialization reuses installed Rustwide helper tools through fast
 initialization. An installed distribution toolchain is checked for updates

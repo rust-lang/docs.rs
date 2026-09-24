@@ -1,6 +1,6 @@
 use crate::support::{TestEnvironment, build_local, fixture, test_workspace};
 use anyhow::{Context as _, Result};
-use docs_rs_rustwide::{BuildEnvironment, CpuLimit, StepResultExt};
+use docs_rs_rustwide::{BuildEnvironment, CpuLimit, RustdocLints, StepResultExt};
 use rustwide::Crate;
 use std::fs;
 use test_case::test_case;
@@ -48,6 +48,41 @@ fn independent_steps_preserve_artifacts_in_any_order(order: [&str; 3]) -> Result
         }
         Ok(())
     })?;
+    Ok(())
+}
+
+#[test_case(false)]
+#[test_case(true)]
+#[ignore = "requires Docker and a Rust toolchain"]
+fn invalid_html_tags_follow_environment_lint_policy(deny: bool) -> Result<()> {
+    let workspace = test_workspace();
+    let builder = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image());
+    let mut environment = if deny {
+        builder
+            .rustdoc_lints(RustdocLints::default().deny("rustdoc::invalid_html_tags"))
+            .build()?
+    } else {
+        builder.build()?
+    };
+    let release = build_local(&mut environment, "invalid-html-tags")?.into_inner();
+
+    assert_eq!(release.build_succeeded(), !deny);
+    assert_eq!(release.has_docs(), !deny);
+    let documentation = release.default_target().documentation();
+    assert_eq!(documentation.is_err(), deny);
+    let log = documentation.log().context("missing rustdoc build log")?;
+    let level = if deny { "error" } else { "warning" };
+    assert!(
+        log.contains(&format!("{level}: unclosed HTML tag `div`")),
+        "{log}"
+    );
+    if deny {
+        assert!(log.contains("-D rustdoc::invalid-html-tags"), "{log}");
+    }
     Ok(())
 }
 
@@ -128,6 +163,30 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
     let krate = Crate::crates_io(crate_name, version);
     let release = test
         .environment
+        .release(&krate)
+        .run(|build| Ok(build.build_docs()))?
+        .into_inner();
+
+    assert!(release.build_succeeded());
+    assert!(release.has_docs());
+    assert!(release.default_target().coverage().is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires Docker, network access, and a Rust toolchain"]
+fn builds_ring_without_lints_cap() -> Result<()> {
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
+        .build()?;
+    // ring originally motivated --cap-lints warn; keep the explicit cap supported.
+    let krate = Crate::crates_io("ring", "0.17.14");
+    let release = environment
         .release(&krate)
         .run(|build| Ok(build.build_docs()))?
         .into_inner();
