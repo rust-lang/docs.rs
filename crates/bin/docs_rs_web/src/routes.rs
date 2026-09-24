@@ -256,6 +256,7 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
             "/crate/{name}/{version}/menus/releases/{*path}",
             get_internal(crate_details::get_all_releases),
         )
+        .route("/-/partial/alerts/", get_internal(status::alerts))
         .route(
             "/-/partial/abnormalities/",
             get_internal(status::abnormalities),

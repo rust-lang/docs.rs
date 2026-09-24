@@ -14,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response as AxumResponse},
 };
 use docs_rs_build_queue::AsyncBuildQueue;
-use docs_rs_database::service_config::Abnormality;
+use docs_rs_database::service_config::{Abnormality, Alert};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Template)]
@@ -59,6 +59,24 @@ pub(crate) async fn abnormalities(
     .into_response())
 }
 
+#[derive(Template)]
+#[template(path = "header/alerts.html")]
+#[derive(Debug, Clone)]
+struct Alerts {
+    alerts: Option<Alert>,
+}
+
+impl_axum_webpage! {
+    Alerts,
+    cache_policy = |_| CachePolicy::LongerInCdnAndBrowser
+}
+
+pub(crate) async fn alerts(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
+    Ok(Alerts {
+        alerts: warnings::load_alerts(&mut conn).await?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -69,11 +87,74 @@ mod tests {
     };
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
-    use docs_rs_database::service_config::{Abnormality, ConfigName, set_config};
+    use docs_rs_database::service_config::{Abnormality, Alert, ConfigName, set_config};
     use docs_rs_types::{KrateName, testing::V1};
     use docs_rs_uri::EscapedURI;
     use kuchikiki::traits::TendrilSink;
     use std::str::FromStr;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn alerts_partial_is_empty_without_alert() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let html = web
+            .assert_success_cached(
+                "/-/partial/alerts/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?;
+
+        assert!(html.trim().is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn alerts_partial_renders_configured_html() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let mut conn = env.async_conn().await?;
+        set_config(
+            &mut conn,
+            ConfigName::Alert,
+            Alert {
+                alert_id: 123,
+                text: "Scheduled <em>maintenance</em>. <a href=\"/details\">Learn more</a>".into(),
+            },
+        )
+        .await?;
+        drop(conn);
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(
+            web.assert_success_cached(
+                "/-/partial/alerts/",
+                CachePolicy::LongerInCdnAndBrowser,
+                env.config(),
+            )
+            .await?
+            .text()
+            .await?,
+        );
+
+        let input = page.select_first("#docsrs-alert-input").unwrap();
+        assert_eq!(input.attributes.borrow().get("data-id"), Some("123"));
+        assert!(page.select_first("label[for='docsrs-alert-input']").is_ok());
+        assert_eq!(
+            page.select_first("#docsrs-alert em")
+                .unwrap()
+                .text_contents(),
+            "maintenance"
+        );
+        assert_eq!(
+            page.select_first("#docsrs-alert a[href='/details']")
+                .unwrap()
+                .text_contents(),
+            "Learn more"
+        );
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn abnormalities_partial_renders_configured_link() -> Result<()> {

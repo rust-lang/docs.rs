@@ -18,6 +18,7 @@ prepare-gui-tests: _ensure_db_migrated
     just _builder build crate libtest 0.0.1
     just _builder build crate zbus 5.15.0
     just _builder build add-essential-files
+    SQLX_OFFLINE=1 cargo run -p docs_rs_admin -- database alert set --alert-id 123 'Scheduled <em>maintenance</em>'
 
 # Run browser assertions against an existing web server on localhost:3000.
 [group('testing')]

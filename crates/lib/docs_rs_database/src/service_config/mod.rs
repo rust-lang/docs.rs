@@ -3,7 +3,7 @@ mod abnormalities;
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 
-pub use abnormalities::Abnormality;
+pub use abnormalities::{Abnormality, Alert};
 
 #[derive(strum::IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
@@ -13,6 +13,7 @@ pub enum ConfigName {
     QueueLocked,
     Toolchain,
     Abnormality,
+    Alert,
 }
 
 pub async fn set_config(

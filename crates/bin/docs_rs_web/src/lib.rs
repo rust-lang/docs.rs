@@ -28,11 +28,3 @@ pub use docs_rs_build_limits::DEFAULT_MAX_TARGETS;
 pub use docs_rs_utils::{APP_USER_AGENT, BUILD_VERSION, RUSTDOC_STATIC_STORAGE_PREFIX};
 pub use font_awesome_as_a_crate::icons;
 pub use handlers::run_web_server;
-
-pub(crate) fn get_alert() -> Option<(&'static str, usize)> {
-    Some((
-        "We are changing which targets are built by default on May 1st.<br>\
-        <a href=\"https://blog.rust-lang.org/2026/04/04/docsrs-only-default-targets/\">Learn more</a>",
-        1,
-    ))
-}

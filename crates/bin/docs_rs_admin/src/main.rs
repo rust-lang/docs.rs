@@ -3,7 +3,7 @@ mod rebuilds;
 pub(crate) mod testing;
 
 use anyhow::{Context as _, Result, bail};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
 use docs_rs_build_queue::priority::{
@@ -13,7 +13,7 @@ use docs_rs_build_queue::priority::{
 use docs_rs_context::Context;
 use docs_rs_database::{
     crate_details,
-    service_config::{Abnormality, ConfigName, remove_config, set_config},
+    service_config::{Abnormality, Alert, ConfigName, remove_config, set_config},
 };
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
@@ -360,6 +360,12 @@ enum DatabaseSubcommand {
         version: Option<i64>,
     },
 
+    /// Manage the alert popup shown to the users.
+    Alert {
+        #[command(subcommand)]
+        command: AlertSubcommand,
+    },
+
     /// Manage the abnormality shown in the site header
     Abnormality {
         #[command(subcommand)]
@@ -404,6 +410,8 @@ impl DatabaseSubcommand {
             .context("Failed to run database migrations")?,
 
             Self::Abnormality { command } => command.handle_args(ctx).await?,
+
+            Self::Alert { command } => command.handle_args(ctx).await?,
 
             Self::UpdateLatestVersionId => {
                 let pool = ctx.pool()?;
@@ -463,6 +471,46 @@ impl DatabaseSubcommand {
 
             Self::Limits { command } => command.handle_args(ctx).await?,
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Subcommand)]
+enum AlertSubcommand {
+    /// Set the alert shown to users as popup.
+    Set {
+        /// Identifier used to remember dismissals; defaults to the current Unix timestamp.
+        #[arg(long, default_value_t = Utc::now().timestamp() as usize)]
+        alert_id: usize,
+        /// HTML text that will be shown as popup to the users.
+        text: String,
+    },
+
+    /// Remove the alert popup.
+    Remove,
+}
+
+impl AlertSubcommand {
+    async fn handle_args(self, ctx: Context) -> Result<()> {
+        let mut conn = ctx
+            .pool()?
+            .get_async()
+            .await
+            .context("failed to get a database connection")?;
+
+        match self {
+            Self::Set { alert_id, text } => {
+                set_config(&mut conn, ConfigName::Alert, Alert { alert_id, text })
+                    .await
+                    .context("failed to set alert in database")?;
+            }
+            Self::Remove => {
+                remove_config(&mut conn, ConfigName::Alert)
+                    .await
+                    .context("failed to remove alert from database")?;
+            }
+        }
+
         Ok(())
     }
 }
