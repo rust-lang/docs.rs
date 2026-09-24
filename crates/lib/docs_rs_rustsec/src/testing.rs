@@ -42,7 +42,7 @@ impl RustsecMockServer {
             if empty {
                 String::new()
             } else {
-                include_str!("../../tests/fixtures/owned-alloc.json").to_owned()
+                include_str!("../tests/fixtures/owned-alloc.json").to_owned()
             }
         });
         self.mocks
