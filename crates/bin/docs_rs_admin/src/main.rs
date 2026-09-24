@@ -1,4 +1,3 @@
-mod cleanup_s3;
 mod rebuilds;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -19,7 +18,7 @@ use docs_rs_database::{
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_headers::SurrogateKey;
 use docs_rs_repository_stats::workspaces;
-use docs_rs_types::{CrateId, KrateName, Version};
+use docs_rs_types::{ByteSize, CrateId, Duration, KrateName, Version};
 use docs_rs_uri::EscapedURI;
 use futures_util::StreamExt;
 use rebuilds::queue_rebuilds_faulty_rustdoc;
@@ -80,7 +79,8 @@ impl CommandLine {
             .await?
             .with_build_queue()?
             .with_repository_stats()?
-            .with_registry_api()?
+            .with_registry_api()
+            .await?
             .with_maybe_cdn()?
             .build()?;
 
@@ -372,12 +372,6 @@ enum DatabaseSubcommand {
     /// Updates GitHub/GitLab stats for crates.
     UpdateRepositoryFields,
 
-    /// Clean up the s3 bucket from non-archive storage files.
-    CleanS3Bucket {
-        #[arg(long)]
-        dry_run: bool,
-    },
-
     /// Backfill GitHub/GitLab stats for crates.
     BackfillRepositoryStats,
 
@@ -439,14 +433,6 @@ impl DatabaseSubcommand {
 
                 println!("update repository stats where outdated...");
                 ctx.repository_stats()?.update_all_crates().await?;
-            }
-
-            Self::CleanS3Bucket { dry_run } => {
-                println!("clean up s3 bucket...");
-                let mut conn = ctx.pool()?.get_async().await?;
-                let storage = ctx.storage()?;
-
-                cleanup_s3::cleanup_s3_bucket(&mut conn, storage, dry_run).await?;
             }
 
             Self::BackfillRepositoryStats => {
@@ -547,11 +533,11 @@ enum LimitsSubcommand {
     Set {
         crate_name: KrateName,
         #[arg(long)]
-        memory: Option<usize>,
+        memory: Option<ByteSize>,
         #[arg(long)]
         targets: Option<usize>,
         #[arg(long)]
-        timeout: Option<usize>,
+        timeout: Option<Duration>,
     },
 
     /// Remove sandbox limits overrides for a crate
@@ -585,7 +571,7 @@ impl LimitsSubcommand {
                 let overrides = Overrides {
                     memory,
                     targets,
-                    timeout: timeout.map(|timeout| std::time::Duration::from_secs(timeout as _)),
+                    timeout,
                 };
                 Overrides::save(&mut conn, &crate_name, overrides).await?;
                 let overrides = Overrides::for_crate(&mut conn, &crate_name).await?;

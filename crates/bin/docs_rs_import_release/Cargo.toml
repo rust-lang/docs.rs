@@ -9,7 +9,6 @@ description = "Import a successfully built release from docs.rs into a test depl
 
 [dependencies]
 anyhow = { workspace = true }
-async-tar = { version = "0.6.0", default-features = false, features = ["runtime-tokio", "xattr"] }
 clap = { workspace = true }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
 docs_rs_context = { path = "../../lib/docs_rs_context" }

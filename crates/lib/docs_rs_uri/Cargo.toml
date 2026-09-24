@@ -8,7 +8,7 @@ edition = "2024"
 [dependencies]
 askama = { workspace = true }
 http = { workspace = true }
-percent-encoding = "2.2.0"
+percent-encoding = { workspace = true }
 serde_with = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }

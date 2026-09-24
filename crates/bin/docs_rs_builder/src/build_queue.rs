@@ -1,12 +1,12 @@
 use crate::BuilderMetrics;
-use crate::{PackageKind, RustwideBuilder};
+use crate::RustwideBuilder;
+use crate::metrics::BuildResult;
 use anyhow::Result;
 use docs_rs_build_queue::{BuildPackageSummary, QueuedCrate};
 use docs_rs_context::Context;
 use docs_rs_fastly::CdnBehaviour as _;
 use docs_rs_logging::BUILD_PACKAGE_TRANSACTION_NAME;
-use docs_rs_utils::{Handle, retry};
-use opentelemetry::KeyValue;
+use docs_rs_utils::Handle;
 use std::time::Instant;
 use tracing::{error, info_span};
 
@@ -25,22 +25,18 @@ fn process_next_crate(
         let res = {
             let instant = Instant::now();
             let res = f(to_process);
-            let elapsed = instant.elapsed().as_secs_f64();
-            builder_metrics.build_time.record(
-                elapsed,
-                &[KeyValue::new(
-                    "result",
-                    match &res {
-                        Ok(summary) => {
-                            if summary.successful {
-                                "success"
-                            } else {
-                                "failed"
-                            }
+            builder_metrics.record_build_time(
+                instant.elapsed(),
+                match &res {
+                    Ok(summary) => {
+                        if summary.successful {
+                            BuildResult::Success
+                        } else {
+                            BuildResult::Failed
                         }
-                        Err(_) => "error",
-                    },
-                )],
+                    }
+                    Err(_) => BuildResult::Error,
+                },
             );
             res
         };
@@ -82,24 +78,16 @@ pub(crate) fn build_next_queue_package(
 
         processed = true;
 
-        if let Err(err) = retry(|| builder.reinitialize_workspace_if_interval_passed(), 3) {
-            error!(?err, "Reinitialize workspace failed after retries");
+        if let Err(err) = builder.perform_maintenance() {
+            error!(
+                ?err,
+                "Builder maintenance failed after retries, locking queue"
+            );
             queue.lock()?;
             return Err(err);
         }
 
-        if let Err(err) = builder.update_toolchain_and_add_essential_files() {
-            error!(?err, "Updating toolchain failed, locking queue");
-            queue.lock()?;
-            return Err(err);
-        }
-
-        builder.build_package(
-            &krate.name,
-            &krate.version,
-            PackageKind::CratesIo,
-            krate.attempt == 0,
-        )
+        builder.build_package(&krate.name, &krate.version)
     })?;
 
     Ok(processed)

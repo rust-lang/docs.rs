@@ -1,0 +1,48 @@
+//! The service-independent parts of a docs.rs documentation build.
+//!
+//! This crate contains the canonical rustwide workspace, sandbox, and Cargo
+//! command configuration used to build documentation. Production concerns such
+//! as the build queue, database records, and artifact storage belong in
+//! `docs_rs_builder`, while local and CI frontends can use this crate directly.
+
+#![doc = include_str!("../README.md")]
+
+mod build;
+mod command;
+pub mod logging;
+mod release;
+mod result;
+mod rustwide_ext;
+mod sandbox;
+#[doc(hidden)]
+pub mod testing;
+mod toolchain;
+pub mod utils;
+mod workspace;
+mod workspace_lock;
+
+use std::sync::LazyLock;
+
+pub use build::ReleaseBuild;
+pub use command::PrepareCommand;
+pub use release::{Fetched, ReleaseContext, Unfetched};
+pub use result::{
+    BuildResult, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput, TargetBuildResult,
+    step::{BuildStepError, StepFailure, StepReport, StepResult, StepResultExt},
+};
+pub use rustwide_ext::ToolchainExt;
+pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
+pub use workspace::{
+    BuildEnvironment, ImagePullPolicy, MaintenanceResult, SANDBOX_IMAGE_LINUX,
+    SANDBOX_IMAGE_LINUX_MICRO, SandboxImageSource,
+};
+
+use docs_rs_types::{KrateName, Version};
+
+/// Version of docs.rs whose build behavior this crate implements.
+pub const BUILDER_VERSION: &str = docs_rs_utils::BUILD_VERSION;
+
+/// dummy crate name & version we're using to build & upload shared static resources
+pub static DUMMY_CRATE_NAME: LazyLock<KrateName> =
+    LazyLock::new(|| "empty-library".parse().unwrap());
+pub const DUMMY_CRATE_VERSION: Version = Version::new(1, 0, 0);

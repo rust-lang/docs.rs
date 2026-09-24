@@ -3,8 +3,8 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, CompressionAlgorithm, CrateId, DocCoverage, Feature,
-    KrateName, ReleaseId, Version,
+    BuildError, BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, DocCoverage,
+    Feature, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
@@ -35,7 +35,7 @@ pub async fn finish_release(
     has_examples: bool,
     compression_algorithms: impl IntoIterator<Item = CompressionAlgorithm>,
     repository_id: Option<i32>,
-    source_size: u64,
+    source_size: ByteSize,
 ) -> Result<()> {
     let source_dir = source_dir.as_ref();
     debug!("updating release data");
@@ -49,6 +49,10 @@ pub async fn finish_release(
     let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
+
+    // NOTE: we're still inserting dummy data in case of empty release-data fields
+    // or missing release data.
+    let registry_data = registry_data.clone().for_database();
 
     let result = sqlx::query!(
         r#"UPDATE releases
@@ -66,14 +70,13 @@ pub async fn finish_release(
                readme = $13,
                keywords = $14,
                have_examples = $15,
-               downloads = $16,
-               doc_targets = $17,
-               is_library = $18,
-               documentation_url = $19,
-               default_target = $20,
-               features = $21,
-               repository_id = $22,
-               source_size = $23
+               doc_targets = $16,
+               is_library = $17,
+               documentation_url = $18,
+               default_target = $19,
+               features = $20,
+               repository_id = $21,
+               source_size = $22
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
@@ -90,14 +93,13 @@ pub async fn finish_release(
         readme,
         serde_json::to_value(&metadata_pkg.keywords)?,
         has_examples,
-        registry_data.downloads,
         serde_json::to_value(doc_targets)?,
         is_library,
         metadata_pkg.documentation,
         default_target,
         features as Vec<Feature>,
         repository_id,
-        source_size as i64,
+        source_size as _,
     )
     .execute(&mut *conn)
     .await?;
@@ -218,7 +220,7 @@ pub async fn finish_build<E>(
     rustc_version: &str,
     docsrs_version: &str,
     build_status: BuildStatus,
-    documentation_size: Option<u64>,
+    documentation_size: Option<ByteSize>,
     memory_peak: Option<u64>,
     build_error: Option<&E>,
 ) -> Result<()>
@@ -263,7 +265,7 @@ where
         build_status as BuildStatus,
         hostname.to_str().unwrap_or(""),
         build_error.map(|err| err.to_string()),
-        documentation_size.map(|v| v as i64),
+        documentation_size as _,
         rustc_date,
         build_error.map(|err| err.kind()),
         memory_peak.map(|v| v as i64),
@@ -658,6 +660,7 @@ mod test {
         name: &KrateName,
         version: &Version,
         keywords: KL,
+        registry_data: &ReleaseData,
     ) -> Result<ReleaseId>
     where
         K: Into<String>,
@@ -691,16 +694,69 @@ mod test {
             tempdir.path(),
             DEFAULT_TARGET,
             vec![DEFAULT_TARGET.to_string()],
-            &ReleaseData::default(),
+            registry_data,
             true,
             false,
             iter::empty(),
             None,
-            24,
+            24u64.into(),
         )
         .await?;
 
         Ok(release_id)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_finish_release_uses_dummy_release_time() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            iter::empty::<String>(),
+            &ReleaseData::dummy(),
+        )
+        .await?;
+        let release_time = sqlx::query_scalar!(
+            "SELECT release_time FROM releases WHERE id = $1",
+            release_id.0,
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        assert!(release_time.is_some());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_finish_release_uses_dummy_release_time_when_missing() -> Result<()> {
+        let test_metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            iter::empty::<String>(),
+            &ReleaseData {
+                release_time: None,
+                yanked: false,
+            },
+        )
+        .await?;
+        let release_time = sqlx::query_scalar!(
+            "SELECT release_time FROM releases WHERE id = $1",
+            release_id.0,
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        assert!(release_time.is_some());
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -814,7 +870,7 @@ mod test {
             "rustc_version",
             "docsrs_version",
             BuildStatus::Success,
-            Some(42),
+            Some(42u64.into()),
             Some(23),
             None::<&SimpleBuildError>,
         )
@@ -903,8 +959,14 @@ mod test {
 
         let mut conn = db.async_conn().await?;
 
-        let release_id =
-            fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 1", "kw 2"]).await?;
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 1", "kw 2"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         let kw_r = sqlx::query!(
             r#"SELECT
@@ -943,10 +1005,24 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         // same version so we have the same release
-        fake_release_with_keywords(&mut conn, &KRATE, &V0_1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V0_1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -957,10 +1033,23 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        fake_release_with_keywords(&mut conn, &KRATE, &V1, ["kw 3", "kw 4"]).await?;
+        fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V1,
+            ["kw 3", "kw 4"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
-        let release_id =
-            fake_release_with_keywords(&mut conn, &KRATE, &V1, ["kw 1", "kw 2"]).await?;
+        let release_id = fake_release_with_keywords(
+            &mut conn,
+            &KRATE,
+            &V1,
+            ["kw 1", "kw 2"],
+            &ReleaseData::dummy(),
+        )
+        .await?;
 
         let mut conn = db.async_conn().await?;
         let kw_r = sqlx::query!(
@@ -1464,12 +1553,12 @@ mod test {
             tempdir.path(),
             DEFAULT_TARGET,
             vec![DEFAULT_TARGET.to_string()],
-            &ReleaseData::default(),
+            &ReleaseData::dummy(),
             true,
             false,
             iter::empty(),
             None,
-            24,
+            24u64.into(),
         )
         .await?;
 

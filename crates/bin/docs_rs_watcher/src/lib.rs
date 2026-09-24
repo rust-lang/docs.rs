@@ -88,6 +88,7 @@ async fn watch_registry(
 ) -> Result<()> {
     let mut last_gc = Instant::now();
     let queue = context.build_queue()?;
+    let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
         if queue.is_locked().await? {
@@ -96,7 +97,7 @@ async fn watch_registry(
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config, metrics).await {
+            match get_new_crates(context, &index, config, &metrics).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
                     metrics.record_poll_error(EventSource::Git);
@@ -104,12 +105,12 @@ async fn watch_registry(
                 }
             }
 
-            if last_gc.elapsed().as_secs() >= config.registry_gc_interval {
+            if last_gc.elapsed() >= *config.registry_gc_interval {
                 index.run_git_gc().await;
                 last_gc = Instant::now();
             }
         }
-        time::sleep(config.delay_between_registry_fetches).await;
+        time::sleep(*config.delay_between_registry_fetches).await;
     }
 }
 
@@ -145,7 +146,7 @@ pub async fn start_background_queue_rebuild(config: Arc<Config>, context: &Conte
 
     start_async_cron(
         "background queue rebuilder",
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
         move || {
             let pool = pool.clone();
             let build_queue = build_queue.clone();
@@ -168,7 +169,7 @@ pub async fn start_background_repository_stats_updater(context: &Context) -> Res
     let updater = context.repository_stats()?.clone();
     start_async_cron(
         "repository stats updater",
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
         move || {
             let updater = updater.clone();
             async move {

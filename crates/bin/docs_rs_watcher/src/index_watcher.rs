@@ -124,7 +124,7 @@ pub async fn set_last_seen_reference(
 
 async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
     let Some(cdn) = &cdn else {
-        info!(%krate, "no CDN configured, skippping crate invalidation");
+        info!(%krate, "no CDN configured, skipping crate invalidation");
         return;
     };
 
@@ -163,7 +163,9 @@ pub(crate) async fn get_new_crates(
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
     metrics.record_events_received(EventSource::Git, changes.len());
-    let crates_added = process_changes(context, &changes, config, metrics).await;
+    // NOTE: `Box::pin` to type-erase this future, otherwise we'll run into `recursion_limit`
+    // errors.
+    let crates_added = Box::pin(process_changes(context, &changes, config, metrics)).await;
 
     if let Err(err) = context.build_queue()?.reevaluate_priorities().await {
         error!(?err, "error reevaluating queued release priorities");
@@ -191,6 +193,7 @@ async fn process_changes(
         let crate_version = change.version();
         let change_type = change.kind();
 
+        // Start temporarily logging all changes, as preparation for the SQS event migration.
         debug!(
             target: "docs_rs_watcher::index_event",
             source = %EventSource::Git,
@@ -233,11 +236,7 @@ async fn process_changes(
 
 /// Process a crate change, returning whether the change was a crate addition or not.
 #[instrument(skip_all, fields(name, version))]
-pub(crate) async fn process_change(
-    context: &Context,
-    change: &Change,
-    config: &Config,
-) -> Result<bool> {
+async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
     // 1: use the `CrateVersion` from `crates-index-diff`.
     let crate_version = change.first_crate_version();
 
@@ -273,11 +272,8 @@ pub(crate) async fn process_change(
 }
 
 /// Processes crate changes, whether they got yanked or unyanked.
-pub(crate) async fn process_version_yank_status(
-    context: &Context,
-    release: &CrateVersion,
-    yanked: bool,
-) -> Result<()> {
+#[instrument(skip_all)]
+async fn process_version_yank_status(context: &Context, release: &CrateVersion) -> Result<()> {
     // FIXME: delay yanks of crates that have not yet finished building
     // https://github.com/rust-lang/docs.rs/issues/1934
     set_yanked(context, &release.name, &release.version, yanked).await?;
@@ -285,7 +281,8 @@ pub(crate) async fn process_version_yank_status(
     Ok(())
 }
 
-pub(crate) async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
+#[instrument(skip_all)]
+async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let build_queue = context.build_queue()?;
 
     let priority = build_queue.find_priority(&release.name).await?;
@@ -317,7 +314,8 @@ pub(crate) async fn process_version_added(context: &Context, release: &CrateVers
     Ok(())
 }
 
-pub(crate) async fn process_version_deleted(
+#[instrument(skip_all)]
+async fn process_version_deleted(
     context: &Context,
     config: &Config,
     release: &CrateVersion,
@@ -351,7 +349,8 @@ pub(crate) async fn process_version_deleted(
     Ok(())
 }
 
-pub(crate) async fn process_crate_deleted(
+#[instrument(skip_all)]
+async fn process_crate_deleted(
     context: &Context,
     config: &Config,
     krate: &KrateName,
@@ -370,6 +369,7 @@ pub(crate) async fn process_crate_deleted(
     context.build_queue()?.remove_crate_from_queue(krate).await
 }
 
+#[instrument(skip_all, fields(name=%name, version=%version, yanked=%yanked))]
 pub(crate) async fn set_yanked(
     context: &Context,
     name: &KrateName,

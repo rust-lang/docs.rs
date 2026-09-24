@@ -13,6 +13,7 @@ use axum::{
 };
 use docs_rs_database::PoolError;
 use docs_rs_storage::PathNotFoundError;
+use docs_rs_types::{KrateName, Version};
 use docs_rs_uri::EscapedURI;
 use std::borrow::Cow;
 use tracing::error;
@@ -37,12 +38,13 @@ pub(crate) struct AxumErrorPage {
     pub status: StatusCode,
     /// Optional navigation links to help the user recover. Empty for most errors.
     pub recovery: Vec<RecoveryLink>,
+    pub cache_policy: Option<CachePolicy>,
 }
 
 impl_axum_webpage! {
     AxumErrorPage,
     status = |err| err.status,
-
+    cache_policy = |page| page.cache_policy.clone().unwrap_or(CachePolicy::NoCaching)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,8 +56,8 @@ pub enum AxumNope {
     /// and offers recovery links (issue #2568).
     #[error("Requested resource not found in an existing crate version")]
     ResourceNotFoundInVersion {
-        name: String,
-        version: String,
+        name: KrateName,
+        version: Version,
         /// Whether the request used the `/latest/` alias (vs. a pinned version).
         is_latest_url: bool,
         /// Root of the docs for the requested version.
@@ -189,6 +191,29 @@ impl AxumNope {
         }
     }
 
+    /// Returns the cache policy for errors that can be cached in the browser or the CDN.
+    fn cache_policy(&self) -> Option<CachePolicy> {
+        match self {
+            AxumNope::Redirect(_target, _cache_policy) => unreachable!(),
+            AxumNope::ResourceNotFoundInVersion {
+                name,
+                is_latest_url,
+                ..
+            } => {
+                // ResourceNotFoundInVersion is used only for resources specific to a crate
+                // and a version. So we assume that 404 can only change when we rebuild
+                // the release.
+                // That means we can cache the 404 as long as the content itself.
+                Some(if *is_latest_url {
+                    CachePolicy::ForeverInCdn(name.into())
+                } else {
+                    CachePolicy::ForeverInCdnAndStaleInBrowser(name.into())
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Navigation links offered on the error page to help the user recover.
     /// Empty for every error except the contextual missing-page 404 (#2568).
     fn recovery_links(&self) -> Vec<RecoveryLink> {
@@ -244,6 +269,7 @@ impl IntoResponse for AxumNope {
             AxumNope::Redirect(target, cache_policy) => redirect_with_policy(target, cache_policy),
             _ => {
                 let recovery = self.recovery_links();
+                let cache_policy = self.cache_policy();
                 let ErrorInfo {
                     title,
                     message,
@@ -254,6 +280,7 @@ impl IntoResponse for AxumNope {
                     message,
                     status,
                     recovery,
+                    cache_policy,
                 }
                 .into_response()
             }
@@ -339,6 +366,8 @@ mod tests {
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironmentExt as _, async_wrapper,
     };
+    use docs_rs_types::testing::DUMMY;
+    use docs_rs_types::testing::V0_1;
     use kuchikiki::traits::TendrilSink;
 
     #[test]
@@ -498,7 +527,7 @@ mod tests {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
-                .name("dummy")
+                .name(DUMMY)
                 .version("0.1.0")
                 .rustdoc_file("dummy/index.html")
                 .create()
@@ -510,6 +539,7 @@ mod tests {
                 .get("/dummy/latest/dummy/removed_module/index.html")
                 .await?;
             assert_eq!(response.status(), 404);
+            response.assert_cache_control(CachePolicy::ForeverInCdn(DUMMY.into()), env.config());
 
             let body = response.text().await?;
             let page = kuchikiki::parse_html().one(body.as_str());
@@ -537,8 +567,8 @@ mod tests {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
-                .name("dummy")
-                .version("0.1.0")
+                .name(DUMMY)
+                .version(V0_1)
                 .rustdoc_file("dummy/index.html")
                 .create()
                 .await?;
@@ -549,6 +579,10 @@ mod tests {
                 .get("/dummy/0.1.0/dummy/removed_module/index.html")
                 .await?;
             assert_eq!(response.status(), 404);
+            response.assert_cache_control(
+                CachePolicy::ForeverInCdnAndStaleInBrowser(DUMMY.into()),
+                env.config(),
+            );
 
             let body = response.text().await?;
             let hrefs = recovery_hrefs(&body);
@@ -584,12 +618,15 @@ mod tests {
     #[test]
     fn json_error_body_includes_recovery_links() {
         async_wrapper(|_env| async move {
+            let version_root_path = format!("/{0}/latest/{0}/", DUMMY);
+            let crate_details_path = format!("/crate/{}/latest", DUMMY);
+
             let response = JsonAxumNope(AxumNope::ResourceNotFoundInVersion {
-                name: "dummy".into(),
-                version: "0.1.0".into(),
+                name: DUMMY,
+                version: V0_1,
                 is_latest_url: true,
-                version_root_url: EscapedURI::from_path("/dummy/latest/dummy/"),
-                crate_details_url: EscapedURI::from_path("/crate/dummy/latest"),
+                version_root_url: EscapedURI::from_path(&version_root_path),
+                crate_details_url: EscapedURI::from_path(&crate_details_path),
             })
             .into_response();
 
@@ -598,8 +635,8 @@ mod tests {
             let body: serde_json::Value = response.json().await?;
             let links = body["links"].as_array().unwrap();
             assert_eq!(links.len(), 2);
-            assert_eq!(links[0]["href"], "/dummy/latest/dummy/");
-            assert_eq!(links[1]["href"], "/crate/dummy/latest");
+            assert_eq!(links[0]["href"], version_root_path);
+            assert_eq!(links[1]["href"], crate_details_path);
 
             Ok(())
         });

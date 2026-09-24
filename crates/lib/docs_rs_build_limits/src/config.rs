@@ -1,10 +1,11 @@
 use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
+use docs_rs_types::ByteSize;
 
 #[derive(Debug, Default)]
 pub struct Config {
-    pub(crate) build_default_memory_limit: Option<usize>,
+    pub(crate) build_default_memory_limit: Option<ByteSize>,
 }
 
 impl AppConfig for Config {

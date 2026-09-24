@@ -1,0 +1,145 @@
+name: docs.rs build
+description: Build a packaged Rust crate with the docs.rs build runner and sandbox.
+
+inputs:
+  path:
+    description: Package or workspace directory, relative to the repository root.
+    default: '.'
+  package:
+    description: Cargo package specification. Required for virtual workspaces.
+    default: ''
+  small-image:
+    description: Use the smaller sandbox image with fewer native libraries. Accepts true or false.
+    default: 'false'
+  strict:
+    description: Also fail on JSON, coverage, or additional-target build failures.
+    default: 'false'
+
+outputs:
+  workspace:
+    description: Absolute rustwide workspace path containing build state and artifacts.
+    value: ${{ steps.prepare.outputs.workspace }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare build workspace
+      id: prepare
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        CRATE_PATH: ${{ inputs.path }}
+        STRICT: ${{ inputs.strict }}
+        SMALL_IMAGE: ${{ inputs.small-image }}
+      run: |
+        if [[ "$RUNNER_OS" != Linux ]]; then
+          echo '::error::docs.rs builds require a Linux host with Docker.'
+          exit 1
+        fi
+        case "$STRICT" in
+          true|false) ;;
+          *) echo '::error::strict must be true or false'; exit 1 ;;
+        esac
+        case "$SMALL_IMAGE" in
+          true|false) ;;
+          *) echo '::error::small-image must be true or false'; exit 1 ;;
+        esac
+        if [[ ! -f "$CRATE_PATH/Cargo.toml" ]]; then
+          echo '::error::No Cargo.toml found at the requested path.'
+          exit 1
+        fi
+        docker info > /dev/null
+        echo "workspace=$RUNNER_TEMP/docsrs-build" >> "$GITHUB_OUTPUT"
+
+    # Install the CLI from the action's source archive so both use the same
+    # commit, even if the requested branch/tag moves while this job runs.
+    # Archives have no .git directory. export-subst embeds their exact commit
+    # in source-commit.txt; github.sha would identify the calling crate instead.
+    # This SHA supplies the CLI's build metadata and keys its binary cache.
+    - name: Read the bundled runner revision
+      id: runner-source
+      shell: bash
+      run: |
+        # Use this repository's .git explicitly so an archived action nested
+        # in a caller's checkout cannot pick up the caller's commit by accident.
+        source_sha=$(git --git-dir="$GITHUB_ACTION_PATH/../../.git" rev-parse HEAD 2>/dev/null ||
+          cat "$GITHUB_ACTION_PATH/source-commit.txt")
+        echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+        echo "Building docs_rs_build from commit $source_sha"
+
+    - name: Install Rust stable for the build runner
+      shell: bash
+      run: rustup toolchain install --profile minimal --no-self-update stable
+
+    - name: Cache the docs.rs build runner
+      id: runner-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: docs-rs-build-runner-commit-v1-${{ steps.runner-source.outputs.sha }}
+        add-rust-environment-hash-key: 'false'
+        cache-targets: 'false'
+        cache-on-failure: 'true'
+
+    - name: Restore the rustwide workspace
+      id: workspace-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.prepare.outputs.workspace }}
+        # Rustwide manages changes to packages, images, and toolchains itself.
+        # Bump the version only when the workspace layout becomes incompatible.
+        key: docs-rs-workspace-v1-${{ runner.os }}-${{ runner.arch }}
+
+    # Keep image download time separate from CLI installation and doc builds.
+    - name: Pull the docs.rs Docker image
+      shell: bash
+      env:
+        SMALL_IMAGE: ${{ inputs.small-image }}
+      run: |
+        # Keep these names aligned with the CLI's default and --small-image.
+        image=ghcr.io/rust-lang/crates-build-env/linux
+        if [[ "$SMALL_IMAGE" == true ]]; then
+          image=ghcr.io/rust-lang/crates-build-env/linux-micro
+        fi
+        docker pull "$image"
+
+    - name: Install docs.rs build runner
+      # Swatinem/rust-cache restores the binary and Cargo installation metadata,
+      # but cargo install --path always rebuilds even when those were restored.
+      # Skip installation on an exact commit-cache hit to reuse the binary;
+      # otherwise build from the same source archive that provided this action.
+      if: steps.runner-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        CARGO_TARGET_DIR: ${{ runner.temp }}/docsrs-runner-target
+        GIT_SHA: ${{ steps.runner-source.outputs.sha }}
+      run: cargo +stable install --path "$GITHUB_ACTION_PATH/../../crates/bin/docs_rs_build" --locked --force
+
+    - name: Build documentation as docs.rs
+      id: build
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        CRATE_PATH: ${{ inputs.path }}
+        PACKAGE: ${{ inputs.package }}
+        STRICT: ${{ inputs.strict }}
+        SMALL_IMAGE: ${{ inputs.small-image }}
+        BUILD_WORKSPACE: ${{ steps.prepare.outputs.workspace }}
+      run: |
+        args=(--workspace "$BUILD_WORKSPACE")
+        if [[ -n "$PACKAGE" ]]; then
+          args+=(--package "$PACKAGE")
+        fi
+        if [[ "$SMALL_IMAGE" == true ]]; then
+          args+=(--small-image)
+        fi
+        if [[ "$STRICT" == true ]]; then
+          args+=(--strict)
+        fi
+        docs_rs_build "${args[@]}" -- "$CRATE_PATH"
+
+    - name: Save the rustwide workspace
+      if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.build.outcome != '' && steps.workspace-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.prepare.outputs.workspace }}
+        key: ${{ steps.workspace-cache.outputs.cache-primary-key }}

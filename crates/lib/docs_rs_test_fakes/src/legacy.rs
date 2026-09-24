@@ -15,8 +15,8 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, DocCoverage, KrateName, ReleaseId, SimpleBuildError, Version,
-    VersionReq,
+    BuildError, BuildId, BuildStatus, ByteSize, DocCoverage, KrateName, ReleaseId,
+    SimpleBuildError, Version, VersionReq,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -146,11 +146,7 @@ impl<'a> FakeRelease<'a> {
             doc_targets: Vec::new(),
             default_target: None,
             registry_crate_data: CrateData { owners: Vec::new() },
-            registry_release_data: ReleaseData {
-                release_time: Utc::now(),
-                yanked: false,
-                downloads: 0,
-            },
+            registry_release_data: ReleaseData::dummy(),
             has_docs: true,
             has_examples: false,
             readme: None,
@@ -172,7 +168,7 @@ impl<'a> FakeRelease<'a> {
     }
 
     pub fn release_time(mut self, new: DateTime<Utc>) -> Self {
-        self.registry_release_data.release_time = new;
+        self.registry_release_data.release_time = Some(new);
         self
     }
 
@@ -565,7 +561,7 @@ impl<'a> FakeRelease<'a> {
             self.has_examples,
             iter::once(stats.alg),
             repository,
-            24,
+            ByteSize::b(24),
         )
         .await?;
         docs_rs_database::releases::update_crate_data_in_database(
@@ -679,7 +675,7 @@ impl FakeBuild {
             &self.rustc_version,
             &self.docsrs_version,
             self.build_status,
-            Some(42),
+            Some(ByteSize::b(42)),
             self.memory_peak,
             None::<&SimpleBuildError>,
         )

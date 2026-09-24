@@ -1,12 +1,11 @@
 use anyhow::Result;
-use docs_rs_types::KrateName;
+use docs_rs_types::{ByteSize, Duration, KrateName};
 use futures_util::stream::TryStreamExt;
-use std::time::Duration;
 use tracing::warn;
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Overrides {
-    pub memory: Option<usize>,
+    pub memory: Option<ByteSize>,
     pub targets: Option<usize>,
     pub timeout: Option<Duration>,
 }
@@ -14,7 +13,7 @@ pub struct Overrides {
 macro_rules! row_to_overrides {
     ($row:expr) => {{
         Overrides {
-            memory: $row.max_memory_bytes.map(|i| i as usize),
+            memory: $row.max_memory_bytes,
             targets: $row.max_targets.map(|i| i as usize),
             timeout: $row.timeout_seconds.map(|i| Duration::from_secs(i as u64)),
         }
@@ -27,7 +26,7 @@ impl Overrides {
             r#"
             SELECT
                 crate_name as "crate_name: KrateName",
-                max_memory_bytes,
+                max_memory_bytes as "max_memory_bytes: ByteSize",
                 timeout_seconds,
                 max_targets
             FROM sandbox_overrides
@@ -44,7 +43,12 @@ impl Overrides {
         krate: &KrateName,
     ) -> Result<Option<Self>> {
         Ok(sqlx::query!(
-            "SELECT * FROM sandbox_overrides WHERE crate_name = $1",
+            r#"SELECT
+                crate_name as "crate_name: KrateName",
+                max_memory_bytes as "max_memory_bytes: ByteSize",
+                timeout_seconds,
+                max_targets
+            FROM sandbox_overrides WHERE crate_name = $1"#,
             krate as _
         )
         .fetch_optional(conn)
@@ -86,7 +90,7 @@ impl Overrides {
                     timeout_seconds = $4
             ",
             krate as _,
-            overrides.memory.map(|i| i as i64),
+            overrides.memory as _,
             overrides.targets.map(|i| i as i32),
             overrides.timeout.map(|d| d.as_secs() as i32),
         )
@@ -145,9 +149,9 @@ mod test {
 
         // overwrite with full overrides
         let expected = Overrides {
-            memory: Some(100_000),
+            memory: Some(ByteSize::b(100_000)),
             targets: Some(1),
-            timeout: Some(Duration::from_secs(300)),
+            timeout: Some(Duration::from_secs(300).into()),
         };
         Overrides::save(&mut conn, &krate, expected).await?;
         let actual = Overrides::for_crate(&mut conn, &krate).await?;
@@ -155,7 +159,7 @@ mod test {
 
         // overwrite with partial overrides
         let expected = Overrides {
-            memory: Some(1),
+            memory: Some(ByteSize::b(1)),
             ..Overrides::default()
         };
         Overrides::save(&mut conn, &krate, expected).await?;

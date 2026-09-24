@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases\n           SET release_time = $3\n           FROM crates\n           WHERE crates.id = releases.crate_id\n             AND crates.name = $1\n             AND releases.version = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1eadbdf3aea6c6a21c40c8d2af79e244e8a9b001751dac4874a5d03f0b4be759"
+}

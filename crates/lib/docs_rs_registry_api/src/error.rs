@@ -4,6 +4,7 @@ use reqwest::StatusCode;
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned while reading registry data.
 pub enum Error {
     #[error("Invalid API url")]
     InvalidApiUrl,
@@ -11,6 +12,12 @@ pub enum Error {
     CrateIoApiError(StatusCode, ApiErrors),
     #[error("Error from crates.io: {0}\n{1}")]
     CrateIoError(StatusCode, String),
+    #[error("Invalid search cursor: {0}")]
+    InvalidSearchCursor(String),
+    #[error(transparent)]
+    SparseIndexError(#[from] Box<crates_index::Error>),
+    #[error(transparent)]
+    HttpLibError(#[from] http::Error),
     #[error("missing releases in crates.io response")]
     MissingReleases,
     #[error("missing metadata in crates.io response")]
@@ -22,13 +29,25 @@ pub enum Error {
 }
 
 impl Error {
-    /// return the HTTP status code of any error inside, if there is any.
+    /// Return the associated HTTP status code, when the error contains one.
     pub fn status(&self) -> Option<StatusCode> {
         match self {
             Self::CrateIoError(status, _) | Self::CrateIoApiError(status, _) => Some(*status),
             Self::HttpError(error, _body) => error.status(),
             _ => None,
         }
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(reqwest_middleware::Error::Reqwest(err), String::new())
+    }
+}
+
+impl From<crates_index::Error> for Error {
+    fn from(err: crates_index::Error) -> Self {
+        Box::new(err).into()
     }
 }
 

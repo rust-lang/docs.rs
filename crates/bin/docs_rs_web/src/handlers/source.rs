@@ -275,12 +275,12 @@ mod tests {
     use axum_extra::headers::{ContentType, ETag, HeaderMapExt as _};
     use docs_rs_headers::IfNoneMatch;
     use docs_rs_storage::StorageKind;
-    use docs_rs_types::KrateName;
-    use docs_rs_uri::encode_url_path;
+    use docs_rs_types::{ByteSize, KrateName};
     use kuchikiki::traits::TendrilSink;
     use mime::APPLICATION_PDF;
     use reqwest::StatusCode;
     use std::str::FromStr as _;
+    use test_case::test_case;
 
     fn get_file_list_links(body: &str) -> Vec<String> {
         let dom = kuchikiki::parse_html().one(body);
@@ -294,11 +294,14 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn fetch_source_file_utf8_path() {
+    #[test_case("序.pdf", "%E5%BA%8F.pdf"; "utf8 path")]
+    #[test_case(
+        "templates/_base_/src-tauri/capabilities/%(v2)%default.json.lte",
+        "templates/_base_/src-tauri/capabilities/%25(v2)%25default.json.lte";
+        "literal percent signs"
+    )]
+    fn fetch_source_file_utf8_path(filename: &str, encoded_filename: &str) {
         async_wrapper(|env| async move {
-            let filename = "序.pdf";
-
             env.fake_release()
                 .await
                 .name("fake")
@@ -309,15 +312,15 @@ mod tests {
 
             let web = env.web_app().await;
             let response = web
-                .get(&format!(
-                    "/crate/fake/0.1.0/source/{}",
-                    encode_url_path(filename)
-                ))
+                .get(&format!("/crate/fake/0.1.0/source/{encoded_filename}"))
                 .await?;
             assert!(response.status().is_success());
+            let canonical_url = format!(
+                "<https://docs.rs/crate/fake/latest/source/{encoded_filename}>; rel=\"canonical\"",
+            );
             assert_eq!(
                 response.headers().get("link").unwrap(),
-                "<https://docs.rs/crate/fake/latest/source/%E5%BA%8F.pdf>; rel=\"canonical\"",
+                canonical_url.as_str(),
             );
             assert!(response.text().await?.contains("some_random_content"));
             Ok(())
@@ -712,8 +715,9 @@ mod tests {
             .storage_config(
                 docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
                     |mut cfg| {
-                        cfg.max_file_size = 1;
-                        cfg.max_file_size_html = 1;
+                        let size = ByteSize::b(1);
+                        cfg.max_file_size = size;
+                        cfg.max_file_size_html = size;
                         cfg
                     },
                 ),

@@ -1,6 +1,8 @@
 use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
+use docs_rs_types::Duration;
+use std::path::PathBuf;
 use std::{path::PathBuf, time::Duration};
 use url::Url;
 
@@ -51,7 +53,7 @@ pub struct Config {
     /// How long to wait between registry checks
     pub delay_between_registry_fetches: Duration,
     // Time between 'git gc --auto' calls in seconds
-    pub registry_gc_interval: u64,
+    pub registry_gc_interval: Duration,
 
     // automatic rebuild configuration
     pub max_queued_rebuilds: Option<u16>,
@@ -82,16 +84,16 @@ impl AppConfig for Config {
 
             crates_io_events: SqsConfig::if_configured()?,
 
-            delay_between_registry_fetches: Duration::from_secs(env::<u64>(
+            delay_between_registry_fetches: env(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
-                60,
-            )?),
-            registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", 60 * 60)?,
+                Duration::from_mins(1),
+            )?,
+            registry_gc_interval: env("DOCSRS_REGISTRY_GC_INTERVAL", Duration::from_hours(1))?,
             max_queued_rebuilds: maybe_env("DOCSRS_MAX_QUEUED_REBUILDS")?,
-            delete_lock_timeout: Duration::from_secs(env::<u64>(
+            delete_lock_timeout: env(
                 "DOCSRS_DELETE_LOCK_TIMEOUT_SECONDS",
-                20 * 60,
-            )?),
+                Duration::from_mins(20),
+            )?,
             repository: docs_rs_repository_stats::Config::from_environment()?,
         })
     }

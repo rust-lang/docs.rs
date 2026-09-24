@@ -93,7 +93,7 @@ async fn apply_middleware(
                     .then_some(middleware::from_fn(log_timeouts_to_sentry)),
             ))
             .layer(option_layer(config.request_timeout.map(|to| {
-                TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to)
+                TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to.into())
             })))
             .layer(Extension(context.clone()))
             .layer(Extension(context.pool()?.clone()))

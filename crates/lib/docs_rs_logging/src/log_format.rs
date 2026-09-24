@@ -1,10 +1,25 @@
-use std::{fmt, str::FromStr};
+use std::{
+    fmt,
+    io::{self, IsTerminal as _},
+    str::FromStr,
+};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogFormat {
-    Json,
-    #[default]
+    Full,
+    Compact,
     Pretty,
+    Json,
+}
+
+impl Default for LogFormat {
+    fn default() -> Self {
+        if io::stdout().is_terminal() {
+            LogFormat::Compact
+        } else {
+            LogFormat::Json
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -22,10 +37,16 @@ impl FromStr for LogFormat {
     type Err = InvalidLogFormat;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "json" => Ok(Self::Json),
-            "pretty" => Ok(Self::Pretty),
-            _ => Err(InvalidLogFormat(s.to_string())),
+        if s.eq_ignore_ascii_case("full") {
+            Ok(Self::Full)
+        } else if s.eq_ignore_ascii_case("compact") {
+            Ok(Self::Compact)
+        } else if s.eq_ignore_ascii_case("pretty") {
+            Ok(Self::Pretty)
+        } else if s.eq_ignore_ascii_case("json") {
+            Ok(Self::Json)
+        } else {
+            Err(InvalidLogFormat(s.to_string()))
         }
     }
 }

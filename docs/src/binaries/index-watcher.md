@@ -25,7 +25,7 @@ every release already present in the index.
 To start from a particular Git reference, set it before starting the watcher:
 
 ```console
-$ just cli-queue-reset-last-seen-ref <GIT_REF>
+$ just watcher queue set-last-seen-reference <GIT_REF>
 ```
 
 Omit the reference, or pass `--head`, to reset it to the index's current HEAD.

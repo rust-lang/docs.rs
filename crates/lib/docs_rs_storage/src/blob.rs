@@ -3,7 +3,7 @@ use anyhow::Result;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use docs_rs_headers::{ETag, compute_etag};
-use docs_rs_types::CompressionAlgorithm;
+use docs_rs_types::{ByteSize, CompressionAlgorithm};
 use mime::Mime;
 use std::{fmt, io::Cursor, path::PathBuf};
 use tokio::io::{self, AsyncBufRead, AsyncBufReadExt};
@@ -124,7 +124,7 @@ impl StreamingBlob {
         // This is because we want a failure here in this method when the data is corrupted,
         // so we can directly act on that, and users don't have any errors when they just
         // stream the data.
-        // This won't _comsume_ the bytes. The user of this StreamingBlob will still be able
+        // This won't _consume_ the bytes. The user of this StreamingBlob will still be able
         // to stream the whole content.
         //
         // This doesn't work 100% of the time. We might get other i/o error here,
@@ -145,8 +145,8 @@ impl StreamingBlob {
     }
 
     /// consume the inner stream and materialize the full blob into memory.
-    pub async fn materialize(mut self, max_size: usize) -> Result<Blob> {
-        let mut content = SizedBuffer::new(max_size);
+    pub async fn materialize(mut self, max_size: ByteSize) -> Result<Blob> {
+        let mut content = SizedBuffer::new(max_size.as_u64() as usize);
         content.reserve(self.content_length.unwrap_or(16 * 1024));
 
         io::copy(&mut self.content, &mut content).await?;
@@ -208,7 +208,7 @@ mod test {
         {
             let stream = streaming_blob(CONTENT, None);
             assert_eq!(stream.content_length, Some(CONTENT.len()));
-            let blob = stream.materialize(usize::MAX).await?;
+            let blob = stream.materialize(ByteSize::MAX).await?;
             assert_eq!(blob.content, CONTENT);
             assert!(blob.compression.is_none());
         }
@@ -218,7 +218,7 @@ mod test {
             let stream = streaming_blob(CONTENT, None).decompress().await?;
             // no compression, content length stays valid
             assert_eq!(stream.content_length, Some(CONTENT.len()));
-            let blob = stream.materialize(usize::MAX).await?;
+            let blob = stream.materialize(ByteSize::MAX).await?;
             assert_eq!(blob.content, CONTENT);
             assert!(blob.compression.is_none());
         }
@@ -236,7 +236,7 @@ mod test {
         {
             let stream = streaming_blob(NOT_ZSTD, Some(alg));
             assert_eq!(stream.content_length, Some(NOT_ZSTD.len()));
-            let blob = stream.materialize(usize::MAX).await?;
+            let blob = stream.materialize(ByteSize::MAX).await?;
             assert_eq!(blob.content, NOT_ZSTD);
             assert_eq!(blob.compression, Some(alg));
         }
@@ -279,7 +279,7 @@ mod test {
         {
             let stream = streaming_blob(compressed_content.clone(), Some(alg));
             assert_eq!(stream.content_length, Some(compressed_content.len()));
-            let blob = stream.materialize(usize::MAX).await?;
+            let blob = stream.materialize(ByteSize::MAX).await?;
             assert_eq!(blob.content, compressed_content);
             assert_eq!(blob.content.last_chunk::<3>().unwrap(), &ZSTD_EOF_BYTES);
             assert_eq!(blob.compression, Some(alg));
@@ -292,7 +292,7 @@ mod test {
                 .await?;
             // content length becomes unknown with decompression
             assert!(stream.content_length.is_none());
-            let blob = stream.materialize(usize::MAX).await?;
+            let blob = stream.materialize(ByteSize::MAX).await?;
             assert_eq!(blob.content, CONTENT);
             assert!(blob.compression.is_none());
         }

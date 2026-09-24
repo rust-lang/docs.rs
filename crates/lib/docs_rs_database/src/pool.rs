@@ -45,8 +45,8 @@ impl Pool {
         otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Pool, PoolError> {
         let acquire_timeout = Duration::from_secs(30);
-        let max_lifetime = Duration::from_secs(30 * 60);
-        let idle_timeout = Duration::from_secs(10 * 60);
+        let max_lifetime = Duration::from_mins(30);
+        let idle_timeout = Duration::from_mins(10);
 
         let mut options = PgPoolOptions::new()
             .max_connections(config.max_pool_size)
@@ -80,7 +80,7 @@ impl Pool {
         }
 
         let async_pool = options
-            .connect_lazy(&config.database_url)
+            .connect_lazy(config.database_url.as_str())
             .map_err(PoolError::AsyncPoolCreationFailed)?;
 
         Ok(Pool {

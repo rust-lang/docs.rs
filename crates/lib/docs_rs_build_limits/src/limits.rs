@@ -1,39 +1,48 @@
-use crate::{config::Config, overrides::Overrides};
-use anyhow::Result;
-use docs_rs_types::KrateName;
-use serde::Serialize;
-use std::time::Duration;
+use crate::config::Config;
+use docs_rs_types::{ByteSize, Duration};
 
-const GB: usize = 1024 * 1024 * 1024;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Limits {
-    pub memory: usize,
+    pub memory: ByteSize,
     pub targets: usize,
     pub timeout: Duration,
     pub networking: bool,
-    pub max_log_size: usize,
+    pub max_log_size: ByteSize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            memory: ByteSize::gib(3),
+            timeout: Duration::from_mins(15),
+            targets: crate::DEFAULT_MAX_TARGETS,
+            networking: false,
+            max_log_size: ByteSize::kib(100),
+        }
+    }
 }
 
 impl Limits {
-    pub fn new(config: &Config) -> Self {
-        Self {
-            // 3 GB default default
-            memory: config.build_default_memory_limit.unwrap_or(3 * GB),
-            timeout: Duration::from_secs(15 * 60), // 15 minutes
-            targets: crate::DEFAULT_MAX_TARGETS,
-            networking: false,
-            max_log_size: 100 * 1024, // 100 KB
+    pub fn from_config(config: &Config) -> Self {
+        let mut limits = Limits::default();
+
+        if let Some(memory_limit) = config.build_default_memory_limit {
+            limits.memory = memory_limit;
         }
+
+        limits
     }
 
+    #[cfg(feature = "database")]
     pub async fn for_crate(
         config: &Config,
         conn: &mut sqlx::PgConnection,
-        name: &KrateName,
-    ) -> Result<Self> {
-        let default = Self::new(config);
-        let overrides = Overrides::for_crate(conn, name).await?.unwrap_or_default();
+        name: &docs_rs_types::KrateName,
+    ) -> anyhow::Result<Self> {
+        let default = Self::from_config(config);
+        let overrides = crate::overrides::Overrides::for_crate(conn, name)
+            .await?
+            .unwrap_or_default();
         Ok(Self {
             memory: overrides
                 .memory
@@ -49,7 +58,7 @@ impl Limits {
         })
     }
 
-    pub fn memory(&self) -> usize {
+    pub fn memory(&self) -> ByteSize {
         self.memory
     }
 
@@ -61,7 +70,7 @@ impl Limits {
         self.networking
     }
 
-    pub fn max_log_size(&self) -> usize {
+    pub fn max_log_size(&self) -> ByteSize {
         self.max_log_size
     }
 
@@ -70,13 +79,15 @@ impl Limits {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "database"))]
 mod test {
     use super::*;
+    use crate::Overrides;
+    use anyhow::Result;
     use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use docs_rs_types::testing::KRATE;
+    use docs_rs_types::{KrateName, testing::KRATE};
 
     async fn db() -> anyhow::Result<TestDatabase> {
         let test_metrics = TestMetrics::new();
@@ -94,7 +105,7 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         let krate = KrateName::from_static("hexponent");
         // limits work if no crate has limits set
@@ -123,8 +134,8 @@ mod test {
         // all limits work
         let krate = KrateName::from_static("regex");
         let limits = Limits {
-            memory: defaults.memory * 2,
-            timeout: defaults.timeout * 2,
+            memory: (defaults.memory.0 * 2).into(),
+            timeout: (defaults.timeout.0 * 2).into(),
             targets: 1,
             ..defaults
         };
@@ -152,7 +163,7 @@ mod test {
             &mut conn,
             &krate,
             Overrides {
-                timeout: Some(Duration::from_secs(20 * 60)),
+                timeout: Some(Duration::from_mins(20)),
                 ..Overrides::default()
             },
         )
@@ -168,13 +179,13 @@ mod test {
         let db = db().await?;
 
         let cfg = Config {
-            build_default_memory_limit: Some(6 * GB),
+            build_default_memory_limit: Some(ByteSize::gib(6)),
         };
 
         let mut conn = db.async_conn().await?;
 
         let limits = Limits::for_crate(&cfg, &mut conn, &KRATE).await?;
-        assert_eq!(limits.memory, 6 * GB);
+        assert_eq!(limits.memory, ByteSize::gib(6));
 
         Ok(())
     }
@@ -186,13 +197,13 @@ mod test {
 
         let cfg = Config::default();
 
-        let defaults = Limits::new(&cfg);
+        let defaults = Limits::from_config(&cfg);
 
         Overrides::save(
             &mut conn,
             &KRATE,
             Overrides {
-                memory: Some(defaults.memory / 2),
+                memory: Some(ByteSize::b(defaults.memory.as_u64() / 2)),
                 ..Overrides::default()
             },
         )

@@ -1,5 +1,4 @@
 pub(crate) mod common;
-pub(crate) mod crates_io;
 mod import;
 mod rustdoc;
 pub(crate) mod rustdoc_status;
@@ -46,7 +45,8 @@ impl CommandLine {
             .await?
             .with_storage()
             .await?
-            .with_registry_api()?
+            .with_registry_api()
+            .await?
             .with_repository_stats()?
             .build()?;
 

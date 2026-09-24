@@ -100,7 +100,7 @@ pub enum MetadataError {
 /// ```
 ///
 /// You can define one or more fields in your `Cargo.toml`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata {
     /// Whether the current crate is a proc-macro (used by docs.rs to hack around cargo bugs).
@@ -826,8 +826,6 @@ mod test_calculations {
                 "unstable-options".into(),
                 "--static-root-path".into(),
                 "/".into(),
-                "--cap-lints".into(),
-                "warn".into(),
             ],
             ..Metadata::default()
         };
@@ -836,7 +834,7 @@ mod test_calculations {
             "--lib".into(),
             "-Zrustdoc-map".into(),
             "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs", "-Z", "unstable-options", "--static-root-path", "/", "--cap-lints", "warn"]"#.into(),
+            r#"build.rustdocflags=["--cfg", "docsrs", "-Z", "unstable-options", "--static-root-path", "/"]"#.into(),
         ];
         assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
 

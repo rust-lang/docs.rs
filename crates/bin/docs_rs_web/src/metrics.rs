@@ -4,25 +4,12 @@ use axum::{
     middleware::Next,
     response::IntoResponse,
 };
-use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},
 };
 use std::{borrow::Cow, sync::Arc, time::Instant};
-
-/// response time histogram buckets from the opentelemetry semantiv conventions
-/// https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration
-///
-/// These are the default prometheus bucket sizes,
-/// https://docs.rs/prometheus/0.14.0/src/prometheus/histogram.rs.html#25-27
-/// tailored to broadly measure the response time (in seconds) of a network service.
-///
-/// Otel default buckets are not suited for that.
-pub const RESPONSE_TIME_HISTOGRAM_BUCKETS: &[f64] = &[
-    0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.5, 3.5, 5.0, 7.5, 10.0,
-    15.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0,
-];
 
 #[derive(Debug)]
 pub(crate) struct WebMetrics {
@@ -52,7 +39,12 @@ impl WebMetrics {
                 .build(),
             response_time: meter
                 .f64_histogram(format!("{PREFIX}.response_time"))
-                .with_boundaries(RESPONSE_TIME_HISTOGRAM_BUCKETS.to_vec())
+                .with_boundaries(
+                    RESPONSE_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
                 .with_unit("s")
                 .build(),
         }

@@ -41,7 +41,7 @@ use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_storage::{
     AsyncStorage, PathNotFoundError, StreamingBlob, rustdoc_archive_path, rustdoc_json_path,
 };
-use docs_rs_types::{CompressionAlgorithm, KrateName, ReqVersion};
+use docs_rs_types::{ByteSize, CompressionAlgorithm, KrateName, ReqVersion};
 use docs_rs_uri::EscapedURI;
 use http::{HeaderMap, HeaderValue, Uri, header::CONTENT_DISPOSITION, uri::Authority};
 use serde::{Deserialize, Serialize};
@@ -457,7 +457,7 @@ pub struct RustdocPage {
 impl RustdocPage {
     /// generate an ETag for this rustdoc page, currently based on
     /// * the ETag of the original rustdoc HTML file
-    /// * the BUILD_VERION
+    /// * the BUILD_VERSION
     /// * the serialized RustdocPage struct
     ///
     /// we might not use all of the details in html rewriting, so we might
@@ -500,7 +500,7 @@ impl RustdocPage {
         template_data: Arc<TemplateData>,
         otel_metrics: Arc<WebMetrics>,
         rustdoc_html: StreamingBlob,
-        max_parse_memory: usize,
+        max_parse_memory: ByteSize,
         if_none_match: Option<&IfNoneMatch>,
     ) -> AxumResponse {
         let crate_name = &self.metadata.name;
@@ -728,8 +728,8 @@ pub(crate) async fn rustdoc_html_server_handler(
             // acknowledges the version and offers recovery links instead of a
             // bare "resource not found" (issue #2568).
             return Err(AxumNope::ResourceNotFoundInVersion {
-                name: params.name().to_string(),
-                version: krate.version.to_string(),
+                name: params.name().clone(),
+                version: krate.version,
                 is_latest_url: params.req_version().is_latest(),
                 version_root_url: params.clone().with_inner_path("").rustdoc_url(),
                 crate_details_url: params.crate_details_url(),
@@ -917,7 +917,7 @@ pub(crate) async fn json_download_handler(
     params = params.apply_matched_release(&matched_release);
 
     if params.doc_target().is_none() && !params.inner_path().is_empty() {
-        // an unkonwn target leads to doc-target being removed, and the target being
+        // an unknown target leads to doc-target being removed, and the target being
         // added to the inner path
         return Err(AxumNope::TargetNotFound);
     }
@@ -1096,7 +1096,7 @@ mod test {
     };
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::{
-        Version,
+        ByteSize, Duration, Version,
         testing::{KRATE, V2},
     };
     use docs_rs_uri::encode_url_path;
@@ -1402,7 +1402,7 @@ mod test {
             .config(
                 Config::builder()
                     .test_config()?
-                    .cache_control_stale_while_revalidate(2592000)
+                    .cache_control_stale_while_revalidate(Duration::from_days(30))
                     .build(),
             )
             .build()
@@ -2981,8 +2981,14 @@ mod test {
             )
             .await?;
 
-            web.assert_not_found("/winapi/0.3.9/winapi/struct.not_here.html")
-                .await?;
+            web.assert_cached_not_found(
+                "/winapi/0.3.9/winapi/struct.not_here.html",
+                CachePolicy::ForeverInCdnAndStaleInBrowser(
+                    KrateName::from_str("winapi").unwrap().into(),
+                ),
+                env.config(),
+            )
+            .await?;
 
             Ok(())
         })
@@ -3088,7 +3094,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn download_specfic_version() -> Result<()> {
+    async fn download_specific_version() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
         env.fake_release()
@@ -3589,7 +3595,7 @@ mod test {
                     FORMAT_VERSION,
                     Some(CompressionAlgorithm::Zstd),
                 ),
-                usize::MAX,
+                ByteSize::MAX,
             )
             .await?;
 

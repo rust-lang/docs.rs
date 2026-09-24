@@ -1,6 +1,5 @@
 use crate::{
     common::{DOCS_RS, download, download_to_temp_file},
-    crates_io::download_and_extract_source,
     rustdoc::{download_static_files, find_static_paths, find_successful_build_targets},
     rustdoc_status::fetch_rustdoc_status,
 };
@@ -35,7 +34,7 @@ const DEFAULT_TARGET: &str = "x86_64-unknown-linux-gnu";
 /// * is currently only tested for newer releases, since there are some hacks in place.
 /// * to find the needed rustdoc-static files, we have to scan all the HTML files for certain paths.
 ///   For bigger releases this might take some time.
-/// * we assume when the normal target build is successfull, we also have a valid rustdoc json file,
+/// * we assume when the normal target build is successful, we also have a valid rustdoc json file,
 ///   and we'll ignore any rustdoc JSON files related to failed targets.
 /// * build logs are fake, but are created.
 ///
@@ -99,15 +98,17 @@ async fn import_test_release_inner(
     build_id: BuildId,
 ) -> Result<()> {
     info!("download & inspect source from crates.io...");
-    let source_dir = download_and_extract_source(name, version).await?;
+    let source_dir = registry_api
+        .download_and_extract_source(name, version)
+        .await?;
 
     let cargo_metadata = spawn_blocking({
-        let source_dir = source_dir.source_path.clone();
+        let source_dir = source_dir.path().to_owned();
         move || CargoMetadata::load_from_host_path(&source_dir)
     })
     .await?;
     let docsrs_metadata = spawn_blocking({
-        let source_dir = source_dir.source_path.clone();
+        let source_dir = source_dir.path().to_owned();
         move || Ok(Metadata::from_crate_root(&source_dir)?)
     })
     .await?;
@@ -146,7 +147,7 @@ async fn import_test_release_inner(
         .await?
     };
 
-    info!("find successfull build targets...");
+    info!("find successful build targets...");
     let (default_target, all_targets) = {
         let build_targets = docsrs_metadata.targets_for_host(true, DEFAULT_TARGET);
         (

@@ -291,8 +291,8 @@ mod tests {
                 .storage_config(
                     docs_rs_storage::Config::test_config_with_kind(StorageKind::Memory)?.set(
                         |mut cfg| {
-                            cfg.max_file_size = MAX_SIZE;
-                            cfg.max_file_size_html = MAX_HTML_SIZE;
+                            cfg.max_file_size = MAX_SIZE.into();
+                            cfg.max_file_size_html = MAX_HTML_SIZE.into();
                             cfg
                         },
                     ),

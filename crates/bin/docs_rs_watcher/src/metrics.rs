@@ -1,10 +1,26 @@
 use docs_rs_crates_io::events::ChangeKind;
 use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},
 };
 use std::{fmt, time::Duration};
+
+/// Shared response-time buckets through 2 minutes, then doubling through 64 minutes.
+const EVENT_PROCESSING_TIME_BUCKETS: &[Duration] = &{
+    let mut buckets = [Duration::ZERO; RESPONSE_TIME_HISTOGRAM_BUCKETS.len() + 5];
+    let mut i = 0;
+    while i < RESPONSE_TIME_HISTOGRAM_BUCKETS.len() {
+        buckets[i] = RESPONSE_TIME_HISTOGRAM_BUCKETS[i];
+        i += 1;
+    }
+    while i < buckets.len() {
+        buckets[i] = Duration::from_secs(buckets[i - 1].as_secs() * 2);
+        i += 1;
+    }
+    buckets
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum EventSource {
@@ -55,10 +71,12 @@ impl WatcherMetrics {
                 .build(),
             event_processing_time: meter
                 .f64_histogram(format!("{PREFIX}.event_processing_time"))
-                .with_boundaries(vec![
-                    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0,
-                    45.0, 55.0, 60.0, 65.0, 90.0, 120.0,
-                ])
+                .with_boundaries(
+                    EVENT_PROCESSING_TIME_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
                 .with_unit("s")
                 .build(),
             event_lag: meter

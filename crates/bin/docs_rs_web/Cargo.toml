@@ -24,8 +24,8 @@ base64 = { workspace = true }
 bon = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-comrak = { version = "0.54.0", default-features = false }
-constant_time_eq = "0.5.0"
+comrak = { version = "0.55.0", default-features = false }
+constant_time_eq = "0.6.0"
 docs_rs_build_limits = { path = "../../lib/docs_rs_build_limits" }
 docs_rs_build_queue = { path = "../../lib/docs_rs_build_queue" }
 docs_rs_cargo_metadata = { path = "../../lib/docs_rs_cargo_metadata" }
@@ -59,6 +59,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slug = { workspace = true }
 sqlx = { workspace = true }
+strum = { workspace = true }
 syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -82,13 +83,13 @@ docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
 docs_rs_headers = { path = "../../lib/docs_rs_headers", features = ["testing"] }
+docs_rs_registry_api = { path = "../../lib/docs_rs_registry_api", features = ["testing"] }
 docs_rs_storage = { path = "../../lib/docs_rs_storage", features = ["testing"] }
 docs_rs_test_fakes = { path = "../../lib/docs_rs_test_fakes" }
 docs_rs_types = { path = "../../lib/docs_rs_types", features = ["testing"] }
 http-body-util = "0.1.0"
 indoc = "2.0.0"
 kuchikiki = "0.8"
-mockito = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }
 reqwest = { workspace = true }

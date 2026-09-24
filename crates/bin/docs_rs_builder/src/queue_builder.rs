@@ -27,13 +27,13 @@ pub fn queue_builder(
         match build_queue.is_locked() {
             Ok(true) => {
                 warn!("Build queue is locked, skipping building new crates");
-                thread::sleep(Duration::from_secs(60));
+                thread::sleep(Duration::from_mins(1));
                 continue;
             }
             Ok(false) => {}
             Err(err) => {
                 error!(?err, "could not get queue lock");
-                thread::sleep(Duration::from_secs(60));
+                thread::sleep(Duration::from_mins(1));
                 continue;
             }
         }
@@ -45,7 +45,7 @@ pub fn queue_builder(
                 Ok(true) => {}
                 Ok(false) => {
                     debug!("Queue is empty, going back to sleep");
-                    thread::sleep(Duration::from_secs(60));
+                    thread::sleep(Duration::from_mins(1));
                 }
                 Err(e) => {
                     error!(?e, "Failed to build crate from queue");
@@ -55,7 +55,7 @@ pub fn queue_builder(
 
         if let Err(e) = res {
             error!(?e, "GRAVE ERROR Building new crates panicked");
-            thread::sleep(Duration::from_secs(60));
+            thread::sleep(Duration::from_mins(1));
             continue;
         }
     }

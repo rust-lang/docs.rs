@@ -125,6 +125,7 @@ mod tests {
     use crate::{StreamingBlob, errors::SizeLimitReached};
     use anyhow::Result;
     use chrono::Utc;
+    use docs_rs_types::ByteSize;
     use strum::IntoEnumIterator;
     use test_case::test_case;
 
@@ -232,7 +233,7 @@ mod tests {
         .await?;
         assert!(stream.content_length.is_none());
 
-        let blob = stream.materialize(usize::MAX).await?;
+        let blob = stream.materialize(ByteSize::MAX).await?;
 
         assert_eq!(blob.compression, None);
         assert_eq!(blob.content, CONTENT);
