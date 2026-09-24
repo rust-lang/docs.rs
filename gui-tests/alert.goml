@@ -1,0 +1,18 @@
+// The alert fixture is configured by `just prepare-gui-tests`.
+go-to: |DOC_PATH|
+set-local-storage: {"hide-alert-id": ""}
+reload:
+
+// Wait for the asynchronously loaded popup to be visible.
+wait-for: "#alerts:not(.hidden) #docsrs-alert"
+assert-css: ("#docsrs-alert", {"display": "flex"})
+assert-text: ("#docsrs-alert .alert-text", "Scheduled maintenance")
+assert-text: ("#docsrs-alert em", "maintenance")
+
+click: "#docsrs-alert-hide"
+assert-css: ("#docsrs-alert", {"display": "none"})
+assert-local-storage: {"hide-alert-id": "123"}
+
+reload:
+wait-for: "#alerts:not(.hidden) #docsrs-alert"
+assert-css: ("#docsrs-alert", {"display": "none"})

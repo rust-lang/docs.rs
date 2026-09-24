@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use docs_rs_build_queue::AsyncBuildQueue;
-use docs_rs_database::service_config::{Abnormality, ConfigName, get_config};
+use docs_rs_database::service_config::{Abnormality, Alert, ConfigName, get_config};
 
 pub(crate) type ActiveAbnormalities = Vec<Abnormality>;
 
@@ -27,6 +27,12 @@ pub(crate) async fn load_abnormalities(
     Ok(active_abnormalities)
 }
 
+pub(crate) async fn load_alerts(conn: &mut sqlx::PgConnection) -> Result<Option<Alert>> {
+    get_config::<Alert>(conn, ConfigName::Alert)
+        .await
+        .context("failed to load alert from config")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -36,6 +42,23 @@ mod tests {
     use docs_rs_database::service_config::set_config;
     use docs_rs_types::{KrateName, Version};
     use docs_rs_uri::EscapedURI;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn load_alert() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        let mut conn = env.async_conn().await?;
+        assert!(load_alerts(&mut conn).await?.is_none());
+
+        let alert = Alert {
+            alert_id: 123,
+            text: "Scheduled maintenance".into(),
+        };
+        set_config(&mut conn, ConfigName::Alert, alert.clone()).await?;
+
+        assert_eq!(load_alerts(&mut conn).await?, Some(alert));
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn load_abnormalities_returns_manual_abnormality() -> Result<()> {
