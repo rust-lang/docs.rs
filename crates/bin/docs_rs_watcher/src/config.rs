@@ -46,7 +46,7 @@ impl AppConfig for SqsConfig {
 
 #[derive(Debug)]
 pub struct Config {
-    /// registry watching config. Also used for database-synchonize
+    /// registry watching config. Also used for database-synchronize
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
     /// How long to wait between registry checks
