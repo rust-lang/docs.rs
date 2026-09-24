@@ -273,7 +273,11 @@ async fn process_change(context: &Context, change: &Change, config: &Config) -> 
 
 /// Processes crate changes, whether they got yanked or unyanked.
 #[instrument(skip_all)]
-async fn process_version_yank_status(context: &Context, release: &CrateVersion) -> Result<()> {
+pub(crate) async fn process_version_yank_status(
+    context: &Context,
+    release: &CrateVersion,
+    yanked: bool,
+) -> Result<()> {
     // FIXME: delay yanks of crates that have not yet finished building
     // https://github.com/rust-lang/docs.rs/issues/1934
     set_yanked(context, &release.name, &release.version, yanked).await?;
@@ -282,7 +286,7 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
 }
 
 #[instrument(skip_all)]
-async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
+pub(crate) async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
     let build_queue = context.build_queue()?;
 
     let priority = build_queue.find_priority(&release.name).await?;
@@ -315,7 +319,7 @@ async fn process_version_added(context: &Context, release: &CrateVersion) -> Res
 }
 
 #[instrument(skip_all)]
-async fn process_version_deleted(
+pub(crate) async fn process_version_deleted(
     context: &Context,
     config: &Config,
     release: &CrateVersion,
@@ -350,7 +354,7 @@ async fn process_version_deleted(
 }
 
 #[instrument(skip_all)]
-async fn process_crate_deleted(
+pub(crate) async fn process_crate_deleted(
     context: &Context,
     config: &Config,
     krate: &KrateName,

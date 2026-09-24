@@ -1,5 +1,4 @@
 use docs_rs_crates_io::events::ChangeKind;
-use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
 use opentelemetry::{
     KeyValue,
@@ -81,9 +80,12 @@ impl WatcherMetrics {
                 .build(),
             event_lag: meter
                 .f64_histogram(format!("{PREFIX}.event_lag"))
-                .with_boundaries(vec![
-                    0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 3600.0,
-                ])
+                .with_boundaries(
+                    EVENT_PROCESSING_TIME_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
                 .with_unit("s")
                 .build(),
         }

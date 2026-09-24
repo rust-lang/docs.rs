@@ -88,7 +88,6 @@ async fn watch_registry(
 ) -> Result<()> {
     let mut last_gc = Instant::now();
     let queue = context.build_queue()?;
-    let metrics = WatcherMetrics::new(context.meter_provider());
 
     loop {
         if queue.is_locked().await? {
@@ -97,7 +96,7 @@ async fn watch_registry(
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config, &metrics).await {
+            match get_new_crates(context, &index, config, metrics).await {
                 Ok(n) => debug!("{} crates added to queue", n),
                 Err(e) => {
                     metrics.record_poll_error(EventSource::Git);

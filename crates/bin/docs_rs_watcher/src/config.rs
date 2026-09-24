@@ -3,7 +3,6 @@ use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, maybe_env, require_env};
 use docs_rs_types::Duration;
 use std::path::PathBuf;
-use std::{path::PathBuf, time::Duration};
 use url::Url;
 
 const SQS_QUEUE_URL: &str = "DOCSRS_SQS_QUEUE_URL";
