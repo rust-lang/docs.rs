@@ -8,8 +8,6 @@ use tracing::{debug, instrument};
 const UNCONDITIONAL_RUSTDOC_ARGS: &[&str] = &[
     "--static-root-path",
     "/-/rustdoc.static/",
-    "--cap-lints",
-    "warn",
     "--extern-html-root-takes-precedence",
 ];
 
@@ -192,7 +190,6 @@ mod tests {
                 .windows(2)
                 .any(|pair| pair == ["--static-root-path", "/-/rustdoc.static/"])
         );
-        assert!(flags.windows(2).any(|pair| pair == ["--cap-lints", "warn"]));
         assert!(
             flags
                 .iter()
