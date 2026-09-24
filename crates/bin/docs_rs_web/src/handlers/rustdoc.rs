@@ -24,7 +24,7 @@ use anyhow::{Context as _, anyhow};
 use askama::Template;
 use axum::{
     body::Body,
-    extract::{Extension, MatchedPath, Query, RawQuery},
+    extract::{Extension, MatchedPath, Query, RawQuery, State},
     http::StatusCode,
     response::{IntoResponse, Response as AxumResponse},
 };
@@ -192,8 +192,8 @@ pub(crate) async fn rustdoc_redirector_handler(
     Path(params): Path<RustdocRedirectorParams>,
     original_uri: Uri,
     matched_path: MatchedPath,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(pool): Extension<Pool>,
+    State(storage): State<Arc<AsyncStorage>>,
+    State(pool): State<Pool>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
     RawQuery(original_query): RawQuery,
 ) -> AxumResult<impl IntoResponse> {
@@ -560,10 +560,10 @@ impl RustdocPage {
 #[instrument(skip_all)]
 pub(crate) async fn rustdoc_html_server_handler(
     params: RustdocParams,
-    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
-    Extension(templates): Extension<Arc<TemplateData>>,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
+    State(otel_metrics): State<Arc<WebMetrics>>,
+    State(templates): State<Arc<TemplateData>>,
+    State(storage): State<Arc<AsyncStorage>>,
+    State(config): State<Arc<Config>>,
     Extension(csp): Extension<Arc<Csp>>,
     RawQuery(original_query): RawQuery,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
@@ -807,7 +807,7 @@ pub(crate) async fn rustdoc_html_server_handler(
 pub(crate) async fn target_redirect_handler(
     params: RustdocParams,
     mut conn: DbConnection,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
 
@@ -891,7 +891,7 @@ pub(crate) async fn json_download_handler(
     mut params: RustdocParams,
     Path(json_params): Path<JsonDownloadParams>,
     mut conn: DbConnection,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
     wanted_compression: Option<WantedCompression>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<AxumResponse> {
@@ -1026,7 +1026,7 @@ pub(crate) async fn json_download_handler(
 pub(crate) async fn download_handler(
     mut params: RustdocParams,
     mut conn: DbConnection,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let matched_release = match_version(&mut conn, params.name(), params.req_version())
@@ -1073,7 +1073,7 @@ pub(crate) async fn download_handler(
 #[instrument(skip_all)]
 pub(crate) async fn static_asset_handler(
     Path(path): Path<String>,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {
     let storage_path = format!("{RUSTDOC_STATIC_STORAGE_PREFIX}{path}");

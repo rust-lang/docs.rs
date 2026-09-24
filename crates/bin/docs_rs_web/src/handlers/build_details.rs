@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use askama::Template;
-use axum::{extract::Extension, response::IntoResponse};
+use axum::{extract::State, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
@@ -60,7 +60,7 @@ pub(crate) async fn build_details_handler(
     params: RustdocParams,
     Path(build_params): Path<BuildDetailsParams>,
     mut conn: DbConnection,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
+    State(storage): State<Arc<AsyncStorage>>,
 ) -> AxumResult<impl IntoResponse> {
     let id = build_params
         .id

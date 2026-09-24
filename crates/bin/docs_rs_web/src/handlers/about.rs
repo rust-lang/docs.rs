@@ -6,7 +6,7 @@ use crate::{
     page::templates::{RenderBrands, RenderSolid, filters},
 };
 use askama::Template;
-use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use docs_rs_build_limits::Limits;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
@@ -33,7 +33,7 @@ impl_axum_webpage!(
 
 pub(crate) async fn about_builds_handler(
     mut conn: DbConnection,
-    Extension(context): Extension<Arc<Context>>,
+    State(context): State<Arc<Context>>,
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutBuilds {
         rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
