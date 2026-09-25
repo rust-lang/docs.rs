@@ -21,9 +21,9 @@ pub struct Config {
     #[builder(default = 3)]
     pub max_retries: u32,
 
-    /// Default TTL for the cache, if we can't read it from the headers.
-    #[builder(default = Duration::from_mins(10))]
-    pub cache_default_ttl: Duration,
+    /// Delay between background refreshes after the first successful load.
+    #[builder(default = Duration::from_hours(1))]
+    pub refresh_frequency: Duration,
 }
 
 impl AppConfig for Config {
@@ -31,7 +31,7 @@ impl AppConfig for Config {
         Ok(Self::builder()
             .maybe_url(maybe_env("DOCSRS_STD_REPLACEMENTS_URL")?)
             .maybe_max_retries(maybe_env("DOCSRS_STD_REPLACEMENTS_RETRIES")?)
-            .maybe_cache_default_ttl(maybe_env("DOCSRS_STD_REPLACEMENTS_CACHE_DEFAULT_TTL")?)
+            .maybe_refresh_frequency(maybe_env("DOCSRS_STD_REPLACEMENTS_REFRESH_FREQUENCY")?)
             .build())
     }
 }

@@ -9,7 +9,7 @@ use http::{
     HeaderMap, HeaderValue, StatusCode,
     header::{CACHE_CONTROL, ETAG},
 };
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tracing::error;
 
 /// a surrogate key that is attached to _all_ content.
@@ -61,6 +61,26 @@ pub static NO_CACHING: ResponseCacheHeaders = ResponseCacheHeaders {
     surrogate_keys: None,
     needs_cdn_invalidation: false,
     is_caching_something: false,
+};
+
+/// Cache for a short time in the browser & in the CDN.
+/// Helps protecting against traffic spikes.
+static SHORT: ResponseCacheHeaders = ResponseCacheHeaders {
+    cache_control: Some(HeaderValue::from_static("public, max-age=60")),
+    surrogate_control: None,
+    surrogate_keys: None,
+    needs_cdn_invalidation: false,
+    is_caching_something: true,
+};
+
+/// Cache for a little longer time in the browser & in the CDN.
+/// Helps protecting against traffic spikes.
+static LONGER: ResponseCacheHeaders = ResponseCacheHeaders {
+    cache_control: Some(HeaderValue::from_static("public, max-age=600")),
+    surrogate_control: None,
+    surrogate_keys: None,
+    needs_cdn_invalidation: false,
+    is_caching_something: true,
 };
 
 /// don't cache, don't even store. Never. Ever.
@@ -128,8 +148,6 @@ pub enum CachePolicy {
     /// Can be used when the content can be a _little_ outdated,
     /// while protecting against spikes in traffic.
     LongerInCdnAndBrowser,
-    /// Cache in browsers and the CDN for the remaining data lifetime.
-    InCdnAndBrowser(Duration),
     /// cache forever in browser & CDN.
     /// Valid when you have hashed / versioned filenames and every rebuild would
     /// change the filename.
@@ -156,25 +174,8 @@ impl CachePolicy {
         let mut headers = match self {
             CachePolicy::NoCaching => NO_CACHING.clone(),
             CachePolicy::NoStoreMustRevalidate => NO_STORE_MUST_REVALIDATE.clone(),
-            CachePolicy::ShortInCdnAndBrowser => {
-                CachePolicy::InCdnAndBrowser(Duration::from_mins(1)).render(config)?
-            }
-            CachePolicy::LongerInCdnAndBrowser => {
-                CachePolicy::InCdnAndBrowser(Duration::from_mins(10)).render(config)?
-            }
-            CachePolicy::InCdnAndBrowser(ttl) => {
-                if ttl.as_secs() == 0 {
-                    NO_CACHING.clone()
-                } else {
-                    ResponseCacheHeaders {
-                        cache_control: Some(format!("public, max-age={}", ttl.as_secs()).parse()?),
-                        surrogate_control: None,
-                        surrogate_keys: None,
-                        needs_cdn_invalidation: false,
-                        is_caching_something: true,
-                    }
-                }
-            }
+            CachePolicy::ShortInCdnAndBrowser => SHORT.clone(),
+            CachePolicy::LongerInCdnAndBrowser => LONGER.clone(),
             CachePolicy::ForeverInCdnAndBrowser => FOREVER_IN_CDN_AND_BROWSER.clone(),
             CachePolicy::ForeverInCdn(surrogate_keys) => {
                 if config.cache_invalidatable_responses {
@@ -353,18 +354,6 @@ mod tests {
         Ok(())
     }
 
-    #[test_case(
-        CachePolicy::InCdnAndBrowser(Duration::from_secs(123).into()),
-        Some("public, max-age=123"),
-        None,
-        true
-    )]
-    #[test_case(
-        CachePolicy::InCdnAndBrowser(Duration::from_millis(999).into()),
-        Some("max-age=0"),
-        None,
-        false
-    )]
     #[test_case(CachePolicy::NoCaching, Some("max-age=0"), None, false)]
     #[test_case(
         CachePolicy::NoStoreMustRevalidate,

@@ -1,7 +1,6 @@
 use crate::{ReplacementDetails, ReplacementMap};
 use bon::bon;
-use docs_rs_headers::CacheControl;
-use docs_rs_reqwest::testing::MockExt as _;
+use docs_rs_headers::{CacheControl, Header, testing::test_typed_encode};
 use docs_rs_types::KrateName;
 use http::StatusCode;
 use std::sync::Arc;
@@ -23,33 +22,30 @@ impl StdReplacementMockServer {
     #[builder(start_fn(name = mock), finish_fn(name = start))]
     pub async fn create_mock(
         mut self,
-        #[builder(with = |krate: KrateName, details: ReplacementDetails| (krate, details))]
-        replacement: Option<(KrateName, ReplacementDetails)>,
-        #[builder(default, with = FromIterator::from_iter)] replacements: Vec<(
-            KrateName,
-            ReplacementDetails,
-        )>,
+        #[builder(with = |krate: KrateName, details: ReplacementDetails| (krate, Arc::new(details)))]
+        replacement: Option<(KrateName, Arc<ReplacementDetails>)>,
         cache_control: Option<CacheControl>,
         #[builder(default = StatusCode::OK)] status_code: StatusCode,
+        raw_body: Option<String>,
     ) -> Self {
-        let map = ReplacementMap::from_iter(
-            replacements
-                .into_iter()
-                .chain(replacement)
-                .map(|(krate, details)| (krate, Arc::new(details))),
-        );
-
         let mut mock = self
             .server
             .mock("GET", "/all.json")
-            .with_status_code(status_code);
+            .with_status(status_code.as_u16().into());
 
         if let Some(cache_control) = cache_control {
-            mock = mock.with_typed_header(cache_control);
+            let value = test_typed_encode(cache_control);
+            mock = mock.with_header(CacheControl::name(), value.to_str().unwrap());
         }
 
+        let map = ReplacementMap::from_iter(replacement);
+        debug_assert!(
+            raw_body.is_none() || map.is_empty(),
+            "a mock cannot define both raw_body and replacements",
+        );
+
         self.mocks.push(
-            mock.with_body(serde_json::to_string(&map).unwrap())
+            mock.with_body(raw_body.unwrap_or_else(|| serde_json::to_string(&map).unwrap()))
                 .expect(1)
                 .create_async()
                 .await,
@@ -58,8 +54,11 @@ impl StdReplacementMockServer {
         self
     }
 
-    pub fn remove_mock(&mut self) {
-        self.mocks.pop();
+    pub async fn assert_and_remove_mock(&mut self) {
+        if let Some(mock) = self.mocks.pop() {
+            mock.assert_async().await;
+            mock.remove_async().await;
+        }
     }
 
     pub fn config(&self) -> crate::ConfigBuilder {

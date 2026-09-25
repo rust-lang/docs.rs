@@ -1175,6 +1175,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbad30e4b4c14a39e3cc8aed085a12a327257c316619c93581e017bc52be591"
+
+[[package]]
+name = "cargo-lock"
+version = "11.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50524592e6bfbb1bf6f94e8184a786f637faeaf1cf37bbe65502b9a2c5c48939"
+dependencies = [
+ "semver",
+ "serde",
+ "toml",
+ "url",
+]
+
+[[package]]
 name = "caseless"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1770,6 +1788,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
 dependencies = [
  "cmov",
+]
+
+[[package]]
+name = "cvss"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7fb220d3ce1b565af39cee5b89e47fd8dd1dab162900ee4363c8ee4169ee8a2"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2404,27 +2431,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "docs_rs_reqwest"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "bon",
- "docs_rs_headers",
- "docs_rs_utils",
- "mockito",
- "moka",
- "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
- "serde",
- "serde_json",
- "test-case",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "docs_rs_rustdoc_json"
 version = "0.0.0"
 dependencies = [
@@ -2441,22 +2447,21 @@ name = "docs_rs_rustsec"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "bon",
  "docs_rs_config",
  "docs_rs_env_vars",
- "docs_rs_headers",
- "docs_rs_reqwest",
  "docs_rs_types",
  "docs_rs_utils",
  "http 1.5.0",
- "mockito",
  "reqwest",
- "serde",
+ "rustsec",
  "serde_json",
+ "tempfile",
  "test-case",
  "tokio",
+ "toml",
  "tracing",
- "url",
 ]
 
 [[package]]
@@ -2491,18 +2496,23 @@ name = "docs_rs_std_replacements"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "bon",
  "docs_rs_config",
  "docs_rs_env_vars",
  "docs_rs_headers",
- "docs_rs_reqwest",
  "docs_rs_types",
+ "docs_rs_utils",
  "http 1.5.0",
  "mockito",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
  "serde",
  "serde_json",
  "test-case",
  "tokio",
+ "tracing",
  "url",
 ]
 
@@ -2973,6 +2983,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-err"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b91aa448ca50d7e79433bdf3ee8d99215430d2ec02ade5aefab2a073a1822e8a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "fs_at"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3224,6 +3243,7 @@ dependencies = [
  "gix-utils",
  "gix-validate",
  "gix-worktree 0.53.0",
+ "gix-worktree-state",
  "gix-worktree-stream 0.33.0",
  "nonempty",
  "smallvec",
@@ -4673,6 +4693,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gix-worktree-state"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bffae8b3ca258fdd50370cd51f06deb4c76a3b43db3868bc28dde45ffa77d69"
+dependencies = [
+ "bstr",
+ "gix-features 0.48.1",
+ "gix-filter 0.31.0",
+ "gix-fs 0.21.2",
+ "gix-index 0.52.0",
+ "gix-object 0.61.0",
+ "gix-path",
+ "gix-worktree 0.53.0",
+ "io-close",
+ "thiserror",
+]
+
+[[package]]
 name = "gix-worktree-stream"
 version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5290,6 +5328,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "io-close"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cadcf447f06744f8ce713d2d6239bb5bde2c357a452397a9ed90c625da390bc"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -6604,6 +6652,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
+name = "platforms"
+version = "3.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9245c6e7c5a6bcdd7977fdf6d1e1c67f4cc2d0d58c041df0ea5940953033e6ca"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "plotters"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7294,6 +7351,28 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted",
+]
+
+[[package]]
+name = "rustsec"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c60fd662f245fd3d6ae7ee2371f59042c4e9dc00a02183c0b1735f4da2aa5ed"
+dependencies = [
+ "cargo-lock",
+ "cvss",
+ "fs-err",
+ "gix 0.84.0",
+ "home",
+ "jiff",
+ "platforms",
+ "semver",
+ "serde",
+ "tame-index",
+ "thiserror",
+ "time",
+ "toml",
+ "url",
 ]
 
 [[package]]
@@ -8289,6 +8368,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
+name = "tame-index"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c51563c6639245219c077420e0a207e99b5e82e2e6bb78fd4898d42028ea7dde"
+dependencies = [
+ "camino",
+ "crossbeam-channel",
+ "http 1.5.0",
+ "libc",
+ "memchr",
+ "rayon",
+ "reqwest",
+ "rustc-stable-hash",
+ "semver",
+ "serde",
+ "serde_json",
+ "smol_str",
+ "thiserror",
+ "tokio",
+ "toml-span",
+ "twox-hash",
+]
+
+[[package]]
 name = "tar"
 version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8545,6 +8648,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "toml-span"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f22ba417d437b5fa5dcba6c27dbd6c14f38845315b724d89fed73b7a426451b7"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "toml_datetime"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8775,6 +8887,12 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "twox-hash"
+version = "2.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5283634e518fe9e82c7b20520bb4bc209009fd16c82077c802f8111ecbb0117a"
 
 [[package]]
 name = "typed-arena"

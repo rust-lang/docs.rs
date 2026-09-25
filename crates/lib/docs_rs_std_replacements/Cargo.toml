@@ -6,36 +6,33 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-testing = [
-    "dep:mockito",
-    "dep:docs_rs_headers",
-    "dep:http",
-    "dep:serde_json",
-    "docs_rs_headers/testing",
-    "docs_rs_reqwest/testing",
-]
+testing = ["dep:mockito", "dep:docs_rs_headers", "dep:http", "docs_rs_headers/testing"]
 
 [dependencies]
 anyhow = { workspace = true }
+arc-swap = "1.9.2"
 bon = { workspace = true }
 docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_headers = { path = "../docs_rs_headers", optional = true }
-docs_rs_reqwest = { path = "../docs_rs_reqwest" }
 docs_rs_types = { path = "../docs_rs_types" }
+docs_rs_utils = { path = "../docs_rs_utils" }
 http = { workspace = true, optional = true }
 mockito = { workspace = true, optional = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true, optional = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
 docs_rs_headers = { path = "../docs_rs_headers", features = ["testing"] }
-docs_rs_reqwest = { path = "../docs_rs_reqwest", features = ["testing"] }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 http = { workspace = true }
 mockito = { workspace = true }
-serde_json = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 

@@ -258,22 +258,22 @@ impl<S: State> ContextBuilder<S> {
         Ok(self.registry_api(config.into(), api.into()))
     }
 
-    pub fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
+    pub async fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
     where
         S::StdReplacements: IsUnset,
     {
         let config = docs_rs_std_replacements::Config::from_environment()?;
-        let api = StdReplacements::from_config(&config)?;
+        let api = StdReplacements::from_config(&config).await?;
 
         Ok(self.std_replacements(Arc::new(api)))
     }
 
-    pub fn with_rustsec(self) -> Result<ContextBuilder<SetRustsec<S>>>
+    pub async fn with_rustsec(self) -> Result<ContextBuilder<SetRustsec<S>>>
     where
         S::Rustsec: IsUnset,
     {
         let config = docs_rs_rustsec::Config::from_environment()?;
-        Ok(self.rustsec(Arc::new(RustsecClient::from_config(&config)?)))
+        Ok(self.rustsec(Arc::new(RustsecClient::from_config(&config).await?)))
     }
 
     pub fn repository_stats(

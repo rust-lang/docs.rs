@@ -1,4 +1,4 @@
-//! Cached standard-library alternatives to third-party crates.
+//! Standard-library alternatives to third-party crates, refreshed in the background.
 mod api;
 mod config;
 mod models;

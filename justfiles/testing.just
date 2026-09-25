@@ -11,7 +11,12 @@ bench-rustdoc-page host="http://127.0.0.1:8888":
 
 # Build the crate fixtures required by the GUI test suite.
 [group('testing')]
-prepare-gui-tests: _ensure_db_migrated
+prepare-gui-tests:
+    # The web server opens this local snapshot during startup. This keeps the
+    # RustSec warning widget deterministic in browser tests.
+    mkdir -p ignored
+    if [ ! -d ignored/rustsec-advisory-db/.git ]; then git clone https://github.com/RustSec/advisory-db.git ignored/rustsec-advisory-db; fi
+    just _ensure_db_migrated
     just _builder build update-toolchain
     just _builder build crate sysinfo 0.23.4
     just _builder build crate sysinfo 0.23.5
@@ -84,6 +89,7 @@ run-tests: compose-up-resources _build-test-binaries
     export DOCSRS_LOG=docs_rs=debug,rustwide=info
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
+    export DOCSRS_RUSTSEC_ADVISORY_DB=ignored/rustsec-advisory-db
     export DOCSRS_DATABASE_URL=postgresql://cratesfyi:password@localhost:15432
     export AWS_ACCESS_KEY_ID=cratesfyi
     export AWS_SECRET_ACCESS_KEY=secret_key
