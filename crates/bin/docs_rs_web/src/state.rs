@@ -1,5 +1,5 @@
 use crate::{Config, metrics::WebMetrics, page::TemplateData};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use axum::extract::FromRef;
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_context::Context;
@@ -36,6 +36,20 @@ impl AppState {
             config,
             templates,
         })))
+    }
+
+    pub(crate) fn std_replacements(&self) -> Result<&Arc<StdReplacements>> {
+        self.context()
+            .std_replacements
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing std_replacements client in AppState"))
+    }
+
+    pub(crate) fn rustsec(&self) -> Result<&Arc<RustsecClient>> {
+        self.context()
+            .rustsec
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing rustsec client in AppState"))
     }
 }
 
@@ -96,6 +110,4 @@ context_services!(
     Arc<AsyncBuildQueue> => build_queue,
     Arc<RegistryApi> => registry_api,
     Arc<AsyncStorage> => storage,
-    Arc<StdReplacements> => std_replacements,
-    Arc<RustsecClient> => rustsec,
 );

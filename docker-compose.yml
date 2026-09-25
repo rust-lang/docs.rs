@@ -156,8 +156,11 @@ services:
         environment:
             <<: *environment
             DOCSRS_RENDER_THREADS: 2
+            DOCSRS_RUSTSEC_ADVISORY_DB: /opt/docsrs/rustsec-advisory-db
         env_file:
             - .docker.env
+        volumes:
+            - "./ignored/rustsec-advisory-db:/opt/docsrs/rustsec-advisory-db"
         healthcheck:
             <<: *healthcheck-interval
             test: curl --silent --fail localhost:3000/

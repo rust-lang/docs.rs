@@ -258,22 +258,22 @@ impl<S: State> ContextBuilder<S> {
         Ok(self.registry_api(config.into(), api.into()))
     }
 
-    pub fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
+    pub async fn with_std_replacements(self) -> Result<ContextBuilder<SetStdReplacements<S>>>
     where
         S::StdReplacements: IsUnset,
     {
         let config = docs_rs_std_replacements::Config::from_environment()?;
-        let api = StdReplacements::from_config(&config)?;
+        let api = StdReplacements::from_config(&config).await?;
 
         Ok(self.std_replacements(Arc::new(api)))
     }
 
-    pub fn with_rustsec(self) -> Result<ContextBuilder<SetRustsec<S>>>
+    pub async fn with_rustsec(self) -> Result<ContextBuilder<SetRustsec<S>>>
     where
         S::Rustsec: IsUnset,
     {
         let config = docs_rs_rustsec::Config::from_environment()?;
-        Ok(self.rustsec(Arc::new(RustsecClient::from_config(&config)?)))
+        Ok(self.rustsec(Arc::new(RustsecClient::from_config(&config).await?)))
     }
 
     pub fn repository_stats(
@@ -375,17 +375,13 @@ impl Context {
     }
 
     /// Return the client to query the std-replacement database.
-    pub fn std_replacements(&self) -> Result<&Arc<StdReplacements>> {
-        self.std_replacements
-            .as_ref()
-            .ok_or_else(|| anyhow!("Standard-library replacements are not initialized"))
+    pub fn std_replacements(&self) -> Option<&Arc<StdReplacements>> {
+        self.std_replacements.as_ref()
     }
 
-    /// Return the RustSec client.
-    pub fn rustsec(&self) -> Result<&Arc<RustsecClient>> {
-        self.rustsec
-            .as_ref()
-            .ok_or_else(|| anyhow!("RustSec client is not initialized"))
+    /// Return the RustSec client when configured.
+    pub fn rustsec(&self) -> Option<&Arc<RustsecClient>> {
+        self.rustsec.as_ref()
     }
 
     /// return configured CDN or None.

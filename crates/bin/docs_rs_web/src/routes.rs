@@ -305,7 +305,7 @@ pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<
         )
         .route(
             "/-/partial/crate-warnings/{name}/",
-            get_internal(status::crate_warnings),
+            get_internal(metrics, status::crate_warnings),
         )
         .route(
             "/-/rustdoc.static/{*path}",
