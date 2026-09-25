@@ -24,13 +24,14 @@ const EVENT_PROCESSING_TIME_BUCKETS: &[Duration] = &{
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum EventSource {
     Git,
-    // NOTE: Sqs will be added later
+    Sqs,
 }
 
 impl EventSource {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Git => "git",
+            Self::Sqs => "sqs",
         }
     }
 }
@@ -43,14 +44,11 @@ impl fmt::Display for EventSource {
 
 #[derive(Debug)]
 pub(crate) struct WatcherMetrics {
-    /// received event count, by source
     events_received_total: Counter<u64>,
-    /// poll errors, by source
     poll_errors_total: Counter<u64>,
-    /// changes applied, by source and change-kind
     changes_applied_total: Counter<u64>,
-    /// event processing time, by source and change-kind
     event_processing_time: Histogram<f64>,
+    event_lag: Histogram<f64>,
 }
 
 impl WatcherMetrics {
@@ -80,6 +78,16 @@ impl WatcherMetrics {
                 )
                 .with_unit("s")
                 .build(),
+            event_lag: meter
+                .f64_histogram(format!("{PREFIX}.event_lag"))
+                .with_boundaries(
+                    EVENT_PROCESSING_TIME_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
+                .with_unit("s")
+                .build(),
         }
     }
 
@@ -90,6 +98,13 @@ impl WatcherMetrics {
                 KeyValue::new("source", source.as_str()),
                 KeyValue::new("type", kind.as_str()),
             ],
+        );
+    }
+
+    pub(crate) fn record_event_lag(&self, source: EventSource, duration: Duration) {
+        self.event_lag.record(
+            duration.as_secs_f64(),
+            &[KeyValue::new("source", source.as_str())],
         );
     }
 
