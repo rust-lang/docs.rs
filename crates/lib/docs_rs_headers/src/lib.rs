@@ -1,4 +1,3 @@
-mod cache_control;
 mod canonical_url;
 mod etag;
 mod if_none_match;
@@ -6,7 +5,6 @@ mod surrogate_key;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-pub use cache_control::cache_control_ttl;
 pub use canonical_url::CanonicalUrl;
 pub use etag::{ETagComputer, compute_etag};
 pub use headers::{Age, CacheControl, ETag, Header, HeaderMapExt, UserAgent};

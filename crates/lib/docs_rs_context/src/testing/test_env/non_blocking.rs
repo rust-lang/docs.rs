@@ -7,6 +7,7 @@ use docs_rs_database::{AsyncPoolClient, Config as DatabaseConfig, testing::TestD
 use docs_rs_fastly::Cdn;
 use docs_rs_opentelemetry::testing::{CollectedMetrics, TestMetrics};
 use docs_rs_registry_api::testing::TestRegistry;
+use docs_rs_std_replacements::StdReplacements;
 use docs_rs_storage::{Config as StorageConfig, testing::TestStorage};
 use docs_rs_test_fakes::FakeRelease;
 use std::{ops::Deref, sync::Arc};
@@ -45,7 +46,7 @@ impl<C: AppConfig> TestEnvironment<C> {
         config: Option<C>,
         storage_config: Option<StorageConfig>,
         build_queue_config: Option<docs_rs_build_queue::Config>,
-        rustsec_config: Option<docs_rs_rustsec::Config>,
+        rustsec: Option<Arc<docs_rs_rustsec::RustsecClient>>,
         std_replacements_config: Option<docs_rs_std_replacements::Config>,
     ) -> Result<Self> {
         docs_rs_logging::testing::init();
@@ -78,6 +79,12 @@ impl<C: AppConfig> TestEnvironment<C> {
             docs_rs_build_queue::Config::from_environment()?
         });
 
+        let std_replacements = if let Some(config) = std_replacements_config {
+            Some(Arc::new(StdReplacements::from_config(&config).await?))
+        } else {
+            None
+        };
+
         let build_queue = Arc::new(AsyncBuildQueue::new(
             db.pool().clone(),
             build_queue_config.clone(),
@@ -102,20 +109,8 @@ impl<C: AppConfig> TestEnvironment<C> {
                     Arc::new(docs_rs_fastly::Config::test_config()?),
                     Some(Cdn::mock().into()),
                 )
-                .maybe_std_replacements(
-                    std_replacements_config
-                        .as_ref()
-                        .map(docs_rs_std_replacements::StdReplacements::from_config)
-                        .transpose()?
-                        .map(Arc::new),
-                )
-                .maybe_rustsec(
-                    rustsec_config
-                        .as_ref()
-                        .map(docs_rs_rustsec::RustsecClient::from_config)
-                        .transpose()?
-                        .map(Arc::new),
-                )
+                .maybe_std_replacements(std_replacements)
+                .maybe_rustsec(rustsec)
                 .with_build_limits()?
                 .build()?
                 .into(),
