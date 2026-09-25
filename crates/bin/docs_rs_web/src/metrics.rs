@@ -58,11 +58,12 @@ impl WebMetrics {
 ///
 /// Can be used like:
 /// ```text,ignore
-/// get(handler).route_layer(middleware::from_fn(|request, next| async {
-///     request_recorder(request, next, Some("static resource")).await
+/// get(handler).route_layer(middleware::from_fn_with_state(metrics, |State(metrics), request, next| async {
+///     request_recorder(metrics, request, next, Some("static resource")).await
 /// }))
 /// ```
 pub(crate) async fn request_recorder(
+    otel_metrics: Arc<WebMetrics>,
     request: AxumRequest,
     next: Next,
     route_name: Option<&str>,
@@ -74,12 +75,6 @@ pub(crate) async fn request_recorder(
     } else {
         Cow::Owned(request.uri().path().to_string())
     };
-
-    let otel_metrics = request
-        .extensions()
-        .get::<Arc<WebMetrics>>()
-        .expect("otel metrics missing in request extensions")
-        .clone();
 
     let start = Instant::now();
     let result = next.run(request).await;

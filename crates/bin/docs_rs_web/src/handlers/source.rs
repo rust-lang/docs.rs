@@ -15,7 +15,7 @@ use crate::{
 
 use anyhow::{Context as _, Result};
 use askama::Template;
-use axum::{Extension, response::IntoResponse};
+use axum::{extract::State, response::IntoResponse};
 use axum_extra::{TypedHeader, headers::HeaderMapExt};
 use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
 use docs_rs_storage::{AsyncStorage, FolderEntry, PathNotFoundError, source_archive_path};
@@ -92,8 +92,8 @@ impl SourcePage {
 #[instrument(skip(conn, storage))]
 pub(crate) async fn source_browser_handler(
     params: RustdocParams,
-    Extension(storage): Extension<Arc<AsyncStorage>>,
-    Extension(config): Extension<Arc<Config>>,
+    State(storage): State<Arc<AsyncStorage>>,
+    State(config): State<Arc<Config>>,
     mut conn: DbConnection,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> AxumResult<impl IntoResponse> {

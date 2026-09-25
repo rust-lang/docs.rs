@@ -1,6 +1,7 @@
 use crate::config::Config;
 use axum::{
-    Extension, extract::Request as AxumHttpRequest, middleware::Next,
+    extract::{Request as AxumHttpRequest, State},
+    middleware::Next,
     response::Response as AxumResponse,
 };
 use axum_extra::headers::HeaderMapExt as _;
@@ -223,7 +224,7 @@ impl CachePolicy {
 }
 
 pub(crate) async fn cache_middleware(
-    Extension(config): Extension<Arc<Config>>,
+    State(config): State<Arc<Config>>,
     req: AxumHttpRequest,
     next: Next,
 ) -> AxumResponse {
@@ -275,13 +276,13 @@ mod tests {
         headers::{test_typed_decode, test_typed_encode},
     };
     use anyhow::{Context as _, Result};
-    use axum::{Router, body::Body, routing::get};
+    use axum::{Extension, Router, body::Body, routing::get};
     use axum_extra::headers::CacheControl;
     use docs_rs_config::AppConfig as _;
     use docs_rs_types::Duration;
     use http::Request;
     use test_case::{test_case, test_matrix};
-    use tower::{ServiceBuilder, ServiceExt as _};
+    use tower::ServiceExt as _;
 
     fn validate_cache_control(value: &HeaderValue) -> Result<()> {
         assert!(!value.as_bytes().is_empty());
@@ -541,11 +542,10 @@ mod tests {
                     move || async move { (Extension(policy), "Hello, World!") }
                 }),
             )
-            .layer(
-                ServiceBuilder::new()
-                    .layer(Extension(config.clone()))
-                    .layer(axum::middleware::from_fn(cache_middleware)),
-            );
+            .layer(axum::middleware::from_fn_with_state(
+                config.clone(),
+                cache_middleware,
+            ));
 
         let builder = Request::builder().uri("/krate");
 
@@ -578,11 +578,10 @@ mod tests {
                     )
                 }),
             )
-            .layer(
-                ServiceBuilder::new()
-                    .layer(Extension(config.clone()))
-                    .layer(axum::middleware::from_fn(cache_middleware)),
-            );
+            .layer(axum::middleware::from_fn_with_state(
+                config.clone(),
+                cache_middleware,
+            ));
 
         let builder = Request::builder().uri("/");
 

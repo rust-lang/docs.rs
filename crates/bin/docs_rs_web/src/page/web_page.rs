@@ -1,7 +1,7 @@
 use crate::{error::AxumNope, middleware::csp::Csp, page::templates::TemplateData};
 use axum::{
     body::Body,
-    extract::Request as AxumRequest,
+    extract::{Request as AxumRequest, State},
     middleware::Next,
     response::{IntoResponse, Response as AxumResponse},
 };
@@ -156,13 +156,11 @@ fn render_response(
     .boxed()
 }
 
-pub(crate) async fn render_templates_middleware(req: AxumRequest, next: Next) -> AxumResponse {
-    let templates: Arc<TemplateData> = req
-        .extensions()
-        .get::<Arc<TemplateData>>()
-        .expect("template data request extension not found")
-        .clone();
-
+pub(crate) async fn render_templates_middleware(
+    State(templates): State<Arc<TemplateData>>,
+    req: AxumRequest,
+    next: Next,
+) -> AxumResponse {
     let csp_nonce = req
         .extensions()
         .get::<Arc<Csp>>()
