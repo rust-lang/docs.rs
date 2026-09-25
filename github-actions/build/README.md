@@ -97,16 +97,28 @@ checkout or a separate runner revision input.
 
 ## Inputs
 
-| Input         | Default | Meaning                                                                                                                           |
-| ------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `path`        | `.`     | Crate or workspace directory relative to the checkout root.                                                                       |
-| `package`     | empty   | Cargo package specification; required for virtual workspaces. If omitted, Cargo must select exactly one package.                  |
-| `small-image` | `false` | Use the smaller [linux-micro image][linux-micro-image] instead of the full [linux image][linux-image]. Accepts `true` or `false`. |
-| `strict`      | `false` | Also fail for JSON, coverage, or additional-target failures. Accepts `true` or `false`.                                           |
+| Input          | Default | Meaning                                                                                                                           |
+| -------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `path`         | `.`     | Crate or workspace directory relative to the checkout root.                                                                       |
+| `package`      | empty   | Cargo package specification; required for virtual workspaces. If omitted, Cargo must select exactly one package.                  |
+| `small-image`  | `false` | Use the smaller [linux-micro image][linux-micro-image] instead of the full [linux image][linux-image]. Accepts `true` or `false`. |
+| `strict`       | `false` | Also fail for JSON, coverage, or additional-target failures. Accepts `true` or `false`.                                           |
+| `experimental` | `false` | Enable experimental docs.rs build defaults. Accepts `true` or `false`.                                                            |
 
 Default failure behavior matches the runner: setup, packaging, default-target
 HTML, and missing library documentation fail the action. `strict: 'true'`
 additionally makes auxiliary build failures fatal.
+
+Set `experimental: "true"` to pass `--experimental` to the runner and enable
+proposed docs.rs defaults, currently denying `rustdoc::invalid_html_tags` and
+unknown lint names. These defaults may change between releases. This is separate
+from `strict`, which only changes how build-step failures affect the result.
+
+```yaml
+- uses: rust-lang/docs.rs/github-actions/build@main
+  with:
+    experimental: "true"
+```
 
 To select a workspace member, run from the workspace root (the default
 `path: .`) and specify its package name:

@@ -189,6 +189,56 @@ fn main() -> Result<()> {
 See [`examples/full_release.rs`](examples/full_release.rs) for a complete
 command-line version.
 
+## Rustdoc lint policy
+
+Documentation builds apply no lint cap and promote no lints to errors by
+default. Rustdoc defaults and the crate's lint attributes remain effective, so
+lints denied or forbidden by the crate can fail documentation builds. For
+example, crate authors can use `#![deny(rustdoc::all)]` in `lib.rs` to deny all
+stable rustdoc lints, including those normally allowed.
+
+Configure the environment with `.rustdoc_lints(policy)`, selecting one policy:
+
+- `RustdocLints::default()` adds no lint flags.
+- `RustdocLints::experimental()` opts into proposed docs.rs lint defaults,
+  currently denying `rustdoc::invalid_html_tags`. This policy may change between
+  releases and is used by the CLI's `--experimental` flag.
+- `RustdocLints::default().deny("rustdoc::invalid_html_tags")` denies one lint
+  or group. Chain `.deny(...)` calls or use `.deny_many([...])` for several.
+
+```rust,no_run
+# use anyhow::Result;
+use docs_rs_rustwide::{BuildEnvironment, RustdocLints};
+use std::path::Path;
+# fn main() -> Result<()> {
+# docs_rs_rustwide::logging::init(true);
+let mut environment = BuildEnvironment::builder(Path::new("./rustwide-workspace"))
+    .rustdoc_lints(RustdocLints::default().deny("rustdoc::invalid_html_tags"))
+    .build()?;
+# let _ = environment;
+# Ok(())
+# }
+```
+
+Selecting any denied lint also adds `-D unknown_lints`. The selected toolchain
+checks lint names during the documentation build, making unknown names errors,
+including those in the crate's source.
+
+Environment lint defaults precede the crate's
+`package.metadata.docs.rs.rustdoc-args`, which precede explicit
+`PrepareCommand::rustdoc_args`. Later flags can override earlier settings
+according to Rust's lint precedence rules. For example, a crate can override an
+environment default denial with
+`rustdoc-args = ["-A",
+"rustdoc::invalid_html_tags"]`.
+
+This policy configures rustdoc invocations, not rustc compilation of
+dependencies or other Cargo builds. Names can include rustdoc lints, compiler
+lints supported by rustdoc such as `missing_docs`, and groups such as `warnings`
+or `rustdoc::all`. Rustdoc does not run every compiler lint check. Crate lint
+attributes still follow Rust's normal lint-level precedence rules, and forced
+warnings are not suppressed by a cap.
+
 ## Selecting individual build products
 
 `ReleaseContext::run` prepares and fetches the release once, then gives the
