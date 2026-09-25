@@ -313,6 +313,32 @@
         }
     });
 
+    (async function loadAlerts() {
+        const alerts = document.getElementById("alerts");
+        if (!alerts) {
+            return;
+        }
+
+        try {
+            const response = await fetch("/-/partial/alerts/");
+            alerts.innerHTML = await response.text();
+            const alertCheckbox = document.getElementById("docsrs-alert-input");
+            if (alertCheckbox) {
+                const alertId = alertCheckbox.getAttribute("data-id");
+                alertCheckbox.onchange = () => {
+                    // Remember when the user closes this alert.
+                    window.localStorage.setItem("hide-alert-id", alertId);
+                };
+                // Restore dismissal before showing the loaded alert.
+                alertCheckbox.checked = window.localStorage.getItem("hide-alert-id") === alertId;
+            }
+            alerts.classList.remove("hidden");
+        } catch (ex) {
+            console.error(`Failed to load alerts: ${ex}`);
+            alerts.innerHTML = "";
+        }
+    })();
+
     (async function loadAbnormalities() {
         const abnormalities = document.getElementById("abnormalities");
         if (!abnormalities) {

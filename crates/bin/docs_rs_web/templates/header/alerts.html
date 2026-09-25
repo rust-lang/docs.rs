@@ -1,0 +1,10 @@
+{%- if let Some(alert) = alerts -%}
+    <input type="checkbox" id="docsrs-alert-input" data-id={{alert.alert_id|safe}}>
+    <label id="docsrs-alert-hide" for="docsrs-alert-input" title="Close alert message">
+        {{- crate::icons::IconXmark.render_solid(false, false, "") -}}
+    </label>
+    <div id="docsrs-alert">
+        {{- crate::icons::IconCircleInfo.render_solid(false, false, "") -}}
+        <span class="alert-text">{{- alert.text|safe -}}</span>
+    </div>
+{%- endif -%}
