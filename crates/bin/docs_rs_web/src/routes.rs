@@ -261,6 +261,10 @@ pub(crate) fn build_axum_routes() -> Result<AxumRouter> {
             get_internal(status::abnormalities),
         )
         .route(
+            "/-/partial/crate-warnings/{name}/",
+            get_internal(status::crate_warnings),
+        )
+        .route(
             "/-/rustdoc.static/{*path}",
             get_internal(rustdoc::static_asset_handler),
         )

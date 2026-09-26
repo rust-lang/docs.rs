@@ -313,6 +313,26 @@
         }
     });
 
+    (async function loadCrateWarnings() {
+        const warnings = document.getElementById("crate-warnings");
+        if (!warnings) {
+            return;
+        }
+
+        try {
+            const response = await fetch(warnings.dataset.url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const html = await response.text();
+            warnings.outerHTML = html;
+        } catch (ex) {
+            console.error(`Failed to load crate warnings: ${ex}`);
+            warnings.innerHTML = "";
+            warnings.classList.add("hidden");
+        }
+    })();
+
     (async function loadAbnormalities() {
         const abnormalities = document.getElementById("abnormalities");
         if (!abnormalities) {

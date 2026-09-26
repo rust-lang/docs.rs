@@ -1,7 +1,7 @@
 use crate::{
     cache::CachePolicy,
     error::AxumResult,
-    extractors::DbConnection,
+    extractors::{DbConnection, Path},
     impl_axum_webpage,
     page::{
         templates::{RenderBrands, RenderSolid},
@@ -15,6 +15,9 @@ use axum::{
 };
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::service_config::Abnormality;
+use docs_rs_rustsec::RustsecClient;
+use docs_rs_std_replacements::{ReplacementDetails, StdReplacements};
+use docs_rs_types::KrateName;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Template)]
@@ -59,6 +62,68 @@ pub(crate) async fn abnormalities(
     .into_response())
 }
 
+/// subset of `rustsec::Advisory` that we
+/// currently show in the crate-warnings.
+///
+/// So we don't have to clone the whole advisory.
+struct UnmaintainedWarning {
+    id: String,
+    title: String,
+}
+
+#[derive(Template)]
+#[template(path = "header/crate_warnings.html")]
+struct CrateWarnings {
+    replacement: Option<Arc<ReplacementDetails>>,
+    unmaintained: Option<UnmaintainedWarning>,
+    cache_policy: CachePolicy,
+}
+
+impl_axum_webpage! {
+    CrateWarnings,
+    cache_policy = |page| page.cache_policy.clone()
+}
+
+/// Render crate warnings for insertion into the documentation topbar.
+pub(crate) async fn crate_warnings(
+    Extension(rustsec): Extension<Arc<RustsecClient>>,
+    Extension(std_replacements): Extension<Arc<StdReplacements>>,
+    Path(name): Path<KrateName>,
+) -> AxumResult<impl IntoResponse> {
+    // default cache policy for this endpoint.
+    // Should be used:
+    // - when we have results
+    // - when we don't have results for that crate, but the database was loaded.
+    let mut cache_policy = CachePolicy::LongerInCdnAndBrowser;
+
+    let unmaintained = if let Some(database) = rustsec.database() {
+        database
+            .find_unmaintained(&name)
+            .map(|advisory| UnmaintainedWarning {
+                id: advisory.id().to_string(),
+                title: advisory.title().to_string(),
+            })
+    } else {
+        // when the database wasn't available, don't cache for long.
+        cache_policy = CachePolicy::ShortInCdnAndBrowser;
+        None
+    };
+
+    let replacement = if let Some(database) = std_replacements.database() {
+        database.get(&name).cloned()
+    } else {
+        // The first background refresh has not completed yet.
+        cache_policy = CachePolicy::ShortInCdnAndBrowser;
+        None
+    };
+
+    Ok(CrateWarnings {
+        replacement,
+        unmaintained,
+        cache_policy,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -70,10 +135,129 @@ mod tests {
     use anyhow::Result;
     use docs_rs_config::AppConfig as _;
     use docs_rs_database::service_config::{Abnormality, ConfigName, set_config};
+    use docs_rs_rustsec::{RustsecClient, testing};
+    use docs_rs_std_replacements::testing::{StdReplacementMockServer, std_replacement};
     use docs_rs_types::{KrateName, testing::V1};
     use docs_rs_uri::EscapedURI;
+    use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
+
+    const OWNED_ALLOC: KrateName = KrateName::from_static("owned-alloc");
+
+    fn rustsec_client() -> Result<Arc<RustsecClient>> {
+        Ok(Arc::new(testing::client([testing::unmaintained(
+            &OWNED_ALLOC,
+        )])?))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_renders_separate_menu_items() -> Result<()> {
+        let std_server = StdReplacementMockServer::new()
+            .await
+            .mock()
+            .replacement(OWNED_ALLOC, std_replacement("Use std"))
+            .start()
+            .await;
+
+        let rustsec = rustsec_client()?;
+
+        let env = TestEnvironment::builder()
+            .std_replacements_config(std_server.config().build())
+            .rustsec(rustsec)
+            .build()
+            .await?;
+
+        let html = env
+            .web_app()
+            .await
+            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .await?
+            .text()
+            .await?;
+
+        let page = kuchikiki::parse_html().one(format!("<ul>{html}</ul>"));
+        let labels: Vec<_> = page
+            .select("ul > li.crate-warning > a.warn")
+            .unwrap()
+            .map(|link| link.text_contents().trim().to_owned())
+            .collect();
+
+        assert_eq!(labels, ["Std alternative", "Unmaintained"]);
+        assert_eq!(
+            page.select("li.crate-warning + li.crate-warning")
+                .unwrap()
+                .count(),
+            1
+        );
+
+        std_server.assert_async().await;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_caches_replacement_404() -> Result<()> {
+        let std_server = StdReplacementMockServer::new()
+            .await
+            .mock()
+            .status_code(StatusCode::NOT_FOUND)
+            .start()
+            .await;
+
+        let env = TestEnvironment::builder()
+            .std_replacements_config(std_server.config().build())
+            .rustsec(rustsec_client()?)
+            .build()
+            .await?;
+
+        let response = env
+            .web_app()
+            .await
+            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .await?;
+
+        response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
+
+        let html = response.text().await?;
+        assert!(html.contains("Unmaintained"));
+        assert!(!html.contains("Std alternative"));
+
+        std_server.assert_async().await;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_renders_rustsec_warning_when_replacements_are_unavailable() -> Result<()>
+    {
+        let std_server = StdReplacementMockServer::new()
+            .await
+            .mock()
+            .replacement(OWNED_ALLOC, std_replacement("Use std"))
+            .status_code(StatusCode::SERVICE_UNAVAILABLE)
+            .start()
+            .await;
+
+        let env = TestEnvironment::builder()
+            .std_replacements_config(std_server.config().build())
+            .rustsec(rustsec_client()?)
+            .build()
+            .await?;
+
+        let response = env
+            .web_app()
+            .await
+            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .await?;
+
+        response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
+
+        let html = response.text().await?;
+        assert!(html.contains("Unmaintained"));
+        assert!(!html.contains("Std alternative"));
+
+        std_server.assert_async().await;
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn abnormalities_partial_renders_configured_link() -> Result<()> {
