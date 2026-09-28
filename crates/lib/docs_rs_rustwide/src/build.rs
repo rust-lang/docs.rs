@@ -27,7 +27,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::{Span, debug, error, info, instrument};
+use tracing::{Span, debug, error, info, instrument, warn};
 
 /// Name of rustdoc's documentation output directory.
 const DOC_OUTPUT_DIR_NAME: &str = "doc";
@@ -349,7 +349,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// When requested, an HTML preparation or command failure retries all enabled
     /// steps once with a regenerated lockfile if one exists. If regeneration fails,
     /// no retry runs; the original results and regeneration failure are retained together.
-    /// Metrics collection is a separate, nonfatal step after each HTML attempt.
+    /// When compiler metrics are enabled, a failed HTML attempt is retried once
+    /// without metrics before applying the normal lockfile retry policy.
     #[builder(finish_fn(name=run))]
     pub fn build_target(
         &self,
@@ -399,13 +400,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
 
         let rustdoc_json = self.build_rustdoc_json(target);
         let documentation = self.build_documentation(target);
-
-        let compiler_metrics = self
-            .collect_compiler_metrics()
-            .inspect_err(|err| error!(?err, "error collecting compiler metrics after target build"))
-            .ok()
-            .flatten();
-
         let is_default = target == self.metadata_targets().default_target;
 
         if documentation.is_ok() && self.docsrs_metadata().proc_macro {
@@ -421,7 +415,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             is_default,
             documentation,
             rustdoc_json,
-            compiler_metrics,
             coverage,
             regenerate_lockfile: None,
         }
@@ -499,12 +492,29 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// All failures retain their duration and log; the caller decides whether to abort.
     pub fn build_documentation(&self, target: &str) -> StepResult<HtmlOutput> {
-        self.build_html(target, Emit::HtmlNonStaticFiles)
+        let documentation = self.build_html(target, Emit::HtmlNonStaticFiles, true);
+        match documentation {
+            Err(err)
+                if self
+                    .environment
+                    .compiler_metrics_collection_path()
+                    .is_some() =>
+            {
+                error!(
+                    target,
+                    ?err,
+                    "HTML build with compiler metrics failed; retrying without compiler metrics"
+                );
+                self.build_html(target, Emit::HtmlNonStaticFiles, false)
+            }
+            documentation => documentation,
+        }
     }
 
     #[instrument(skip_all)]
     pub(crate) fn build_essential_files(&self) -> StepResult<HtmlOutput> {
-        let mut result = self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles)?;
+        let mut result =
+            self.build_html(docsrs_metadata::HOST_TARGET, Emit::HtmlStaticFiles, false)?;
 
         // we keep the original duration & log from the build-html step,
         // changing / testing the output dir doesn't change much here.
@@ -529,7 +539,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     }
 
     #[instrument(skip_all, fields(target, emit))]
-    fn build_html(&self, target: &str, emit: Emit) -> StepResult<HtmlOutput> {
+    fn build_html(
+        &self,
+        target: &str,
+        emit: Emit,
+        collect_compiler_metrics: bool,
+    ) -> StepResult<HtmlOutput> {
         self.capture_rustwide_step(|| {
             let mut command = self
                 .command(target)
@@ -537,18 +552,15 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .rustdoc_args(["--resource-suffix", &self.resource_suffix])
                 .cargo_arg("-Zrustdoc-scrape-examples");
 
-            if let Some(directory) = self.compiler_metrics_dir() {
-                // Metrics setup must not prevent HTML from being generated.
-                // Target builds log collection errors and return no metrics paths.
-                match fs::create_dir_all(&directory) {
-                    Ok(()) => {
-                        command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics");
-                    }
-                    Err(err) => error!(
-                        ?err,
-                        "cannot create metrics directory; building without metrics"
-                    ),
-                }
+            let compiler_metrics_collection_path = collect_compiler_metrics
+                .then_some(self.environment.compiler_metrics_collection_path())
+                .flatten();
+
+            let host_metrics_dir = self.host_metrics_dir();
+            if compiler_metrics_collection_path.is_some() {
+                fs::create_dir_all(&host_metrics_dir)
+                    .map_err(|err| BuildStepError::Prepare(err.into()))?;
+                command = command.rustdoc_arg("-Zmetrics-dir=/opt/rustwide/target/metrics");
             }
 
             command
@@ -571,27 +583,20 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 fs::rename(&output_dir, &destination)
                     .context("couldn't move output dir to temp destination")?;
 
-                Ok(HtmlOutput::new(temp_dir.keep().join("docs")))
+                let collected_metrics = compiler_metrics_collection_path
+                    .map(|target| copy_compiler_metrics(&host_metrics_dir, target))
+                    .transpose()?;
+
+                Ok(HtmlOutput::new(
+                    temp_dir.keep().join("docs"),
+                    collected_metrics,
+                ))
             })
         })
     }
 
-    /// Copy compiler metrics after HTML execution. Failure does not invalidate HTML.
-    pub fn collect_compiler_metrics(&self) -> Result<Option<Vec<PathBuf>>> {
-        let (Some(source), Some(destination)) = (
-            self.compiler_metrics_dir(),
-            self.environment.compiler_metrics_collection_path(),
-        ) else {
-            return Ok(None);
-        };
-        copy_compiler_metrics(&source, destination).map(Some)
-    }
-
-    fn compiler_metrics_dir(&self) -> Option<PathBuf> {
-        self.environment
-            .compiler_metrics_collection_path()
-            .is_some()
-            .then(|| self.build.host_target_dir().join("metrics"))
+    fn host_metrics_dir(&self) -> PathBuf {
+        self.build.host_target_dir().join("metrics")
     }
 
     fn capture_rustwide_step<T>(
@@ -1089,8 +1094,8 @@ mod policy_tests {
 
     #[test]
     #[ignore = "requires Docker and a Rust toolchain"]
-    fn metrics_collection_failure_is_nonfatal() -> Result<()> {
-        crate::logging::init(false);
+    fn metrics_collection_failure_retries_without_metrics() -> Result<()> {
+        crate::logging::init(true);
         let workspace = crate::testing::test_workspace_path();
         let temporary = tempfile::tempdir()?;
         let destination = temporary.path().join("not-a-directory");
@@ -1100,19 +1105,50 @@ mod policy_tests {
             .fast_init(true)
             .validate_host_resources(false)
             .sandbox_image(crate::testing::test_sandbox_image())
+            .toolchain(rustwide::Toolchain::dist(
+                crate::testing::COMPILER_METRICS_TEST_TOOLCHAIN,
+            ))
             .compiler_metrics_collection_path(destination.as_path())
             .build()?;
         environment.release(&fixture()).run(|build| {
             let release = build.build_docs();
             assert!(release.has_docs());
             assert!(release.default_target().compiler_metrics().is_none());
-            let source = build.compiler_metrics_dir().unwrap();
+            let source = build.host_metrics_dir();
             assert!(
                 fs::read_dir(source)?.next().is_some(),
                 "failed collection must retain metrics"
             );
             Ok(())
         })?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn metrics_ice_retries_without_metrics() -> Result<()> {
+        crate::logging::init(true);
+        let workspace = crate::testing::test_workspace_path();
+        let metrics = tempfile::tempdir()?;
+        let mut environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
+            .fast_init(true)
+            .validate_host_resources(false)
+            .sandbox_image(crate::testing::test_sandbox_image())
+            .toolchain(rustwide::Toolchain::dist(
+                // Nightly containing the rustdoc `-Zmetrics-dir` ICE.
+                // See https://github.com/rust-lang/rust/issues/163426
+                "nightly-2026-09-27",
+            ))
+            .compiler_metrics_collection_path(metrics.path())
+            .build()?;
+
+        let release = environment
+            .release(&fixture())
+            .run(|build| Ok(build.build_docs()))?
+            .into_inner();
+        assert!(release.has_docs());
+        assert!(release.default_target().compiler_metrics().is_none());
         Ok(())
     }
 }

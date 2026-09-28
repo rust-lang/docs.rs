@@ -1,7 +1,7 @@
 use crate::support::{TestEnvironment, build_local, fixture, test_workspace};
 use anyhow::{Context as _, Result};
 use docs_rs_rustwide::{BuildEnvironment, CpuLimit, StepResultExt};
-use rustwide::Crate;
+use rustwide::{Crate, Toolchain};
 use std::fs;
 use test_case::test_case;
 
@@ -200,13 +200,36 @@ fn collects_compiler_metrics() -> Result<()> {
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
+        .toolchain(Toolchain::dist(
+            docs_rs_rustwide::testing::COMPILER_METRICS_TEST_TOOLCHAIN,
+        ))
         .compiler_metrics_collection_path(metrics.path())
         .build()?;
 
     let release = build_local(&mut environment, "hello-world")?.into_inner();
-    let metric_files = release.default_target().compiler_metrics().unwrap();
+    assert!(release.has_docs());
+
+    let metric_files = release
+        .default_target()
+        .compiler_metrics()
+        .expect("compiler metrics should be collected");
     assert_eq!(metric_files.len(), 1);
-    let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
+
+    let metric_file = &metric_files[0];
+    assert_eq!(metric_file.extension().unwrap().to_str().unwrap(), "json");
+    assert!(
+        metric_file
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("unstable_feature_usage_metrics-")
+    );
+
+    let metric: serde_json::Value = serde_json::from_slice(&fs::read(metric_file)?)?;
+    assert!(metric["lib_features"].is_array());
+    assert!(metric["lang_features"].is_array());
+
     Ok(())
 }
 
