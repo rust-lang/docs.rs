@@ -220,10 +220,8 @@ fn collects_compiler_metrics() -> Result<()> {
     assert!(
         metric_file
             .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .starts_with("unstable_feature_usage_metrics-")
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("unstable_feature_usage_metrics-"))
     );
 
     let metric: serde_json::Value = serde_json::from_slice(&fs::read(metric_file)?)?;
