@@ -1,0 +1,47 @@
+go-to: |DOC_PATH| + "/sysinfo"
+
+set-window-size: (1000, 800)
+
+define-function: (
+    "check-crate-name-elems",
+    [],
+    block {
+        // First we store the size and position of the crate name menu item in the topbar.
+        store-size: (
+            "#nav-search-form .pure-menu-link.crate-name",
+            {"width": width, "height": height}
+        )
+        store-position: (
+            "#nav-search-form .pure-menu-link.crate-name",
+            {"x": x, "y": y}
+        )
+
+        // Then we store the same info for the title itself and the menu arrow (ie "▼").
+        store-position: (
+            "#nav-search-form .pure-menu-link.crate-name .title",
+            {"x": title_x, "y": title_y}
+        )
+        store-size: (
+            "#nav-search-form .pure-menu-link.crate-name .title",
+            {"width": title_width}
+        )
+        store-position: (
+            "#nav-search-form .pure-menu-link.crate-name::after",
+            {"x": after_x, "y": after_y}
+        )
+        store-size: (
+            "#nav-search-form .pure-menu-link.crate-name::after",
+            {"width": after_width}
+        )
+        // And finally we ensure that none of it overflows and that it's all visible.
+        assert: |title_x| + |title_width| < |x| + |width|
+        assert: |after_x| + |after_width| < |x| + |width|
+    }
+)
+
+call-function: ("check-crate-name-elems", {})
+set-text: (
+    "#nav-search-form .pure-menu-link.crate-name .title",
+    "antesdfsdfdsfsdfsdcedent-stats-sdfksndflksdn",
+)
+call-function: ("check-crate-name-elems", {})
