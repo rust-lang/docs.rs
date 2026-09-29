@@ -493,21 +493,20 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     pub fn build_documentation(&self, target: &str) -> StepResult<HtmlOutput> {
         let documentation = self.build_html(target, Emit::HtmlNonStaticFiles, true);
-        match documentation {
-            Err(err)
-                if self
-                    .environment
-                    .compiler_metrics_collection_path()
-                    .is_some() =>
-            {
-                error!(
-                    target,
-                    ?err,
-                    "HTML build with compiler metrics failed; retrying without compiler metrics"
-                );
-                self.build_html(target, Emit::HtmlNonStaticFiles, false)
-            }
-            documentation => documentation,
+        if let Err(err) = &documentation
+            && self
+                .environment
+                .compiler_metrics_collection_path()
+                .is_some()
+        {
+            error!(
+                target,
+                ?err,
+                "HTML build with compiler metrics failed; retrying without compiler metrics"
+            );
+            self.build_html(target, Emit::HtmlNonStaticFiles, false)
+        } else {
+            documentation
         }
     }
 
