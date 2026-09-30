@@ -38,7 +38,7 @@ mod tests {
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build = Build::start(&mut conn, release_id).await?;
 
-        // A rejected upload must not wait for the sole, currently held connection.
+        // Failed uploads are omitted even when using a single connection.
         let rejected = || {
             BuildLog::builder()
                 .target("rejected")
@@ -49,12 +49,11 @@ mod tests {
         assert!(
             tokio::time::timeout(
                 std::time::Duration::from_secs(2),
-                build.publish_build_logs(db.pool(), &storage, [rejected()]),
+                build.publish_build_logs(&mut conn, &storage, [rejected()]),
             )
             .await?
             .is_err()
         );
-        drop(conn);
 
         let logs = [
             rejected(),
@@ -73,12 +72,11 @@ mod tests {
         assert!(
             tokio::time::timeout(
                 std::time::Duration::from_secs(2),
-                build.publish_build_logs(db.pool(), &storage, logs),
+                build.publish_build_logs(&mut conn, &storage, logs),
             )
             .await?
             .is_err()
         );
-        let mut conn = db.async_conn().await?;
         let logs = sqlx::query_as::<_, (String, bool)>(
             "SELECT log_filename, success FROM builds_logs WHERE build_id = $1 ORDER BY log_filename",
         )
@@ -192,7 +190,7 @@ impl BuildLog {
     }
 
     fn storage_path(&self, build_id: BuildId) -> String {
-        format!("build_logs/{build_id}/{}", self.filename())
+        format!("build-logs/{build_id}/{}", self.filename())
     }
 }
 
@@ -282,7 +280,7 @@ impl Build<InProgress> {
     }
 
     /// Upload up to eight logs concurrently, then register all successful uploads
-    /// in one SQL statement using a pooled connection. Upload errors are reported
+    /// in one SQL statement using the supplied connection. Upload errors are reported
     /// after registration so other logs remain available even when one fails.
     pub async fn publish_build_logs(
         &self,
@@ -332,8 +330,8 @@ impl Build<InProgress> {
 
         sqlx::query!(
             "INSERT INTO builds_logs(build_id, log_filename, success)
-             SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
-             ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
+         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
+         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
             self.id as _,
             &logs_filename as &[String],
             &successes as &[bool],

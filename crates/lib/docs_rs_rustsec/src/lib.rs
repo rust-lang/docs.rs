@@ -4,7 +4,7 @@
 //! # async fn example() -> anyhow::Result<()> {
 //! use docs_rs_rustsec::{Config, RustsecClient};
 //!
-//! let client = RustsecClient::from_config(&Config::builder().build())?;
+//! let client = RustsecClient::from_config(&Config::builder().build()).await?;
 //! if let Some(database) = client.database() {
 //!     let advisory = database.find_unmaintained(&"owned-alloc".parse()?);
 //! }
