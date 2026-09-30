@@ -12,281 +12,6 @@ use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use tracing::{debug, error};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        Config,
-        releases::{initialize_crate, initialize_release},
-        testing::TestDatabase,
-    };
-    use docs_rs_config::AppConfig as _;
-    use docs_rs_opentelemetry::testing::TestMetrics;
-    use docs_rs_types::testing::{KRATE, V0_1};
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn log_reads_support_storage_fallback_and_legacy_output() -> Result<()> {
-        let metrics = TestMetrics::new();
-        let storage = docs_rs_storage::testing::TestStorage::from_kind(
-            docs_rs_storage::StorageKind::Memory,
-            metrics.provider(),
-        )
-        .await?;
-        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
-        for filename in ["b.txt", "a.txt"] {
-            storage
-                .store_one(
-                    format!("build-logs/{}/{filename}", build.id()),
-                    filename.to_owned(),
-                )
-                .await?;
-        }
-        let listed = build.list_build_logs(&storage).await?;
-        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
-        assert_eq!(
-            listed
-                .into_iter()
-                .map(|log| (log.filename().to_owned(), log.successful()))
-                .collect::<Vec<_>>(),
-            vec![("a.txt".into(), None), ("b.txt".into(), None)]
-        );
-        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
-        let error = build
-            .build_log("missing.txt")
-            .fetch(&storage)
-            .await
-            .unwrap_err();
-        assert!(error.is::<docs_rs_storage::PathNotFoundError>());
-
-        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
-            .bind(build.id().0)
-            .execute(&mut *conn)
-            .await?;
-        let legacy = Build::open(&mut conn, build.id()).await?;
-        assert!(legacy.list_build_logs(&storage).await?.is_empty());
-        assert_eq!(
-            legacy.build_log("missing.txt").fetch(&storage).await?,
-            "legacy log"
-        );
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
-        let metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let finished = Build::start(&mut conn, release_id)
-            .await?
-            .finish()
-            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
-            .docsrs_version("docs.rs test")
-            .successful(true)
-            .memory_peak(ByteSize::mib(12))
-            .save(&mut conn)
-            .await?;
-        assert_eq!(
-            finished.state().docsrs_version.as_deref(),
-            Some("docs.rs test")
-        );
-        assert!(finished.state().finished_at.is_some());
-        assert!(finished.started_at().is_some());
-        let id = finished.id();
-        sqlx::query("INSERT INTO builds_logs (build_id, log_filename, success) VALUES ($1, 'target.txt', false)")
-            .bind(id.0).execute(&mut *conn).await?;
-        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
-            .bind(id.0)
-            .execute(&mut *conn)
-            .await?;
-
-        let detail = Build::find_for_release(&mut conn, &KRATE, &V0_1, id)
-            .await?
-            .unwrap();
-        assert_eq!(detail.status(), BuildStatus::Success);
-        assert_eq!(detail.display_status(), BuildStatus::PartialFailure);
-        assert_eq!(detail.legacy_output(), Some("legacy log"));
-        assert_eq!(detail.logs(), &[("target.txt".into(), false)]);
-        assert!(
-            Build::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
-                .await?
-                .is_none()
-        );
-
-        let in_progress = Build::start(&mut conn, release_id).await?;
-        let builds = Build::for_release(&mut conn, &KRATE, &V0_1).await?;
-        assert_eq!(
-            builds.iter().map(OpenBuild::id).collect::<Vec<_>>(),
-            vec![in_progress.id(), id]
-        );
-        assert!(builds.iter().all(|build| build.legacy_output().is_none()));
-        assert!(matches!(&builds[0], OpenBuild::InProgress(_)));
-        assert!(builds[0].duration(Utc::now()).is_some());
-
-        // Successful historical rows need not have either lifecycle timestamp.
-        sqlx::query("UPDATE builds SET build_started = NULL, build_finished = NULL, rustc_version = NULL WHERE id = $1")
-            .bind(id.0).execute(&mut *conn).await?;
-        let legacy = Build::open(&mut conn, id).await?;
-        assert!(matches!(&legacy, OpenBuild::Finished(_)));
-        assert!(legacy.build_time().is_none());
-        assert!(legacy.duration(Utc::now()).is_none());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
-        let metrics = TestMetrics::new();
-        let storage = docs_rs_storage::testing::TestStorage::from_kind(
-            docs_rs_storage::StorageKind::Memory,
-            metrics.provider(),
-        )
-        .await?;
-        storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected")));
-        let mut config = Config::test_config()?;
-        config.max_pool_size = 1;
-        let db = TestDatabase::new(&config, metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let mut build = Build::start(&mut conn, release_id).await?;
-
-        // Failed uploads are omitted even when using a single connection.
-        let rejected = || {
-            NewBuildLog::builder()
-                .target("rejected")
-                .log("log")
-                .successful(false)
-                .build()
-        };
-        assert!(
-            tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                build.publish_build_logs(&mut conn, &storage, [rejected()]),
-            )
-            .await?
-            .is_err()
-        );
-
-        let logs = [
-            rejected(),
-            NewBuildLog::builder()
-                .target("target")
-                .log("html")
-                .successful(true)
-                .build(),
-            NewBuildLog::builder()
-                .target("target")
-                .kind(BuildLogKind::Json)
-                .log("json")
-                .successful(false)
-                .build(),
-        ];
-        assert!(
-            tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                build.publish_build_logs(&mut conn, &storage, logs),
-            )
-            .await?
-            .is_err()
-        );
-        let logs = sqlx::query_as::<_, (String, bool)>(
-            "SELECT log_filename, success FROM builds_logs WHERE build_id = $1 ORDER BY log_filename",
-        )
-        .bind(build.id().0)
-        .fetch_all(&mut *conn)
-        .await?;
-        assert_eq!(
-            logs,
-            vec![("target".into(), true), ("target_json".into(), false)]
-        );
-        assert_eq!(build.logs(), logs.as_slice());
-        assert_eq!(
-            build
-                .list_build_logs(&storage)
-                .await?
-                .into_iter()
-                .map(|log| (log.filename().to_owned(), log.successful()))
-                .collect::<Vec<_>>(),
-            vec![
-                ("target".into(), Some(true)),
-                ("target_json".into(), Some(false))
-            ]
-        );
-        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
-        for (filename, _) in logs {
-            assert!(
-                storage
-                    .exists(&format!("build-logs/{}/{filename}", build.id()))
-                    .await?
-            );
-        }
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn stale_handle_cannot_overwrite_completed_build() -> Result<()> {
-        let metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
-        let id = build.id();
-        let OpenBuild::InProgress(stale) = Build::open(&mut conn, id).await? else {
-            panic!("new attempt should be in progress");
-        };
-        build
-            .finish()
-            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
-            .docsrs_version("docs.rs test")
-            .successful(true)
-            .save(&mut conn)
-            .await?;
-        assert!(stale.fail_early().save(&mut conn).await.is_err());
-        let OpenBuild::Finished(finished) = Build::open(&mut conn, id).await? else {
-            panic!("completed attempt should remain finished");
-        };
-        assert_eq!(finished.state().status, BuildStatus::Success);
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn open_distinguishes_early_and_finished_failures() -> Result<()> {
-        let metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let early = Build::start(&mut conn, release_id)
-            .await?
-            .fail_early()
-            .save(&mut conn)
-            .await?;
-        assert!(matches!(
-            Build::open(&mut conn, early.id()).await?,
-            OpenBuild::EarlyFailure(_)
-        ));
-        let finished = Build::start(&mut conn, release_id)
-            .await?
-            .finish()
-            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
-            .docsrs_version("docs.rs test")
-            .successful(false)
-            .save(&mut conn)
-            .await?;
-        assert!(matches!(
-            Build::open(&mut conn, finished.id()).await?,
-            OpenBuild::Finished(_)
-        ));
-        Ok(())
-    }
-}
-
 #[derive(Debug, Copy, Clone, Default)]
 pub enum BuildLogKind {
     #[default]
@@ -1078,6 +803,281 @@ impl Build<InProgress> {
             "build {} is no longer in progress",
             self.id
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Config,
+        releases::{initialize_crate, initialize_release},
+        testing::TestDatabase,
+    };
+    use docs_rs_config::AppConfig as _;
+    use docs_rs_opentelemetry::testing::TestMetrics;
+    use docs_rs_types::testing::{KRATE, V0_1};
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn log_reads_support_storage_fallback_and_legacy_output() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        for filename in ["b.txt", "a.txt"] {
+            storage
+                .store_one(
+                    format!("build-logs/{}/{filename}", build.id()),
+                    filename.to_owned(),
+                )
+                .await?;
+        }
+        let listed = build.list_build_logs(&storage).await?;
+        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
+        assert_eq!(
+            listed
+                .into_iter()
+                .map(|log| (log.filename().to_owned(), log.successful()))
+                .collect::<Vec<_>>(),
+            vec![("a.txt".into(), None), ("b.txt".into(), None)]
+        );
+        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
+        let error = build
+            .build_log("missing.txt")
+            .fetch(&storage)
+            .await
+            .unwrap_err();
+        assert!(error.is::<docs_rs_storage::PathNotFoundError>());
+
+        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
+            .bind(build.id().0)
+            .execute(&mut *conn)
+            .await?;
+        let legacy = Build::open(&mut conn, build.id()).await?;
+        assert!(legacy.list_build_logs(&storage).await?.is_empty());
+        assert_eq!(
+            legacy.build_log("missing.txt").fetch(&storage).await?,
+            "legacy log"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let finished = Build::start(&mut conn, release_id)
+            .await?
+            .finish()
+            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
+            .docsrs_version("docs.rs test")
+            .successful(true)
+            .memory_peak(ByteSize::mib(12))
+            .save(&mut conn)
+            .await?;
+        assert_eq!(
+            finished.state().docsrs_version.as_deref(),
+            Some("docs.rs test")
+        );
+        assert!(finished.state().finished_at.is_some());
+        assert!(finished.started_at().is_some());
+        let id = finished.id();
+        sqlx::query("INSERT INTO builds_logs (build_id, log_filename, success) VALUES ($1, 'target.txt', false)")
+            .bind(id.0).execute(&mut *conn).await?;
+        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
+            .bind(id.0)
+            .execute(&mut *conn)
+            .await?;
+
+        let detail = Build::find_for_release(&mut conn, &KRATE, &V0_1, id)
+            .await?
+            .unwrap();
+        assert_eq!(detail.status(), BuildStatus::Success);
+        assert_eq!(detail.display_status(), BuildStatus::PartialFailure);
+        assert_eq!(detail.legacy_output(), Some("legacy log"));
+        assert_eq!(detail.logs(), &[("target.txt".into(), false)]);
+        assert!(
+            Build::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
+                .await?
+                .is_none()
+        );
+
+        let in_progress = Build::start(&mut conn, release_id).await?;
+        let builds = Build::for_release(&mut conn, &KRATE, &V0_1).await?;
+        assert_eq!(
+            builds.iter().map(OpenBuild::id).collect::<Vec<_>>(),
+            vec![in_progress.id(), id]
+        );
+        assert!(builds.iter().all(|build| build.legacy_output().is_none()));
+        assert!(matches!(&builds[0], OpenBuild::InProgress(_)));
+        assert!(builds[0].duration(Utc::now()).is_some());
+
+        // Successful historical rows need not have either lifecycle timestamp.
+        sqlx::query("UPDATE builds SET build_started = NULL, build_finished = NULL, rustc_version = NULL WHERE id = $1")
+            .bind(id.0).execute(&mut *conn).await?;
+        let legacy = Build::open(&mut conn, id).await?;
+        assert!(matches!(&legacy, OpenBuild::Finished(_)));
+        assert!(legacy.build_time().is_none());
+        assert!(legacy.duration(Utc::now()).is_none());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
+        storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected")));
+        let mut config = Config::test_config()?;
+        config.max_pool_size = 1;
+        let db = TestDatabase::new(&config, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let mut build = Build::start(&mut conn, release_id).await?;
+
+        // Failed uploads are omitted even when using a single connection.
+        let rejected = || {
+            NewBuildLog::builder()
+                .target("rejected")
+                .log("log")
+                .successful(false)
+                .build()
+        };
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                build.publish_build_logs(&mut conn, &storage, [rejected()]),
+            )
+            .await?
+            .is_err()
+        );
+
+        let logs = [
+            rejected(),
+            NewBuildLog::builder()
+                .target("target")
+                .log("html")
+                .successful(true)
+                .build(),
+            NewBuildLog::builder()
+                .target("target")
+                .kind(BuildLogKind::Json)
+                .log("json")
+                .successful(false)
+                .build(),
+        ];
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                build.publish_build_logs(&mut conn, &storage, logs),
+            )
+            .await?
+            .is_err()
+        );
+        let logs = sqlx::query_as::<_, (String, bool)>(
+            "SELECT log_filename, success FROM builds_logs WHERE build_id = $1 ORDER BY log_filename",
+        )
+        .bind(build.id().0)
+        .fetch_all(&mut *conn)
+        .await?;
+        assert_eq!(
+            logs,
+            vec![("target".into(), true), ("target_json".into(), false)]
+        );
+        assert_eq!(build.logs(), logs.as_slice());
+        assert_eq!(
+            build
+                .list_build_logs(&storage)
+                .await?
+                .into_iter()
+                .map(|log| (log.filename().to_owned(), log.successful()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("target".into(), Some(true)),
+                ("target_json".into(), Some(false))
+            ]
+        );
+        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
+        for (filename, _) in logs {
+            assert!(
+                storage
+                    .exists(&format!("build-logs/{}/{filename}", build.id()))
+                    .await?
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stale_handle_cannot_overwrite_completed_build() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let id = build.id();
+        let OpenBuild::InProgress(stale) = Build::open(&mut conn, id).await? else {
+            panic!("new attempt should be in progress");
+        };
+        build
+            .finish()
+            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
+            .docsrs_version("docs.rs test")
+            .successful(true)
+            .save(&mut conn)
+            .await?;
+        assert!(stale.fail_early().save(&mut conn).await.is_err());
+        let OpenBuild::Finished(finished) = Build::open(&mut conn, id).await? else {
+            panic!("completed attempt should remain finished");
+        };
+        assert_eq!(finished.state().status, BuildStatus::Success);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn open_distinguishes_early_and_finished_failures() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let early = Build::start(&mut conn, release_id)
+            .await?
+            .fail_early()
+            .save(&mut conn)
+            .await?;
+        assert!(matches!(
+            Build::open(&mut conn, early.id()).await?,
+            OpenBuild::EarlyFailure(_)
+        ));
+        let finished = Build::start(&mut conn, release_id)
+            .await?
+            .finish()
+            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
+            .docsrs_version("docs.rs test")
+            .successful(false)
+            .save(&mut conn)
+            .await?;
+        assert!(matches!(
+            Build::open(&mut conn, finished.id()).await?,
+            OpenBuild::Finished(_)
+        ));
         Ok(())
     }
 }
