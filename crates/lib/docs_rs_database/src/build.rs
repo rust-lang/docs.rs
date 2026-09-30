@@ -267,13 +267,13 @@ impl Build {
 
         sqlx::query!(
             r#"UPDATE builds
-           SET
-               build_status = 'failure',
-               errors = $1,
-               build_finished = NOW()
-           WHERE
-               rid = $2
-               AND build_status = 'in_progress'"#,
+               SET
+                   build_status = 'failure',
+                   errors = $1,
+                   build_finished = NOW()
+               WHERE
+                   rid = $2
+                   AND build_status = 'in_progress'"#,
             "build aborted: builder process restarted before completion",
             release_id as _,
         )
@@ -282,8 +282,8 @@ impl Build {
 
         let build_id = sqlx::query_scalar!(
             r#"INSERT INTO builds(rid, build_status, build_server, build_started)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id as "id: BuildId" "#,
+               VALUES ($1, $2, $3, NOW())
+               RETURNING id as "id: BuildId" "#,
             release_id.0,
             BuildStatus::InProgress as BuildStatus,
             hostname.to_str().unwrap_or(""),
