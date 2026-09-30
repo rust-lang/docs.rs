@@ -2,13 +2,13 @@ use crate::{FakeBuild, errored_build::StoredBuildError};
 use anyhow::{Result, bail};
 use docs_rs_database::releases::add_build_logs;
 use docs_rs_storage::AsyncStorage;
-use docs_rs_types::{BuildId, BuildStatus, ReleaseId};
+use docs_rs_types::{BuildId, BuildStatus, ByteSize, ReleaseId};
 use std::collections::HashMap;
 
 /// A completed build with compiler metadata, metrics, and optional logs.
 #[derive(bon::Builder)]
-#[builder(on(_, into))]
 #[builder(
+    on(_, into),
     start_fn(vis = "pub(crate)"),
     finish_fn(name = into_finished, vis = "pub(crate)")
 )]
@@ -17,12 +17,8 @@ pub struct FakeFinishedBuild {
     other_build_logs: HashMap<String, (String, bool)>,
 
     #[builder(
-        setters(
-            name = s3_build_log_internal,
-            vis = ""
-        ),
         required,
-        with = Some,
+        with = |build_log: impl Into<String>, successful: bool| Some((build_log.into(), successful)),
         default = Some(("It works!".into(), true))
     )]
     s3_build_log: Option<(String, bool)>,
@@ -41,8 +37,19 @@ pub struct FakeFinishedBuild {
     #[builder(with = |error: impl docs_rs_types::BuildError| StoredBuildError::new(error))]
     error: Option<StoredBuildError>,
 
-    #[builder(default = 23u64)]
-    memory_peak: u64,
+    #[builder(
+        required,
+        with=Some,
+        default = Some(23u64)
+    )]
+    memory_peak: Option<u64>,
+
+    #[builder(
+        required,
+        with=Some,
+        default=Some(ByteSize::b(42u64))
+    )]
+    documentation_size: Option<ByteSize>,
 
     /// new build logs: we have a record in the `builds_logs` table for each log, including a status
     /// old build logs: people have to run `s3 ls` with prefix to know which build logs exist
@@ -61,22 +68,11 @@ impl<S: State> FakeFinishedBuildBuilder<S> {
         self.into_finished().into()
     }
 
-    pub fn s3_build_log(
-        self,
-        build_log: impl Into<String>,
-        successful: bool,
-    ) -> FakeFinishedBuildBuilder<SetS3BuildLog<S>>
-    where
-        S::S3BuildLog: IsUnset,
-    {
-        self.s3_build_log_internal((build_log.into(), successful))
-    }
-
     pub fn no_s3_build_log(self) -> FakeFinishedBuildBuilder<SetS3BuildLog<S>>
     where
         S::S3BuildLog: IsUnset,
     {
-        self.maybe_s3_build_log_internal(None::<(String, bool)>)
+        self.maybe_s3_build_log(None::<(String, bool)>)
     }
 
     pub fn build_log_for_other_target(
@@ -132,8 +128,8 @@ impl FakeFinishedBuild {
             } else {
                 BuildStatus::Failure
             },
-            Some(42u64.into()),
-            Some(self.memory_peak),
+            self.documentation_size,
+            self.memory_peak,
             self.error.as_ref(),
         )
         .await?;
