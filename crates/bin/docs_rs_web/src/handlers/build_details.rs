@@ -90,7 +90,7 @@ pub(crate) async fn build_details_handler(
 
     let (output, logs, current_filename) = if build.has_legacy_output() {
         // legacy case, for old builds the build log was stored in the database.
-        let output = build.build_log("").fetch(&pool, &storage).await?;
+        let output = build.fetch_legacy_output(&pool).await?;
         (output, Vec::new(), None)
     } else {
         let logs = build.list_build_logs(&storage).await?;
@@ -113,7 +113,7 @@ pub(crate) async fn build_details_handler(
         };
 
         let output = if let Some(ref filename) = current_filename {
-            build.build_log(filename).fetch(&pool, &storage).await?
+            build.build_log(filename).fetch(&storage).await?
         } else {
             "".to_string()
         };

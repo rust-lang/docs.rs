@@ -66,28 +66,14 @@ impl NewBuildLog {
 pub struct BuildLog {
     filename: String,
     successful: Option<bool>,
-    source: BuildLogSource,
-}
-
-#[derive(Debug)]
-enum BuildLogSource {
-    Storage(String),
-    Database(BuildId),
+    storage_path: String,
 }
 
 impl BuildLog {
-    pub fn database(build_id: BuildId, default_target: impl Into<String>) -> Self {
-        Self {
-            filename: format!("{}.txt", default_target.into()),
-            successful: None,
-            source: BuildLogSource::Database(build_id),
-        }
-    }
-
     pub fn storage(build_id: BuildId, filename: impl Into<String>, successful: bool) -> Self {
         let filename = filename.into();
         Self {
-            source: BuildLogSource::Storage(build_log_storage_path(build_id, &filename)),
+            storage_path: build_log_storage_path(build_id, &filename),
             filename,
             successful: Some(successful),
         }
@@ -102,27 +88,10 @@ impl BuildLog {
         self.successful
     }
 
-    pub async fn fetch(
-        &self,
-        pool: &crate::Pool,
-        storage: &docs_rs_storage::AsyncStorage,
-    ) -> Result<String> {
-        match &self.source {
-            BuildLogSource::Database(id) => {
-                let mut conn = pool.get_async().await?;
-                sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
-                    .bind(id.0)
-                    .fetch_optional(&mut *conn)
-                    .await?
-                    .flatten()
-                    .ok_or_else(|| docs_rs_storage::PathNotFoundError.into())
-            }
-            BuildLogSource::Storage(path) => {
-                let blob =
-                    Box::pin(storage.get(path, storage.config().max_file_size_for(path))).await?;
-                String::from_utf8(blob.content).context("non utf8 build log")
-            }
-        }
+    pub async fn fetch(&self, storage: &docs_rs_storage::AsyncStorage) -> Result<String> {
+        let path = &self.storage_path;
+        let blob = Box::pin(storage.get(path, storage.config().max_file_size_for(path))).await?;
+        String::from_utf8(blob.content).context("non utf8 build log")
     }
 }
 
@@ -268,6 +237,14 @@ impl BuildRow {
 }
 
 impl AnyBuild {
+    pub async fn fetch_legacy_output(&self, pool: &crate::Pool) -> Result<String> {
+        match self {
+            Self::InProgress(build) => build.fetch_legacy_output(pool).await,
+            Self::Finished(build) => build.fetch_legacy_output(pool).await,
+            Self::EarlyFailure(build) => build.fetch_legacy_output(pool).await,
+        }
+    }
+
     /// Start a new attempt, marking any previous in-progress attempts aborted.
     pub async fn start(
         conn: &mut sqlx::PgConnection,
@@ -496,19 +473,25 @@ pub enum AnyBuild {
 }
 
 impl<State> Build<State> {
+    /// Fetch legacy database output lazily. Missing output is a not-found error.
+    pub async fn fetch_legacy_output(&self, pool: &crate::Pool) -> Result<String> {
+        let mut conn = pool.get_async().await?;
+        sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
+            .bind(self.id.0)
+            .fetch_optional(&mut *conn)
+            .await?
+            .flatten()
+            .ok_or_else(|| docs_rs_storage::PathNotFoundError.into())
+    }
+
     /// List registered logs, falling back to storage for older attempts without
-    /// log records. Legacy database output is represented by one lazy descriptor.
+    /// log records. Legacy database output is fetched separately and has no files.
     pub async fn list_build_logs(
         &self,
         storage: &docs_rs_storage::AsyncStorage,
     ) -> Result<Vec<BuildLog>> {
-        let default_target = self
-            .default_target()
-            .unwrap_or("default_target.txt")
-            .to_string();
-
         if self.has_legacy_output {
-            return Ok(vec![BuildLog::database(self.id, &default_target)]);
+            return Ok(Vec::new());
         }
         if !self.logs.is_empty() {
             return Ok(self
@@ -532,7 +515,6 @@ impl<State> Build<State> {
     }
 
     /// Resolve a log without fetching its content or checking storage existence.
-    /// Legacy database output takes precedence over the requested filename.
     pub fn build_log(&self, filename: &str) -> BuildLog {
         BuildLog {
             filename: filename.to_owned(),
@@ -541,11 +523,7 @@ impl<State> Build<State> {
                 .iter()
                 .find(|(name, _)| name == filename)
                 .map(|(_, success)| *success),
-            source: if self.has_legacy_output {
-                BuildLogSource::Database(self.id)
-            } else {
-                BuildLogSource::Storage(format!("build-logs/{}/{filename}", self.id))
-            },
+            storage_path: build_log_storage_path(self.id, filename),
         }
     }
 
@@ -851,7 +829,7 @@ mod tests {
                 .await?;
         }
         let listed = build.list_build_logs(&storage).await?;
-        assert_eq!(listed[0].fetch(db.pool(), &storage).await?, "a.txt");
+        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
         assert_eq!(
             listed
                 .into_iter()
@@ -859,13 +837,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![("a.txt".into(), None), ("b.txt".into(), None)]
         );
-        assert_eq!(
-            build.build_log("a.txt").fetch(db.pool(), &storage).await?,
-            "a.txt"
-        );
+        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
         let error = build
             .build_log("missing.txt")
-            .fetch(db.pool(), &storage)
+            .fetch(&storage)
             .await
             .unwrap_err();
         assert!(error.is::<docs_rs_storage::PathNotFoundError>());
@@ -875,32 +850,21 @@ mod tests {
             .execute(&mut *conn)
             .await?;
         let legacy = AnyBuild::open(&mut conn, build.id()).await?;
-        let legacy_logs = legacy.list_build_logs(&storage).await?;
-        assert_eq!(legacy_logs.len(), 1);
-        assert_eq!(
-            legacy_logs[0].fetch(db.pool(), &storage).await?,
-            "legacy log"
-        );
-        assert_eq!(
-            legacy
-                .build_log("missing.txt")
-                .fetch(db.pool(), &storage)
-                .await?,
-            "legacy log"
-        );
-        // Descriptors carry only the build ID: content is read at fetch time.
-        let log = legacy.build_log("missing.txt");
+        assert!(legacy.list_build_logs(&storage).await?.is_empty());
+        assert_eq!(legacy.fetch_legacy_output(db.pool()).await?, "legacy log");
+        // Content is read at fetch time, not carried by the build snapshot.
         sqlx::query("UPDATE builds SET output = 'updated log' WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        assert_eq!(log.fetch(db.pool(), &storage).await?, "updated log");
+        assert_eq!(legacy.fetch_legacy_output(db.pool()).await?, "updated log");
         sqlx::query("UPDATE builds SET output = NULL WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
         assert!(
-            log.fetch(db.pool(), &storage)
+            legacy
+                .fetch_legacy_output(db.pool())
                 .await
                 .unwrap_err()
                 .is::<docs_rs_storage::PathNotFoundError>()
@@ -967,9 +931,11 @@ mod tests {
         );
         assert!(!builds[0].has_legacy_output());
         assert!(builds[1].has_legacy_output());
-        let logs = builds[1].list_build_logs(&storage).await?;
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].fetch(db.pool(), &storage).await?, "legacy log");
+        assert!(builds[1].list_build_logs(&storage).await?.is_empty());
+        assert_eq!(
+            builds[1].fetch_legacy_output(db.pool()).await?,
+            "legacy log"
+        );
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
         assert!(builds[0].duration(Utc::now()).is_some());
 
@@ -1062,10 +1028,7 @@ mod tests {
                 ("target_json".into(), Some(false))
             ]
         );
-        assert_eq!(
-            build.build_log("target").fetch(db.pool(), &storage).await?,
-            "html"
-        );
+        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
         for (filename, _) in logs {
             assert!(
                 storage
