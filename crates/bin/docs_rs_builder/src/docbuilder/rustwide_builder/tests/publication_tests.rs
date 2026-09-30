@@ -1,6 +1,6 @@
 use super::*;
 use docs_rs_config::AppConfig as _;
-use docs_rs_types::ByteSize;
+use docs_rs_types::{BuildId, ByteSize};
 use pretty_assertions::assert_eq;
 
 fn environment() -> Result<TestEnvironment> {

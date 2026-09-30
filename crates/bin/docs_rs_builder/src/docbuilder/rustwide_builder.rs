@@ -7,10 +7,10 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
+    build::{Build, BuildLogKind, CompletionError, InProgress},
     releases::{
-        add_doc_coverage,
-        build_lifecycle::{Build, BuildLogKind, CompletionError, InProgress},
-        finish_release, initialize_crate, initialize_release, update_crate_data_in_database,
+        add_doc_coverage, finish_release, initialize_crate, initialize_release,
+        update_crate_data_in_database,
     },
     service_config::{ConfigName, get_config, set_config},
 };
