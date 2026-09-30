@@ -86,29 +86,36 @@ pub(crate) async fn build_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    let logs = build.list_build_logs(&storage).await?;
-
-    let current_filename = if let Some(filename) = build_params.filename {
-        // if we have a given filename in the URL, we use that one.
-        Some(filename)
-    } else if let Some(default_filename) = build.default_log_filename() {
-        // without a filename in the URL, we try to show the build log
-        // for the default target, if we have one.
-        logs.iter()
-            .any(|log| log.filename() == default_filename)
-            .then_some(default_filename)
+    let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
+        // legacy case, for old builds the build log was stored in the database.
+        (output, Vec::new(), None)
     } else {
-        // this can only happen when `releases.default_target` is NULL,
-        // which is the case for in-progress builds or builds which errored
-        // before we could determine the target.
-        // For early failures we show the build's error instead.
-        None
-    };
+        let logs = build.list_build_logs(&storage).await?;
 
-    let output = if let Some(ref filename) = current_filename {
-        build.build_log(filename).fetch(&storage).await?
-    } else {
-        "".to_string()
+        let current_filename = if let Some(filename) = build_params.filename {
+            // if we have a given filename in the URL, we use that one.
+            Some(filename)
+        } else if let Some(default_filename) = build.default_log_filename() {
+            // without a filename in the URL, we try to show the build log
+            // for the default target, if we have one.
+            logs.iter()
+                .any(|log| log.filename() == default_filename)
+                .then_some(default_filename)
+        } else {
+            // this can only happen when `releases.default_target` is NULL,
+            // which is the case for in-progress builds or builds which errored
+            // before we could determine the target.
+            // For early failures we show the build's error instead.
+            None
+        };
+
+        let output = if let Some(ref filename) = current_filename {
+            build.build_log(filename).fetch(&storage).await?
+        } else {
+            "".to_string()
+        };
+
+        (output, logs, current_filename)
     };
 
     Ok(BuildDetailsPage {
