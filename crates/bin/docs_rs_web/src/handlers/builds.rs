@@ -276,9 +276,8 @@ mod tests {
                     .build(),
                 FakeEarlyErrorBuild::builder()
                     .error(SimpleBuildError("early error".into()))
-                    .build()
-                    .into(),
-                FakeEarlyErrorBuild::builder().build().into(),
+                    .build(),
+                FakeEarlyErrorBuild::builder().build(),
                 FakeBuild::InProgress,
             ])
             .create()
