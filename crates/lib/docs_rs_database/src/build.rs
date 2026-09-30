@@ -851,20 +851,20 @@ mod tests {
             .await?;
         let legacy = AnyBuild::open(&mut conn, build.id()).await?;
         assert!(legacy.list_build_logs(&storage).await?.is_empty());
-        assert_eq!(legacy.fetch_legacy_output(&mut *conn).await?, "legacy log");
+        assert_eq!(legacy.fetch_legacy_output(&mut conn).await?, "legacy log");
         // Content is read at fetch time, not carried by the build snapshot.
         sqlx::query("UPDATE builds SET output = 'updated log' WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        assert_eq!(legacy.fetch_legacy_output(&mut *conn).await?, "updated log");
+        assert_eq!(legacy.fetch_legacy_output(&mut conn).await?, "updated log");
         sqlx::query("UPDATE builds SET output = NULL WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
         assert!(
             legacy
-                .fetch_legacy_output(&mut *conn)
+                .fetch_legacy_output(&mut conn)
                 .await
                 .unwrap_err()
                 .is::<PathNotFoundError>()
@@ -929,7 +929,7 @@ mod tests {
         assert!(builds[1].has_legacy_output());
         assert!(builds[1].list_build_logs(&storage).await?.is_empty());
         assert_eq!(
-            builds[1].fetch_legacy_output(&mut *conn).await?,
+            builds[1].fetch_legacy_output(&mut conn).await?,
             "legacy log"
         );
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
