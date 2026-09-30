@@ -699,12 +699,10 @@ mod tests {
 
     use super::*;
     use crate::testing::{TestEnvironment, TestEnvironmentExt as _};
-    use docs_rs_database::releases::{finish_build, initialize_build};
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_rustwide::{DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION};
     use docs_rs_types::{
-        BuildStatus, ByteSize, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version,
-        testing::V0_1,
+        BuildStatus, ByteSize, CompressionAlgorithm, ReleaseId, Version, testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;
@@ -1081,18 +1079,14 @@ mod tests {
         let release_id = block_on_async_with_conn!(env, |mut conn| async {
             let crate_id = initialize_crate(&mut *conn, &crate_).await?;
             let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-            let build_id = initialize_build(&mut *conn, release_id).await?;
-            finish_build(
-                &mut *conn,
-                build_id,
-                "some-version",
-                "other-version",
-                BuildStatus::Success,
-                None,
-                None,
-                None::<&SimpleBuildError>,
-            )
-            .await?;
+            let build = Build::start(&mut *conn, release_id).await?;
+            build
+                .finish()
+                .rustc_version("some-version")
+                .docsrs_version("other-version")
+                .successful(BuildStatus::Success == BuildStatus::Success)
+                .save(&mut *conn)
+                .await?;
             finish_release(
                 &mut *conn,
                 crate_id,

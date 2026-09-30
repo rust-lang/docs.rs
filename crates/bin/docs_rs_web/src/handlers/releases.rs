@@ -866,9 +866,8 @@ mod tests {
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
-    use docs_rs_database::releases::{
-        finish_build, initialize_build, initialize_crate, initialize_release,
-    };
+    use docs_rs_database::build::Build;
+    use docs_rs_database::releases::{initialize_crate, initialize_release};
     use docs_rs_registry_api::{CrateOwner, OwnerKind, SearchQuery, testing::TestRegistry};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
@@ -888,19 +887,15 @@ mod tests {
 
             let crate_id = initialize_crate(&mut conn, &FOO).await?;
             let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
-            let build_id = initialize_build(&mut conn, release_id).await?;
+            let build = Build::start(&mut conn, release_id).await?;
 
-            finish_build(
-                &mut conn,
-                build_id,
-                "rustc-version",
-                "docs.rs 4.0.0",
-                BuildStatus::Success,
-                None,
-                None,
-                None::<&SimpleBuildError>,
-            )
-            .await?;
+            build
+                .finish()
+                .rustc_version("rustc-version")
+                .docsrs_version("docs.rs 4.0.0")
+                .successful(BuildStatus::Success == BuildStatus::Success)
+                .save(&mut conn)
+                .await?;
 
             let releases = get_releases(&mut conn, 1, 10, Order::ReleaseTime, false).await?;
 

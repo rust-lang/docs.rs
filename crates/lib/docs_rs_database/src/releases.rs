@@ -3,10 +3,9 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, DocCoverage,
-    Feature, KrateName, ReleaseId, Version,
+    BuildId, ByteSize, CompressionAlgorithm, CrateId, DocCoverage, Feature, KrateName, ReleaseId,
+    Version,
 };
-use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
 use slug::slugify;
 use std::{
@@ -15,7 +14,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 /// Adds a package into database.
 ///
@@ -211,105 +210,6 @@ pub async fn add_doc_coverage(
     .await?)
 }
 
-/// Adds a build into database
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip(conn))]
-pub async fn finish_build<E>(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    rustc_version: &str,
-    docsrs_version: &str,
-    build_status: BuildStatus,
-    documentation_size: Option<ByteSize>,
-    memory_peak: Option<ByteSize>,
-    build_error: Option<&E>,
-) -> Result<()>
-where
-    E: BuildError,
-{
-    debug!("updating build after finishing");
-    let hostname = hostname::get()?;
-
-    let rustc_date = match parse_rustc_date(rustc_version) {
-        Ok(date) => Some(date),
-        Err(err) => {
-            // in the database we see cases where the rustc version is missing
-            // in the builds-table. In this case & if we can't parse the version
-            // we just want to log an error, but still finish the build.
-            error!(
-                "Failed to parse date from rustc version \"{}\": {:?}",
-                rustc_version, err
-            );
-            None
-        }
-    };
-
-    let release_id = sqlx::query_scalar!(
-        r#"UPDATE builds
-         SET
-             rustc_version = $1,
-             docsrs_version = $2,
-             build_status = $3,
-             build_server = $4,
-             errors = $5,
-             documentation_size = $6,
-             rustc_nightly_date = $7,
-             build_finished = NOW(),
-             error_kind = $8,
-             memory_peak = $9
-         WHERE
-            id = $10
-         RETURNING rid as "rid: ReleaseId" "#,
-        rustc_version,
-        docsrs_version,
-        build_status as BuildStatus,
-        hostname.to_str().unwrap_or(""),
-        build_error.map(|err| err.to_string()),
-        documentation_size as _,
-        rustc_date,
-        build_error.map(|err| err.kind()),
-        memory_peak as _,
-        build_id as _,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(())
-}
-
-#[instrument(skip(conn))]
-pub async fn update_build_with_error<E>(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    build_error: Option<&E>,
-) -> Result<BuildId>
-where
-    E: BuildError,
-{
-    debug!("updating build with error");
-    let release_id = sqlx::query_scalar!(
-        r#"UPDATE builds
-         SET
-             build_status = $1,
-             errors = $2,
-             error_kind = $3
-         WHERE id = $4
-         RETURNING rid as "rid: ReleaseId" "#,
-        BuildStatus::Failure as BuildStatus,
-        build_error.map(|err| err.to_string()),
-        build_error.map(|err| err.kind()),
-        build_id.0,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(build_id)
-}
-
 pub async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<CrateId> {
     sqlx::query_scalar!(
         "INSERT INTO crates (name)
@@ -347,43 +247,6 @@ pub async fn initialize_release(
     update_build_status(conn, release_id).await?;
 
     Ok(release_id)
-}
-
-pub async fn initialize_build(
-    conn: &mut sqlx::PgConnection,
-    release_id: ReleaseId,
-) -> Result<BuildId> {
-    let hostname = hostname::get()?;
-
-    sqlx::query!(
-        r#"UPDATE builds
-           SET
-               build_status = 'failure',
-               errors = $1,
-               build_finished = NOW()
-           WHERE
-               rid = $2
-               AND build_status = 'in_progress'"#,
-        "build aborted: builder process restarted before completion",
-        release_id as _,
-    )
-    .execute(&mut *conn)
-    .await?;
-
-    let build_id = sqlx::query_scalar!(
-        r#"INSERT INTO builds(rid, build_status, build_server, build_started)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id as "id: BuildId" "#,
-        release_id.0,
-        BuildStatus::InProgress as BuildStatus,
-        hostname.to_str().unwrap_or(""),
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(build_id)
 }
 
 /// Reads features and converts them to Vec<Feature> with default being first
@@ -642,14 +505,14 @@ pub async fn add_build_logs(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Config, testing::TestDatabase};
+    use crate::{Config, build::Build, testing::TestDatabase};
     use chrono::NaiveDate;
     use docs_rs_cargo_metadata::CargoMetadata;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_registry_api::OwnerKind;
     use docs_rs_types::{
-        KrateName, SimpleBuildError,
+        BuildStatus, KrateName, SimpleBuildError,
         testing::{DEFAULT_TARGET, KRATE, V0_1, V1},
     };
     use std::{collections::BTreeMap, iter, slice};
@@ -662,7 +525,8 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
         add_build_logs(&mut conn, build_id, vec![("target.txt".into(), false)]).await?;
         add_build_logs(&mut conn, build_id, vec![("target.txt".into(), true)]).await?;
         let logs = sqlx::query_as::<_, (String, bool)>(
@@ -788,14 +652,14 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
 
-        update_build_with_error(
-            &mut conn,
-            build_id,
-            Some(&SimpleBuildError("error message".into())),
-        )
-        .await?;
+        build
+            .fail_early()
+            .maybe_error(Some(&SimpleBuildError("error message".into())))
+            .save(&mut conn)
+            .await?;
 
         let row = sqlx::query!(
             r#"SELECT
@@ -830,19 +694,16 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
 
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc 1.84.0-nightly (e7c0d2750 2024-10-15)",
-            "docsrs_version",
-            BuildStatus::Success,
-            None,
-            None,
-            None::<&SimpleBuildError>,
-        )
-        .await?;
+        build
+            .finish()
+            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
+            .docsrs_version("docsrs_version")
+            .successful(BuildStatus::Success == BuildStatus::Success)
+            .save(&mut conn)
+            .await?;
 
         let row = sqlx::query!(
             r#"SELECT
@@ -883,19 +744,18 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
 
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc_version",
-            "docsrs_version",
-            BuildStatus::Success,
-            Some(42u64.into()),
-            Some(23u64.into()),
-            None::<&SimpleBuildError>,
-        )
-        .await?;
+        build
+            .finish()
+            .rustc_version("rustc_version")
+            .docsrs_version("docsrs_version")
+            .successful(BuildStatus::Success == BuildStatus::Success)
+            .maybe_documentation_size(Some(42u64.into()))
+            .maybe_memory_peak(Some(23u64.into()))
+            .save(&mut conn)
+            .await?;
 
         let row = sqlx::query!(
             r#"SELECT
@@ -934,19 +794,17 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
 
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc_version",
-            "docsrs_version",
-            BuildStatus::Failure,
-            None,
-            None,
-            Some(&SimpleBuildError("error message".into())),
-        )
-        .await?;
+        build
+            .finish()
+            .rustc_version("rustc_version")
+            .docsrs_version("docsrs_version")
+            .successful(BuildStatus::Failure == BuildStatus::Success)
+            .maybe_error(Some(&SimpleBuildError("error message".into())))
+            .save(&mut conn)
+            .await?;
 
         let row = sqlx::query!(
             r#"SELECT
@@ -1421,7 +1279,8 @@ mod test {
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
-        let build_id = initialize_build(&mut conn, release_id).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        let build_id = build.id();
 
         let id = sqlx::query_scalar!(
             r#"SELECT id as "id: BuildId" FROM builds WHERE rid = $1"#,
@@ -1432,7 +1291,7 @@ mod test {
 
         assert_eq!(build_id, id);
 
-        let another_build_id = initialize_build(&mut conn, release_id).await?;
+        let another_build_id = Build::start(&mut conn, release_id).await?.id();
         assert_ne!(build_id, another_build_id);
 
         Ok(())
@@ -1447,8 +1306,8 @@ mod test {
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
-        let first_build_id = initialize_build(&mut conn, release_id).await?;
-        let second_build_id = initialize_build(&mut conn, release_id).await?;
+        let first_build_id = Build::start(&mut conn, release_id).await?.id();
+        let second_build_id = Build::start(&mut conn, release_id).await?.id();
 
         assert_ne!(first_build_id, second_build_id);
 

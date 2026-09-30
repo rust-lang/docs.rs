@@ -2,7 +2,7 @@ use crate::{FakeBuild, errored_build::StoredBuildError};
 use anyhow::{Result, bail};
 use docs_rs_database::releases::add_build_logs;
 use docs_rs_storage::AsyncStorage;
-use docs_rs_types::{BuildId, BuildStatus, ByteSize, ReleaseId};
+use docs_rs_types::{BuildId, ByteSize, ReleaseId};
 use std::collections::HashMap;
 
 /// A completed build with compiler metadata, metrics, and optional logs.
@@ -116,23 +116,18 @@ impl FakeFinishedBuild {
         release_id: ReleaseId,
         default_target: &str,
     ) -> Result<BuildId> {
-        let build_id = docs_rs_database::releases::initialize_build(&mut *conn, release_id).await?;
-
-        docs_rs_database::releases::finish_build(
-            &mut *conn,
-            build_id,
-            &self.rustc_version,
-            &self.docsrs_version,
-            if self.successful {
-                BuildStatus::Success
-            } else {
-                BuildStatus::Failure
-            },
-            self.documentation_size,
-            self.memory_peak,
-            self.error.as_ref(),
-        )
-        .await?;
+        let build = docs_rs_database::build::Build::start(conn, release_id).await?;
+        let build_id = build.id();
+        build
+            .finish()
+            .rustc_version(&self.rustc_version)
+            .docsrs_version(&self.docsrs_version)
+            .successful(self.successful)
+            .maybe_documentation_size(self.documentation_size)
+            .maybe_memory_peak(self.memory_peak)
+            .maybe_error(self.error.as_ref())
+            .save(conn)
+            .await?;
 
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(
