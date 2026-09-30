@@ -9,6 +9,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
+use docs_rs_database::Pool;
 use docs_rs_database::build::{AnyBuild, BuildLog};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
@@ -47,6 +48,7 @@ pub(crate) async fn build_details_handler(
     Path(build_params): Path<BuildDetailsParams>,
     mut conn: DbConnection,
     State(storage): State<Arc<AsyncStorage>>,
+    State(pool): State<Pool>,
 ) -> AxumResult<impl IntoResponse> {
     let id = build_params
         .id
@@ -86,8 +88,9 @@ pub(crate) async fn build_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
+    let (output, logs, current_filename) = if build.has_legacy_output() {
         // legacy case, for old builds the build log was stored in the database.
+        let output = build.build_log("").fetch(&pool, &storage).await?;
         (output, Vec::new(), None)
     } else {
         let logs = build.list_build_logs(&storage).await?;
@@ -110,7 +113,7 @@ pub(crate) async fn build_details_handler(
         };
 
         let output = if let Some(ref filename) = current_filename {
-            build.build_log(filename).fetch(&storage).await?
+            build.build_log(filename).fetch(&pool, &storage).await?
         } else {
             "".to_string()
         };
@@ -277,13 +280,7 @@ mod tests {
             };
 
             let page = kuchikiki::parse_html().one(web.get(&url).await?.text().await?);
-            assert_eq!(
-                get_all_log_links(&page),
-                vec![(
-                    "x86_64-unknown-linux-gnu.txt".into(),
-                    format!("{url}/x86_64-unknown-linux-gnu.txt"),
-                )]
-            );
+            assert!(get_all_log_links(&page).is_empty());
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 

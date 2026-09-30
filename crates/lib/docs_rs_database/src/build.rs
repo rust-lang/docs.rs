@@ -72,15 +72,15 @@ pub struct BuildLog {
 #[derive(Debug)]
 enum BuildLogSource {
     Storage(String),
-    Database(String),
+    Database(BuildId),
 }
 
 impl BuildLog {
-    pub fn database(default_target: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn database(build_id: BuildId, default_target: impl Into<String>) -> Self {
         Self {
             filename: format!("{}.txt", default_target.into()),
             successful: None,
-            source: BuildLogSource::Database(content.into()),
+            source: BuildLogSource::Database(build_id),
         }
     }
 
@@ -102,9 +102,21 @@ impl BuildLog {
         self.successful
     }
 
-    pub async fn fetch(&self, storage: &docs_rs_storage::AsyncStorage) -> Result<String> {
+    pub async fn fetch(
+        &self,
+        pool: &crate::Pool,
+        storage: &docs_rs_storage::AsyncStorage,
+    ) -> Result<String> {
         match &self.source {
-            BuildLogSource::Database(output) => Ok(output.clone()),
+            BuildLogSource::Database(id) => {
+                let mut conn = pool.get_async().await?;
+                sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
+                    .bind(id.0)
+                    .fetch_optional(&mut *conn)
+                    .await?
+                    .flatten()
+                    .ok_or_else(|| docs_rs_storage::PathNotFoundError.into())
+            }
             BuildLogSource::Storage(path) => {
                 let blob =
                     Box::pin(storage.get(path, storage.config().max_file_size_for(path))).await?;
@@ -164,7 +176,7 @@ pub struct Build<State> {
     id: BuildId,
     started_at: Option<DateTime<Utc>>,
     logs: Vec<(String, bool)>,
-    legacy_output: Option<String>,
+    has_legacy_output: bool,
     default_target: Option<String>,
     state: State,
 }
@@ -181,16 +193,16 @@ struct BuildRow {
     documentation_size: Option<ByteSize>,
     errors: Option<String>,
     error_kind: Option<String>,
-    output: Option<String>,
+    has_legacy_output: bool,
     default_target: Option<String>,
     logs: Option<Vec<(String, bool)>>,
 }
 
-// Lists omit potentially large legacy output; detail/open queries include it.
+// All reads fetch log existence, never the potentially large legacy contents.
 const READ_BUILDS: &str = r#"
     SELECT b.id, b.build_status, b.build_started, b.build_finished,
            b.rustc_version, b.docsrs_version, b.memory_peak, b.documentation_size,
-           b.errors, b.error_kind, CASE WHEN $4 THEN b.output ELSE NULL END AS output,
+           b.errors, b.error_kind, b.output IS NOT NULL AS has_legacy_output,
            r.default_target,
            (SELECT array_agg(row(l.log_filename, l.success) ORDER BY l.log_filename)
             FROM builds_logs l WHERE l.build_id = b.id) AS logs
@@ -211,7 +223,7 @@ impl BuildRow {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
-                legacy_output: self.output,
+                has_legacy_output: self.has_legacy_output,
                 default_target: self.default_target,
                 state: InProgress,
             }),
@@ -219,7 +231,7 @@ impl BuildRow {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
-                legacy_output: self.output,
+                has_legacy_output: self.has_legacy_output,
                 default_target: self.default_target,
                 state: EarlyFailure {
                     errors: self.errors,
@@ -231,7 +243,7 @@ impl BuildRow {
                     id: self.id,
                     started_at: self.build_started,
                     logs,
-                    legacy_output: self.output,
+                    has_legacy_output: self.has_legacy_output,
                     default_target: self.default_target,
                     state: Finished {
                         status,
@@ -267,13 +279,13 @@ impl AnyBuild {
 
         sqlx::query!(
             r#"UPDATE builds
-               SET
-                   build_status = 'failure',
-                   errors = $1,
-                   build_finished = NOW()
-               WHERE
-                   rid = $2
-                   AND build_status = 'in_progress'"#,
+           SET
+               build_status = 'failure',
+               errors = $1,
+               build_finished = NOW()
+           WHERE
+               rid = $2
+               AND build_status = 'in_progress'"#,
             "build aborted: builder process restarted before completion",
             release_id as _,
         )
@@ -282,8 +294,8 @@ impl AnyBuild {
 
         let build_id = sqlx::query_scalar!(
             r#"INSERT INTO builds(rid, build_status, build_server, build_started)
-               VALUES ($1, $2, $3, NOW())
-               RETURNING id as "id: BuildId" "#,
+         VALUES ($1, $2, $3, NOW())
+         RETURNING id as "id: BuildId" "#,
             release_id.0,
             BuildStatus::InProgress as BuildStatus,
             hostname.to_str().unwrap_or(""),
@@ -303,8 +315,8 @@ impl AnyBuild {
     /// Open an existing attempt without creating a new one or changing its state.
     ///
     /// ```ignore
-    /// match Build::open(conn, build_id).await? {
-    ///     Build::InProgress(build) => {
+    /// match AnyBuild::open(conn, build_id).await? {
+    ///     AnyBuild::InProgress(build) => {
     ///         let finished = build.finish()
     ///             .rustc_version("rustc 1.84.0-nightly (000000000 2024-10-01)")
     ///             .docsrs_version("docs.rs 1.0.0")
@@ -313,7 +325,7 @@ impl AnyBuild {
     ///             .save(conn)
     ///             .await?;
     ///     }
-    ///     Build::Finished(_) | Build::EarlyFailure(_) => {}
+    ///     AnyBuild::Finished(_) | AnyBuild::EarlyFailure(_) => {}
     /// }
     /// ```
     pub async fn open(conn: &mut sqlx::PgConnection, id: BuildId) -> Result<AnyBuild> {
@@ -321,7 +333,6 @@ impl AnyBuild {
             .bind(None::<&str>)
             .bind(None::<&str>)
             .bind(id.0)
-            .bind(true)
             .fetch_one(conn)
             .await?
             .into_build()
@@ -337,7 +348,6 @@ impl AnyBuild {
             .bind(name.to_string())
             .bind(version.to_string())
             .bind(None::<i32>)
-            .bind(false)
             .fetch_all(conn)
             .await?
             .into_iter()
@@ -356,7 +366,6 @@ impl AnyBuild {
             .bind(name.to_string())
             .bind(version.to_string())
             .bind(id.0)
-            .bind(true)
             .fetch_optional(conn)
             .await?
             .map(BuildRow::into_build)
@@ -427,13 +436,13 @@ impl AnyBuild {
         }
     }
 
-    // pub fn legacy_output(&self) -> Option<&str> {
-    //     match self {
-    //         Self::InProgress(build) => build.legacy_output(),
-    //         Self::Finished(build) => build.legacy_output(),
-    //         Self::EarlyFailure(build) => build.legacy_output(),
-    //     }
-    // }
+    pub fn has_legacy_output(&self) -> bool {
+        match self {
+            Self::InProgress(build) => build.has_legacy_output(),
+            Self::Finished(build) => build.has_legacy_output(),
+            Self::EarlyFailure(build) => build.has_legacy_output(),
+        }
+    }
 
     pub fn default_target(&self) -> Option<&str> {
         match self {
@@ -488,7 +497,7 @@ pub enum AnyBuild {
 
 impl<State> Build<State> {
     /// List registered logs, falling back to storage for older attempts without
-    /// log records. Legacy database output has no separate log files.
+    /// log records. Legacy database output is represented by one lazy descriptor.
     pub async fn list_build_logs(
         &self,
         storage: &docs_rs_storage::AsyncStorage,
@@ -498,11 +507,8 @@ impl<State> Build<State> {
             .unwrap_or("default_target.txt")
             .to_string();
 
-        if let Some(legacy_output) = self.legacy_output.as_ref() {
-            return Ok(vec![BuildLog::database(
-                &default_target,
-                legacy_output.clone(),
-            )]);
+        if self.has_legacy_output {
+            return Ok(vec![BuildLog::database(self.id, &default_target)]);
         }
         if !self.logs.is_empty() {
             return Ok(self
@@ -535,9 +541,10 @@ impl<State> Build<State> {
                 .iter()
                 .find(|(name, _)| name == filename)
                 .map(|(_, success)| *success),
-            source: match &self.legacy_output {
-                Some(output) => BuildLogSource::Database(output.clone()),
-                None => BuildLogSource::Storage(format!("build-logs/{}/{filename}", self.id)),
+            source: if self.has_legacy_output {
+                BuildLogSource::Database(self.id)
+            } else {
+                BuildLogSource::Storage(format!("build-logs/{}/{filename}", self.id))
             },
         }
     }
@@ -550,8 +557,8 @@ impl<State> Build<State> {
         &self.logs
     }
 
-    pub fn legacy_output(&self) -> Option<&str> {
-        self.legacy_output.as_deref()
+    pub fn has_legacy_output(&self) -> bool {
+        self.has_legacy_output
     }
 
     pub fn default_target(&self) -> Option<&str> {
@@ -844,7 +851,7 @@ mod tests {
                 .await?;
         }
         let listed = build.list_build_logs(&storage).await?;
-        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
+        assert_eq!(listed[0].fetch(db.pool(), &storage).await?, "a.txt");
         assert_eq!(
             listed
                 .into_iter()
@@ -852,10 +859,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![("a.txt".into(), None), ("b.txt".into(), None)]
         );
-        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
+        assert_eq!(
+            build.build_log("a.txt").fetch(db.pool(), &storage).await?,
+            "a.txt"
+        );
         let error = build
             .build_log("missing.txt")
-            .fetch(&storage)
+            .fetch(db.pool(), &storage)
             .await
             .unwrap_err();
         assert!(error.is::<docs_rs_storage::PathNotFoundError>());
@@ -867,10 +877,33 @@ mod tests {
         let legacy = AnyBuild::open(&mut conn, build.id()).await?;
         let legacy_logs = legacy.list_build_logs(&storage).await?;
         assert_eq!(legacy_logs.len(), 1);
-        assert_eq!(legacy_logs[0].fetch(&storage).await?, "legacy log");
         assert_eq!(
-            legacy.build_log("missing.txt").fetch(&storage).await?,
+            legacy_logs[0].fetch(db.pool(), &storage).await?,
             "legacy log"
+        );
+        assert_eq!(
+            legacy
+                .build_log("missing.txt")
+                .fetch(db.pool(), &storage)
+                .await?,
+            "legacy log"
+        );
+        // Descriptors carry only the build ID: content is read at fetch time.
+        let log = legacy.build_log("missing.txt");
+        sqlx::query("UPDATE builds SET output = 'updated log' WHERE id = $1")
+            .bind(build.id().0)
+            .execute(&mut *conn)
+            .await?;
+        assert_eq!(log.fetch(db.pool(), &storage).await?, "updated log");
+        sqlx::query("UPDATE builds SET output = NULL WHERE id = $1")
+            .bind(build.id().0)
+            .execute(&mut *conn)
+            .await?;
+        assert!(
+            log.fetch(db.pool(), &storage)
+                .await
+                .unwrap_err()
+                .is::<docs_rs_storage::PathNotFoundError>()
         );
         Ok(())
     }
@@ -878,6 +911,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
         let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
         let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -913,7 +951,7 @@ mod tests {
         let AnyBuild::Finished(detail) = detail else {
             panic!("completed build should be finished");
         };
-        assert_eq!(detail.legacy_output(), Some("legacy log"));
+        assert!(detail.has_legacy_output());
         assert_eq!(detail.logs(), &[("target.txt".into(), false)]);
         assert!(
             AnyBuild::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
@@ -927,11 +965,11 @@ mod tests {
             builds.iter().map(AnyBuild::id).collect::<Vec<_>>(),
             vec![in_progress.id(), id]
         );
-        assert!(builds.iter().all(|build| match build {
-            AnyBuild::InProgress(build) => build.legacy_output().is_none(),
-            AnyBuild::Finished(build) => build.legacy_output().is_none(),
-            AnyBuild::EarlyFailure(build) => build.legacy_output().is_none(),
-        }));
+        assert!(!builds[0].has_legacy_output());
+        assert!(builds[1].has_legacy_output());
+        let logs = builds[1].list_build_logs(&storage).await?;
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].fetch(db.pool(), &storage).await?, "legacy log");
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
         assert!(builds[0].duration(Utc::now()).is_some());
 
@@ -1024,7 +1062,10 @@ mod tests {
                 ("target_json".into(), Some(false))
             ]
         );
-        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
+        assert_eq!(
+            build.build_log("target").fetch(db.pool(), &storage).await?,
+            "html"
+        );
         for (filename, _) in logs {
             assert!(
                 storage
