@@ -218,7 +218,7 @@ mod tests {
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
     };
-    use docs_rs_test_fakes::{FakeFinishedBuild, fake_release_that_failed_before_build};
+    use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{BuildId, ReleaseId, SimpleBuildError, testing::V0_1};
     use kuchikiki::traits::TendrilSink;
     use test_case::test_case;
@@ -335,7 +335,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .no_s3_build_log()
                         .db_build_log("A build log")
                         .build(),
@@ -378,7 +378,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .s3_build_log("A build log", true)
                         .build(),
                 ])
@@ -434,7 +434,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .s3_build_log("A build log", true)
                         .build_log_for_other_target("other_target", "other target build log", true)
                         .build(),
@@ -502,7 +502,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .s3_build_log("A build log", true)
                         .db_build_log("Another build log")
                         .build(),

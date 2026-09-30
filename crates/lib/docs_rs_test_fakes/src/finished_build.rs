@@ -8,7 +8,10 @@ use std::collections::HashMap;
 /// A completed build with compiler metadata, metrics, and optional logs.
 #[derive(bon::Builder)]
 #[builder(on(_, into))]
-#[builder(finish_fn = into_finished)]
+#[builder(
+    start_fn(vis = "pub(crate)"),
+    finish_fn(name = into_finished, vis = "pub(crate)")
+)]
 pub struct FakeFinishedBuild {
     #[builder(field)]
     other_build_logs: HashMap<String, (String, bool)>,

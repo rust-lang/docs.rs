@@ -248,9 +248,7 @@ mod tests {
     use anyhow::Result;
     use axum::{body::Body, http::Request};
     use docs_rs_build_limits::Overrides;
-    use docs_rs_test_fakes::{
-        FakeBuild, FakeEarlyErrorBuild, FakeFinishedBuild, fake_release_that_failed_before_build,
-    };
+    use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
         BuildStatus, ByteSize, Duration, SimpleBuildError,
         testing::{FOO, V0_1, V1, V2},
@@ -269,15 +267,15 @@ mod tests {
             .name(FOO)
             .version(V0_1)
             .builds(vec![
-                FakeFinishedBuild::default().into(),
-                FakeFinishedBuild::builder()
+                FakeBuild::finished().build(),
+                FakeBuild::finished()
                     .successful(false)
                     .error(SimpleBuildError("finished error".into()))
                     .build(),
-                FakeEarlyErrorBuild::builder()
+                FakeBuild::early_error()
                     .error(SimpleBuildError("early error".into()))
                     .build(),
-                FakeEarlyErrorBuild::builder().build(),
+                FakeBuild::early_error().build(),
                 FakeBuild::InProgress,
             ])
             .create()
@@ -412,16 +410,16 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .build(),
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .successful(false)
                         .rustc_version("rustc (blabla 2020-01-01)")
                         .docsrs_version("docs.rs 2.0.0")
                         .build(),
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0")
                         .build(),
@@ -463,7 +461,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .memory_peak(test_memory_bytes)
@@ -754,7 +752,7 @@ mod tests {
                 .name("aquarelle")
                 .version(V1)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .build(),
@@ -767,7 +765,7 @@ mod tests {
                 .name("aquarelle")
                 .version(V2)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .build(),
@@ -803,7 +801,7 @@ mod tests {
                 .name("foo")
                 .version(V1)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .build(),
@@ -829,7 +827,7 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .build(),
@@ -860,7 +858,7 @@ mod tests {
                     unreachable!("partial failure is derived from target logs")
                 }
                 BuildStatus::InProgress => FakeBuild::InProgress,
-                BuildStatus::Success | BuildStatus::Failure => FakeFinishedBuild::builder()
+                BuildStatus::Success | BuildStatus::Failure => FakeBuild::finished()
                     .successful(build_status == BuildStatus::Success)
                     .legacy_build_logs(true)
                     .build(),
@@ -893,7 +891,7 @@ mod tests {
             .name(FOO)
             .version(V0_1)
             .builds(vec![
-                FakeFinishedBuild::builder()
+                FakeBuild::finished()
                     .successful(false)
                     .s3_build_log("some log", build_log_success)
                     .build(),
@@ -924,7 +922,7 @@ mod tests {
             .name(FOO)
             .version(V0_1)
             .builds(vec![
-                FakeFinishedBuild::builder()
+                FakeBuild::finished()
                     .successful(true)
                     .s3_build_log("some log", true)
                     .build_log_for_other_target("other-target", "other log", true)
@@ -956,7 +954,7 @@ mod tests {
             .name(FOO)
             .version(V0_1)
             .builds(vec![
-                FakeFinishedBuild::builder()
+                FakeBuild::finished()
                     .successful(true)
                     .s3_build_log("some log", true)
                     .build_log_for_other_target("other-target", "other log", false)

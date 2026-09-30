@@ -66,7 +66,7 @@ pub(crate) async fn queue_rebuilds_faulty_rustdoc(
 mod tests {
     use super::*;
     use crate::testing::TestEnvironment;
-    use docs_rs_test_fakes::FakeFinishedBuild;
+    use docs_rs_test_fakes::FakeBuild;
     use docs_rs_types::testing::{BAR, FOO, V1, V2};
     use pretty_assertions::assert_eq;
 
@@ -93,7 +93,7 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version(format!(
                             "rustc 1.84.0-nightly (e7c0d2750 {})",
                             nightly.format("%Y-%m-%d")
@@ -153,7 +153,7 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version(format!(
                             "rustc 1.84.0-nightly (e7c0d2750 {})",
                             nightly.format("%Y-%m-%d")
@@ -206,7 +206,7 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeFinishedBuild::builder()
+                    FakeBuild::finished()
                         .rustc_version(format!(
                             "rustc 1.84.0-nightly (e7c0d2750 {})",
                             nightly.format("%Y-%m-%d")

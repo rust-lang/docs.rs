@@ -35,7 +35,7 @@ impl BuildError for StoredBuildError {
 
 /// A build that failed before compiler versions and metrics were available.
 #[derive(bon::Builder)]
-#[builder(finish_fn = into_early_error)]
+#[builder(start_fn(vis = "pub(crate)"), finish_fn(name = into_early_error, vis = "pub(crate)"))]
 pub struct FakeEarlyErrorBuild {
     #[builder(with = |error: impl BuildError| StoredBuildError::new(error))]
     error: Option<StoredBuildError>,

@@ -1,4 +1,7 @@
-use crate::{FakeEarlyErrorBuild, FakeFinishedBuild};
+use crate::{
+    errored_build::{FakeEarlyErrorBuild, FakeEarlyErrorBuildBuilder},
+    finished_build::{FakeFinishedBuild, FakeFinishedBuildBuilder},
+};
 use anyhow::Result;
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, ReleaseId};
@@ -29,6 +32,16 @@ impl From<FakeEarlyErrorBuild> for FakeBuild {
 }
 
 impl FakeBuild {
+    /// Configure a build that failed before compiler metadata was available.
+    pub fn early_error() -> FakeEarlyErrorBuildBuilder {
+        FakeEarlyErrorBuild::builder()
+    }
+
+    /// Configure a finished build fixture.
+    pub fn finished() -> FakeFinishedBuildBuilder {
+        FakeFinishedBuild::builder()
+    }
+
     pub async fn create(
         &self,
         conn: &mut sqlx::PgConnection,

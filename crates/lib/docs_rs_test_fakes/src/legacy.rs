@@ -1,4 +1,4 @@
-use crate::{FakeBuild, FakeEarlyErrorBuild, FakeFinishedBuild, FakeGithubStats};
+use crate::{FakeBuild, FakeGithubStats};
 use anyhow::{Context as _, Result, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
@@ -38,7 +38,7 @@ where
     let version = version.try_into()?;
     let crate_id = initialize_crate(&mut *conn, &name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build_id = FakeEarlyErrorBuild::builder()
+    let build_id = FakeBuild::early_error()
         .error(build_error)
         .create(&mut *conn, release_id)
         .await?;
@@ -175,7 +175,7 @@ impl<'a> FakeRelease<'a> {
         );
         Self {
             has_docs: false,
-            builds: Some(vec![FakeFinishedBuild::builder().successful(false).build()]),
+            builds: Some(vec![FakeBuild::finished().successful(false).build()]),
             ..self
         }
     }

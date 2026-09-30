@@ -710,7 +710,7 @@ mod tests {
     use docs_rs_database::Pool;
     use docs_rs_database::{crate_details::releases_for_crate, releases::update_build_status};
     use docs_rs_registry_api::CrateOwner;
-    use docs_rs_test_fakes::{FakeBuild, FakeFinishedBuild, fake_release_that_failed_before_build};
+    use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::testing::{FOO, V1};
     use docs_rs_types::{KrateName, SimpleBuildError};
     use http::StatusCode;
@@ -2103,10 +2103,8 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder().successful(true).build(),
-                    FakeFinishedBuild::builder()
-                        .successful(false)
-                        .build(),
+                    FakeBuild::finished().successful(true).build(),
+                    FakeBuild::finished().successful(false).build(),
                     FakeBuild::InProgress,
                 ])
                 .create()
@@ -2131,9 +2129,7 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder()
-                        .successful(false)
-                        .build(),
+                    FakeBuild::finished().successful(false).build(),
                     FakeBuild::InProgress,
                 ])
                 .create()
