@@ -20,6 +20,7 @@ use constant_time_eq::constant_time_eq;
 use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
+use docs_rs_database::build::{Build as DatabaseBuild, OpenBuild};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
 use http::StatusCode;
@@ -184,54 +185,31 @@ pub(super) async fn get_builds(
     name: &KrateName,
     version: &Version,
 ) -> Result<Vec<Build>> {
-    Ok(sqlx::query_as!(
-        Build,
-        r#"SELECT
-            builds.id as "id: BuildId",
-            builds.rustc_version,
-            builds.docsrs_version,
-            CASE
-                WHEN builds.build_status = 'success'::build_status THEN
-                    CASE
-                        WHEN COALESCE(
-                            (SELECT bool_and(builds_logs.success)
-                             FROM builds_logs
-                             WHERE builds_logs.build_id = builds.id),
-                            TRUE
-                        ) = TRUE THEN 'success'::build_status
-                        ELSE 'partial_failure'::build_status
-                    END
-                ELSE builds.build_status
-            END as "build_status!: BuildStatus",
-            COALESCE(builds.build_finished, builds.build_started) as build_time,
-            CASE
-                WHEN builds.build_started IS NULL
-                    -- for old builds, `build_started` is empty.
-                    THEN NULL
-                ELSE
-                    CASE
-                        -- for in-progress builds we show the duration until now
-                        WHEN builds.build_status = 'in_progress' THEN (CURRENT_TIMESTAMP - builds.build_started)
-                        -- there are broken builds where the status is `error`, and `build_finished` is NULL
-                        WHEN builds.build_finished IS NULL THEN NULL
-                        -- for finished builds we can show the full duration
-                        ELSE (builds.build_finished - builds.build_started)
-                    END
-            END AS "build_duration?: Duration",
-            builds.memory_peak,
-            builds.errors
-         FROM builds
-         INNER JOIN releases ON releases.id = builds.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE
-            crates.name = $1 AND
-            releases.version = $2
-         ORDER BY builds.id DESC"#,
-        name as _,
-        version as _,
-    )
-    .fetch_all(&mut *conn)
-    .await?)
+    let now = Utc::now();
+    Ok(DatabaseBuild::for_release(conn, name, version)
+        .await?
+        .into_iter()
+        .map(|build| {
+            let (rustc_version, docsrs_version, memory_peak) = match &build {
+                OpenBuild::Finished(build) => (
+                    build.state().rustc_version.clone(),
+                    build.state().docsrs_version.clone(),
+                    build.state().memory_peak,
+                ),
+                OpenBuild::InProgress(_) | OpenBuild::EarlyFailure(_) => (None, None, None),
+            };
+            Build {
+                id: build.id(),
+                rustc_version,
+                docsrs_version,
+                memory_peak,
+                build_status: build.display_status(),
+                build_time: build.build_time(),
+                build_duration: build.duration(now),
+                errors: build.errors().map(str::to_owned),
+            }
+        })
+        .collect())
 }
 
 #[cfg(test)]

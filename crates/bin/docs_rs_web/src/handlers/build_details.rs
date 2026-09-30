@@ -12,6 +12,7 @@ use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
 use chrono::{DateTime, Utc};
+use docs_rs_database::build::{Build, OpenBuild};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
 use futures_util::TryStreamExt;
@@ -83,36 +84,10 @@ pub(crate) async fn build_details_handler(
         })?
         .into_version();
 
-    let row = sqlx::query!(
-        r#"SELECT
-             builds.rustc_version,
-             builds.docsrs_version,
-             builds.build_status as "build_status: BuildStatus",
-             COALESCE(builds.build_finished, builds.build_started) as build_time,
-             builds.output,
-             builds.errors,
-             builds.error_kind,
-             releases.default_target,
-             (
-                 SELECT array_agg(row(bl.log_filename, bl.success))
-                 FROM (
-                     SELECT log_filename, success
-                     FROM builds_logs
-                     WHERE builds_logs.build_id = builds.id
-                     ORDER BY log_filename
-                 ) bl
-             ) AS "logs: Vec<(String, bool)>"
-         FROM builds
-         INNER JOIN releases ON releases.id = builds.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
-        id.0,
-        params.name() as _,
-        version as _
-    )
-    .fetch_optional(&mut *conn)
-    .await?
-    .ok_or(AxumNope::BuildNotFound)?;
+    let build = Build::find_for_release(&mut conn, params.name(), &version, id)
+        .await?
+        .ok_or(AxumNope::BuildNotFound)?;
+    let row = build.data();
 
     let metadata = MetaData::from_crate(
         &mut conn,
@@ -127,21 +102,20 @@ pub(crate) async fn build_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
+    let (output, all_log_filenames, current_filename) = if let Some(output) = &row.legacy_output {
         // legacy case, for old builds the build log was stored in the database.
-        (output, Vec::new(), None)
+        (output.clone(), Vec::new(), None)
     } else {
         // for newer builds we have the build logs stored in S3.
         // For a long time only for one target, then we started storing the logs for other targets
-        // toFor a long time only for one target, then we started storing the logs for other
-        // targets. In any case, all the logfiles are put into a folder we can just query.
+        // In any case, all the logfiles are put into a folder we can just query.
         let prefix = format!("build-logs/{id}/");
 
         // A list of `(path, build_successful)`.
-        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs
-            && !logs.is_empty()
-        {
-            logs.into_iter()
+        let all_log_filenames: Vec<(String, Option<bool>)> = if !row.logs.is_empty() {
+            row.logs
+                .iter()
+                .cloned()
                 .map(|(path, success)| (path, Some(success)))
                 .collect()
         } else {
@@ -163,7 +137,7 @@ pub(crate) async fn build_details_handler(
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
             Some(filename)
-        } else if let Some(default_target) = row.default_target {
+        } else if let Some(default_target) = &row.default_target {
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
             let wanted_filename = format!("{default_target}.txt");
@@ -179,7 +153,7 @@ pub(crate) async fn build_details_handler(
             // this can only happen when `releases.default_target` is NULL,
             // which is the case for in-progress builds or builds which errored
             // before we could determine the target.
-            // For the "error" case we show `row.errors`, which should contain what we need to see.
+            // For early failures we show the build's error instead.
             None
         };
 
@@ -193,17 +167,24 @@ pub(crate) async fn build_details_handler(
         (file_content, all_log_filenames, current_filename)
     };
 
+    let (rustc_version, docsrs_version) = match &build {
+        OpenBuild::Finished(build) => (
+            build.state().rustc_version.clone(),
+            build.state().docsrs_version.clone(),
+        ),
+        OpenBuild::InProgress(_) | OpenBuild::EarlyFailure(_) => (None, None),
+    };
     Ok(BuildDetailsPage {
         metadata,
         build_details: BuildDetails {
             id,
-            rustc_version: row.rustc_version,
-            docsrs_version: row.docsrs_version,
-            build_status: row.build_status,
-            build_time: row.build_time,
+            rustc_version,
+            docsrs_version,
+            build_status: build.status(),
+            build_time: build.build_time(),
             output,
-            errors: row.errors,
-            error_kind: row.error_kind,
+            errors: build.errors().map(str::to_owned),
+            error_kind: build.error_kind().map(str::to_owned),
         },
         all_log_filenames,
         current_filename,

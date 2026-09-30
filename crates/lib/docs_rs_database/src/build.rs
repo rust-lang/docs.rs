@@ -4,7 +4,10 @@
 
 use crate::releases::update_build_status;
 use anyhow::{Result, anyhow};
-use docs_rs_types::{BuildError, BuildId, BuildStatus, ByteSize, ReleaseId};
+use chrono::{DateTime, Utc};
+use docs_rs_types::{
+    BuildError, BuildId, BuildStatus, ByteSize, Duration, KrateName, ReleaseId, Version,
+};
 use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::{StreamExt as _, stream};
 use tracing::{debug, error};
@@ -20,6 +23,73 @@ mod tests {
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::{KRATE, V0_1};
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let finished = Build::start(&mut conn, release_id)
+            .await?
+            .finish()
+            .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
+            .docsrs_version("docs.rs test")
+            .successful(true)
+            .memory_peak(ByteSize::mib(12))
+            .save(&mut conn)
+            .await?;
+        assert_eq!(
+            finished.state().docsrs_version.as_deref(),
+            Some("docs.rs test")
+        );
+        assert!(finished.state().finished_at.is_some());
+        assert!(finished.data().started_at.is_some());
+        let id = finished.id();
+        sqlx::query("INSERT INTO builds_logs (build_id, log_filename, success) VALUES ($1, 'target.txt', false)")
+            .bind(id.0).execute(&mut *conn).await?;
+        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
+            .bind(id.0)
+            .execute(&mut *conn)
+            .await?;
+
+        let detail = Build::find_for_release(&mut conn, &KRATE, &V0_1, id)
+            .await?
+            .unwrap();
+        assert_eq!(detail.status(), BuildStatus::Success);
+        assert_eq!(detail.display_status(), BuildStatus::PartialFailure);
+        assert_eq!(detail.data().legacy_output.as_deref(), Some("legacy log"));
+        assert_eq!(detail.data().logs, vec![("target.txt".into(), false)]);
+        assert!(
+            Build::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
+                .await?
+                .is_none()
+        );
+
+        let in_progress = Build::start(&mut conn, release_id).await?;
+        let builds = Build::for_release(&mut conn, &KRATE, &V0_1).await?;
+        assert_eq!(
+            builds.iter().map(OpenBuild::id).collect::<Vec<_>>(),
+            vec![in_progress.id(), id]
+        );
+        assert!(
+            builds
+                .iter()
+                .all(|build| build.data().legacy_output.is_none())
+        );
+        assert!(matches!(&builds[0], OpenBuild::InProgress(_)));
+        assert!(builds[0].duration(Utc::now()).is_some());
+
+        // Successful historical rows need not have either lifecycle timestamp.
+        sqlx::query("UPDATE builds SET build_started = NULL, build_finished = NULL, rustc_version = NULL WHERE id = $1")
+            .bind(id.0).execute(&mut *conn).await?;
+        let legacy = Build::open(&mut conn, id).await?;
+        assert!(matches!(&legacy, OpenBuild::Finished(_)));
+        assert!(legacy.build_time().is_none());
+        assert!(legacy.duration(Utc::now()).is_none());
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
@@ -200,10 +270,21 @@ pub struct InProgress;
 #[derive(Debug)]
 pub struct Finished {
     pub status: BuildStatus,
+    pub errors: Option<String>,
+    pub error_kind: Option<String>,
+    /// Historical builds may lack completion metadata.
+    pub finished_at: Option<DateTime<Utc>>,
+    pub rustc_version: Option<String>,
+    pub docsrs_version: Option<String>,
+    pub memory_peak: Option<i64>,
+    pub documentation_size: Option<ByteSize>,
 }
 
 #[derive(Debug)]
-pub struct EarlyFailure;
+pub struct EarlyFailure {
+    pub errors: Option<String>,
+    pub error_kind: Option<String>,
+}
 
 /// Error text and classification captured when configuring a transition.
 #[derive(Debug, thiserror::Error)]
@@ -231,7 +312,171 @@ impl BuildError for CompletionError {
 #[derive(Debug)]
 pub struct Build<State> {
     id: BuildId,
+    data: BuildData,
     state: State,
+}
+
+/// Data available regardless of lifecycle state. This is a database snapshot.
+#[derive(Debug)]
+pub struct BuildData {
+    pub started_at: Option<DateTime<Utc>>,
+    pub logs: Vec<(String, bool)>,
+    pub legacy_output: Option<String>,
+    pub default_target: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct BuildRow {
+    id: BuildId,
+    build_status: BuildStatus,
+    build_started: Option<DateTime<Utc>>,
+    build_finished: Option<DateTime<Utc>>,
+    rustc_version: Option<String>,
+    docsrs_version: Option<String>,
+    memory_peak: Option<i64>,
+    documentation_size: Option<ByteSize>,
+    errors: Option<String>,
+    error_kind: Option<String>,
+    output: Option<String>,
+    default_target: Option<String>,
+    logs: Option<Vec<(String, bool)>>,
+}
+
+// Lists omit potentially large legacy output; detail/open queries include it.
+const READ_BUILDS: &str = r#"
+    SELECT b.id, b.build_status, b.build_started, b.build_finished,
+           b.rustc_version, b.docsrs_version, b.memory_peak, b.documentation_size,
+           b.errors, b.error_kind, CASE WHEN $4 THEN b.output ELSE NULL END AS output,
+           r.default_target,
+           (SELECT array_agg(row(l.log_filename, l.success) ORDER BY l.log_filename)
+            FROM builds_logs l WHERE l.build_id = b.id) AS logs
+    FROM builds b
+    JOIN releases r ON r.id = b.rid
+    JOIN crates c ON c.id = r.crate_id
+    WHERE ($1::text IS NULL OR c.name = $1)
+      AND ($2::text IS NULL OR r.version = $2)
+      AND ($3::integer IS NULL OR b.id = $3)
+    ORDER BY b.id DESC
+"#;
+
+impl BuildRow {
+    fn into_build(self) -> Result<OpenBuild> {
+        let data = BuildData {
+            started_at: self.build_started,
+            logs: self.logs.unwrap_or_default(),
+            legacy_output: self.output,
+            default_target: self.default_target,
+        };
+        Ok(match (self.build_status, self.build_finished) {
+            (BuildStatus::InProgress, None) => OpenBuild::InProgress(Build {
+                id: self.id,
+                data,
+                state: InProgress,
+            }),
+            (BuildStatus::Failure, None) => OpenBuild::EarlyFailure(Build {
+                id: self.id,
+                data,
+                state: EarlyFailure {
+                    errors: self.errors,
+                    error_kind: self.error_kind,
+                },
+            }),
+            (status, finished_at) if status != BuildStatus::InProgress => {
+                OpenBuild::Finished(Build {
+                    id: self.id,
+                    data,
+                    state: Finished {
+                        status,
+                        errors: self.errors,
+                        error_kind: self.error_kind,
+                        finished_at,
+                        rustc_version: self.rustc_version,
+                        docsrs_version: self.docsrs_version,
+                        memory_peak: self.memory_peak,
+                        documentation_size: self.documentation_size,
+                    },
+                })
+            }
+            _ => {
+                return Err(anyhow!(
+                    "build {} has inconsistent lifecycle fields",
+                    self.id
+                ));
+            }
+        })
+    }
+}
+
+impl OpenBuild {
+    pub fn errors(&self) -> Option<&str> {
+        match self {
+            Self::InProgress(_) => None,
+            Self::Finished(build) => build.state.errors.as_deref(),
+            Self::EarlyFailure(build) => build.state.errors.as_deref(),
+        }
+    }
+
+    pub fn error_kind(&self) -> Option<&str> {
+        match self {
+            Self::InProgress(_) => None,
+            Self::Finished(build) => build.state.error_kind.as_deref(),
+            Self::EarlyFailure(build) => build.state.error_kind.as_deref(),
+        }
+    }
+
+    pub fn id(&self) -> BuildId {
+        match self {
+            Self::InProgress(build) => build.id(),
+            Self::Finished(build) => build.id(),
+            Self::EarlyFailure(build) => build.id(),
+        }
+    }
+
+    pub fn data(&self) -> &BuildData {
+        match self {
+            Self::InProgress(build) => build.data(),
+            Self::Finished(build) => build.data(),
+            Self::EarlyFailure(build) => build.data(),
+        }
+    }
+
+    pub fn status(&self) -> BuildStatus {
+        match self {
+            Self::InProgress(_) => BuildStatus::InProgress,
+            Self::EarlyFailure(_) => BuildStatus::Failure,
+            Self::Finished(build) => build.state.status,
+        }
+    }
+
+    /// Target failures only downgrade a successful build, never an existing failure.
+    pub fn display_status(&self) -> BuildStatus {
+        if self.status() == BuildStatus::Success
+            && self.data().logs.iter().any(|(_, success)| !success)
+        {
+            BuildStatus::PartialFailure
+        } else {
+            self.status()
+        }
+    }
+
+    pub fn build_time(&self) -> Option<DateTime<Utc>> {
+        match self {
+            Self::Finished(build) => build.state.finished_at.or(build.data.started_at),
+            _ => self.data().started_at,
+        }
+    }
+
+    pub fn duration(&self, now: DateTime<Utc>) -> Option<Duration> {
+        let end = match self {
+            Self::InProgress(_) => now,
+            Self::Finished(build) => build.state.finished_at?,
+            Self::EarlyFailure(_) => return None,
+        };
+        (end - self.data().started_at?)
+            .to_std()
+            .ok()
+            .map(Into::into)
+    }
 }
 
 /// Loading a database row requires inspecting its state at runtime.
@@ -243,6 +488,9 @@ pub enum OpenBuild {
 }
 
 impl<State> Build<State> {
+    pub fn data(&self) -> &BuildData {
+        &self.data
+    }
     pub fn id(&self) -> BuildId {
         self.id
     }
@@ -375,11 +623,11 @@ impl Build<InProgress> {
 
         update_build_status(conn, release_id).await?;
 
+        let OpenBuild::InProgress(build) = Self::open(conn, build_id).await? else {
+            unreachable!("new build is in progress");
+        };
         transaction.commit().await?;
-        Ok(Self {
-            id: build_id,
-            state: InProgress,
-        })
+        Ok(build)
     }
 
     /// Open an existing attempt without creating a new one or changing its state.
@@ -399,28 +647,50 @@ impl Build<InProgress> {
     /// }
     /// ```
     pub async fn open(conn: &mut sqlx::PgConnection, id: BuildId) -> Result<OpenBuild> {
-        let (status, finished) = sqlx::query_as::<_, (BuildStatus, bool)>(
-            "SELECT build_status, build_finished IS NOT NULL FROM builds WHERE id = $1",
-        )
-        .bind(id.0)
-        .fetch_one(conn)
-        .await?;
+        sqlx::query_as::<_, BuildRow>(READ_BUILDS)
+            .bind(None::<&str>)
+            .bind(None::<&str>)
+            .bind(id.0)
+            .bind(true)
+            .fetch_one(conn)
+            .await?
+            .into_build()
+    }
 
-        Ok(match (status, finished) {
-            (BuildStatus::InProgress, false) => OpenBuild::InProgress(Self {
-                id,
-                state: InProgress,
-            }),
-            (BuildStatus::Failure, false) => OpenBuild::EarlyFailure(Build {
-                id,
-                state: EarlyFailure,
-            }),
-            (status, true) if status != BuildStatus::InProgress => OpenBuild::Finished(Build {
-                id,
-                state: Finished { status },
-            }),
-            _ => return Err(anyhow!("build {id} has inconsistent lifecycle fields")),
-        })
+    /// Load all attempts in one query, without loading legacy log contents.
+    pub async fn for_release(
+        conn: &mut sqlx::PgConnection,
+        name: &KrateName,
+        version: &Version,
+    ) -> Result<Vec<OpenBuild>> {
+        sqlx::query_as::<_, BuildRow>(READ_BUILDS)
+            .bind(name.to_string())
+            .bind(version.to_string())
+            .bind(None::<i32>)
+            .bind(false)
+            .fetch_all(conn)
+            .await?
+            .into_iter()
+            .map(BuildRow::into_build)
+            .collect()
+    }
+
+    /// Load an attempt only if it belongs to the requested crate and version.
+    pub async fn find_for_release(
+        conn: &mut sqlx::PgConnection,
+        name: &KrateName,
+        version: &Version,
+        id: BuildId,
+    ) -> Result<Option<OpenBuild>> {
+        sqlx::query_as::<_, BuildRow>(READ_BUILDS)
+            .bind(name.to_string())
+            .bind(version.to_string())
+            .bind(id.0)
+            .bind(true)
+            .fetch_optional(conn)
+            .await?
+            .map(BuildRow::into_build)
+            .transpose()
     }
 
     /// Configure completion data, then persist the transition with `.save(conn).await`.
@@ -496,11 +766,11 @@ impl Build<InProgress> {
 
         update_build_status(conn, release_id).await?;
 
+        let OpenBuild::Finished(build) = Self::open(conn, self.id).await? else {
+            unreachable!("just completed build is finished");
+        };
         transaction.commit().await?;
-        Ok(Build {
-            id: self.id,
-            state: Finished { status },
-        })
+        Ok(build)
     }
 
     /// Configure an early failure, then persist it with `.save(conn).await`.
@@ -536,11 +806,11 @@ impl Build<InProgress> {
 
         update_build_status(conn, release_id).await?;
 
+        let OpenBuild::EarlyFailure(build) = Self::open(conn, self.id).await? else {
+            unreachable!("just failed build is an early failure");
+        };
         transaction.commit().await?;
-        Ok(Build {
-            id: self.id,
-            state: EarlyFailure,
-        })
+        Ok(build)
     }
 
     /// Recheck under a row lock: another process may have completed this
