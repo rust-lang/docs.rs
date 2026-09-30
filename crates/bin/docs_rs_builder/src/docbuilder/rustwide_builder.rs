@@ -425,9 +425,12 @@ impl RustwideBuilder {
                     })
                 })
             });
-            self.runtime
-                .block_on(build.publish_build_logs(&self.db, &self.storage, logs))?;
             let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+            self.runtime.block_on(build.publish_build_logs(
+                &mut async_conn,
+                &self.storage,
+                logs,
+            ))?;
 
             self.publish_json(name, version, &release_build_result);
 

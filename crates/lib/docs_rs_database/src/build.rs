@@ -22,6 +22,84 @@ mod tests {
     use docs_rs_types::testing::{KRATE, V0_1};
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
+        storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected")));
+        let mut config = Config::test_config()?;
+        config.max_pool_size = 1;
+        let db = TestDatabase::new(&config, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+
+        // A rejected upload must not wait for the sole, currently held connection.
+        let rejected = || {
+            BuildLog::builder()
+                .target("rejected")
+                .log("log")
+                .successful(false)
+                .build()
+        };
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                build.publish_build_logs(db.pool(), &storage, [rejected()]),
+            )
+            .await?
+            .is_err()
+        );
+        drop(conn);
+
+        let logs = [
+            rejected(),
+            BuildLog::builder()
+                .target("target")
+                .log("html")
+                .successful(true)
+                .build(),
+            BuildLog::builder()
+                .target("target")
+                .kind(BuildLogKind::Json)
+                .log("json")
+                .successful(false)
+                .build(),
+        ];
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                build.publish_build_logs(db.pool(), &storage, logs),
+            )
+            .await?
+            .is_err()
+        );
+        let mut conn = db.async_conn().await?;
+        let logs = sqlx::query_as::<_, (String, bool)>(
+            "SELECT log_filename, success FROM builds_logs WHERE build_id = $1 ORDER BY log_filename",
+        )
+        .bind(build.id().0)
+        .fetch_all(&mut *conn)
+        .await?;
+        assert_eq!(
+            logs,
+            vec![("target".into(), true), ("target_json".into(), false)]
+        );
+        for (filename, _) in logs {
+            assert!(
+                storage
+                    .exists(&format!("build-logs/{}/{filename}", build.id()))
+                    .await?
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn stale_handle_cannot_overwrite_completed_build() -> Result<()> {
         let metrics = TestMetrics::new();
         let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
@@ -80,7 +158,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum BuildLogKind {
     #[default]
     Html,
@@ -89,11 +167,13 @@ pub enum BuildLogKind {
 
 /// A target log to upload and register as part of a batch.
 #[derive(bon::Builder)]
-pub struct BuildLog<'a> {
-    target: &'a str,
+pub struct BuildLog {
+    #[builder(into)]
+    target: String,
     #[builder(default)]
     kind: BuildLogKind,
-    log: &'a str,
+    #[builder(into)]
+    log: String,
     successful: bool,
 }
 
@@ -178,21 +258,27 @@ impl Build<InProgress> {
         #[builder(into)] log: String,
         successful: bool,
     ) -> Result<()> {
-        let filename = format!("{target}{}", kind.suffix());
-        storage
-            .store_one(format!("build-logs/{}/{filename}", self.id), log.to_owned())
-            .await?;
-        self.register_log(conn, filename, successful).await
+        self.publish_build_logs(
+            conn,
+            storage,
+            [BuildLog {
+                target,
+                kind,
+                log,
+                successful,
+            }],
+        )
+        .await
     }
 
-    /// Upload up to eight logs concurrently, acquiring a pooled connection only
-    /// after each upload succeeds. Finish all operations before reporting an
-    /// error so successful uploads are registered even when another log fails.
-    pub async fn publish_build_logs<'a>(
+    /// Upload up to eight logs concurrently, then register all successful uploads
+    /// in one SQL statement using a pooled connection. Upload errors are reported
+    /// after registration so other logs remain available even when one fails.
+    pub async fn publish_build_logs(
         &self,
-        pool: &crate::Pool,
+        conn: &mut sqlx::PgConnection,
         storage: &docs_rs_storage::AsyncStorage,
-        logs: impl IntoIterator<Item = BuildLog<'a>>,
+        logs: impl IntoIterator<Item = BuildLog>,
     ) -> Result<()> {
         let results = stream::iter(logs)
             .map(|log| async move {
@@ -203,30 +289,44 @@ impl Build<InProgress> {
                         log.log.to_owned(),
                     )
                     .await?;
-                let mut conn = pool.get_async().await?;
-                self.register_log(&mut conn, filename, log.successful).await
+                Ok::<_, anyhow::Error>((filename, log.successful))
             })
             .buffer_unordered(8)
             .collect::<Vec<_>>()
             .await;
-        for result in results {
-            result?;
+
+        let successful_uploads: Vec<(String, bool)> = results
+            .iter()
+            .filter_map(|result| {
+                let Ok(result) = &result else {
+                    return None;
+                };
+                Some(result.clone())
+            })
+            .collect();
+
+        if !successful_uploads.is_empty() {
+            self.register_logs(&mut *conn, successful_uploads).await?;
         }
+
+        if let Some(err_result) = results.into_iter().find(|result| result.is_err()) {
+            return Err(err_result.unwrap_err());
+        }
+
         Ok(())
     }
 
-    async fn register_log(
+    async fn register_logs(
         &self,
         conn: &mut sqlx::PgConnection,
-        filename: String,
-        successful: bool,
+        build_logs: impl IntoIterator<Item = (String, bool)>,
     ) -> Result<()> {
-        let logs_filename = [filename];
-        let successes = [successful];
+        let (logs_filename, successes): (Vec<String>, Vec<bool>) = build_logs.into_iter().unzip();
+
         sqlx::query!(
             "INSERT INTO builds_logs(build_id, log_filename, success)
-         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
-         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
+             SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
+             ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
             self.id as _,
             &logs_filename as &[String],
             &successes as &[bool],
