@@ -3,8 +3,7 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildId, ByteSize, CompressionAlgorithm, CrateId, DocCoverage, Feature, KrateName, ReleaseId,
-    Version,
+    ByteSize, CompressionAlgorithm, CrateId, DocCoverage, Feature, KrateName, ReleaseId, Version,
 };
 use futures_util::stream::TryStreamExt;
 use slug::slugify;
@@ -482,26 +481,6 @@ where
     Ok(())
 }
 
-pub async fn add_build_logs(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    builds_logs: impl IntoIterator<Item = (String, bool)>,
-) -> Result<()> {
-    let (logs_filename, successes): (Vec<String>, Vec<bool>) = builds_logs.into_iter().unzip();
-
-    sqlx::query!(
-        "INSERT INTO builds_logs(build_id, log_filename, success)
-         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
-         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
-        build_id as _,
-        &logs_filename as &[String],
-        &successes as &[bool],
-    )
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -512,7 +491,7 @@ mod test {
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_registry_api::OwnerKind;
     use docs_rs_types::{
-        BuildStatus, KrateName, SimpleBuildError,
+        BuildId, BuildStatus, KrateName, SimpleBuildError,
         testing::{DEFAULT_TARGET, KRATE, V0_1, V1},
     };
     use std::{collections::BTreeMap, iter, slice};
@@ -521,14 +500,31 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_log_registration_is_idempotent() -> Result<()> {
         let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
         let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
         let build = Build::start(&mut conn, release_id).await?;
         let build_id = build.id();
-        add_build_logs(&mut conn, build_id, vec![("target.txt".into(), false)]).await?;
-        add_build_logs(&mut conn, build_id, vec![("target.txt".into(), true)]).await?;
+        build
+            .publish_build_log()
+            .target("target.txt")
+            .log("failed")
+            .successful(false)
+            .save(&mut conn, &storage)
+            .await?;
+        build
+            .publish_build_log()
+            .target("target.txt")
+            .log("succeeded")
+            .successful(true)
+            .save(&mut conn, &storage)
+            .await?;
         let logs = sqlx::query_as::<_, (String, bool)>(
             "SELECT log_filename, success FROM builds_logs WHERE build_id = $1",
         )

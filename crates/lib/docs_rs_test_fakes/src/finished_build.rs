@@ -1,6 +1,5 @@
 use crate::{FakeBuild, errored_build::StoredBuildError};
 use anyhow::{Result, bail};
-use docs_rs_database::releases::add_build_logs;
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, ByteSize, ReleaseId};
 use std::collections::HashMap;
@@ -118,17 +117,6 @@ impl FakeFinishedBuild {
     ) -> Result<BuildId> {
         let build = docs_rs_database::build::Build::start(conn, release_id).await?;
         let build_id = build.id();
-        build
-            .finish()
-            .rustc_version(&self.rustc_version)
-            .docsrs_version(&self.docsrs_version)
-            .successful(self.successful)
-            .maybe_documentation_size(self.documentation_size)
-            .maybe_memory_peak(self.memory_peak)
-            .maybe_error(self.error.as_ref())
-            .save(conn)
-            .await?;
-
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(
                 "UPDATE builds SET output = $2 WHERE id = $1",
@@ -141,31 +129,54 @@ impl FakeFinishedBuild {
 
         let prefix = format!("build-logs/{build_id}/");
 
-        let mut log_filenames = Vec::new();
-
         if let Some((s3_build_log, successful)) = &self.s3_build_log {
-            log_filenames.push((format!("{default_target}.txt"), *successful));
-            storage
-                .store_one(
-                    format!("{prefix}{default_target}.txt"),
-                    s3_build_log.clone(),
-                )
-                .await?;
+            if self.legacy_build_logs {
+                storage
+                    .store_one(
+                        format!("{prefix}{default_target}.txt"),
+                        s3_build_log.clone(),
+                    )
+                    .await?;
+            } else {
+                build
+                    .publish_build_log()
+                    .target(format!("{default_target}.txt"))
+                    .log(s3_build_log.as_str())
+                    .successful(*successful)
+                    .save(conn, storage)
+                    .await?;
+            }
         }
 
         for (target, (log, successful)) in &self.other_build_logs {
             if target == default_target {
                 bail!("build log for default target has to be set via `s3_build_log`");
             }
-            log_filenames.push((format!("{target}.txt"), *successful));
-            storage
-                .store_one(format!("{prefix}{target}.txt"), log.clone())
-                .await?;
+            if self.legacy_build_logs {
+                storage
+                    .store_one(format!("{prefix}{target}.txt"), log.clone())
+                    .await?;
+            } else {
+                build
+                    .publish_build_log()
+                    .target(format!("{target}.txt"))
+                    .log(log.as_str())
+                    .successful(*successful)
+                    .save(conn, storage)
+                    .await?;
+            }
         }
 
-        if !self.legacy_build_logs && !log_filenames.is_empty() {
-            add_build_logs(&mut *conn, build_id, log_filenames).await?;
-        }
+        build
+            .finish()
+            .rustc_version(&self.rustc_version)
+            .docsrs_version(&self.docsrs_version)
+            .successful(self.successful)
+            .maybe_documentation_size(self.documentation_size)
+            .maybe_memory_peak(self.memory_peak)
+            .maybe_error(self.error.as_ref())
+            .save(conn)
+            .await?;
 
         Ok(build_id)
     }

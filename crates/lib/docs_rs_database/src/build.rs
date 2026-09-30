@@ -2,7 +2,7 @@
 //!
 //! A transition consumes its in-progress handle and checks the database state.
 
-use crate::releases::{add_build_logs, update_build_status};
+use crate::releases::update_build_status;
 use anyhow::{Result, anyhow};
 use docs_rs_types::{BuildError, BuildId, BuildStatus, ByteSize, ReleaseId};
 use docs_rs_utils::rustc_version::parse_rustc_date;
@@ -171,7 +171,20 @@ impl Build<InProgress> {
         storage
             .store_one(format!("build-logs/{}/{filename}", self.id), log.to_owned())
             .await?;
-        add_build_logs(conn, self.id, [(filename, successful)]).await
+
+        let logs_filename = [filename];
+        let successes = [successful];
+        sqlx::query!(
+            "INSERT INTO builds_logs(build_id, log_filename, success)
+         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
+         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
+            self.id as _,
+            &logs_filename as &[String],
+            &successes as &[bool],
+        )
+        .execute(conn)
+        .await?;
+        Ok(())
     }
 
     /// Start a new attempt, marking any previous in-progress attempts aborted.
