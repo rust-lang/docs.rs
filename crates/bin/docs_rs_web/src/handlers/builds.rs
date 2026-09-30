@@ -20,7 +20,7 @@ use constant_time_eq::constant_time_eq;
 use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
-use docs_rs_database::build::{Build as DatabaseBuild, OpenBuild};
+use docs_rs_database::build::{Build, OpenBuild};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
@@ -175,7 +175,7 @@ pub(super) async fn get_builds(
     name: &KrateName,
     version: &Version,
 ) -> Result<Vec<OpenBuild>> {
-    DatabaseBuild::for_release(conn, name, version).await
+    Build::for_release(conn, name, version).await
 }
 
 #[cfg(test)]
