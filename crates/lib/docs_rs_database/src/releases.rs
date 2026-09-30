@@ -386,6 +386,170 @@ pub async fn initialize_build(
     Ok(build_id)
 }
 
+/// Alternative typed API for build lifecycle transitions.
+///
+/// Existing callers can continue using the free functions above. These handles
+/// deliberately aren't `Clone`: a transition consumes the in-progress handle.
+pub mod build_lifecycle {
+    use super::*;
+
+    #[derive(Debug)]
+    pub struct InProgress;
+
+    #[derive(Debug)]
+    pub struct Finished {
+        pub status: BuildStatus,
+    }
+
+    #[derive(Debug)]
+    pub struct EarlyFailure;
+
+    #[derive(Debug)]
+    pub struct Build<State> {
+        id: BuildId,
+        state: State,
+    }
+
+    /// Loading a database row requires inspecting its state at runtime.
+    #[derive(Debug)]
+    pub enum OpenBuild {
+        InProgress(Build<InProgress>),
+        Finished(Build<Finished>),
+        EarlyFailure(Build<EarlyFailure>),
+    }
+
+    /// Data available once the compiler invocation has completed.
+    pub struct Completion<'a> {
+        pub rustc_version: &'a str,
+        pub docsrs_version: &'a str,
+        pub successful: bool,
+        pub documentation_size: Option<ByteSize>,
+        pub memory_peak: Option<ByteSize>,
+    }
+
+    impl<State> Build<State> {
+        pub fn id(&self) -> BuildId {
+            self.id
+        }
+
+        pub fn state(&self) -> &State {
+            &self.state
+        }
+    }
+
+    impl Build<InProgress> {
+        /// Start a new attempt, marking any previous in-progress attempts aborted.
+        pub async fn start(conn: &mut sqlx::PgConnection, release_id: ReleaseId) -> Result<Self> {
+            let mut transaction = sqlx::Connection::begin(conn).await?;
+            let id = initialize_build(&mut transaction, release_id).await?;
+            transaction.commit().await?;
+            Ok(Self {
+                id,
+                state: InProgress,
+            })
+        }
+
+        /// Open an existing attempt without creating a new one or changing its state.
+        ///
+        /// ```ignore
+        /// match Build::open(conn, build_id).await? {
+        ///     OpenBuild::InProgress(build) => {
+        ///         let finished = build.finish(conn, completion, Some(&error)).await?;
+        ///     }
+        ///     OpenBuild::Finished(_) | OpenBuild::EarlyFailure(_) => {}
+        /// }
+        /// ```
+        pub async fn open(conn: &mut sqlx::PgConnection, id: BuildId) -> Result<OpenBuild> {
+            let (status, finished) = sqlx::query_as::<_, (BuildStatus, bool)>(
+                "SELECT build_status, build_finished IS NOT NULL FROM builds WHERE id = $1",
+            )
+            .bind(id.0)
+            .fetch_one(conn)
+            .await?;
+
+            Ok(match (status, finished) {
+                (BuildStatus::InProgress, false) => OpenBuild::InProgress(Self {
+                    id,
+                    state: InProgress,
+                }),
+                (BuildStatus::Failure, false) => OpenBuild::EarlyFailure(Build {
+                    id,
+                    state: EarlyFailure,
+                }),
+                (status, true) if status != BuildStatus::InProgress => OpenBuild::Finished(Build {
+                    id,
+                    state: Finished { status },
+                }),
+                _ => return Err(anyhow!("build {id} has inconsistent lifecycle fields")),
+            })
+        }
+
+        pub async fn finish<E: BuildError>(
+            self,
+            conn: &mut sqlx::PgConnection,
+            completion: Completion<'_>,
+            error: Option<&E>,
+        ) -> Result<Build<Finished>> {
+            let mut transaction = sqlx::Connection::begin(conn).await?;
+            self.lock_in_progress(&mut transaction).await?;
+            let status = if completion.successful {
+                BuildStatus::Success
+            } else {
+                BuildStatus::Failure
+            };
+            finish_build(
+                &mut transaction,
+                self.id,
+                completion.rustc_version,
+                completion.docsrs_version,
+                status,
+                completion.documentation_size,
+                completion.memory_peak,
+                error,
+            )
+            .await?;
+            transaction.commit().await?;
+            Ok(Build {
+                id: self.id,
+                state: Finished { status },
+            })
+        }
+
+        pub async fn fail_early<E: BuildError>(
+            self,
+            conn: &mut sqlx::PgConnection,
+            error: Option<&E>,
+        ) -> Result<Build<EarlyFailure>> {
+            let mut transaction = sqlx::Connection::begin(conn).await?;
+            self.lock_in_progress(&mut transaction).await?;
+            update_build_with_error(&mut transaction, self.id, error).await?;
+            transaction.commit().await?;
+            Ok(Build {
+                id: self.id,
+                state: EarlyFailure,
+            })
+        }
+
+        /// Recheck under a row lock: another process may have completed this
+        /// attempt since the handle was created. Hold the lock through the write
+        /// and release status update, so the transition is atomic.
+        async fn lock_in_progress(&self, conn: &mut sqlx::PgConnection) -> Result<()> {
+            let status = sqlx::query_scalar::<_, BuildStatus>(
+                "SELECT build_status FROM builds WHERE id = $1 FOR UPDATE",
+            )
+            .bind(self.id.0)
+            .fetch_one(conn)
+            .await?;
+            anyhow::ensure!(
+                status == BuildStatus::InProgress,
+                "build {} is no longer in progress",
+                self.id
+            );
+            Ok(())
+        }
+    }
+}
+
 /// Reads features and converts them to Vec<Feature> with default being first
 fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
     let mut features = Vec::with_capacity(pkg.features.len());
