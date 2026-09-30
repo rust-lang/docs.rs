@@ -90,7 +90,7 @@
                                             {%- when OpenBuild::Finished(finished) -%}
                                             {%- if let Some(memory_peak) = finished.state().memory_peak -%}
                                                 {{ crate::icons::IconMemory.render_solid(false, false, "") }}
-                                                {{ memory_peak.as_u64()|filesizeformat }}
+                                                {{ memory_peak.display().si() }}
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}

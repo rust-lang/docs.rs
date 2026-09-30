@@ -3,13 +3,13 @@
 //! A transition consumes its in-progress handle and checks the database state.
 
 use crate::releases::update_build_status;
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use chrono::{DateTime, Utc};
 use docs_rs_types::{
     BuildError, BuildId, BuildStatus, ByteSize, Duration, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::rustc_version::parse_rustc_date;
-use futures_util::{StreamExt as _, stream};
+use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use tracing::{debug, error};
 
 #[cfg(test)]
@@ -23,6 +23,51 @@ mod tests {
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::testing::{KRATE, V0_1};
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn log_reads_support_storage_fallback_and_legacy_output() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let storage = docs_rs_storage::testing::TestStorage::from_kind(
+            docs_rs_storage::StorageKind::Memory,
+            metrics.provider(),
+        )
+        .await?;
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build = Build::start(&mut conn, release_id).await?;
+        for filename in ["b.txt", "a.txt"] {
+            storage
+                .store_one(
+                    format!("build-logs/{}/{filename}", build.id()),
+                    filename.to_owned(),
+                )
+                .await?;
+        }
+        assert_eq!(
+            build.list_build_logs(&storage).await?,
+            vec![("a.txt".into(), None), ("b.txt".into(), None)]
+        );
+        assert_eq!(build.fetch_build_log(&storage, "a.txt").await?, "a.txt");
+        let error = build
+            .fetch_build_log(&storage, "missing.txt")
+            .await
+            .unwrap_err();
+        assert!(error.is::<docs_rs_storage::PathNotFoundError>());
+
+        sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
+            .bind(build.id().0)
+            .execute(&mut *conn)
+            .await?;
+        let legacy = Build::open(&mut conn, build.id()).await?;
+        assert!(legacy.list_build_logs(&storage).await?.is_empty());
+        assert_eq!(
+            legacy.fetch_build_log(&storage, "missing.txt").await?,
+            "legacy log"
+        );
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
@@ -154,6 +199,14 @@ mod tests {
             vec![("target".into(), true), ("target_json".into(), false)]
         );
         assert_eq!(build.logs(), logs.as_slice());
+        assert_eq!(
+            build.list_build_logs(&storage).await?,
+            vec![
+                ("target".into(), Some(true)),
+                ("target_json".into(), Some(false))
+            ]
+        );
+        assert_eq!(build.fetch_build_log(&storage, "target").await?, "html");
         for (filename, _) in logs {
             assert!(
                 storage
@@ -403,6 +456,29 @@ impl BuildRow {
 }
 
 impl OpenBuild {
+    pub async fn list_build_logs(
+        &self,
+        storage: &docs_rs_storage::AsyncStorage,
+    ) -> Result<Vec<(String, Option<bool>)>> {
+        match self {
+            Self::InProgress(build) => build.list_build_logs(storage).await,
+            Self::Finished(build) => build.list_build_logs(storage).await,
+            Self::EarlyFailure(build) => build.list_build_logs(storage).await,
+        }
+    }
+
+    pub async fn fetch_build_log(
+        &self,
+        storage: &docs_rs_storage::AsyncStorage,
+        filename: &str,
+    ) -> Result<String> {
+        match self {
+            Self::InProgress(build) => build.fetch_build_log(storage, filename).await,
+            Self::Finished(build) => build.fetch_build_log(storage, filename).await,
+            Self::EarlyFailure(build) => build.fetch_build_log(storage, filename).await,
+        }
+    }
+
     pub fn errors(&self) -> Option<&str> {
         match self {
             Self::InProgress(_) => None,
@@ -503,6 +579,53 @@ pub enum OpenBuild {
 }
 
 impl<State> Build<State> {
+    /// List registered logs, falling back to storage for older attempts without
+    /// log records. Legacy database output has no separate log files.
+    pub async fn list_build_logs(
+        &self,
+        storage: &docs_rs_storage::AsyncStorage,
+    ) -> Result<Vec<(String, Option<bool>)>> {
+        if self.legacy_output.is_some() {
+            return Ok(Vec::new());
+        }
+        if !self.logs.is_empty() {
+            return Ok(self
+                .logs
+                .iter()
+                .map(|(filename, success)| (filename.clone(), Some(*success)))
+                .collect());
+        }
+        let prefix = format!("build-logs/{}/", self.id);
+        storage
+            .list_prefix(&prefix)
+            .await
+            .map_ok(|path| {
+                (
+                    path.strip_prefix(&prefix)
+                        .expect("storage lists only keys under the requested prefix")
+                        .to_owned(),
+                    None,
+                )
+            })
+            .try_collect()
+            .await
+    }
+
+    /// Fetch a UTF-8 log, preserving storage size limits and missing-file errors.
+    /// For legacy attempts, the database output takes precedence over filenames.
+    pub async fn fetch_build_log(
+        &self,
+        storage: &docs_rs_storage::AsyncStorage,
+        filename: &str,
+    ) -> Result<String> {
+        if let Some(output) = &self.legacy_output {
+            return Ok(output.clone());
+        }
+        let path = format!("build-logs/{}/{filename}", self.id);
+        let blob = Box::pin(storage.get(&path, storage.config().max_file_size_for(&path))).await?;
+        String::from_utf8(blob.content).context("non utf8 build log")
+    }
+
     pub fn started_at(&self) -> Option<DateTime<Utc>> {
         self.started_at
     }

@@ -2,41 +2,26 @@ use crate::{
     cache::CachePolicy,
     error::{AxumNope, AxumResult},
     extractors::{DbConnection, Path, rustdoc::RustdocParams},
-    file::File,
     impl_axum_webpage,
     match_release::match_version,
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
 };
-use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use chrono::{DateTime, Utc};
 use docs_rs_database::build::{Build, OpenBuild};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
-use futures_util::TryStreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BuildDetails {
-    id: BuildId,
-    rustc_version: Option<String>,
-    docsrs_version: Option<String>,
-    build_status: BuildStatus,
-    build_time: Option<DateTime<Utc>>,
-    output: String,
-    errors: Option<String>,
-    error_kind: Option<String>,
-}
-
 #[derive(Template)]
 #[template(path = "crate/build_details.html")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 struct BuildDetailsPage {
     metadata: MetaData,
-    build_details: BuildDetails,
+    build: OpenBuild,
+    output: String,
     all_log_filenames: Vec<(String, Option<bool>)>,
     current_filename: Option<String>,
     params: RustdocParams,
@@ -106,34 +91,7 @@ pub(crate) async fn build_details_handler(
         // legacy case, for old builds the build log was stored in the database.
         (output.to_owned(), Vec::new(), None)
     } else {
-        // for newer builds we have the build logs stored in S3.
-        // For a long time only for one target, then we started storing the logs for other targets
-        // In any case, all the logfiles are put into a folder we can just query.
-        let prefix = format!("build-logs/{id}/");
-
-        // A list of `(path, build_successful)`.
-        let all_log_filenames: Vec<(String, Option<bool>)> = if !build.logs().is_empty() {
-            build
-                .logs()
-                .iter()
-                .cloned()
-                .map(|(path, success)| (path, Some(success)))
-                .collect()
-        } else {
-            storage
-                .list_prefix(&prefix) // the result from S3 is ordered by key
-                .await
-                .map_ok(|path| {
-                    (
-                        path.strip_prefix(&prefix)
-                            .expect("since we query for the prefix, it has to be always there")
-                            .to_owned(),
-                        None,
-                    )
-                })
-                .try_collect()
-                .await?
-        };
+        let all_log_filenames = build.list_build_logs(&storage).await?;
 
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
@@ -159,8 +117,7 @@ pub(crate) async fn build_details_handler(
         };
 
         let file_content = if let Some(ref filename) = current_filename {
-            let file = File::from_path(&storage, &format!("{prefix}{filename}")).await?;
-            String::from_utf8(file.0.content).context("non utf8")?
+            build.fetch_build_log(&storage, filename).await?
         } else {
             "".to_string()
         };
@@ -168,25 +125,10 @@ pub(crate) async fn build_details_handler(
         (file_content, all_log_filenames, current_filename)
     };
 
-    let (rustc_version, docsrs_version) = match &build {
-        OpenBuild::Finished(build) => (
-            build.state().rustc_version.clone(),
-            build.state().docsrs_version.clone(),
-        ),
-        OpenBuild::InProgress(_) | OpenBuild::EarlyFailure(_) => (None, None),
-    };
     Ok(BuildDetailsPage {
         metadata,
-        build_details: BuildDetails {
-            id,
-            rustc_version,
-            docsrs_version,
-            build_status: build.status(),
-            build_time: build.build_time(),
-            output,
-            errors: build.errors().map(str::to_owned),
-            error_kind: build.error_kind().map(str::to_owned),
-        },
+        build,
+        output,
         all_log_filenames,
         current_filename,
         params,
