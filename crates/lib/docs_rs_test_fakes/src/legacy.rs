@@ -175,12 +175,7 @@ impl<'a> FakeRelease<'a> {
         );
         Self {
             has_docs: false,
-            builds: Some(vec![
-                FakeFinishedBuild::builder()
-                    .successful(false)
-                    .build()
-                    .into(),
-            ]),
+            builds: Some(vec![FakeFinishedBuild::builder().successful(false).build()]),
             ..self
         }
     }

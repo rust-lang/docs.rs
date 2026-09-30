@@ -273,8 +273,7 @@ mod tests {
                 FakeFinishedBuild::builder()
                     .successful(false)
                     .error(SimpleBuildError("finished error".into()))
-                    .build()
-                    .into(),
+                    .build(),
                 FakeEarlyErrorBuild::builder()
                     .error(SimpleBuildError("early error".into()))
                     .build()

@@ -1,4 +1,4 @@
-use crate::errored_build::StoredBuildError;
+use crate::{FakeBuild, errored_build::StoredBuildError};
 use anyhow::{Result, bail};
 use docs_rs_database::releases::add_build_logs;
 use docs_rs_storage::AsyncStorage;
@@ -8,6 +8,7 @@ use std::collections::HashMap;
 /// A completed build with compiler metadata, metrics, and optional logs.
 #[derive(bon::Builder)]
 #[builder(on(_, into))]
+#[builder(finish_fn = into_finished)]
 pub struct FakeFinishedBuild {
     #[builder(field)]
     other_build_logs: HashMap<String, (String, bool)>,
@@ -49,6 +50,14 @@ pub struct FakeFinishedBuild {
 use fake_finished_build_builder::{IsComplete, IsUnset, SetS3BuildLog, State};
 
 impl<S: State> FakeFinishedBuildBuilder<S> {
+    /// Finish the fixture as a build in the finished lifecycle state.
+    pub fn build(self) -> FakeBuild
+    where
+        S: IsComplete,
+    {
+        self.into_finished().into()
+    }
+
     pub fn s3_build_log(
         self,
         build_log: impl Into<String>,
@@ -96,7 +105,7 @@ impl<S: State> FakeFinishedBuildBuilder<S> {
 
 impl Default for FakeFinishedBuild {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().into_finished()
     }
 }
 
