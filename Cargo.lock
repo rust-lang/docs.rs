@@ -2570,7 +2570,9 @@ dependencies = [
  "bon",
  "chrono",
  "docs_rs_cargo_metadata",
+ "docs_rs_config",
  "docs_rs_database",
+ "docs_rs_opentelemetry",
  "docs_rs_registry_api",
  "docs_rs_rustdoc_json",
  "docs_rs_storage",
@@ -2578,6 +2580,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
