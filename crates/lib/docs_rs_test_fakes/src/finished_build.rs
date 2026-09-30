@@ -40,9 +40,9 @@ pub struct FakeFinishedBuild {
     #[builder(
         required,
         with=Some,
-        default = Some(23u64)
+        default = Some(ByteSize::b(23u64))
     )]
-    memory_peak: Option<u64>,
+    memory_peak: Option<ByteSize>,
 
     #[builder(
         required,

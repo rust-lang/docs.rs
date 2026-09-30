@@ -27,7 +27,7 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
@@ -431,7 +431,7 @@ impl RustwideBuilder {
                 BuildStatus::Failure
             },
             documentation_size,
-            build_statistics.memory_peak_bytes(),
+            build_statistics.memory_peak_bytes().map(ByteSize::b),
             build_error,
         ))?;
 

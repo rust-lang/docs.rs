@@ -221,7 +221,7 @@ pub async fn finish_build<E>(
     docsrs_version: &str,
     build_status: BuildStatus,
     documentation_size: Option<ByteSize>,
-    memory_peak: Option<u64>,
+    memory_peak: Option<ByteSize>,
     build_error: Option<&E>,
 ) -> Result<()>
 where
@@ -268,7 +268,7 @@ where
         documentation_size as _,
         rustc_date,
         build_error.map(|err| err.kind()),
-        memory_peak.map(|v| v as i64),
+        memory_peak as _,
         build_id as _,
     )
     .fetch_one(&mut *conn)

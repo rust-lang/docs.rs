@@ -346,7 +346,7 @@ mod tests {
         async_wrapper(|env| async move {
             // Use a specific memory value: 256 MiB = 256 * 1024 * 1024 = 268435456 bytes
             // filesizeformat uses decimal (1000-based), so this will display as ~268.43 MB
-            let test_memory_bytes: u64 = 256 * 1024 * 1024;
+            let test_memory_bytes = ByteSize::mib(256);
 
             env.fake_release()
                 .await
