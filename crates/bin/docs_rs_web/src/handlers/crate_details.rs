@@ -20,7 +20,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
-use docs_rs_database::build::{Build, Finished, OpenBuild};
+use docs_rs_database::build::{Build, BuildFor, Finished};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
@@ -47,7 +47,7 @@ pub(crate) struct CrateDetails {
     build_status: BuildStatus,
     pub latest_build_id: Option<BuildId>,
     last_successful_build: Option<Version>,
-    pub latest_build: Option<Build<Finished>>,
+    pub latest_build: Option<BuildFor<Finished>>,
     pub rustdoc_status: Option<bool>,
     pub repository_url: Option<String>,
     pub homepage_url: Option<String>,
@@ -226,10 +226,10 @@ impl CrateDetails {
                 build.display_status() == BuildStatus::Success && build.build_time().is_some()
             })
             .filter_map(|build| match build {
-                OpenBuild::Finished(build) => Some(build),
-                OpenBuild::InProgress(_) | OpenBuild::EarlyFailure(_) => None,
+                Build::Finished(build) => Some(build),
+                Build::InProgress(_) | Build::EarlyFailure(_) => None,
             })
-            .max_by_key(Build::build_time);
+            .max_by_key(BuildFor::build_time);
 
         let mut crate_details = CrateDetails {
             name: krate.name,

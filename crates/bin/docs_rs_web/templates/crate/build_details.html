@@ -76,7 +76,7 @@
                     {%- endif -%}
 
                     {%- match build -%}
-                    {%- when OpenBuild::Finished(finished) -%}
+                    {%- when Build::Finished(finished) -%}
                     {%- if let Some(rustc_version) = finished.state().rustc_version -%}
                         <p>
                         # rustc version

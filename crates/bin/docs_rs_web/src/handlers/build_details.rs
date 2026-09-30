@@ -9,7 +9,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use docs_rs_database::build::{Build, BuildLog, OpenBuild};
+use docs_rs_database::build::{Build, BuildLog};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct BuildDetailsPage {
     metadata: MetaData,
-    build: OpenBuild,
+    build: Build,
     output: String,
     logs: Vec<BuildLog>,
     current_filename: Option<String>,
@@ -270,7 +270,13 @@ mod tests {
             };
 
             let page = kuchikiki::parse_html().one(web.get(&url).await?.text().await?);
-            assert!(get_all_log_links(&page).is_empty());
+            assert_eq!(
+                get_all_log_links(&page),
+                vec![(
+                    "x86_64-unknown-linux-gnu.txt".into(),
+                    format!("{url}/x86_64-unknown-linux-gnu.txt"),
+                )]
+            );
 
             let log = page.select("pre").unwrap().next().unwrap().text_contents();
 

@@ -49,7 +49,7 @@
                                         </div> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-7-24">
                                             {%- match build -%}
-                                            {%- when OpenBuild::Finished(finished) -%}
+                                            {%- when Build::Finished(finished) -%}
                                             {%- if let Some(rustc_version) = finished.state().rustc_version -%}
                                                 {{ rustc_version }}
                                             {%- else -%}
@@ -61,7 +61,7 @@
                                         </div> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-6-24">
                                             {%- match build -%}
-                                            {%- when OpenBuild::Finished(finished) -%}
+                                            {%- when Build::Finished(finished) -%}
                                             {%- if let Some(docsrs_version) = finished.state().docsrs_version -%}
                                                 {{ docsrs_version }}
                                             {%- else -%}
@@ -87,7 +87,7 @@
                                         </div>
                                         <div class="pure-u-1 pure-u-sm-3-24 memory" title="Peak memory usage">
                                             {%- match build -%}
-                                            {%- when OpenBuild::Finished(finished) -%}
+                                            {%- when Build::Finished(finished) -%}
                                             {%- if let Some(memory_peak) = finished.state().memory_peak -%}
                                                 {{ crate::icons::IconMemory.render_solid(false, false, "") }}
                                                 {{ memory_peak.display().si() }}

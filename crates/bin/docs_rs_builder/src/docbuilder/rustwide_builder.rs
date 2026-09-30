@@ -7,7 +7,7 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
-    build::{Build, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
+    build::{Build, BuildFor, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
     releases::{
         add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
@@ -233,7 +233,7 @@ impl RustwideBuilder {
 
     fn finish_uncompiled_build(
         &self,
-        build: Build<InProgress>,
+        build: BuildFor<InProgress>,
         result: Result<()>,
     ) -> Result<BuildPackageSummary> {
         self.runtime.block_on(async {
@@ -324,9 +324,9 @@ impl RustwideBuilder {
         version: &Version,
         crate_id: CrateId,
         release_id: ReleaseId,
-        mut build: Build<InProgress>,
+        mut build: BuildFor<InProgress>,
         release: BuiltRelease,
-    ) -> Result<(Build<Finished>, BuildPackageSummary)> {
+    ) -> Result<(BuildFor<Finished>, BuildPackageSummary)> {
         let BuiltRelease {
             result: release_build_result,
             statistics: build_statistics,
