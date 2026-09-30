@@ -11,10 +11,10 @@ _run-cli mode package service_name *args:
 
     case "{{ mode }}" in
       local)
-        cargo run -p {{ package }} -- {{ args }}
+        cargo run -p {{ package }} -- {{ quote(args) }}
         ;;
       docker)
-        just docker-run {{ service_name }} {{ args }}
+        just docker-run {{ service_name }} {{ quote(args) }}
         ;;
       *)
         echo "Invalid CLI mode: {{ mode }}" >&2
@@ -26,23 +26,23 @@ _run-cli mode package service_name *args:
 # Run a docs_rs_admin command using DOCSRS_CLI_MODE.
 [group('cli')]
 cli *args: _ensure_db_migrated
-    SQLX_OFFLINE=1 just _run-cli "$DOCSRS_CLI_MODE" docs_rs_admin cli {{ args }}
+    SQLX_OFFLINE=1 just _run-cli "$DOCSRS_CLI_MODE" docs_rs_admin cli {{ quote(args) }}
 
 _builder *args:
     # on non-linux (and arm/linux) we need to run the builder inside
     # a docker container because many places expect the builder to
     # run on a linux host.
-    just _run-cli "$DOCSRS_BUILDER_CLI_MODE" docs_rs_builder builder-cli {{ args }}
+    just _run-cli "$DOCSRS_BUILDER_CLI_MODE" docs_rs_builder builder-cli {{ quote(args) }}
 
 # Run a docs_rs_builder command using DOCSRS_BUILDER_CLI_MODE.
 [group('cli')]
 builder *args: _ensure_db_migrated
-    just _builder {{ args }}
+    just _builder {{ quote(args) }}
 
 # Run a docs_rs_watcher command using DOCSRS_CLI_MODE.
 [group('cli')]
 watcher *args: _ensure_db_migrated
-    just _run-cli "$DOCSRS_CLI_MODE" docs_rs_watcher registry-watcher-cli {{ args }}
+    just _run-cli "$DOCSRS_CLI_MODE" docs_rs_watcher registry-watcher-cli {{ quote(args) }}
 
 # Migrate to an optional version using docs_rs_admin and DOCSRS_CLI_MODE.
 [group('cli')]
