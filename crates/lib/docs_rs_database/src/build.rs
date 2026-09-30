@@ -90,7 +90,9 @@ impl BuildLog {
 
     pub async fn fetch(&self, storage: &docs_rs_storage::AsyncStorage) -> Result<String> {
         let path = &self.storage_path;
-        let blob = Box::pin(storage.get(path, storage.config().max_file_size_for(path))).await?;
+        let blob = storage
+            .get(path, storage.config().max_file_size_for(path))
+            .await?;
         String::from_utf8(blob.content).context("non utf8 build log")
     }
 }
@@ -237,11 +239,11 @@ impl BuildRow {
 }
 
 impl AnyBuild {
-    pub async fn fetch_legacy_output(&self, pool: &crate::Pool) -> Result<String> {
+    pub async fn fetch_legacy_output(&self, conn: &mut sqlx::PgConnection) -> Result<String> {
         match self {
-            Self::InProgress(build) => build.fetch_legacy_output(pool).await,
-            Self::Finished(build) => build.fetch_legacy_output(pool).await,
-            Self::EarlyFailure(build) => build.fetch_legacy_output(pool).await,
+            Self::InProgress(build) => build.fetch_legacy_output(conn).await,
+            Self::Finished(build) => build.fetch_legacy_output(conn).await,
+            Self::EarlyFailure(build) => build.fetch_legacy_output(conn).await,
         }
     }
 
@@ -487,8 +489,7 @@ impl<State> Build<State> {
     }
 
     /// Fetch legacy database output lazily. Missing output is a not-found error.
-    pub async fn fetch_legacy_output(&self, pool: &crate::Pool) -> Result<String> {
-        let mut conn = pool.get_async().await?;
+    pub async fn fetch_legacy_output(&self, conn: &mut sqlx::PgConnection) -> Result<String> {
         sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
             .bind(self.id.0)
             .fetch_optional(&mut *conn)

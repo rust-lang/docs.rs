@@ -9,7 +9,6 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use docs_rs_database::Pool;
 use docs_rs_database::build::{AnyBuild, BuildLog};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
@@ -48,7 +47,6 @@ pub(crate) async fn build_details_handler(
     Path(build_params): Path<BuildDetailsParams>,
     mut conn: DbConnection,
     State(storage): State<Arc<AsyncStorage>>,
-    State(pool): State<Pool>,
 ) -> AxumResult<impl IntoResponse> {
     let id = build_params
         .id
@@ -84,15 +82,15 @@ pub(crate) async fn build_details_handler(
     .await?;
     let params = params.apply_metadata(&metadata);
 
-    // NOTE: we want to give back the db connection to the pool
-    // before we do the long S3 requests.
-    drop(conn);
-
     let (output, logs, current_filename) = if build.has_legacy_output() {
         // legacy case, for old builds the build log was stored in the database.
-        let output = build.fetch_legacy_output(&pool).await?;
+        let output = build.fetch_legacy_output(&mut conn).await?;
         (output, Vec::new(), None)
     } else {
+        // NOTE: we want to give back the db connection to the pool
+        // before we do the long S3 requests.
+        drop(conn);
+
         let logs = build.list_build_logs(&storage).await?;
 
         let current_filename = if let Some(filename) = build_params.filename {
