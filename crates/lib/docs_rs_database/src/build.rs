@@ -6,6 +6,7 @@ use crate::releases::update_build_status;
 use anyhow::{Result, anyhow};
 use docs_rs_types::{BuildError, BuildId, BuildStatus, ByteSize, ReleaseId};
 use docs_rs_utils::rustc_version::parse_rustc_date;
+use futures_util::{StreamExt as _, stream};
 use tracing::{debug, error};
 
 #[cfg(test)]
@@ -84,6 +85,16 @@ pub enum BuildLogKind {
     #[default]
     Html,
     Json,
+}
+
+/// A target log to upload and register as part of a batch.
+#[derive(bon::Builder)]
+pub struct BuildLog<'a> {
+    target: &'a str,
+    #[builder(default)]
+    kind: BuildLogKind,
+    log: &'a str,
+    successful: bool,
 }
 
 impl BuildLogKind {
@@ -171,7 +182,45 @@ impl Build<InProgress> {
         storage
             .store_one(format!("build-logs/{}/{filename}", self.id), log.to_owned())
             .await?;
+        self.register_log(conn, filename, successful).await
+    }
 
+    /// Upload up to eight logs concurrently, acquiring a pooled connection only
+    /// after each upload succeeds. Finish all operations before reporting an
+    /// error so successful uploads are registered even when another log fails.
+    pub async fn publish_build_logs<'a>(
+        &self,
+        pool: &crate::Pool,
+        storage: &docs_rs_storage::AsyncStorage,
+        logs: impl IntoIterator<Item = BuildLog<'a>>,
+    ) -> Result<()> {
+        let results = stream::iter(logs)
+            .map(|log| async move {
+                let filename = format!("{}{}", log.target, log.kind.suffix());
+                storage
+                    .store_one(
+                        format!("build-logs/{}/{filename}", self.id),
+                        log.log.to_owned(),
+                    )
+                    .await?;
+                let mut conn = pool.get_async().await?;
+                self.register_log(&mut conn, filename, log.successful).await
+            })
+            .buffer_unordered(8)
+            .collect::<Vec<_>>()
+            .await;
+        for result in results {
+            result?;
+        }
+        Ok(())
+    }
+
+    async fn register_log(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        filename: String,
+        successful: bool,
+    ) -> Result<()> {
         let logs_filename = [filename];
         let successes = [successful];
         sqlx::query!(

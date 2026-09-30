@@ -7,7 +7,7 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
-    build::{Build, BuildLogKind, CompletionError, Finished, InProgress},
+    build::{Build, BuildLog, BuildLogKind, CompletionError, Finished, InProgress},
     releases::{
         add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
@@ -400,31 +400,34 @@ impl RustwideBuilder {
             // The new library also collects logs from all other steps, I didn't dig into
             // if these would be useful for crate developers at all, and leave them as they
             // are right now.
+            let logs = release_build_result.targets().flat_map(|target| {
+                [
+                    (
+                        BuildLogKind::Html,
+                        target.documentation().log(),
+                        target.documentation_succeeded(),
+                    ),
+                    (
+                        BuildLogKind::Json,
+                        target.rustdoc_json().log(),
+                        target.rustdoc_json().is_ok(),
+                    ),
+                ]
+                .into_iter()
+                .filter_map(move |(kind, log, successful)| {
+                    log.map(|log| {
+                        BuildLog::builder()
+                            .target(target.target())
+                            .kind(kind)
+                            .log(log)
+                            .successful(successful)
+                            .build()
+                    })
+                })
+            });
+            self.runtime
+                .block_on(build.publish_build_logs(&self.db, &self.storage, logs))?;
             let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-            for target in release_build_result.targets() {
-                if let Some(log) = target.documentation().log() {
-                    self.runtime.block_on(
-                        build
-                            .publish_build_log()
-                            .target(target.target())
-                            .kind(BuildLogKind::Html)
-                            .log(log)
-                            .successful(target.documentation_succeeded())
-                            .save(&mut async_conn, &self.storage),
-                    )?;
-                }
-                if let Some(log) = target.rustdoc_json().log() {
-                    self.runtime.block_on(
-                        build
-                            .publish_build_log()
-                            .target(target.target())
-                            .kind(BuildLogKind::Json)
-                            .log(log)
-                            .successful(target.rustdoc_json().is_ok())
-                            .save(&mut async_conn, &self.storage),
-                    )?;
-                }
-            }
 
             self.publish_json(name, version, &release_build_result);
 
