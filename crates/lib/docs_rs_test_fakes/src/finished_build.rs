@@ -39,7 +39,7 @@ pub struct FakeFinishedBuild {
 
     #[builder(
         required,
-        with=Some,
+        with=|size: impl Into<ByteSize>| Some(size.into()),
         default = Some(ByteSize::b(23u64))
     )]
     memory_peak: Option<ByteSize>,

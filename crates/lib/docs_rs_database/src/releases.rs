@@ -871,7 +871,7 @@ mod test {
             "docsrs_version",
             BuildStatus::Success,
             Some(42u64.into()),
-            Some(23),
+            Some(23u64.into()),
             None::<&SimpleBuildError>,
         )
         .await?;
