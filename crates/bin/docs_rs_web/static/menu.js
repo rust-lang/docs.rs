@@ -313,6 +313,52 @@
         }
     });
 
+    (async function loadCrateWarnings() {
+        const warnings = document.getElementById("crate-warnings");
+        if (!warnings) {
+            return;
+        }
+
+        try {
+            const response = await fetch(warnings.dataset.url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const html = await response.text();
+            warnings.outerHTML = html;
+        } catch (ex) {
+            console.error(`Failed to load crate warnings: ${ex}`);
+            warnings.innerHTML = "";
+            warnings.classList.add("hidden");
+        }
+    })();
+
+    (async function loadAlerts() {
+        const alerts = document.getElementById("alerts");
+        if (!alerts) {
+            return;
+        }
+
+        try {
+            const response = await fetch("/-/partial/alerts/");
+            alerts.innerHTML = await response.text();
+            const alertCheckbox = document.getElementById("docsrs-alert-input");
+            if (alertCheckbox) {
+                const alertId = alertCheckbox.getAttribute("data-id");
+                alertCheckbox.onchange = () => {
+                    // Remember when the user closes this alert.
+                    window.localStorage.setItem("hide-alert-id", alertId);
+                };
+                // Restore dismissal before showing the loaded alert.
+                alertCheckbox.checked = window.localStorage.getItem("hide-alert-id") === alertId;
+            }
+            alerts.classList.remove("hidden");
+        } catch (ex) {
+            console.error(`Failed to load alerts: ${ex}`);
+            alerts.innerHTML = "";
+        }
+    })();
+
     (async function loadAbnormalities() {
         const abnormalities = document.getElementById("abnormalities");
         if (!abnormalities) {

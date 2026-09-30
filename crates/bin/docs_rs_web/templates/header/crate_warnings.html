@@ -1,0 +1,16 @@
+{%- if let Some(replacement) = replacement -%}
+<li class="pure-menu-item crate-warning">
+    <a href="{{ replacement.url() }}" class="pure-menu-link warn" title="{{ replacement.description() }}">
+        {{- crate::icons::IconCircleInfo.render_solid(false, false, "") }}
+        <span class="title">Std alternative</span>
+    </a>
+</li>
+{%- endif -%}
+{%- if let Some(advisory) = unmaintained -%}
+<li class="pure-menu-item crate-warning">
+    <a href="https://rustsec.org/advisories/{{ advisory.id }}.html" class="pure-menu-link warn" title="{{ advisory.title }}">
+        {{- crate::icons::IconCircleInfo.render_solid(false, false, "") }}
+        <span class="title">Unmaintained</span>
+    </a>
+</li>
+{%- endif -%}

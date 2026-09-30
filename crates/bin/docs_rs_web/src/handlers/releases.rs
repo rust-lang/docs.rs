@@ -14,7 +14,7 @@ use crate::{
 use anyhow::{Context as _, Result, anyhow};
 use askama::Template;
 use axum::{
-    extract::{Extension, Query},
+    extract::{Query, State},
     response::{IntoResponse, Response as AxumResponse},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
@@ -520,9 +520,9 @@ impl_axum_webpage! {
 
 pub(crate) async fn search_handler(
     mut conn: DbConnection,
-    Extension(config): Extension<Arc<Config>>,
-    Extension(registry): Extension<Arc<RegistryApi>>,
-    Extension(otel_metrics): Extension<Arc<WebMetrics>>,
+    State(config): State<Arc<Config>>,
+    State(registry): State<Arc<RegistryApi>>,
+    State(otel_metrics): State<Arc<WebMetrics>>,
     Query(mut query_params): Query<HashMap<String, String>>,
 ) -> AxumResult<AxumResponse> {
     let mut query = query_params
@@ -784,7 +784,7 @@ pub(crate) struct BuildQueueParams {
 }
 
 pub(crate) async fn build_queue_handler(
-    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
+    State(build_queue): State<Arc<AsyncBuildQueue>>,
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {

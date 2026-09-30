@@ -1,7 +1,8 @@
 use headers::{self, Header, HeaderMapExt};
 use http::{HeaderMap, HeaderValue};
 
-pub(crate) fn test_typed_decode<H, V>(value: V) -> Result<Option<H>, headers::Error>
+/// Decode a `HeaderValue` into a typed header.
+pub fn test_typed_decode<H, V>(value: V) -> Result<Option<H>, headers::Error>
 where
     H: Header,
     V: TryInto<HeaderValue>,
@@ -17,7 +18,8 @@ where
     map.typed_try_get()
 }
 
-pub(crate) fn test_typed_encode<H: Header>(header: H) -> HeaderValue {
+/// Encode a typed header into a `HeaderValue`.
+pub fn test_typed_encode<H: Header>(header: H) -> HeaderValue {
     let mut map = HeaderMap::new();
     map.typed_insert(header);
     map.get(H::name()).cloned().unwrap()

@@ -11,7 +11,7 @@ define-function: (
         assert-css: (
             |crate_main_info_items| + "> *",
             {"padding": |padding|},
-	    ALL,
+            ALL,
         )
     },
 )

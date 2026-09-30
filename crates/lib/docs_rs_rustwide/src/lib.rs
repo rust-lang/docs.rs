@@ -7,6 +7,7 @@
 
 #![doc = include_str!("../README.md")]
 
+mod args;
 mod build;
 mod command;
 pub mod logging;
