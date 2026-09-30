@@ -27,7 +27,7 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
@@ -375,7 +375,6 @@ impl RustwideBuilder {
         build: &Build<InProgress>,
         release: BuiltRelease,
     ) -> Result<BuildPublication> {
-        let build_id = build.id();
         let BuiltRelease {
             result: release_build_result,
             statistics: build_statistics,
@@ -465,7 +464,7 @@ impl RustwideBuilder {
                 }
             }
 
-            self.publish_json(build_id, name, version, &release_build_result);
+            self.publish_json(name, version, &release_build_result);
 
             if build_succeeded {
                 self.builder_metrics.successful_builds.add(1, &[]);
@@ -582,13 +581,7 @@ impl RustwideBuilder {
     }
 
     #[instrument(skip(self, release))]
-    fn publish_json(
-        &self,
-        build_id: BuildId,
-        name: &KrateName,
-        version: &Version,
-        release: &ReleaseBuildResult,
-    ) {
+    fn publish_json(&self, name: &KrateName, version: &Version, release: &ReleaseBuildResult) {
         info!("uploading rustdoc json files...");
 
         for (target, json) in release.targets().filter_map(|target_result| {
