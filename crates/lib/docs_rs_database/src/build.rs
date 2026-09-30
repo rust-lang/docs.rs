@@ -160,7 +160,7 @@ impl BuildError for CompletionError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BuildFor<State> {
+pub struct Build<State> {
     id: BuildId,
     started_at: Option<DateTime<Utc>>,
     logs: Vec<(String, bool)>,
@@ -204,10 +204,10 @@ const READ_BUILDS: &str = r#"
 "#;
 
 impl BuildRow {
-    fn into_build(self) -> Result<Build> {
+    fn into_build(self) -> Result<AnyBuild> {
         let logs = self.logs.unwrap_or_default();
         Ok(match (self.build_status, self.build_finished) {
-            (BuildStatus::InProgress, None) => Build::InProgress(BuildFor {
+            (BuildStatus::InProgress, None) => AnyBuild::InProgress(Build {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
@@ -215,7 +215,7 @@ impl BuildRow {
                 default_target: self.default_target,
                 state: InProgress,
             }),
-            (BuildStatus::Failure, None) => Build::EarlyFailure(BuildFor {
+            (BuildStatus::Failure, None) => AnyBuild::EarlyFailure(Build {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
@@ -227,7 +227,7 @@ impl BuildRow {
                 },
             }),
             (status, finished_at) if status != BuildStatus::InProgress => {
-                Build::Finished(BuildFor {
+                AnyBuild::Finished(Build {
                     id: self.id,
                     started_at: self.build_started,
                     logs,
@@ -255,12 +255,12 @@ impl BuildRow {
     }
 }
 
-impl Build {
+impl AnyBuild {
     /// Start a new attempt, marking any previous in-progress attempts aborted.
     pub async fn start(
         conn: &mut sqlx::PgConnection,
         release_id: ReleaseId,
-    ) -> Result<BuildFor<InProgress>> {
+    ) -> Result<Build<InProgress>> {
         let mut transaction = sqlx::Connection::begin(conn).await?;
         let conn = &mut *transaction;
         let hostname = hostname::get()?;
@@ -293,7 +293,7 @@ impl Build {
 
         update_build_status(conn, release_id).await?;
 
-        let Build::InProgress(build) = Build::open(conn, build_id).await? else {
+        let AnyBuild::InProgress(build) = AnyBuild::open(conn, build_id).await? else {
             unreachable!("new build is in progress");
         };
         transaction.commit().await?;
@@ -316,7 +316,7 @@ impl Build {
     ///     Build::Finished(_) | Build::EarlyFailure(_) => {}
     /// }
     /// ```
-    pub async fn open(conn: &mut sqlx::PgConnection, id: BuildId) -> Result<Build> {
+    pub async fn open(conn: &mut sqlx::PgConnection, id: BuildId) -> Result<AnyBuild> {
         sqlx::query_as::<_, BuildRow>(READ_BUILDS)
             .bind(None::<&str>)
             .bind(None::<&str>)
@@ -332,7 +332,7 @@ impl Build {
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
         version: &Version,
-    ) -> Result<Vec<Build>> {
+    ) -> Result<Vec<AnyBuild>> {
         sqlx::query_as::<_, BuildRow>(READ_BUILDS)
             .bind(name.to_string())
             .bind(version.to_string())
@@ -351,7 +351,7 @@ impl Build {
         name: &KrateName,
         version: &Version,
         id: BuildId,
-    ) -> Result<Option<Build>> {
+    ) -> Result<Option<AnyBuild>> {
         sqlx::query_as::<_, BuildRow>(READ_BUILDS)
             .bind(name.to_string())
             .bind(version.to_string())
@@ -480,13 +480,13 @@ impl Build {
 
 /// Loading a database row requires inspecting its state at runtime.
 #[derive(Debug)]
-pub enum Build {
-    InProgress(BuildFor<InProgress>),
-    Finished(BuildFor<Finished>),
-    EarlyFailure(BuildFor<EarlyFailure>),
+pub enum AnyBuild {
+    InProgress(Build<InProgress>),
+    Finished(Build<Finished>),
+    EarlyFailure(Build<EarlyFailure>),
 }
 
-impl<State> BuildFor<State> {
+impl<State> Build<State> {
     /// List registered logs, falling back to storage for older attempts without
     /// log records. Legacy database output has no separate log files.
     pub async fn list_build_logs(
@@ -566,14 +566,14 @@ impl<State> BuildFor<State> {
     }
 }
 
-impl BuildFor<Finished> {
+impl Build<Finished> {
     pub fn build_time(&self) -> Option<DateTime<Utc>> {
         self.state.finished_at.or(self.started_at)
     }
 }
 
 #[bon::bon]
-impl BuildFor<InProgress> {
+impl Build<InProgress> {
     /// Upload a target log, then register it in the database. Missing logs
     /// are reported and omitted; failed uploads never create a log record.
     #[builder(finish_fn = save)]
@@ -686,7 +686,7 @@ impl BuildFor<InProgress> {
             kind: error.kind(),
         })]
         error: Option<CompletionError>,
-    ) -> Result<BuildFor<Finished>> {
+    ) -> Result<Build<Finished>> {
         let mut transaction = sqlx::Connection::begin(conn).await?;
         self.lock_in_progress(&mut transaction).await?;
         let status = if successful {
@@ -744,7 +744,7 @@ impl BuildFor<InProgress> {
 
         update_build_status(conn, release_id).await?;
 
-        let Build::Finished(build) = Build::open(conn, self.id).await? else {
+        let AnyBuild::Finished(build) = AnyBuild::open(conn, self.id).await? else {
             unreachable!("just completed build is finished");
         };
         transaction.commit().await?;
@@ -761,7 +761,7 @@ impl BuildFor<InProgress> {
             kind: error.kind(),
         })]
         error: Option<CompletionError>,
-    ) -> Result<BuildFor<EarlyFailure>> {
+    ) -> Result<Build<EarlyFailure>> {
         let mut transaction = sqlx::Connection::begin(conn).await?;
         self.lock_in_progress(&mut transaction).await?;
         let conn = &mut *transaction;
@@ -784,7 +784,7 @@ impl BuildFor<InProgress> {
 
         update_build_status(conn, release_id).await?;
 
-        let Build::EarlyFailure(build) = Build::open(conn, self.id).await? else {
+        let AnyBuild::EarlyFailure(build) = AnyBuild::open(conn, self.id).await? else {
             unreachable!("just failed build is an early failure");
         };
         transaction.commit().await?;
@@ -834,7 +834,7 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         for filename in ["b.txt", "a.txt"] {
             storage
                 .store_one(
@@ -864,7 +864,7 @@ mod tests {
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        let legacy = Build::open(&mut conn, build.id()).await?;
+        let legacy = AnyBuild::open(&mut conn, build.id()).await?;
         let legacy_logs = legacy.list_build_logs(&storage).await?;
         assert_eq!(legacy_logs.len(), 1);
         assert_eq!(legacy_logs[0].fetch(&storage).await?, "legacy log");
@@ -882,7 +882,7 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let finished = Build::start(&mut conn, release_id)
+        let finished = AnyBuild::start(&mut conn, release_id)
             .await?
             .finish()
             .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
@@ -905,41 +905,41 @@ mod tests {
             .execute(&mut *conn)
             .await?;
 
-        let detail = Build::find_for_release(&mut conn, &KRATE, &V0_1, id)
+        let detail = AnyBuild::find_for_release(&mut conn, &KRATE, &V0_1, id)
             .await?
             .unwrap();
         assert_eq!(detail.status(), BuildStatus::Success);
         assert_eq!(detail.display_status(), BuildStatus::PartialFailure);
-        let Build::Finished(detail) = detail else {
+        let AnyBuild::Finished(detail) = detail else {
             panic!("completed build should be finished");
         };
         assert_eq!(detail.legacy_output(), Some("legacy log"));
         assert_eq!(detail.logs(), &[("target.txt".into(), false)]);
         assert!(
-            Build::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
+            AnyBuild::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
                 .await?
                 .is_none()
         );
 
-        let in_progress = Build::start(&mut conn, release_id).await?;
-        let builds = Build::for_release(&mut conn, &KRATE, &V0_1).await?;
+        let in_progress = AnyBuild::start(&mut conn, release_id).await?;
+        let builds = AnyBuild::for_release(&mut conn, &KRATE, &V0_1).await?;
         assert_eq!(
-            builds.iter().map(Build::id).collect::<Vec<_>>(),
+            builds.iter().map(AnyBuild::id).collect::<Vec<_>>(),
             vec![in_progress.id(), id]
         );
         assert!(builds.iter().all(|build| match build {
-            Build::InProgress(build) => build.legacy_output().is_none(),
-            Build::Finished(build) => build.legacy_output().is_none(),
-            Build::EarlyFailure(build) => build.legacy_output().is_none(),
+            AnyBuild::InProgress(build) => build.legacy_output().is_none(),
+            AnyBuild::Finished(build) => build.legacy_output().is_none(),
+            AnyBuild::EarlyFailure(build) => build.legacy_output().is_none(),
         }));
-        assert!(matches!(&builds[0], Build::InProgress(_)));
+        assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
         assert!(builds[0].duration(Utc::now()).is_some());
 
         // Successful historical rows need not have either lifecycle timestamp.
         sqlx::query("UPDATE builds SET build_started = NULL, build_finished = NULL, rustc_version = NULL WHERE id = $1")
             .bind(id.0).execute(&mut *conn).await?;
-        let legacy = Build::open(&mut conn, id).await?;
-        assert!(matches!(&legacy, Build::Finished(_)));
+        let legacy = AnyBuild::open(&mut conn, id).await?;
+        assert!(matches!(&legacy, AnyBuild::Finished(_)));
         assert!(legacy.build_time().is_none());
         assert!(legacy.duration(Utc::now()).is_none());
         Ok(())
@@ -960,7 +960,7 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let mut build = Build::start(&mut conn, release_id).await?;
+        let mut build = AnyBuild::start(&mut conn, release_id).await?;
 
         // Failed uploads are omitted even when using a single connection.
         let rejected = || {
@@ -1042,9 +1042,9 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let id = build.id();
-        let Build::InProgress(stale) = Build::open(&mut conn, id).await? else {
+        let AnyBuild::InProgress(stale) = AnyBuild::open(&mut conn, id).await? else {
             panic!("new attempt should be in progress");
         };
         build
@@ -1055,7 +1055,7 @@ mod tests {
             .save(&mut conn)
             .await?;
         assert!(stale.fail_early().save(&mut conn).await.is_err());
-        let Build::Finished(finished) = Build::open(&mut conn, id).await? else {
+        let AnyBuild::Finished(finished) = AnyBuild::open(&mut conn, id).await? else {
             panic!("completed attempt should remain finished");
         };
         assert_eq!(finished.state().status, BuildStatus::Success);
@@ -1069,16 +1069,16 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let early = Build::start(&mut conn, release_id)
+        let early = AnyBuild::start(&mut conn, release_id)
             .await?
             .fail_early()
             .save(&mut conn)
             .await?;
         assert!(matches!(
-            Build::open(&mut conn, early.id()).await?,
-            Build::EarlyFailure(_)
+            AnyBuild::open(&mut conn, early.id()).await?,
+            AnyBuild::EarlyFailure(_)
         ));
-        let finished = Build::start(&mut conn, release_id)
+        let finished = AnyBuild::start(&mut conn, release_id)
             .await?
             .finish()
             .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
@@ -1087,8 +1087,8 @@ mod tests {
             .save(&mut conn)
             .await?;
         assert!(matches!(
-            Build::open(&mut conn, finished.id()).await?,
-            Build::Finished(_)
+            AnyBuild::open(&mut conn, finished.id()).await?,
+            AnyBuild::Finished(_)
         ));
         Ok(())
     }

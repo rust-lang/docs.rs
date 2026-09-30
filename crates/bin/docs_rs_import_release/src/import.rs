@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_database::{
-    build::{Build, BuildFor, InProgress},
+    build::{AnyBuild, Build, InProgress},
     releases::{finish_release, initialize_crate, initialize_release},
 };
 use docs_rs_registry_api::RegistryApi;
@@ -57,7 +57,7 @@ pub(crate) async fn import_test_release(
 
     let crate_id = initialize_crate(&mut *conn, name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build = Build::start(conn, release_id).await?;
+    let build = AnyBuild::start(conn, release_id).await?;
 
     let result = import_test_release_inner(
         &mut *conn,
@@ -106,7 +106,7 @@ async fn import_test_release_inner(
     version: &Version,
     crate_id: CrateId,
     release_id: ReleaseId,
-    build: &BuildFor<InProgress>,
+    build: &Build<InProgress>,
 ) -> Result<ByteSize> {
     let build_id = build.id();
     info!("download & inspect source from crates.io...");

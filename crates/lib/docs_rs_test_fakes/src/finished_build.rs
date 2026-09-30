@@ -115,7 +115,7 @@ impl FakeFinishedBuild {
         release_id: ReleaseId,
         default_target: &str,
     ) -> Result<BuildId> {
-        let mut build = docs_rs_database::build::Build::start(conn, release_id).await?;
+        let mut build = docs_rs_database::build::AnyBuild::start(conn, release_id).await?;
         let build_id = build.id();
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(

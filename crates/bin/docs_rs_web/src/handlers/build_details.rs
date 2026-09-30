@@ -9,7 +9,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use docs_rs_database::build::{Build, BuildLog};
+use docs_rs_database::build::{AnyBuild, BuildLog};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct BuildDetailsPage {
     metadata: MetaData,
-    build: Build,
+    build: AnyBuild,
     output: String,
     logs: Vec<BuildLog>,
     current_filename: Option<String>,
@@ -69,7 +69,7 @@ pub(crate) async fn build_details_handler(
         })?
         .into_version();
 
-    let build = Build::find_for_release(&mut conn, params.name(), &version, id)
+    let build = AnyBuild::find_for_release(&mut conn, params.name(), &version, id)
         .await?
         .ok_or(AxumNope::BuildNotFound)?;
 

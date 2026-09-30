@@ -85,7 +85,7 @@ fn publish_release(
         let mut conn = env.pool()?.get_async().await?;
         let crate_id = initialize_crate(&mut conn, name).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         Ok::<_, Error>((crate_id, release_id, build))
     })?;
     let (finished, summary) =

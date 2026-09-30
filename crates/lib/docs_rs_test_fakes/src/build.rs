@@ -57,9 +57,11 @@ impl FakeBuild {
         default_target: &str,
     ) -> Result<BuildId> {
         match &self.0 {
-            BuildState::InProgress => Ok(docs_rs_database::build::Build::start(conn, release_id)
-                .await?
-                .id()),
+            BuildState::InProgress => {
+                Ok(docs_rs_database::build::AnyBuild::start(conn, release_id)
+                    .await?
+                    .id())
+            }
             BuildState::Finished(build) => {
                 build
                     .create(conn, storage, release_id, default_target)

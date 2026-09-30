@@ -71,7 +71,7 @@ impl FakeEarlyErrorBuild {
         conn: &mut sqlx::PgConnection,
         release_id: ReleaseId,
     ) -> Result<BuildId> {
-        let build = docs_rs_database::build::Build::start(conn, release_id).await?;
+        let build = docs_rs_database::build::AnyBuild::start(conn, release_id).await?;
         Ok(build
             .fail_early()
             .maybe_error(self.error.as_ref())

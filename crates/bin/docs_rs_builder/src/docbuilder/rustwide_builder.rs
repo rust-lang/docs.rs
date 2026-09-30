@@ -7,7 +7,7 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
-    build::{Build, BuildFor, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
+    build::{AnyBuild, Build, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
     releases::{
         add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
@@ -218,7 +218,7 @@ impl RustwideBuilder {
             let mut conn = self.db.get_async().await?;
             let crate_id = initialize_crate(&mut conn, name).await?;
             let release_id = initialize_release(&mut conn, crate_id, version).await?;
-            let build = Build::start(&mut conn, release_id).await?;
+            let build = AnyBuild::start(&mut conn, release_id).await?;
             Ok::<_, Error>((crate_id, release_id, build))
         })?;
 
@@ -233,7 +233,7 @@ impl RustwideBuilder {
 
     fn finish_uncompiled_build(
         &self,
-        build: BuildFor<InProgress>,
+        build: Build<InProgress>,
         result: Result<()>,
     ) -> Result<BuildPackageSummary> {
         self.runtime.block_on(async {
@@ -324,9 +324,9 @@ impl RustwideBuilder {
         version: &Version,
         crate_id: CrateId,
         release_id: ReleaseId,
-        mut build: BuildFor<InProgress>,
+        mut build: Build<InProgress>,
         release: BuiltRelease,
-    ) -> Result<(BuildFor<Finished>, BuildPackageSummary)> {
+    ) -> Result<(Build<Finished>, BuildPackageSummary)> {
         let BuiltRelease {
             result: release_build_result,
             statistics: build_statistics,
@@ -1066,7 +1066,7 @@ mod tests {
         let release_id = block_on_async_with_conn!(env, |mut conn| async {
             let crate_id = initialize_crate(&mut *conn, &crate_).await?;
             let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-            let build = Build::start(&mut *conn, release_id).await?;
+            let build = AnyBuild::start(&mut *conn, release_id).await?;
             build
                 .finish()
                 .rustc_version("some-version")

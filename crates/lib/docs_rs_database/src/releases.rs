@@ -484,7 +484,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Config, build::Build, testing::TestDatabase};
+    use crate::{Config, build::AnyBuild, testing::TestDatabase};
     use chrono::NaiveDate;
     use docs_rs_cargo_metadata::CargoMetadata;
     use docs_rs_config::AppConfig as _;
@@ -509,7 +509,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let mut build = Build::start(&mut conn, release_id).await?;
+        let mut build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
         build
             .publish_build_log()
@@ -649,7 +649,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
 
         build
@@ -691,7 +691,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
 
         build
@@ -741,7 +741,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
 
         build
@@ -791,7 +791,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
 
         build
@@ -1276,7 +1276,7 @@ mod test {
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
-        let build = Build::start(&mut conn, release_id).await?;
+        let build = AnyBuild::start(&mut conn, release_id).await?;
         let build_id = build.id();
 
         let id = sqlx::query_scalar!(
@@ -1288,7 +1288,7 @@ mod test {
 
         assert_eq!(build_id, id);
 
-        let another_build_id = Build::start(&mut conn, release_id).await?.id();
+        let another_build_id = AnyBuild::start(&mut conn, release_id).await?.id();
         assert_ne!(build_id, another_build_id);
 
         Ok(())
@@ -1303,8 +1303,8 @@ mod test {
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
 
-        let first_build_id = Build::start(&mut conn, release_id).await?.id();
-        let second_build_id = Build::start(&mut conn, release_id).await?.id();
+        let first_build_id = AnyBuild::start(&mut conn, release_id).await?.id();
+        let second_build_id = AnyBuild::start(&mut conn, release_id).await?.id();
 
         assert_ne!(first_build_id, second_build_id);
 
