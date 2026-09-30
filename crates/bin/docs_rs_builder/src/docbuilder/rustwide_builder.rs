@@ -30,7 +30,7 @@ use docs_rs_types::{
     BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
-use futures_util::future::try_join_all;
+use futures_util::{StreamExt as _, future::try_join_all, stream};
 use regex::Regex;
 use rustwide::{Crate, SandboxStatistics, Toolchain};
 use std::{
@@ -400,31 +400,50 @@ impl RustwideBuilder {
             // The new library also collects logs from all other steps, I didn't dig into
             // if these would be useful for crate developers at all, and leave them as they
             // are right now.
+            self.runtime.block_on(async {
+                let build = &build;
+                let logs = release_build_result.targets().flat_map(|target| {
+                    [
+                        (
+                            BuildLogKind::Html,
+                            target.documentation().log(),
+                            target.documentation_succeeded(),
+                        ),
+                        (
+                            BuildLogKind::Json,
+                            target.rustdoc_json().log(),
+                            target.rustdoc_json().is_ok(),
+                        ),
+                    ]
+                    .into_iter()
+                    .filter_map(move |(kind, log, successful)| {
+                        log.map(|log| (target.target(), kind, log, successful))
+                    })
+                });
+                // Bound storage traffic and connection usage. Collect every
+                // result before propagating errors so a failed upload doesn't
+                // cancel other uploads between storage and registration.
+                let results = stream::iter(logs)
+                    .map(|(target, kind, log, successful)| async move {
+                        let mut conn = self.db.get_async().await?;
+                        build
+                            .publish_build_log()
+                            .target(target)
+                            .kind(kind)
+                            .log(log)
+                            .successful(successful)
+                            .save(&mut conn, &self.storage)
+                            .await
+                    })
+                    .buffer_unordered(8)
+                    .collect::<Vec<_>>()
+                    .await;
+                for result in results {
+                    result?;
+                }
+                Ok::<_, Error>(())
+            })?;
             let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-            for target in release_build_result.targets() {
-                if let Some(log) = target.documentation().log() {
-                    self.runtime.block_on(
-                        build
-                            .publish_build_log()
-                            .target(target.target())
-                            .kind(BuildLogKind::Html)
-                            .log(log)
-                            .successful(target.documentation_succeeded())
-                            .save(&mut async_conn, &self.storage),
-                    )?;
-                }
-                if let Some(log) = target.rustdoc_json().log() {
-                    self.runtime.block_on(
-                        build
-                            .publish_build_log()
-                            .target(target.target())
-                            .kind(BuildLogKind::Json)
-                            .log(log)
-                            .successful(target.rustdoc_json().is_ok())
-                            .save(&mut async_conn, &self.storage),
-                    )?;
-                }
-            }
 
             self.publish_json(name, version, &release_build_result);
 
