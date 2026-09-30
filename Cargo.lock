@@ -2211,6 +2211,7 @@ dependencies = [
  "docs_rs_env_vars",
  "docs_rs_opentelemetry",
  "docs_rs_registry_api",
+ "docs_rs_storage",
  "docs_rs_types",
  "docs_rs_uri",
  "docs_rs_utils",

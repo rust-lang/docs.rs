@@ -393,6 +393,22 @@ pub async fn initialize_build(
 pub mod build_lifecycle {
     use super::*;
 
+    #[derive(Debug, Default)]
+    pub enum BuildLogKind {
+        #[default]
+        Html,
+        Json,
+    }
+
+    impl BuildLogKind {
+        fn suffix(&self) -> &'static str {
+            match self {
+                Self::Html => "",
+                Self::Json => "_json",
+            }
+        }
+    }
+
     #[derive(Debug)]
     pub struct InProgress;
 
@@ -410,6 +426,15 @@ pub mod build_lifecycle {
     pub struct CompletionError {
         message: String,
         kind: &'static str,
+    }
+
+    impl CompletionError {
+        pub fn new(error: &impl BuildError) -> Self {
+            Self {
+                message: error.to_string(),
+                kind: error.kind(),
+            }
+        }
     }
 
     impl BuildError for CompletionError {
@@ -444,6 +469,25 @@ pub mod build_lifecycle {
 
     #[bon::bon]
     impl Build<InProgress> {
+        /// Upload a target log, then register it in the database. Missing logs
+        /// are reported and omitted; failed uploads never create a log record.
+        #[builder(finish_fn = save)]
+        pub async fn publish_build_log(
+            &self,
+            #[builder(finish_fn)] conn: &mut sqlx::PgConnection,
+            #[builder(finish_fn)] storage: &docs_rs_storage::AsyncStorage,
+            #[builder(into)] target: String,
+            #[builder(default)] kind: BuildLogKind,
+            #[builder(into)] log: String,
+            successful: bool,
+        ) -> Result<()> {
+            let filename = format!("{target}{}", kind.suffix());
+            storage
+                .store_one(format!("build-logs/{}/{filename}", self.id), log.to_owned())
+                .await?;
+            add_build_logs(conn, self.id, [(filename, successful)]).await
+        }
+
         /// Start a new attempt, marking any previous in-progress attempts aborted.
         pub async fn start(conn: &mut sqlx::PgConnection, release_id: ReleaseId) -> Result<Self> {
             let mut transaction = sqlx::Connection::begin(conn).await?;
@@ -814,13 +858,14 @@ where
 pub async fn add_build_logs(
     conn: &mut sqlx::PgConnection,
     build_id: BuildId,
-    builds_logs: Vec<(String, bool)>,
+    builds_logs: impl IntoIterator<Item = (String, bool)>,
 ) -> Result<()> {
     let (logs_filename, successes): (Vec<String>, Vec<bool>) = builds_logs.into_iter().unzip();
 
     sqlx::query!(
         "INSERT INTO builds_logs(build_id, log_filename, success)
-         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])",
+         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])
+         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
         build_id as _,
         &logs_filename as &[String],
         &successes as &[bool],
@@ -845,6 +890,26 @@ mod test {
     };
     use std::{collections::BTreeMap, iter, slice};
     use test_case::test_case;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_log_registration_is_idempotent() -> Result<()> {
+        let metrics = TestMetrics::new();
+        let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
+        let mut conn = db.async_conn().await?;
+        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
+        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
+        let build_id = initialize_build(&mut conn, release_id).await?;
+        add_build_logs(&mut conn, build_id, vec![("target.txt".into(), false)]).await?;
+        add_build_logs(&mut conn, build_id, vec![("target.txt".into(), true)]).await?;
+        let logs = sqlx::query_as::<_, (String, bool)>(
+            "SELECT log_filename, success FROM builds_logs WHERE build_id = $1",
+        )
+        .bind(build_id.0)
+        .fetch_all(&mut *conn)
+        .await?;
+        assert_eq!(logs, vec![("target.txt".into(), true)]);
+        Ok(())
+    }
 
     /// miminmal fake release for the tests in this module (keyword tests mostly).
     async fn fake_release_with_keywords<K, KL>(

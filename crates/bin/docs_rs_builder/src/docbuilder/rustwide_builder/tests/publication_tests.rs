@@ -14,6 +14,8 @@ pub(super) struct PublishedBuild {
     pub id: BuildId,
     pub status: BuildStatus,
     pub errors: Option<String>,
+    pub rustc_version: Option<String>,
+    pub build_finished: bool,
     pub rustdoc_status: Option<bool>,
     pub doc_targets: Option<sqlx::types::Json<Vec<String>>>,
 }
@@ -30,6 +32,8 @@ pub(super) fn fetch_build_result(
                 b.id,
                 b.build_status AS status,
                 b.errors,
+                b.rustc_version,
+                b.build_finished IS NOT NULL AS build_finished,
                 r.rustdoc_status,
                 r.doc_targets
             FROM builds b
@@ -77,15 +81,17 @@ fn publish_release(
     name: &KrateName,
     release: BuiltRelease,
 ) -> Result<BuildPackageSummary> {
-    let (crate_id, release_id, build_id) = env.runtime().block_on(async {
+    let (crate_id, release_id, build) = env.runtime().block_on(async {
         let mut conn = env.pool()?.get_async().await?;
         let crate_id = initialize_crate(&mut conn, name).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
-        Ok::<_, Error>((crate_id, release_id, build_id))
+        let build = Build::start(&mut conn, release_id).await?;
+        Ok::<_, Error>((crate_id, release_id, build))
     })?;
-    let result = builder.publish_release(name, &V0_1, crate_id, release_id, build_id, release);
-    builder.finish_package_build(build_id, result)
+    let result = builder
+        .publish_release(name, &V0_1, crate_id, release_id, &build, release)
+        .map(Some);
+    builder.finish_package_build(build, result)
 }
 
 #[test]
@@ -178,6 +184,11 @@ fn upload_failure(reject: fn(&str) -> bool, fatal: bool) -> Result<()> {
     );
     if fatal {
         assert!(row.errors.unwrap().contains("injected upload failure"));
+        // Source upload fails during fetch, whereas documentation/log upload
+        // fails after compilation. Only the latter has completion metadata.
+        let compiled = !reject(&source_archive_path(&name, &V0_1));
+        assert_eq!(row.rustc_version.is_some(), compiled);
+        assert_eq!(row.build_finished, compiled);
     } else {
         assert_eq!(row.rustdoc_status, Some(true));
         assert!(blocking_storage.exists_in_archive(
@@ -314,7 +325,11 @@ fn blacklisted_crate_is_skipped_without_reattempt() -> Result<()> {
     assert!(!summary.should_reattempt);
     assert!(!blocking_storage.exists(&source_archive_path(&name, &V0_1))?);
     assert!(!blocking_storage.exists(&rustdoc_archive_path(&name, &V0_1))?);
-    assert!(fetch_build_logs(&env, fetch_build_result(&env, &name)?.id)?.is_empty());
+    let build = fetch_build_result(&env, &name)?;
+    assert_eq!(build.status, BuildStatus::Failure);
+    assert!(build.rustc_version.is_none());
+    assert!(!build.build_finished);
+    assert!(fetch_build_logs(&env, build.id)?.is_empty());
     Ok(())
 }
 
