@@ -9,7 +9,7 @@ use crate::{
 };
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use docs_rs_database::build::{Build, OpenBuild};
+use docs_rs_database::build::{Build, BuildLog, OpenBuild};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
 use serde::Deserialize;
@@ -22,7 +22,7 @@ struct BuildDetailsPage {
     metadata: MetaData,
     build: OpenBuild,
     output: String,
-    all_log_filenames: Vec<(String, Option<bool>)>,
+    logs: Vec<BuildLog>,
     current_filename: Option<String>,
     params: RustdocParams,
 }
@@ -86,50 +86,36 @@ pub(crate) async fn build_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    let (output, all_log_filenames, current_filename) = if let Some(output) = build.legacy_output()
-    {
-        // legacy case, for old builds the build log was stored in the database.
-        (output.to_owned(), Vec::new(), None)
+    let logs = build.list_build_logs(&storage).await?;
+
+    let current_filename = if let Some(filename) = build_params.filename {
+        // if we have a given filename in the URL, we use that one.
+        Some(filename)
+    } else if let Some(default_filename) = build.default_log_filename() {
+        // without a filename in the URL, we try to show the build log
+        // for the default target, if we have one.
+        logs.iter()
+            .any(|log| log.filename() == default_filename)
+            .then_some(default_filename)
     } else {
-        let all_log_filenames = build.list_build_logs(&storage).await?;
+        // this can only happen when `releases.default_target` is NULL,
+        // which is the case for in-progress builds or builds which errored
+        // before we could determine the target.
+        // For early failures we show the build's error instead.
+        None
+    };
 
-        let current_filename = if let Some(filename) = build_params.filename {
-            // if we have a given filename in the URL, we use that one.
-            Some(filename)
-        } else if let Some(default_target) = build.default_target() {
-            // without a filename in the URL, we try to show the build log
-            // for the default target, if we have one.
-            let wanted_filename = format!("{default_target}.txt");
-            if all_log_filenames
-                .iter()
-                .any(|(filename, _)| *filename == wanted_filename)
-            {
-                Some(wanted_filename)
-            } else {
-                None
-            }
-        } else {
-            // this can only happen when `releases.default_target` is NULL,
-            // which is the case for in-progress builds or builds which errored
-            // before we could determine the target.
-            // For early failures we show the build's error instead.
-            None
-        };
-
-        let file_content = if let Some(ref filename) = current_filename {
-            build.fetch_build_log(&storage, filename).await?
-        } else {
-            "".to_string()
-        };
-
-        (file_content, all_log_filenames, current_filename)
+    let output = if let Some(ref filename) = current_filename {
+        build.build_log(filename).fetch(&storage).await?
+    } else {
+        "".to_string()
     };
 
     Ok(BuildDetailsPage {
         metadata,
         build,
         output,
-        all_log_filenames,
+        logs,
         current_filename,
         params,
     }

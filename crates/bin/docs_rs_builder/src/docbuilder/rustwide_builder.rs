@@ -7,7 +7,7 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
-    build::{Build, BuildLog, BuildLogKind, CompletionError, Finished, InProgress},
+    build::{Build, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
     releases::{
         add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
@@ -416,7 +416,7 @@ impl RustwideBuilder {
                 .into_iter()
                 .filter_map(move |(kind, log, successful)| {
                     log.map(|log| {
-                        BuildLog::builder()
+                        NewBuildLog::builder()
                             .target(target.target())
                             .kind(kind)
                             .log(log)

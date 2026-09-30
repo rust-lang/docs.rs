@@ -45,13 +45,19 @@ mod tests {
                 )
                 .await?;
         }
+        let listed = build.list_build_logs(&storage).await?;
+        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
         assert_eq!(
-            build.list_build_logs(&storage).await?,
+            listed
+                .into_iter()
+                .map(|log| (log.filename().to_owned(), log.successful()))
+                .collect::<Vec<_>>(),
             vec![("a.txt".into(), None), ("b.txt".into(), None)]
         );
-        assert_eq!(build.fetch_build_log(&storage, "a.txt").await?, "a.txt");
+        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
         let error = build
-            .fetch_build_log(&storage, "missing.txt")
+            .build_log("missing.txt")
+            .fetch(&storage)
             .await
             .unwrap_err();
         assert!(error.is::<docs_rs_storage::PathNotFoundError>());
@@ -63,7 +69,7 @@ mod tests {
         let legacy = Build::open(&mut conn, build.id()).await?;
         assert!(legacy.list_build_logs(&storage).await?.is_empty());
         assert_eq!(
-            legacy.fetch_build_log(&storage, "missing.txt").await?,
+            legacy.build_log("missing.txt").fetch(&storage).await?,
             "legacy log"
         );
         Ok(())
@@ -151,7 +157,7 @@ mod tests {
 
         // Failed uploads are omitted even when using a single connection.
         let rejected = || {
-            BuildLog::builder()
+            NewBuildLog::builder()
                 .target("rejected")
                 .log("log")
                 .successful(false)
@@ -168,12 +174,12 @@ mod tests {
 
         let logs = [
             rejected(),
-            BuildLog::builder()
+            NewBuildLog::builder()
                 .target("target")
                 .log("html")
                 .successful(true)
                 .build(),
-            BuildLog::builder()
+            NewBuildLog::builder()
                 .target("target")
                 .kind(BuildLogKind::Json)
                 .log("json")
@@ -200,13 +206,18 @@ mod tests {
         );
         assert_eq!(build.logs(), logs.as_slice());
         assert_eq!(
-            build.list_build_logs(&storage).await?,
+            build
+                .list_build_logs(&storage)
+                .await?
+                .into_iter()
+                .map(|log| (log.filename().to_owned(), log.successful()))
+                .collect::<Vec<_>>(),
             vec![
                 ("target".into(), Some(true)),
                 ("target_json".into(), Some(false))
             ]
         );
-        assert_eq!(build.fetch_build_log(&storage, "target").await?, "html");
+        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
         for (filename, _) in logs {
             assert!(
                 storage
@@ -292,9 +303,17 @@ impl BuildLogKind {
     }
 }
 
+fn build_log_filename(target: &str, suffix: &str) -> String {
+    format!("{target}{suffix}")
+}
+
+fn build_log_storage_path(build_id: BuildId, filename: &str) -> String {
+    format!("build-logs/{build_id}/{filename}",)
+}
+
 /// A target log to upload and register as part of a batch.
 #[derive(bon::Builder)]
-pub struct BuildLog {
+pub struct NewBuildLog {
     #[builder(into)]
     target: String,
     #[builder(default)]
@@ -304,13 +323,69 @@ pub struct BuildLog {
     successful: bool,
 }
 
-impl BuildLog {
+impl NewBuildLog {
     fn filename(&self) -> String {
-        format!("{}{}", self.target, self.kind.suffix())
+        build_log_filename(&self.target, self.kind.suffix())
     }
 
     fn storage_path(&self, build_id: BuildId) -> String {
-        format!("build-logs/{build_id}/{}", self.filename())
+        build_log_storage_path(
+            build_id,
+            &build_log_filename(&self.target, self.kind.suffix()),
+        )
+    }
+}
+
+/// A readable log descriptor. Content is loaded only by calling `fetch`.
+#[derive(Debug)]
+pub struct BuildLog {
+    filename: String,
+    successful: Option<bool>,
+    source: BuildLogSource,
+}
+
+#[derive(Debug)]
+enum BuildLogSource {
+    Storage(String),
+    Database(String),
+}
+
+impl BuildLog {
+    pub fn database(default_target: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            filename: format!("{}.txt", default_target.into()),
+            successful: None,
+            source: BuildLogSource::Database(content.into()),
+        }
+    }
+
+    pub fn storage(build_id: BuildId, filename: impl Into<String>, successful: bool) -> Self {
+        let filename = filename.into();
+        Self {
+            source: BuildLogSource::Storage(build_log_storage_path(build_id, &filename)),
+            filename,
+            successful: Some(successful),
+        }
+    }
+
+    pub fn filename(&self) -> &str {
+        &self.filename
+    }
+
+    /// Unknown for older logs that have no registration record.
+    pub fn successful(&self) -> Option<bool> {
+        self.successful
+    }
+
+    pub async fn fetch(&self, storage: &docs_rs_storage::AsyncStorage) -> Result<String> {
+        match &self.source {
+            BuildLogSource::Database(output) => Ok(output.clone()),
+            BuildLogSource::Storage(path) => {
+                let blob =
+                    Box::pin(storage.get(path, storage.config().max_file_size_for(path))).await?;
+                String::from_utf8(blob.content).context("non utf8 build log")
+            }
+        }
     }
 }
 
@@ -456,10 +531,15 @@ impl BuildRow {
 }
 
 impl OpenBuild {
+    pub fn default_log_filename(&self) -> Option<String> {
+        self.default_target()
+            .map(|default_target| format!("{default_target}.txt"))
+    }
+
     pub async fn list_build_logs(
         &self,
         storage: &docs_rs_storage::AsyncStorage,
-    ) -> Result<Vec<(String, Option<bool>)>> {
+    ) -> Result<Vec<BuildLog>> {
         match self {
             Self::InProgress(build) => build.list_build_logs(storage).await,
             Self::Finished(build) => build.list_build_logs(storage).await,
@@ -467,15 +547,11 @@ impl OpenBuild {
         }
     }
 
-    pub async fn fetch_build_log(
-        &self,
-        storage: &docs_rs_storage::AsyncStorage,
-        filename: &str,
-    ) -> Result<String> {
+    pub fn build_log(&self, filename: &str) -> BuildLog {
         match self {
-            Self::InProgress(build) => build.fetch_build_log(storage, filename).await,
-            Self::Finished(build) => build.fetch_build_log(storage, filename).await,
-            Self::EarlyFailure(build) => build.fetch_build_log(storage, filename).await,
+            Self::InProgress(build) => build.build_log(filename),
+            Self::Finished(build) => build.build_log(filename),
+            Self::EarlyFailure(build) => build.build_log(filename),
         }
     }
 
@@ -519,13 +595,13 @@ impl OpenBuild {
         }
     }
 
-    pub fn legacy_output(&self) -> Option<&str> {
-        match self {
-            Self::InProgress(build) => build.legacy_output(),
-            Self::Finished(build) => build.legacy_output(),
-            Self::EarlyFailure(build) => build.legacy_output(),
-        }
-    }
+    // pub fn legacy_output(&self) -> Option<&str> {
+    //     match self {
+    //         Self::InProgress(build) => build.legacy_output(),
+    //         Self::Finished(build) => build.legacy_output(),
+    //         Self::EarlyFailure(build) => build.legacy_output(),
+    //     }
+    // }
 
     pub fn default_target(&self) -> Option<&str> {
         match self {
@@ -584,15 +660,23 @@ impl<State> Build<State> {
     pub async fn list_build_logs(
         &self,
         storage: &docs_rs_storage::AsyncStorage,
-    ) -> Result<Vec<(String, Option<bool>)>> {
-        if self.legacy_output.is_some() {
-            return Ok(Vec::new());
+    ) -> Result<Vec<BuildLog>> {
+        let default_target = self
+            .default_target()
+            .unwrap_or("default_target.txt")
+            .to_string();
+
+        if let Some(legacy_output) = self.legacy_output.as_ref() {
+            return Ok(vec![BuildLog::database(
+                &default_target,
+                legacy_output.clone(),
+            )]);
         }
         if !self.logs.is_empty() {
             return Ok(self
                 .logs
                 .iter()
-                .map(|(filename, success)| (filename.clone(), Some(*success)))
+                .map(|(filename, _)| self.build_log(filename))
                 .collect());
         }
         let prefix = format!("build-logs/{}/", self.id);
@@ -600,30 +684,30 @@ impl<State> Build<State> {
             .list_prefix(&prefix)
             .await
             .map_ok(|path| {
-                (
+                self.build_log(
                     path.strip_prefix(&prefix)
-                        .expect("storage lists only keys under the requested prefix")
-                        .to_owned(),
-                    None,
+                        .expect("storage lists only keys under the requested prefix"),
                 )
             })
             .try_collect()
             .await
     }
 
-    /// Fetch a UTF-8 log, preserving storage size limits and missing-file errors.
-    /// For legacy attempts, the database output takes precedence over filenames.
-    pub async fn fetch_build_log(
-        &self,
-        storage: &docs_rs_storage::AsyncStorage,
-        filename: &str,
-    ) -> Result<String> {
-        if let Some(output) = &self.legacy_output {
-            return Ok(output.clone());
+    /// Resolve a log without fetching its content or checking storage existence.
+    /// Legacy database output takes precedence over the requested filename.
+    pub fn build_log(&self, filename: &str) -> BuildLog {
+        BuildLog {
+            filename: filename.to_owned(),
+            successful: self
+                .logs
+                .iter()
+                .find(|(name, _)| name == filename)
+                .map(|(_, success)| *success),
+            source: match &self.legacy_output {
+                Some(output) => BuildLogSource::Database(output.clone()),
+                None => BuildLogSource::Storage(format!("build-logs/{}/{filename}", self.id)),
+            },
         }
-        let path = format!("build-logs/{}/{filename}", self.id);
-        let blob = Box::pin(storage.get(&path, storage.config().max_file_size_for(&path))).await?;
-        String::from_utf8(blob.content).context("non utf8 build log")
     }
 
     pub fn started_at(&self) -> Option<DateTime<Utc>> {
@@ -673,7 +757,7 @@ impl Build<InProgress> {
         self.publish_build_logs(
             conn,
             storage,
-            [BuildLog {
+            [NewBuildLog {
                 target,
                 kind,
                 log,
@@ -690,7 +774,7 @@ impl Build<InProgress> {
         &mut self,
         conn: &mut sqlx::PgConnection,
         storage: &docs_rs_storage::AsyncStorage,
-        logs: impl IntoIterator<Item = BuildLog>,
+        logs: impl IntoIterator<Item = NewBuildLog>,
     ) -> Result<()> {
         let id = self.id;
         let results = stream::iter(logs)
