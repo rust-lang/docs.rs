@@ -276,7 +276,7 @@ mod tests {
                     .error(SimpleBuildError("early error".into()))
                     .build(),
                 FakeBuild::early_error().build(),
-                FakeBuild::InProgress,
+                FakeBuild::in_progress(),
             ])
             .create()
             .await?;
@@ -423,7 +423,7 @@ mod tests {
                         .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0")
                         .build(),
-                    FakeBuild::InProgress,
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -857,7 +857,7 @@ mod tests {
                 BuildStatus::PartialFailure => {
                     unreachable!("partial failure is derived from target logs")
                 }
-                BuildStatus::InProgress => FakeBuild::InProgress,
+                BuildStatus::InProgress => FakeBuild::in_progress(),
                 BuildStatus::Success | BuildStatus::Failure => FakeBuild::finished()
                     .successful(build_status == BuildStatus::Success)
                     .legacy_build_logs(true)

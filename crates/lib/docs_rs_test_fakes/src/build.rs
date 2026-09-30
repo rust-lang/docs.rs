@@ -7,7 +7,9 @@ use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, ReleaseId};
 
 /// A build fixture at one of the lifecycle states supported by the database.
-pub enum FakeBuild {
+pub struct FakeBuild(BuildState);
+
+enum BuildState {
     InProgress,
     Finished(FakeFinishedBuild),
     EarlyFailure(FakeEarlyErrorBuild),
@@ -21,17 +23,22 @@ impl Default for FakeBuild {
 
 impl From<FakeFinishedBuild> for FakeBuild {
     fn from(build: FakeFinishedBuild) -> Self {
-        Self::Finished(build)
+        Self(BuildState::Finished(build))
     }
 }
 
 impl From<FakeEarlyErrorBuild> for FakeBuild {
     fn from(build: FakeEarlyErrorBuild) -> Self {
-        Self::EarlyFailure(build)
+        Self(BuildState::EarlyFailure(build))
     }
 }
 
 impl FakeBuild {
+    /// Create a build fixture that has started but has not completed.
+    pub fn in_progress() -> Self {
+        Self(BuildState::InProgress)
+    }
+
     /// Configure a build that failed before compiler metadata was available.
     pub fn early_error() -> FakeEarlyErrorBuildBuilder {
         FakeEarlyErrorBuild::builder()
@@ -49,16 +56,16 @@ impl FakeBuild {
         release_id: ReleaseId,
         default_target: &str,
     ) -> Result<BuildId> {
-        match self {
-            Self::InProgress => {
+        match &self.0 {
+            BuildState::InProgress => {
                 docs_rs_database::releases::initialize_build(conn, release_id).await
             }
-            Self::Finished(build) => {
+            BuildState::Finished(build) => {
                 build
                     .create(conn, storage, release_id, default_target)
                     .await
             }
-            Self::EarlyFailure(build) => build.create(conn, release_id).await,
+            BuildState::EarlyFailure(build) => build.create(conn, release_id).await,
         }
     }
 }

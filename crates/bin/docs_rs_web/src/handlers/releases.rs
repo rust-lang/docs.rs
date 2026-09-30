@@ -955,7 +955,7 @@ mod tests {
                 .await
                 .name("in_progress")
                 .version(V0_1)
-                .builds(vec![FakeBuild::InProgress])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 
@@ -1399,7 +1399,7 @@ mod tests {
             .await
             .name("in_progress")
             .version("0.1.0")
-            .builds(vec![FakeBuild::InProgress])
+            .builds(vec![FakeBuild::in_progress()])
             .create()
             .await?;
 
@@ -1839,7 +1839,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version(V1)
-                .builds(vec![FakeBuild::InProgress])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 

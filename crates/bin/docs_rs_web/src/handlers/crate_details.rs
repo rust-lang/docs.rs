@@ -1223,7 +1223,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::InProgress])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 
@@ -2105,7 +2105,7 @@ path = "src/lib.rs"
                 .builds(vec![
                     FakeBuild::finished().successful(true).build(),
                     FakeBuild::finished().successful(false).build(),
-                    FakeBuild::InProgress,
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -2130,7 +2130,7 @@ path = "src/lib.rs"
                 .version("0.1.0")
                 .builds(vec![
                     FakeBuild::finished().successful(false).build(),
-                    FakeBuild::InProgress,
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -2153,7 +2153,7 @@ path = "src/lib.rs"
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::InProgress])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 
