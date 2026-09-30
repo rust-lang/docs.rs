@@ -5,6 +5,7 @@
 use crate::releases::update_build_status;
 use anyhow::{Context as _, Result, anyhow};
 use chrono::{DateTime, Utc};
+use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{
     BuildError, BuildId, BuildStatus, ByteSize, Duration, KrateName, ReleaseId, Version,
 };
@@ -88,7 +89,7 @@ impl BuildLog {
         self.successful
     }
 
-    pub async fn fetch(&self, storage: &docs_rs_storage::AsyncStorage) -> Result<String> {
+    pub async fn fetch(&self, storage: &AsyncStorage) -> Result<String> {
         let path = &self.storage_path;
         let blob = storage
             .get(path, storage.config().max_file_size_for(path))
@@ -356,10 +357,7 @@ impl AnyBuild {
             .map(|default_target| format!("{default_target}.txt"))
     }
 
-    pub async fn list_build_logs(
-        &self,
-        storage: &docs_rs_storage::AsyncStorage,
-    ) -> Result<Vec<BuildLog>> {
+    pub async fn list_build_logs(&self, storage: &AsyncStorage) -> Result<Vec<BuildLog>> {
         match self {
             Self::InProgress(build) => build.list_build_logs(storage).await,
             Self::Finished(build) => build.list_build_logs(storage).await,
@@ -495,15 +493,12 @@ impl<State> Build<State> {
             .fetch_optional(&mut *conn)
             .await?
             .flatten()
-            .ok_or_else(|| docs_rs_storage::PathNotFoundError.into())
+            .ok_or_else(|| PathNotFoundError.into())
     }
 
     /// List registered logs, falling back to storage for older attempts without
     /// log records. Legacy database output is fetched separately and has no files.
-    pub async fn list_build_logs(
-        &self,
-        storage: &docs_rs_storage::AsyncStorage,
-    ) -> Result<Vec<BuildLog>> {
+    pub async fn list_build_logs(&self, storage: &AsyncStorage) -> Result<Vec<BuildLog>> {
         if self.has_legacy_output {
             return Ok(Vec::new());
         }
@@ -573,7 +568,7 @@ impl Build<InProgress> {
     pub async fn publish_build_log(
         &mut self,
         #[builder(finish_fn)] conn: &mut sqlx::PgConnection,
-        #[builder(finish_fn)] storage: &docs_rs_storage::AsyncStorage,
+        #[builder(finish_fn)] storage: &AsyncStorage,
         #[builder(into)] target: String,
         #[builder(default)] kind: BuildLogKind,
         #[builder(into)] log: String,
@@ -598,7 +593,7 @@ impl Build<InProgress> {
     pub async fn publish_build_logs(
         &mut self,
         conn: &mut sqlx::PgConnection,
-        storage: &docs_rs_storage::AsyncStorage,
+        storage: &AsyncStorage,
         logs: impl IntoIterator<Item = NewBuildLog>,
     ) -> Result<()> {
         let id = self.id;
@@ -813,16 +808,13 @@ mod tests {
     };
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
+    use docs_rs_storage::{StorageKind, testing::TestStorage};
     use docs_rs_types::testing::{KRATE, V0_1};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn log_reads_support_storage_fallback_and_legacy_output() -> Result<()> {
         let metrics = TestMetrics::new();
-        let storage = docs_rs_storage::testing::TestStorage::from_kind(
-            docs_rs_storage::StorageKind::Memory,
-            metrics.provider(),
-        )
-        .await?;
+        let storage = TestStorage::from_kind(StorageKind::Memory, metrics.provider()).await?;
         let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -851,7 +843,7 @@ mod tests {
             .fetch(&storage)
             .await
             .unwrap_err();
-        assert!(error.is::<docs_rs_storage::PathNotFoundError>());
+        assert!(error.is::<PathNotFoundError>());
 
         sqlx::query("UPDATE builds SET output = 'legacy log' WHERE id = $1")
             .bind(build.id().0)
@@ -859,23 +851,23 @@ mod tests {
             .await?;
         let legacy = AnyBuild::open(&mut conn, build.id()).await?;
         assert!(legacy.list_build_logs(&storage).await?.is_empty());
-        assert_eq!(legacy.fetch_legacy_output(db.pool()).await?, "legacy log");
+        assert_eq!(legacy.fetch_legacy_output(&mut *conn).await?, "legacy log");
         // Content is read at fetch time, not carried by the build snapshot.
         sqlx::query("UPDATE builds SET output = 'updated log' WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        assert_eq!(legacy.fetch_legacy_output(db.pool()).await?, "updated log");
+        assert_eq!(legacy.fetch_legacy_output(&mut *conn).await?, "updated log");
         sqlx::query("UPDATE builds SET output = NULL WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
         assert!(
             legacy
-                .fetch_legacy_output(db.pool())
+                .fetch_legacy_output(&mut *conn)
                 .await
                 .unwrap_err()
-                .is::<docs_rs_storage::PathNotFoundError>()
+                .is::<PathNotFoundError>()
         );
         Ok(())
     }
@@ -883,11 +875,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn typed_reads_preserve_metadata_scope_and_legacy_builds() -> Result<()> {
         let metrics = TestMetrics::new();
-        let storage = docs_rs_storage::testing::TestStorage::from_kind(
-            docs_rs_storage::StorageKind::Memory,
-            metrics.provider(),
-        )
-        .await?;
+        let storage = TestStorage::from_kind(StorageKind::Memory, metrics.provider()).await?;
         let db = TestDatabase::new(&Config::test_config()?, metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -941,7 +929,7 @@ mod tests {
         assert!(builds[1].has_legacy_output());
         assert!(builds[1].list_build_logs(&storage).await?.is_empty());
         assert_eq!(
-            builds[1].fetch_legacy_output(db.pool()).await?,
+            builds[1].fetch_legacy_output(&mut *conn).await?,
             "legacy log"
         );
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
@@ -960,11 +948,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
         let metrics = TestMetrics::new();
-        let storage = docs_rs_storage::testing::TestStorage::from_kind(
-            docs_rs_storage::StorageKind::Memory,
-            metrics.provider(),
-        )
-        .await?;
+        let storage = TestStorage::from_kind(StorageKind::Memory, metrics.provider()).await?;
         storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected")));
         let mut config = Config::test_config()?;
         config.max_pool_size = 1;
