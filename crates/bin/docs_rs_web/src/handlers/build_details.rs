@@ -87,7 +87,6 @@ pub(crate) async fn build_details_handler(
     let build = Build::find_for_release(&mut conn, params.name(), &version, id)
         .await?
         .ok_or(AxumNope::BuildNotFound)?;
-    let row = build.data();
 
     let metadata = MetaData::from_crate(
         &mut conn,
@@ -102,9 +101,10 @@ pub(crate) async fn build_details_handler(
     // before we do the long S3 requests.
     drop(conn);
 
-    let (output, all_log_filenames, current_filename) = if let Some(output) = &row.legacy_output {
+    let (output, all_log_filenames, current_filename) = if let Some(output) = build.legacy_output()
+    {
         // legacy case, for old builds the build log was stored in the database.
-        (output.clone(), Vec::new(), None)
+        (output.to_owned(), Vec::new(), None)
     } else {
         // for newer builds we have the build logs stored in S3.
         // For a long time only for one target, then we started storing the logs for other targets
@@ -112,8 +112,9 @@ pub(crate) async fn build_details_handler(
         let prefix = format!("build-logs/{id}/");
 
         // A list of `(path, build_successful)`.
-        let all_log_filenames: Vec<(String, Option<bool>)> = if !row.logs.is_empty() {
-            row.logs
+        let all_log_filenames: Vec<(String, Option<bool>)> = if !build.logs().is_empty() {
+            build
+                .logs()
                 .iter()
                 .cloned()
                 .map(|(path, success)| (path, Some(success)))
@@ -137,7 +138,7 @@ pub(crate) async fn build_details_handler(
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
             Some(filename)
-        } else if let Some(default_target) = &row.default_target {
+        } else if let Some(default_target) = build.default_target() {
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
             let wanted_filename = format!("{default_target}.txt");

@@ -45,7 +45,7 @@ mod tests {
             Some("docs.rs test")
         );
         assert!(finished.state().finished_at.is_some());
-        assert!(finished.data().started_at.is_some());
+        assert!(finished.started_at().is_some());
         let id = finished.id();
         sqlx::query("INSERT INTO builds_logs (build_id, log_filename, success) VALUES ($1, 'target.txt', false)")
             .bind(id.0).execute(&mut *conn).await?;
@@ -59,8 +59,8 @@ mod tests {
             .unwrap();
         assert_eq!(detail.status(), BuildStatus::Success);
         assert_eq!(detail.display_status(), BuildStatus::PartialFailure);
-        assert_eq!(detail.data().legacy_output.as_deref(), Some("legacy log"));
-        assert_eq!(detail.data().logs, vec![("target.txt".into(), false)]);
+        assert_eq!(detail.legacy_output(), Some("legacy log"));
+        assert_eq!(detail.logs(), &[("target.txt".into(), false)]);
         assert!(
             Build::find_for_release(&mut conn, &KRATE, &docs_rs_types::testing::V1, id)
                 .await?
@@ -73,11 +73,7 @@ mod tests {
             builds.iter().map(OpenBuild::id).collect::<Vec<_>>(),
             vec![in_progress.id(), id]
         );
-        assert!(
-            builds
-                .iter()
-                .all(|build| build.data().legacy_output.is_none())
-        );
+        assert!(builds.iter().all(|build| build.legacy_output().is_none()));
         assert!(matches!(&builds[0], OpenBuild::InProgress(_)));
         assert!(builds[0].duration(Utc::now()).is_some());
 
@@ -106,7 +102,7 @@ mod tests {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let mut build = Build::start(&mut conn, release_id).await?;
 
         // Failed uploads are omitted even when using a single connection.
         let rejected = || {
@@ -157,6 +153,7 @@ mod tests {
             logs,
             vec![("target".into(), true), ("target_json".into(), false)]
         );
+        assert_eq!(build.logs(), logs.as_slice());
         for (filename, _) in logs {
             assert!(
                 storage
@@ -276,7 +273,7 @@ pub struct Finished {
     pub finished_at: Option<DateTime<Utc>>,
     pub rustc_version: Option<String>,
     pub docsrs_version: Option<String>,
-    pub memory_peak: Option<i64>,
+    pub memory_peak: Option<ByteSize>,
     pub documentation_size: Option<ByteSize>,
 }
 
@@ -312,17 +309,11 @@ impl BuildError for CompletionError {
 #[derive(Debug)]
 pub struct Build<State> {
     id: BuildId,
-    data: BuildData,
+    started_at: Option<DateTime<Utc>>,
+    logs: Vec<(String, bool)>,
+    legacy_output: Option<String>,
+    default_target: Option<String>,
     state: State,
-}
-
-/// Data available regardless of lifecycle state. This is a database snapshot.
-#[derive(Debug)]
-pub struct BuildData {
-    pub started_at: Option<DateTime<Utc>>,
-    pub logs: Vec<(String, bool)>,
-    pub legacy_output: Option<String>,
-    pub default_target: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -333,7 +324,7 @@ struct BuildRow {
     build_finished: Option<DateTime<Utc>>,
     rustc_version: Option<String>,
     docsrs_version: Option<String>,
-    memory_peak: Option<i64>,
+    memory_peak: Option<ByteSize>,
     documentation_size: Option<ByteSize>,
     errors: Option<String>,
     error_kind: Option<String>,
@@ -361,21 +352,22 @@ const READ_BUILDS: &str = r#"
 
 impl BuildRow {
     fn into_build(self) -> Result<OpenBuild> {
-        let data = BuildData {
-            started_at: self.build_started,
-            logs: self.logs.unwrap_or_default(),
-            legacy_output: self.output,
-            default_target: self.default_target,
-        };
+        let logs = self.logs.unwrap_or_default();
         Ok(match (self.build_status, self.build_finished) {
             (BuildStatus::InProgress, None) => OpenBuild::InProgress(Build {
                 id: self.id,
-                data,
+                started_at: self.build_started,
+                logs,
+                legacy_output: self.output,
+                default_target: self.default_target,
                 state: InProgress,
             }),
             (BuildStatus::Failure, None) => OpenBuild::EarlyFailure(Build {
                 id: self.id,
-                data,
+                started_at: self.build_started,
+                logs,
+                legacy_output: self.output,
+                default_target: self.default_target,
                 state: EarlyFailure {
                     errors: self.errors,
                     error_kind: self.error_kind,
@@ -384,7 +376,10 @@ impl BuildRow {
             (status, finished_at) if status != BuildStatus::InProgress => {
                 OpenBuild::Finished(Build {
                     id: self.id,
-                    data,
+                    started_at: self.build_started,
+                    logs,
+                    legacy_output: self.output,
+                    default_target: self.default_target,
                     state: Finished {
                         status,
                         errors: self.errors,
@@ -432,11 +427,35 @@ impl OpenBuild {
         }
     }
 
-    pub fn data(&self) -> &BuildData {
+    pub fn started_at(&self) -> Option<DateTime<Utc>> {
         match self {
-            Self::InProgress(build) => build.data(),
-            Self::Finished(build) => build.data(),
-            Self::EarlyFailure(build) => build.data(),
+            Self::InProgress(build) => build.started_at(),
+            Self::Finished(build) => build.started_at(),
+            Self::EarlyFailure(build) => build.started_at(),
+        }
+    }
+
+    pub fn logs(&self) -> &[(String, bool)] {
+        match self {
+            Self::InProgress(build) => build.logs(),
+            Self::Finished(build) => build.logs(),
+            Self::EarlyFailure(build) => build.logs(),
+        }
+    }
+
+    pub fn legacy_output(&self) -> Option<&str> {
+        match self {
+            Self::InProgress(build) => build.legacy_output(),
+            Self::Finished(build) => build.legacy_output(),
+            Self::EarlyFailure(build) => build.legacy_output(),
+        }
+    }
+
+    pub fn default_target(&self) -> Option<&str> {
+        match self {
+            Self::InProgress(build) => build.default_target(),
+            Self::Finished(build) => build.default_target(),
+            Self::EarlyFailure(build) => build.default_target(),
         }
     }
 
@@ -450,8 +469,7 @@ impl OpenBuild {
 
     /// Target failures only downgrade a successful build, never an existing failure.
     pub fn display_status(&self) -> BuildStatus {
-        if self.status() == BuildStatus::Success
-            && self.data().logs.iter().any(|(_, success)| !success)
+        if self.status() == BuildStatus::Success && self.logs().iter().any(|(_, success)| !success)
         {
             BuildStatus::PartialFailure
         } else {
@@ -461,8 +479,8 @@ impl OpenBuild {
 
     pub fn build_time(&self) -> Option<DateTime<Utc>> {
         match self {
-            Self::Finished(build) => build.state.finished_at.or(build.data.started_at),
-            _ => self.data().started_at,
+            Self::Finished(build) => build.state.finished_at.or(build.started_at),
+            _ => self.started_at(),
         }
     }
 
@@ -472,10 +490,7 @@ impl OpenBuild {
             Self::Finished(build) => build.state.finished_at?,
             Self::EarlyFailure(_) => return None,
         };
-        (end - self.data().started_at?)
-            .to_std()
-            .ok()
-            .map(Into::into)
+        (end - self.started_at()?).to_std().ok().map(Into::into)
     }
 }
 
@@ -488,8 +503,20 @@ pub enum OpenBuild {
 }
 
 impl<State> Build<State> {
-    pub fn data(&self) -> &BuildData {
-        &self.data
+    pub fn started_at(&self) -> Option<DateTime<Utc>> {
+        self.started_at
+    }
+
+    pub fn logs(&self) -> &[(String, bool)] {
+        &self.logs
+    }
+
+    pub fn legacy_output(&self) -> Option<&str> {
+        self.legacy_output.as_deref()
+    }
+
+    pub fn default_target(&self) -> Option<&str> {
+        self.default_target.as_deref()
     }
     pub fn id(&self) -> BuildId {
         self.id
@@ -506,7 +533,7 @@ impl Build<InProgress> {
     /// are reported and omitted; failed uploads never create a log record.
     #[builder(finish_fn = save)]
     pub async fn publish_build_log(
-        &self,
+        &mut self,
         #[builder(finish_fn)] conn: &mut sqlx::PgConnection,
         #[builder(finish_fn)] storage: &docs_rs_storage::AsyncStorage,
         #[builder(into)] target: String,
@@ -531,17 +558,16 @@ impl Build<InProgress> {
     /// in one SQL statement using the supplied connection. Upload errors are reported
     /// after registration so other logs remain available even when one fails.
     pub async fn publish_build_logs(
-        &self,
+        &mut self,
         conn: &mut sqlx::PgConnection,
         storage: &docs_rs_storage::AsyncStorage,
         logs: impl IntoIterator<Item = BuildLog>,
     ) -> Result<()> {
+        let id = self.id;
         let results = stream::iter(logs)
             .map(|log| async move {
                 let filename = log.filename();
-                storage
-                    .store_one(log.storage_path(self.id), log.log)
-                    .await?;
+                storage.store_one(log.storage_path(id), log.log).await?;
                 Ok::<_, anyhow::Error>((filename, log.successful))
             })
             .buffer_unordered(8)
@@ -570,7 +596,7 @@ impl Build<InProgress> {
     }
 
     async fn register_logs(
-        &self,
+        &mut self,
         conn: &mut sqlx::PgConnection,
         build_logs: impl IntoIterator<Item = (String, bool)>,
     ) -> Result<()> {
@@ -586,6 +612,17 @@ impl Build<InProgress> {
         )
         .execute(conn)
         .await?;
+        // Mirror the upsert only after SQL succeeds, preserving the same ordering
+        // as reads. Failed uploads and failed registrations leave these untouched.
+        for (filename, successful) in logs_filename.into_iter().zip(successes) {
+            match self
+                .logs
+                .binary_search_by(|(existing, _)| existing.cmp(&filename))
+            {
+                Ok(index) => self.logs[index].1 = successful,
+                Err(index) => self.logs.insert(index, (filename, successful)),
+            }
+        }
         Ok(())
     }
 

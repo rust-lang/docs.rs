@@ -509,7 +509,7 @@ mod test {
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
         let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build = Build::start(&mut conn, release_id).await?;
+        let mut build = Build::start(&mut conn, release_id).await?;
         let build_id = build.id();
         build
             .publish_build_log()
@@ -532,6 +532,7 @@ mod test {
         .fetch_all(&mut *conn)
         .await?;
         assert_eq!(logs, vec![("target.txt".into(), true)]);
+        assert_eq!(build.logs(), logs.as_slice());
         Ok(())
     }
 

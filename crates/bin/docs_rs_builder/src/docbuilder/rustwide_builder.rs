@@ -324,7 +324,7 @@ impl RustwideBuilder {
         version: &Version,
         crate_id: CrateId,
         release_id: ReleaseId,
-        build: Build<InProgress>,
+        mut build: Build<InProgress>,
         release: BuiltRelease,
     ) -> Result<(Build<Finished>, BuildPackageSummary)> {
         let BuiltRelease {
