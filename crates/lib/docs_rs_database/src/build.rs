@@ -473,6 +473,19 @@ pub enum AnyBuild {
 }
 
 impl<State> Build<State> {
+    /// Describe a storage log, including its registered status when available.
+    pub fn build_log(&self, filename: &str) -> BuildLog {
+        BuildLog {
+            filename: filename.into(),
+            successful: self
+                .logs
+                .iter()
+                .find(|(name, _)| name == filename)
+                .map(|(_, successful)| *successful),
+            storage_path: build_log_storage_path(self.id, filename),
+        }
+    }
+
     /// Fetch legacy database output lazily. Missing output is a not-found error.
     pub async fn fetch_legacy_output(&self, pool: &crate::Pool) -> Result<String> {
         let mut conn = pool.get_async().await?;
