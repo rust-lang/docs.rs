@@ -7,7 +7,7 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
-    build::{Build, BuildLogKind, CompletionError, InProgress},
+    build::{Build, BuildLogKind, CompletionError, Finished, InProgress},
     releases::{
         add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
@@ -79,18 +79,6 @@ struct BuiltRelease {
     statistics: SandboxStatistics,
     source_dir: tempfile::TempDir,
     source_stats: ArchiveStatistics,
-}
-
-/// Compiler results survive publication failures, so finalization can record
-/// both the completed attempt's metadata and a retryable publication error.
-struct BuildPublication {
-    rustc_version: String,
-    docsrs_version: String,
-    build_succeeded: bool,
-    documentation_size: Option<ByteSize>,
-    memory_peak: Option<ByteSize>,
-    build_error: Option<CompletionError>,
-    result: Result<bool>,
 }
 
 impl RustwideBuilder {
@@ -234,43 +222,24 @@ impl RustwideBuilder {
             Ok::<_, Error>((crate_id, release_id, build))
         })?;
 
-        let result = self.build_package_inner(name, version, crate_id, release_id, &build);
-        self.finish_package_build(build, result)
+        match self.build_release(name, version) {
+            Ok(Some(release)) => self
+                .publish_release(name, version, crate_id, release_id, build, release)
+                .map(|(_, summary)| summary),
+            Ok(None) => self.finish_uncompiled_build(build, Ok(())),
+            Err(err) => self.finish_uncompiled_build(build, Err(err)),
+        }
     }
 
-    fn finish_package_build(
+    fn finish_uncompiled_build(
         &self,
         build: Build<InProgress>,
-        result: Result<Option<BuildPublication>>,
+        result: Result<()>,
     ) -> Result<BuildPackageSummary> {
         self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
             match result {
-                Ok(Some(publication)) => {
-                    let (successful, should_reattempt, error) = match publication.result {
-                        Ok(successful) => (successful, false, publication.build_error),
-                        Err(err) => (
-                            false,
-                            true,
-                            Some(CompletionError::new(&RustwideBuildError::Other(err))),
-                        ),
-                    };
-                    build
-                        .finish()
-                        .rustc_version(&publication.rustc_version)
-                        .docsrs_version(&publication.docsrs_version)
-                        .successful(publication.build_succeeded && !should_reattempt)
-                        .maybe_documentation_size(publication.documentation_size)
-                        .maybe_memory_peak(publication.memory_peak)
-                        .maybe_error(error.as_ref())
-                        .save(&mut conn)
-                        .await?;
-                    Ok(BuildPackageSummary {
-                        successful,
-                        should_reattempt,
-                    })
-                }
-                Ok(None) => {
+                Ok(()) => {
                     // A blacklisted release has no compiler results. Close the
                     // attempt rather than leaving it in progress indefinitely.
                     build.fail_early().save(&mut conn).await?;
@@ -289,23 +258,6 @@ impl RustwideBuilder {
                 }
             }
         })
-    }
-
-    #[instrument(skip(self))]
-    #[allow(clippy::too_many_arguments)]
-    fn build_package_inner(
-        &mut self,
-        name: &KrateName,
-        version: &Version,
-        crate_id: CrateId,
-        release_id: ReleaseId,
-        build: &Build<InProgress>,
-    ) -> Result<Option<BuildPublication>> {
-        let Some(release) = self.build_release(name, version)? else {
-            return Ok(None);
-        };
-        self.publish_release(name, version, crate_id, release_id, build, release)
-            .map(Some)
     }
 
     #[instrument(skip(self))]
@@ -372,16 +324,26 @@ impl RustwideBuilder {
         version: &Version,
         crate_id: CrateId,
         release_id: ReleaseId,
-        build: &Build<InProgress>,
+        build: Build<InProgress>,
         release: BuiltRelease,
-    ) -> Result<BuildPublication> {
+    ) -> Result<(Build<Finished>, BuildPackageSummary)> {
         let BuiltRelease {
             result: release_build_result,
             statistics: build_statistics,
             source_dir,
             source_stats,
         } = release;
-        let rustc_version = self.environment.rustc_version()?;
+        let rustc_version = match self.environment.rustc_version() {
+            Ok(version) => version,
+            Err(err) => {
+                let error = RustwideBuildError::Other(err);
+                self.runtime.block_on(async {
+                    let mut conn = self.db.get_async().await?;
+                    build.fail_early().error(&error).save(&mut conn).await
+                })?;
+                return Err(error.into());
+            }
+        };
         let docsrs_version = format!("docsrs {BUILDER_VERSION}");
         let build_succeeded = release_build_result.build_succeeded();
         let memory_peak = build_statistics.memory_peak_bytes().map(ByteSize::b);
@@ -569,15 +531,34 @@ impl RustwideBuilder {
             local_storage.close()?;
             Ok(build_succeeded)
         })();
-        Ok(BuildPublication {
-            rustc_version,
-            docsrs_version,
-            build_succeeded,
-            documentation_size,
-            memory_peak,
-            build_error,
-            result,
-        })
+        let (successful, should_reattempt, error) = match result {
+            Ok(successful) => (successful, false, build_error),
+            Err(err) => (
+                false,
+                true,
+                Some(CompletionError::new(&RustwideBuildError::Other(err))),
+            ),
+        };
+        let finished = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            build
+                .finish()
+                .rustc_version(&rustc_version)
+                .docsrs_version(&docsrs_version)
+                .successful(build_succeeded && !should_reattempt)
+                .maybe_documentation_size(documentation_size)
+                .maybe_memory_peak(memory_peak)
+                .maybe_error(error.as_ref())
+                .save(&mut conn)
+                .await
+        })?;
+        Ok((
+            finished,
+            BuildPackageSummary {
+                successful,
+                should_reattempt,
+            },
+        ))
     }
 
     #[instrument(skip(self, release))]

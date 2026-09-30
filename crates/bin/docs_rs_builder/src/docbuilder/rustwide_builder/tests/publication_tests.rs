@@ -88,10 +88,17 @@ fn publish_release(
         let build = Build::start(&mut conn, release_id).await?;
         Ok::<_, Error>((crate_id, release_id, build))
     })?;
-    let result = builder
-        .publish_release(name, &V0_1, crate_id, release_id, &build, release)
-        .map(Some);
-    builder.finish_package_build(build, result)
+    let (finished, summary) =
+        builder.publish_release(name, &V0_1, crate_id, release_id, build, release)?;
+    assert_eq!(
+        finished.state().status,
+        if summary.successful {
+            BuildStatus::Success
+        } else {
+            BuildStatus::Failure
+        }
+    );
+    Ok(summary)
 }
 
 #[test]
