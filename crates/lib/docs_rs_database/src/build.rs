@@ -494,36 +494,30 @@ impl<State> Build<State> {
             return Ok(Vec::new());
         }
         if !self.logs.is_empty() {
-            return Ok(self
+            Ok(self
                 .logs
                 .iter()
-                .map(|(filename, _)| self.build_log(filename))
-                .collect());
-        }
-        let prefix = format!("build-logs/{}/", self.id);
-        storage
-            .list_prefix(&prefix)
-            .await
-            .map_ok(|path| {
-                self.build_log(
-                    path.strip_prefix(&prefix)
-                        .expect("storage lists only keys under the requested prefix"),
-                )
-            })
-            .try_collect()
-            .await
-    }
-
-    /// Resolve a log without fetching its content or checking storage existence.
-    pub fn build_log(&self, filename: &str) -> BuildLog {
-        BuildLog {
-            filename: filename.to_owned(),
-            successful: self
-                .logs
-                .iter()
-                .find(|(name, _)| name == filename)
-                .map(|(_, success)| *success),
-            storage_path: build_log_storage_path(self.id, filename),
+                .map(|(filename, success)| BuildLog {
+                    filename: filename.into(),
+                    successful: Some(*success),
+                    storage_path: build_log_storage_path(self.id, filename),
+                })
+                .collect())
+        } else {
+            let prefix = format!("build-logs/{}/", self.id);
+            storage
+                .list_prefix(&prefix)
+                .await
+                .map_ok(|path| BuildLog {
+                    filename: path
+                        .strip_prefix(&prefix)
+                        .expect("storage lists only keys under the requested prefix")
+                        .into(),
+                    storage_path: path,
+                    successful: None,
+                })
+                .try_collect()
+                .await
         }
     }
 
