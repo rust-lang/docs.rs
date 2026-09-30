@@ -82,7 +82,7 @@ runs:
 
     - name: Restore the rustwide workspace
       id: workspace-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.prepare.outputs.workspace }}
         # Rustwide manages changes to packages, images, and toolchains itself.
@@ -139,7 +139,7 @@ runs:
 
     - name: Save the rustwide workspace
       if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.build.outcome != '' && steps.workspace-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ${{ steps.prepare.outputs.workspace }}
         key: ${{ steps.workspace-cache.outputs.cache-primary-key }}
