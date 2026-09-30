@@ -165,6 +165,15 @@ pub enum BuildLogKind {
     Json,
 }
 
+impl BuildLogKind {
+    fn suffix(&self) -> &'static str {
+        match self {
+            Self::Html => "",
+            Self::Json => "_json",
+        }
+    }
+}
+
 /// A target log to upload and register as part of a batch.
 #[derive(bon::Builder)]
 pub struct BuildLog {
@@ -177,12 +186,13 @@ pub struct BuildLog {
     successful: bool,
 }
 
-impl BuildLogKind {
-    fn suffix(&self) -> &'static str {
-        match self {
-            Self::Html => "",
-            Self::Json => "_json",
-        }
+impl BuildLog {
+    fn filename(&self) -> String {
+        format!("{}{}", self.target, self.kind.suffix())
+    }
+
+    fn storage_path(&self, build_id: BuildId) -> String {
+        format!("build_logs/{build_id}/{}", self.filename())
     }
 }
 
@@ -282,12 +292,9 @@ impl Build<InProgress> {
     ) -> Result<()> {
         let results = stream::iter(logs)
             .map(|log| async move {
-                let filename = format!("{}{}", log.target, log.kind.suffix());
+                let filename = log.filename();
                 storage
-                    .store_one(
-                        format!("build-logs/{}/{filename}", self.id),
-                        log.log.to_owned(),
-                    )
+                    .store_one(log.storage_path(self.id), log.log)
                     .await?;
                 Ok::<_, anyhow::Error>((filename, log.successful))
             })
