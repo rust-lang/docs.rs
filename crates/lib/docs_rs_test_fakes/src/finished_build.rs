@@ -8,7 +8,6 @@ use std::collections::HashMap;
 /// A completed build with compiler metadata, metrics, and optional logs.
 #[derive(bon::Builder)]
 #[builder(
-    on(_, into),
     start_fn(vis = "pub(crate)"),
     finish_fn(name = into_finished, vis = "pub(crate)")
 )]
@@ -23,12 +22,13 @@ pub struct FakeFinishedBuild {
     )]
     s3_build_log: Option<(String, bool)>,
 
+    #[builder(into)]
     db_build_log: Option<String>,
 
-    #[builder(default = "rustc 2.0.0-nightly (000000000 1970-01-01)")]
+    #[builder(into, default = "rustc 2.0.0-nightly (000000000 1970-01-01)")]
     rustc_version: String,
 
-    #[builder(default = "docs.rs 1.0.0 (000000000 1970-01-01)")]
+    #[builder(into, default = "docs.rs 1.0.0 (000000000 1970-01-01)")]
     docsrs_version: String,
 
     #[builder(default = true)]
