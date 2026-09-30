@@ -404,6 +404,20 @@ pub mod build_lifecycle {
     #[derive(Debug)]
     pub struct EarlyFailure;
 
+    /// Error text and classification captured when configuring a transition.
+    #[derive(Debug, thiserror::Error)]
+    #[error("{message}")]
+    pub struct CompletionError {
+        message: String,
+        kind: &'static str,
+    }
+
+    impl BuildError for CompletionError {
+        fn kind(&self) -> &'static str {
+            self.kind
+        }
+    }
+
     #[derive(Debug)]
     pub struct Build<State> {
         id: BuildId,
@@ -418,15 +432,6 @@ pub mod build_lifecycle {
         EarlyFailure(Build<EarlyFailure>),
     }
 
-    /// Data available once the compiler invocation has completed.
-    pub struct Completion<'a> {
-        pub rustc_version: &'a str,
-        pub docsrs_version: &'a str,
-        pub successful: bool,
-        pub documentation_size: Option<ByteSize>,
-        pub memory_peak: Option<ByteSize>,
-    }
-
     impl<State> Build<State> {
         pub fn id(&self) -> BuildId {
             self.id
@@ -437,6 +442,7 @@ pub mod build_lifecycle {
         }
     }
 
+    #[bon::bon]
     impl Build<InProgress> {
         /// Start a new attempt, marking any previous in-progress attempts aborted.
         pub async fn start(conn: &mut sqlx::PgConnection, release_id: ReleaseId) -> Result<Self> {
@@ -454,7 +460,13 @@ pub mod build_lifecycle {
         /// ```ignore
         /// match Build::open(conn, build_id).await? {
         ///     OpenBuild::InProgress(build) => {
-        ///         let finished = build.finish(conn, completion, Some(&error)).await?;
+        ///         let finished = build.finish()
+        ///             .rustc_version("rustc 1.84.0-nightly (000000000 2024-10-01)")
+        ///             .docsrs_version("docs.rs 1.0.0")
+        ///             .successful(false)
+        ///             .error(&error)
+        ///             .save(conn)
+        ///             .await?;
         ///     }
         ///     OpenBuild::Finished(_) | OpenBuild::EarlyFailure(_) => {}
         /// }
@@ -484,15 +496,25 @@ pub mod build_lifecycle {
             })
         }
 
-        pub async fn finish<E: BuildError>(
+        /// Configure completion data, then persist the transition with `.save(conn).await`.
+        #[builder(finish_fn = save)]
+        pub async fn finish(
             self,
-            conn: &mut sqlx::PgConnection,
-            completion: Completion<'_>,
-            error: Option<&E>,
+            #[builder(finish_fn)] conn: &mut sqlx::PgConnection,
+            rustc_version: &str,
+            docsrs_version: &str,
+            successful: bool,
+            documentation_size: Option<ByteSize>,
+            memory_peak: Option<ByteSize>,
+            #[builder(with = |error: &impl BuildError| CompletionError {
+                message: error.to_string(),
+                kind: error.kind(),
+            })]
+            error: Option<CompletionError>,
         ) -> Result<Build<Finished>> {
             let mut transaction = sqlx::Connection::begin(conn).await?;
             self.lock_in_progress(&mut transaction).await?;
-            let status = if completion.successful {
+            let status = if successful {
                 BuildStatus::Success
             } else {
                 BuildStatus::Failure
@@ -500,12 +522,12 @@ pub mod build_lifecycle {
             finish_build(
                 &mut transaction,
                 self.id,
-                completion.rustc_version,
-                completion.docsrs_version,
+                rustc_version,
+                docsrs_version,
                 status,
-                completion.documentation_size,
-                completion.memory_peak,
-                error,
+                documentation_size,
+                memory_peak,
+                error.as_ref(),
             )
             .await?;
             transaction.commit().await?;
@@ -515,14 +537,20 @@ pub mod build_lifecycle {
             })
         }
 
-        pub async fn fail_early<E: BuildError>(
+        /// Configure an early failure, then persist it with `.save(conn).await`.
+        #[builder(finish_fn = save)]
+        pub async fn fail_early(
             self,
-            conn: &mut sqlx::PgConnection,
-            error: Option<&E>,
+            #[builder(finish_fn)] conn: &mut sqlx::PgConnection,
+            #[builder(with = |error: &impl BuildError| CompletionError {
+                message: error.to_string(),
+                kind: error.kind(),
+            })]
+            error: Option<CompletionError>,
         ) -> Result<Build<EarlyFailure>> {
             let mut transaction = sqlx::Connection::begin(conn).await?;
             self.lock_in_progress(&mut transaction).await?;
-            update_build_with_error(&mut transaction, self.id, error).await?;
+            update_build_with_error(&mut transaction, self.id, error.as_ref()).await?;
             transaction.commit().await?;
             Ok(Build {
                 id: self.id,
