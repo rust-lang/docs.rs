@@ -99,8 +99,7 @@ mod tests {
                             nightly.format("%Y-%m-%d")
                         ))
                         .successful(false)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -160,8 +159,7 @@ mod tests {
                             nightly.format("%Y-%m-%d")
                         ))
                         .successful(false)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -214,8 +212,7 @@ mod tests {
                             nightly.format("%Y-%m-%d")
                         ))
                         .successful(false)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;

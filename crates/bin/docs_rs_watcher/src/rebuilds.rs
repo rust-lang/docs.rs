@@ -98,8 +98,7 @@ mod tests {
             .builds(vec![
                 FakeFinishedBuild::builder()
                     .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;
@@ -147,8 +146,7 @@ mod tests {
             .builds(vec![
                 FakeFinishedBuild::builder()
                     .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;
@@ -181,8 +179,7 @@ mod tests {
             .builds(vec![
                 FakeFinishedBuild::builder()
                     .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;

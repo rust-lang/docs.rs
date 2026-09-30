@@ -338,8 +338,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .no_s3_build_log()
                         .db_build_log("A build log")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -381,8 +380,7 @@ mod tests {
                 .builds(vec![
                     FakeFinishedBuild::builder()
                         .s3_build_log("A build log", true)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -439,8 +437,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .s3_build_log("A build log", true)
                         .build_log_for_other_target("other_target", "other target build log", true)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -508,8 +505,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .s3_build_log("A build log", true)
                         .db_build_log("Another build log")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;

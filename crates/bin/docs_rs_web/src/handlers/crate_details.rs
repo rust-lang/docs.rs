@@ -2103,11 +2103,10 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeFinishedBuild::builder().successful(true).build().into(),
+                    FakeFinishedBuild::builder().successful(true).build(),
                     FakeFinishedBuild::builder()
                         .successful(false)
-                        .build()
-                        .into(),
+                        .build(),
                     FakeBuild::InProgress,
                 ])
                 .create()
@@ -2134,8 +2133,7 @@ path = "src/lib.rs"
                 .builds(vec![
                     FakeFinishedBuild::builder()
                         .successful(false)
-                        .build()
-                        .into(),
+                        .build(),
                     FakeBuild::InProgress,
                 ])
                 .create()

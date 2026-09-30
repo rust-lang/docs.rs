@@ -416,19 +416,16 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                     FakeFinishedBuild::builder()
                         .successful(false)
                         .rustc_version("rustc (blabla 2020-01-01)")
                         .docsrs_version("docs.rs 2.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2021-01-01)")
                         .docsrs_version("docs.rs 3.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                     FakeBuild::InProgress,
                 ])
                 .create()
@@ -471,8 +468,7 @@ mod tests {
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
                         .memory_peak(test_memory_bytes)
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -762,8 +758,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -776,8 +771,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -813,8 +807,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -840,8 +833,7 @@ mod tests {
                     FakeFinishedBuild::builder()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .build()
-                        .into(),
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -872,8 +864,7 @@ mod tests {
                 BuildStatus::Success | BuildStatus::Failure => FakeFinishedBuild::builder()
                     .successful(build_status == BuildStatus::Success)
                     .legacy_build_logs(true)
-                    .build()
-                    .into(),
+                    .build(),
             }])
             .create()
             .await?;
@@ -906,8 +897,7 @@ mod tests {
                 FakeFinishedBuild::builder()
                     .successful(false)
                     .s3_build_log("some log", build_log_success)
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;
@@ -939,8 +929,7 @@ mod tests {
                     .successful(true)
                     .s3_build_log("some log", true)
                     .build_log_for_other_target("other-target", "other log", true)
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;
@@ -972,8 +961,7 @@ mod tests {
                     .successful(true)
                     .s3_build_log("some log", true)
                     .build_log_for_other_target("other-target", "other log", false)
-                    .build()
-                    .into(),
+                    .build(),
             ])
             .create()
             .await?;
