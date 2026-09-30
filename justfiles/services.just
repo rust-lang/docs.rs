@@ -72,4 +72,4 @@ compose-logs *services:
 docker-run service_name *args: compose-up-resources
     # `docker compose run` ignores service dependencies, so the recipe starts
     # the database and object storage explicitly before reaching this point.
-    docker compose --env-file .docker.env run --build --rm {{ service_name }} {{ args }}
+    docker compose --env-file .docker.env run --build --rm {{ service_name }} {{ quote(args) }}
