@@ -22,28 +22,17 @@ use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
 use docs_rs_database::build::{Build as DatabaseBuild, OpenBuild};
 use docs_rs_headers::CanonicalUrl;
-use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Build {
-    id: BuildId,
-    pub rustc_version: Option<String>,
-    docsrs_version: Option<String>,
-    pub build_status: BuildStatus,
-    pub build_time: Option<DateTime<Utc>>,
-    build_duration: Option<Duration>,
-    memory_peak: Option<i64>,
-    errors: Option<String>,
-}
-
 #[derive(Template)]
 #[template(path = "crate/builds.html")]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct BuildsPage {
     metadata: MetaData,
-    builds: Vec<Build>,
+    builds: Vec<OpenBuild>,
+    now: DateTime<Utc>,
     limits: Limits,
     canonical_url: CanonicalUrl,
     params: RustdocParams,
@@ -89,6 +78,7 @@ pub(crate) async fn build_list_handler(
     Ok(BuildsPage {
         metadata,
         builds: get_builds(&mut conn, params.name(), &version).await?,
+        now: Utc::now(),
         limits: Limits::for_crate(context.config().build_limits()?, &mut conn, params.name())
             .await?,
         canonical_url: CanonicalUrl::from_uri(
@@ -184,32 +174,8 @@ pub(super) async fn get_builds(
     conn: &mut sqlx::PgConnection,
     name: &KrateName,
     version: &Version,
-) -> Result<Vec<Build>> {
-    let now = Utc::now();
-    Ok(DatabaseBuild::for_release(conn, name, version)
-        .await?
-        .into_iter()
-        .map(|build| {
-            let (rustc_version, docsrs_version, memory_peak) = match &build {
-                OpenBuild::Finished(build) => (
-                    build.state().rustc_version.clone(),
-                    build.state().docsrs_version.clone(),
-                    build.state().memory_peak,
-                ),
-                OpenBuild::InProgress(_) | OpenBuild::EarlyFailure(_) => (None, None, None),
-            };
-            Build {
-                id: build.id(),
-                rustc_version,
-                docsrs_version,
-                memory_peak,
-                build_status: build.display_status(),
-                build_time: build.build_time(),
-                build_duration: build.duration(now),
-                errors: build.errors().map(str::to_owned),
-            }
-        })
-        .collect())
+) -> Result<Vec<OpenBuild>> {
+    DatabaseBuild::for_release(conn, name, version).await
 }
 
 #[cfg(test)]
@@ -742,7 +708,7 @@ mod tests {
             get_builds(&mut conn, &FOO, &V0_1)
                 .await?
                 .into_iter()
-                .map(|b| b.build_status)
+                .map(|b| b.display_status())
                 .next()
                 .unwrap(),
             build_status,
@@ -775,7 +741,7 @@ mod tests {
             get_builds(&mut conn, &FOO, &V0_1)
                 .await?
                 .into_iter()
-                .map(|b| b.build_status)
+                .map(|b| b.display_status())
                 .next()
                 .unwrap(),
             BuildStatus::Failure,
@@ -807,7 +773,7 @@ mod tests {
             get_builds(&mut conn, &FOO, &V0_1)
                 .await?
                 .into_iter()
-                .map(|b| b.build_status)
+                .map(|b| b.display_status())
                 .next()
                 .unwrap(),
             BuildStatus::Success,
@@ -839,7 +805,7 @@ mod tests {
             get_builds(&mut conn, &FOO, &V0_1)
                 .await?
                 .into_iter()
-                .map(|b| b.build_status)
+                .map(|b| b.display_status())
                 .next()
                 .unwrap(),
             BuildStatus::PartialFailure

@@ -264,7 +264,7 @@ impl BuildLog {
 #[derive(Debug)]
 pub struct InProgress;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Finished {
     pub status: BuildStatus,
     pub errors: Option<String>,
@@ -306,7 +306,7 @@ impl BuildError for CompletionError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Build<State> {
     id: BuildId,
     started_at: Option<DateTime<Utc>>,
@@ -479,7 +479,7 @@ impl OpenBuild {
 
     pub fn build_time(&self) -> Option<DateTime<Utc>> {
         match self {
-            Self::Finished(build) => build.state.finished_at.or(build.started_at),
+            Self::Finished(build) => build.build_time(),
             _ => self.started_at(),
         }
     }
@@ -524,6 +524,12 @@ impl<State> Build<State> {
 
     pub fn state(&self) -> &State {
         &self.state
+    }
+}
+
+impl Build<Finished> {
+    pub fn build_time(&self) -> Option<DateTime<Utc>> {
+        self.state.finished_at.or(self.started_at)
     }
 }
 
