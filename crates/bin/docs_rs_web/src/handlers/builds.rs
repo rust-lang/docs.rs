@@ -226,9 +226,8 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            // Should have 4 mdashes: rustc_version, docsrs_version, build_time, build_duration
-            // (peak_memory_bytes shows "100 MB" from the dummy value)
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 4);
+            // Early failures have timing data, but no compiler versions or memory peak.
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
 
             Ok(())
         });

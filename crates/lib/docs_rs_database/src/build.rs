@@ -159,7 +159,6 @@ pub struct Build<State> {
 
 #[derive(sqlx::FromRow)]
 struct BuildRow {
-    early_failure: bool,
     id: BuildId,
     build_status: BuildStatus,
     build_started: Option<DateTime<Utc>>,
@@ -182,7 +181,6 @@ const READ_BUILDS: &str = r#"
         b.build_status,
         b.build_started,
         b.build_finished,
-        b.early_failure,
         b.rustc_version,
         b.docsrs_version,
         b.memory_peak,
@@ -207,15 +205,20 @@ const READ_BUILDS: &str = r#"
 impl BuildRow {
     fn into_build(self) -> Result<AnyBuild> {
         let logs = self.logs.unwrap_or_default();
-        Ok(match (self.build_status, self.early_failure) {
-            (BuildStatus::InProgress, false) if self.build_finished.is_none() => AnyBuild::InProgress(Build {
-                id: self.id,
-                started_at: self.build_started,
-                logs,
-                has_legacy_output: self.has_legacy_output,
-                default_target: self.default_target,
-                state: InProgress,
-            }),
+        // Compiler metadata distinguishes completed compilation from early failure;
+        // completion timestamps describe when either kind of attempt ended.
+        let early_failure = self.rustc_version.is_none() && self.docsrs_version.is_none();
+        Ok(match (self.build_status, early_failure) {
+            (BuildStatus::InProgress, _) if self.build_finished.is_none() => {
+                AnyBuild::InProgress(Build {
+                    id: self.id,
+                    started_at: self.build_started,
+                    logs,
+                    has_legacy_output: self.has_legacy_output,
+                    default_target: self.default_target,
+                    state: InProgress,
+                })
+            }
             (BuildStatus::Failure, true) => AnyBuild::EarlyFailure(Build {
                 id: self.id,
                 started_at: self.build_started,
@@ -228,25 +231,23 @@ impl BuildRow {
                     error_kind: self.error_kind,
                 },
             }),
-            (status, false) if status != BuildStatus::InProgress => {
-                AnyBuild::Finished(Build {
-                    id: self.id,
-                    started_at: self.build_started,
-                    logs,
-                    has_legacy_output: self.has_legacy_output,
-                    default_target: self.default_target,
-                    state: Finished {
-                        status,
-                        errors: self.errors,
-                        error_kind: self.error_kind,
-                        finished_at: self.build_finished,
-                        rustc_version: self.rustc_version,
-                        docsrs_version: self.docsrs_version,
-                        memory_peak: self.memory_peak,
-                        documentation_size: self.documentation_size,
-                    },
-                })
-            }
+            (status, _) if status != BuildStatus::InProgress => AnyBuild::Finished(Build {
+                id: self.id,
+                started_at: self.build_started,
+                logs,
+                has_legacy_output: self.has_legacy_output,
+                default_target: self.default_target,
+                state: Finished {
+                    status,
+                    errors: self.errors,
+                    error_kind: self.error_kind,
+                    finished_at: self.build_finished,
+                    rustc_version: self.rustc_version,
+                    docsrs_version: self.docsrs_version,
+                    memory_peak: self.memory_peak,
+                    documentation_size: self.documentation_size,
+                },
+            }),
             _ => {
                 return Err(anyhow!(
                     "build {} has inconsistent lifecycle fields",
@@ -445,7 +446,8 @@ impl AnyBuild {
     pub fn build_time(&self) -> Option<DateTime<Utc>> {
         match self {
             Self::Finished(build) => build.build_time(),
-            _ => self.started_at(),
+            Self::EarlyFailure(build) => build.state.finished_at.or(build.started_at),
+            Self::InProgress(_) => self.started_at(),
         }
     }
 
@@ -757,7 +759,6 @@ impl Build<InProgress> {
              build_status = $1,
              errors = $2,
              error_kind = $3,
-             early_failure = true,
              build_finished = NOW()
          WHERE id = $4
          RETURNING rid"#,
@@ -913,6 +914,21 @@ mod tests {
                 .default_log_filename()
                 .as_deref(),
             Some("x86_64-unknown-linux-gnu.txt")
+        );
+    }
+
+    #[test]
+    fn early_failure_duration_uses_completion_time() {
+        let finished_at = DateTime::from_timestamp(1_042, 0);
+        let build = AnyBuild::EarlyFailure(snapshot(EarlyFailure {
+            finished_at,
+            errors: None,
+            error_kind: None,
+        }));
+        assert_eq!(build.build_time(), finished_at);
+        assert_eq!(
+            build.duration_at(DateTime::from_timestamp(0, 0).unwrap()),
+            Some(std::time::Duration::from_secs(42).into())
         );
     }
 
@@ -1440,10 +1456,21 @@ mod tests {
             .fail_early()
             .save(&mut conn)
             .await?;
+        assert!(early.state().finished_at.is_some());
+        let reopened = AnyBuild::open(&mut conn, early.id()).await?;
+        assert!(reopened.duration().is_some());
         assert!(matches!(
             AnyBuild::open(&mut conn, early.id()).await?,
             AnyBuild::EarlyFailure(_)
         ));
+        // Historical failures remain early even without a known end time.
+        sqlx::query("UPDATE builds SET build_finished = NULL WHERE id = $1")
+            .bind(early.id().0)
+            .execute(&mut *conn)
+            .await?;
+        let historical = AnyBuild::open(&mut conn, early.id()).await?;
+        assert!(matches!(&historical, AnyBuild::EarlyFailure(_)));
+        assert!(historical.duration().is_none());
         let finished = AnyBuild::start(&mut conn, release_id)
             .await?
             .finish()

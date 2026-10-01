@@ -192,10 +192,11 @@ fn upload_failure(reject: fn(&str) -> bool, fatal: bool) -> Result<()> {
     if fatal {
         assert!(row.errors.unwrap().contains("injected upload failure"));
         // Source upload fails during fetch, whereas documentation/log upload
-        // fails after compilation. Only the latter has completion metadata.
+        // fails after compilation. Both end the attempt; only the latter
+        // has compiler metadata.
         let compiled = !reject(&source_archive_path(&name, &V0_1));
         assert_eq!(row.rustc_version.is_some(), compiled);
-        assert_eq!(row.build_finished, compiled);
+        assert!(row.build_finished);
     } else {
         assert_eq!(row.rustdoc_status, Some(true));
         assert!(blocking_storage.exists_in_archive(
@@ -335,7 +336,7 @@ fn blacklisted_crate_is_skipped_without_reattempt() -> Result<()> {
     let build = fetch_build_result(&env, &name)?;
     assert_eq!(build.status, BuildStatus::Failure);
     assert!(build.rustc_version.is_none());
-    assert!(!build.build_finished);
+    assert!(build.build_finished);
     assert!(fetch_build_logs(&env, build.id)?.is_empty());
     Ok(())
 }

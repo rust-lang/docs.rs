@@ -341,7 +341,7 @@ mod tests {
                 (
                     BuildStatus::Failure,
                     true,
-                    false,
+                    true,
                     false,
                     false,
                     false,
@@ -352,7 +352,7 @@ mod tests {
                 (
                     BuildStatus::Failure,
                     true,
-                    false,
+                    true,
                     false,
                     false,
                     false,
