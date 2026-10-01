@@ -96,15 +96,45 @@ fn capture_rustwide_step<T>(
 
 fn capture_rustwide_step_with_cargo_messages<T>(
     max_log_size: ByteSize,
-    run: impl FnOnce(&mut CargoMessages) -> Result<T, BuildStepError>,
+    run: impl FnOnce(&mut CargoMessageCollector) -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
-    let mut cargo_messages = Vec::new();
+    let mut cargo_messages = CargoMessageCollector::new(max_log_size.as_usize());
     let mut result = capture_rustwide_step(max_log_size, || run(&mut cargo_messages));
+    let cargo_messages = cargo_messages.into_messages();
     match &mut result {
         Ok(report) => report.cargo_messages = Some(cargo_messages),
         Err(report) => report.cargo_messages = Some(cargo_messages),
     }
     result
+}
+
+/// Retain whole Cargo JSONL records up to the same byte limit as the step log.
+struct CargoMessageCollector {
+    messages: CargoMessages,
+    retained_bytes: usize,
+    max_bytes: usize,
+}
+
+impl CargoMessageCollector {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            messages: Vec::new(),
+            retained_bytes: 0,
+            max_bytes,
+        }
+    }
+
+    fn push(&mut self, line: &str, message: CargoMessage) {
+        let record_bytes = line.len().saturating_add(1);
+        if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
+            self.messages.push(message);
+            self.retained_bytes += record_bytes;
+        }
+    }
+
+    fn into_messages(self) -> CargoMessages {
+        self.messages
+    }
 }
 
 /// Load Cargo metadata for a source tree with the configured toolchain.
@@ -204,7 +234,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         line: &str,
         actions: &mut ProcessLinesActions,
-        cargo_messages: &mut CargoMessages,
+        cargo_messages: &mut CargoMessageCollector,
     ) {
         let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
             return;
@@ -219,7 +249,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             } else {
                 actions.remove_line();
             }
-            cargo_messages.push(message);
+            cargo_messages.push(line, message);
         } else {
             // Cargo protocol records are not user output. Removing them keeps the captured build
             // log readable and leaves non-JSON process output untouched.
@@ -883,6 +913,18 @@ mod tests {
                 .unwrap()
                 .contains("installing additional target")
         );
+    }
+
+    #[test]
+    fn cargo_message_collection_respects_the_log_size_limit() {
+        let line = r#"{"reason":"compiler-message"}"#;
+        let message = serde_json::from_str(line).unwrap();
+        let mut collector = CargoMessageCollector::new(line.len() + 1);
+
+        collector.push(line, message);
+        collector.push(line, serde_json::from_str(line).unwrap());
+
+        assert_eq!(collector.into_messages().len(), 1);
     }
 
     #[test]
