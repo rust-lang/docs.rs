@@ -235,7 +235,32 @@ impl BuildRow {
     }
 }
 
+// Keep forwarding signatures visible while sharing the variant dispatch.
+macro_rules! forward_build_methods {
+    ($($(#[$attr:meta])* $vis:vis fn $name:ident(&self $(, $arg:ident: $arg_ty:ty)*) -> $ret:ty;)*) => {
+        $(
+            $(#[$attr])*
+            $vis fn $name(&self $(, $arg: $arg_ty)*) -> $ret {
+                match self {
+                    Self::InProgress(build) => build.$name($($arg),*),
+                    Self::Finished(build) => build.$name($($arg),*),
+                    Self::EarlyFailure(build) => build.$name($($arg),*),
+                }
+            }
+        )*
+    };
+}
+
 impl AnyBuild {
+    forward_build_methods! {
+        pub fn id(&self) -> BuildId;
+        pub fn started_at(&self) -> Option<DateTime<Utc>>;
+        pub fn logs(&self) -> &[(String, bool)];
+        pub fn has_legacy_output(&self) -> bool;
+        pub fn default_target(&self) -> Option<&str>;
+        pub fn build_log(&self, filename: &str) -> BuildLog;
+    }
+
     pub async fn fetch_legacy_output(&self, conn: &mut sqlx::PgConnection) -> Result<String> {
         match self {
             Self::InProgress(build) => build.fetch_legacy_output(conn).await,
@@ -361,14 +386,6 @@ impl AnyBuild {
         }
     }
 
-    pub fn build_log(&self, filename: &str) -> BuildLog {
-        match self {
-            Self::InProgress(build) => build.build_log(filename),
-            Self::Finished(build) => build.build_log(filename),
-            Self::EarlyFailure(build) => build.build_log(filename),
-        }
-    }
-
     pub fn errors(&self) -> Option<&str> {
         match self {
             Self::InProgress(_) => None,
@@ -382,46 +399,6 @@ impl AnyBuild {
             Self::InProgress(_) => None,
             Self::Finished(build) => build.state.error_kind.as_deref(),
             Self::EarlyFailure(build) => build.state.error_kind.as_deref(),
-        }
-    }
-
-    pub fn id(&self) -> BuildId {
-        match self {
-            Self::InProgress(build) => build.id(),
-            Self::Finished(build) => build.id(),
-            Self::EarlyFailure(build) => build.id(),
-        }
-    }
-
-    pub fn started_at(&self) -> Option<DateTime<Utc>> {
-        match self {
-            Self::InProgress(build) => build.started_at(),
-            Self::Finished(build) => build.started_at(),
-            Self::EarlyFailure(build) => build.started_at(),
-        }
-    }
-
-    pub fn logs(&self) -> &[(String, bool)] {
-        match self {
-            Self::InProgress(build) => build.logs(),
-            Self::Finished(build) => build.logs(),
-            Self::EarlyFailure(build) => build.logs(),
-        }
-    }
-
-    pub fn has_legacy_output(&self) -> bool {
-        match self {
-            Self::InProgress(build) => build.has_legacy_output(),
-            Self::Finished(build) => build.has_legacy_output(),
-            Self::EarlyFailure(build) => build.has_legacy_output(),
-        }
-    }
-
-    pub fn default_target(&self) -> Option<&str> {
-        match self {
-            Self::InProgress(build) => build.default_target(),
-            Self::Finished(build) => build.default_target(),
-            Self::EarlyFailure(build) => build.default_target(),
         }
     }
 
