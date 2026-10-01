@@ -19,8 +19,8 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResult, StepResultExt as _,
-    TargetBuildResult, ToolchainExt as _, utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, CargoMessage, ReleaseBuildResult, StepResult,
+    StepResultExt as _, TargetBuildResult, ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     ArchiveStatistics, AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path,
@@ -41,6 +41,21 @@ use std::{
     sync::Arc,
 };
 use tracing::{debug, error, info, info_span, instrument, warn};
+
+fn create_jsonl_file<M>(messages: impl IntoIterator<Item = M>) -> Result<tempfile::TempPath>
+where
+    M: AsRef<CargoMessage>,
+{
+    let mut writer = BufWriter::new(tempfile::NamedTempFile::new()?);
+    for message in messages {
+        let message = message.as_ref();
+        serde_json::to_writer(&mut writer, message)?;
+        writeln!(&mut writer)?;
+    }
+    writer.flush()?;
+
+    Ok(writer.into_inner()?.into_temp_path())
+}
 
 async fn get_configured_toolchain(conn: &mut sqlx::PgConnection) -> Result<Toolchain> {
     let Some(name) = get_config::<String>(conn, ConfigName::Toolchain).await? else {
@@ -396,21 +411,9 @@ impl RustwideBuilder {
                 target.documentation(),
                 target.documentation_succeeded(),
             )?);
-            build_logs.extend(self.publish_json_log(
-                build_id,
-                format!("{}.jsonl", target.target()),
-                target.documentation(),
-                target.documentation_succeeded(),
-            )?);
             build_logs.extend(self.publish_build_log(
                 build_id,
                 format!("{}_json.txt", target.target()),
-                target.rustdoc_json(),
-                target.rustdoc_json().is_ok(),
-            )?);
-            build_logs.extend(self.publish_json_log(
-                build_id,
-                format!("{}_json.jsonl", target.target()),
                 target.rustdoc_json(),
                 target.rustdoc_json().is_ok(),
             )?);
@@ -547,47 +550,39 @@ impl RustwideBuilder {
         Ok(build_succeeded)
     }
 
-    fn publish_json_log<T>(
-        &self,
-        build_id: BuildId,
-        filename: String,
-        step: &StepResult<T>,
-        successful: bool,
-    ) -> Result<Option<(String, bool)>> {
-        let Some(messages) = step.cargo_messages() else {
-            error!(filename, successful, "missing cargo messages log");
-            return Ok(None);
-        };
-
-        let mut writer = BufWriter::new(tempfile::NamedTempFile::new()?);
-        for message in messages {
-            serde_json::to_writer(&mut writer, &message)?;
-            writeln!(&mut writer)?;
-        }
-        writer.flush()?;
-
-        let temp_path = writer.into_inner()?.into_temp_path();
-
-        self.blocking_storage
-            .store_file(format!("build-logs/{build_id}/{filename}"), temp_path)?;
-        Ok(Some((filename, successful)))
-    }
-
     fn publish_build_log<T>(
         &self,
         build_id: BuildId,
-        filename: String,
+        filename_stem: String,
         step: &StepResult<T>,
         successful: bool,
-    ) -> Result<Option<(String, bool)>> {
-        let Some(log) = step.log() else {
-            error!(filename, successful, "missing build log");
-            return Ok(None);
+    ) -> Result<Vec<(String, bool)>> {
+        let mut logs = Vec::new();
+
+        if let Some(log) = step.log() {
+            let filename = format!("{filename_stem}.txt");
+            self.blocking_storage
+                .store_one(format!("build-logs/{build_id}/{filename}"), log.to_owned())?;
+            logs.push((filename, successful));
+        } else {
+            error!(filename_stem, successful, "missing build log");
         };
 
-        self.blocking_storage
-            .store_one(format!("build-logs/{build_id}/{filename}"), log.to_owned())?;
-        Ok(Some((filename, successful)))
+        if let Some(messages) = step.cargo_messages() {
+            let filename = format!("{filename_stem}.jsonl");
+            match create_jsonl_file(messages.as_ref()) {
+                Ok(rendered_file) => {
+                    self.blocking_storage
+                        .store_file(format!("build-logs/{build_id}/{filename}"), rendered_file)?;
+                    logs.push((filename, successful));
+                }
+                Err(err) => {
+                    error!(filename_stem, successful, "couldn't render jsonl log");
+                }
+            }
+        }
+
+        Ok(logs)
     }
 
     #[instrument(skip(self, release))]
