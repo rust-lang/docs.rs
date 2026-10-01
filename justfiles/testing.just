@@ -91,7 +91,7 @@ run-tests: compose-up-resources _build-test-binaries
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
     export DOCSRS_RUSTSEC_ADVISORY_DB=ignored/rustsec-advisory-db
-    export DOCSRS_DATABASE_URL=postgresql://cratesfyi:password@localhost:15432
+    export DOCSRS_DATABASE_URL=postgresql://cratesfyi:password@localhost:${DOCSRS_POSTGRES_PORT:-15432}
     export AWS_ACCESS_KEY_ID=cratesfyi
     export AWS_SECRET_ACCESS_KEY=secret_key
     export S3_ENDPOINT=http://localhost:9000
