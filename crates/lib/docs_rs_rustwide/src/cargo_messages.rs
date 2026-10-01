@@ -97,19 +97,14 @@ impl CargoMessageCollector {
                 // just to be safe, we don't drop it and leave it in the logs, but still
                 // add it to our cargo messages.
             }
-            self.push(message);
+            self.push(line, message);
         }
 
         // Other JSON lines are kept, as we don't know what they are.
     }
 
-    fn push(&mut self, message: RawCargoMessage) {
-        // JSONL serialization is compact, irrespective of whitespace in the
-        // line Cargo originally wrote. Account for the bytes we will upload.
-        let record_bytes = serde_json::to_vec(&message)
-            .expect("a serde_json::Value always serializes")
-            .len()
-            .saturating_add(1);
+    fn push(&mut self, line: &str, message: RawCargoMessage) {
+        let record_bytes = line.len().saturating_add(1);
         if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
             self.messages.push(message);
             self.retained_bytes += record_bytes;
