@@ -893,7 +893,7 @@ mod tests {
                 .finish()
                 .rustc_version("rustc-version")
                 .docsrs_version("docs.rs 4.0.0")
-                .successful(BuildStatus::Success == BuildStatus::Success)
+                .successful(true)
                 .save(&mut conn)
                 .await?;
 

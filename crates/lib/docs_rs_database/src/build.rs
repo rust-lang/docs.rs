@@ -1545,7 +1545,7 @@ mod tests {
             .finish()
             .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)")
             .docsrs_version("docsrs_version")
-            .successful(BuildStatus::Success == BuildStatus::Success)
+            .successful(true)
             .save(&mut conn)
             .await?;
 
@@ -1595,9 +1595,9 @@ mod tests {
             .finish()
             .rustc_version("rustc_version")
             .docsrs_version("docsrs_version")
-            .successful(BuildStatus::Success == BuildStatus::Success)
-            .maybe_documentation_size(Some(42u64.into()))
-            .maybe_memory_peak(Some(23u64.into()))
+            .successful(true)
+            .documentation_size(42u64.into())
+            .memory_peak(23u64.into())
             .save(&mut conn)
             .await?;
 
