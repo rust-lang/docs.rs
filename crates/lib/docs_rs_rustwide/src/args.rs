@@ -254,7 +254,6 @@ mod tests {
             vec!["--output-format".into(), "json".into()],
         );
         assert!(args.starts_with(&["rustdoc".into(), "--lib".into()]));
-        assert!(args.iter().any(|arg| arg == "--message-format=json"));
         assert!(args.iter().any(|arg| arg == "--offline"));
         assert!(args.iter().any(|arg| arg == "-j2"));
         assert_eq!(
@@ -493,17 +492,11 @@ cargo-args = ["--verbose"]
             .rustdoc_args([r#"label="a value with spaces""#])
             .finish();
         assert_eq!(
-            &args[..5],
-            [
-                "rustdoc",
-                "--lib",
-                "-Zrustdoc-map",
-                "--message-format=json",
-                "--config",
-            ]
+            &args[..4],
+            ["rustdoc", "--lib", "-Zrustdoc-map", "--config",]
         );
         assert_eq!(
-            &args[6..],
+            &args[5..],
             [
                 "--offline",
                 "-Zunstable-options",
@@ -515,5 +508,22 @@ cargo-args = ["--verbose"]
         let mut expected = vec!["--cfg", "docsrs", "--cfg", r#"label="a value with spaces""#];
         expected.extend(UNCONDITIONAL_RUSTDOC_ARGS);
         assert_eq!(rustdoc_flags(&args), expected);
+    }
+
+    #[test_case(false)]
+    #[test_case(true)]
+    fn optionally_enables_cargo_json_message_format(message_format_json: bool) {
+        let metadata = Metadata::default();
+        let command = CommandArgs::new(&metadata, "target", None);
+        let args = if message_format_json {
+            command.message_format_json().finish()
+        } else {
+            command.finish()
+        };
+
+        assert_eq!(
+            args.iter().any(|arg| arg == "--message-format=json"),
+            message_format_json
+        );
     }
 }
