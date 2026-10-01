@@ -15,7 +15,6 @@ use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
 };
-use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
 use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
@@ -32,7 +31,6 @@ use std::sync::Arc;
 struct BuildsPage {
     metadata: MetaData,
     builds: Vec<AnyBuild>,
-    now: DateTime<Utc>,
     limits: Limits,
     canonical_url: CanonicalUrl,
     params: RustdocParams,
@@ -78,7 +76,6 @@ pub(crate) async fn build_list_handler(
     Ok(BuildsPage {
         metadata,
         builds: get_builds(&mut conn, params.name(), &version).await?,
-        now: Utc::now(),
         limits: Limits::for_crate(context.config().build_limits()?, &mut conn, params.name())
             .await?,
         canonical_url: CanonicalUrl::from_uri(

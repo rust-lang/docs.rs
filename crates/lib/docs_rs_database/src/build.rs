@@ -3,9 +3,9 @@
 //! A transition consumes its in-progress handle and checks the database state.
 
 use crate::releases::update_build_status;
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
-use docs_rs_storage::{AsyncStorage, PathNotFoundError};
+use docs_rs_storage::{AsyncStorage, PathNotFoundError, StreamingBlob};
 use docs_rs_types::{
     BuildError, BuildId, BuildStatus, ByteSize, Duration, KrateName, ReleaseId, Version,
 };
@@ -89,12 +89,8 @@ impl BuildLog {
         self.successful
     }
 
-    pub async fn fetch(&self, storage: &AsyncStorage) -> Result<String> {
-        let path = &self.storage_path;
-        let blob = storage
-            .get(path, storage.config().max_file_size_for(path))
-            .await?;
-        String::from_utf8(blob.content).context("non utf8 build log")
+    pub async fn fetch(&self, storage: &AsyncStorage) -> Result<StreamingBlob> {
+        storage.get_stream(&self.storage_path).await
     }
 }
 
@@ -454,7 +450,12 @@ impl AnyBuild {
         }
     }
 
-    pub fn duration(&self, now: DateTime<Utc>) -> Option<Duration> {
+    pub fn duration(&self) -> Option<Duration> {
+        self.duration_at(Utc::now())
+    }
+
+    /// Compute elapsed time at a supplied instant for in-progress builds.
+    pub fn duration_at(&self, now: DateTime<Utc>) -> Option<Duration> {
         let end = match self {
             Self::InProgress(_) => now,
             Self::Finished(build) => build.state.finished_at?,
@@ -811,6 +812,35 @@ mod tests {
     use docs_rs_storage::{StorageKind, testing::TestStorage};
     use docs_rs_types::testing::{KRATE, V0_1};
 
+    #[test]
+    fn in_progress_duration_at() {
+        let started_at = DateTime::from_timestamp(1_000, 0).unwrap();
+        let mut build = AnyBuild::InProgress(Build {
+            id: BuildId(1),
+            started_at: Some(started_at),
+            logs: Vec::new(),
+            has_legacy_output: false,
+            default_target: None,
+            state: InProgress,
+        });
+        assert_eq!(
+            build.duration_at(started_at + chrono::Duration::seconds(42)),
+            Some(std::time::Duration::from_secs(42).into())
+        );
+        assert_eq!(
+            build.duration_at(started_at),
+            Some(std::time::Duration::ZERO.into())
+        );
+        assert_eq!(
+            build.duration_at(started_at - chrono::Duration::seconds(1)),
+            None
+        );
+        if let AnyBuild::InProgress(build) = &mut build {
+            build.started_at = None;
+        }
+        assert_eq!(build.duration_at(started_at), None);
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn log_reads_support_storage_fallback_and_legacy_output() -> Result<()> {
         let metrics = TestMetrics::new();
@@ -933,7 +963,7 @@ mod tests {
             "legacy log"
         );
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
-        assert!(builds[0].duration(Utc::now()).is_some());
+        assert!(builds[0].duration().is_some());
 
         // Successful historical rows need not have either lifecycle timestamp.
         sqlx::query("UPDATE builds SET build_started = NULL, build_finished = NULL, rustc_version = NULL WHERE id = $1")
@@ -941,7 +971,7 @@ mod tests {
         let legacy = AnyBuild::open(&mut conn, id).await?;
         assert!(matches!(&legacy, AnyBuild::Finished(_)));
         assert!(legacy.build_time().is_none());
-        assert!(legacy.duration(Utc::now()).is_none());
+        assert!(legacy.duration().is_none());
         Ok(())
     }
 

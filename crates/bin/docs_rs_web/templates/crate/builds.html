@@ -79,7 +79,7 @@
                                             {%- endif -%}
                                         </div>
                                         <div class="pure-u-1 pure-u-sm-4-24 duration">
-                                            {%- if let Some(build_duration) = build.duration(*now) -%}
+                                            {%- if let Some(build_duration) = build.duration() -%}
                                                 took {{ build_duration|format_duration }}
                                             {%- else -%}
                                                 &mdash;
@@ -116,7 +116,7 @@
                                             &mdash;
                                         </div> {#- -#}
                                         <div class="pure-u-1 pure-u-sm-4-24 duration">
-                                            {%- if let Some(build_duration) = build.duration(*now) -%}
+                                            {%- if let Some(build_duration) = build.duration() -%}
                                                 since {{ build_duration|format_duration }}
                                             {%- else -%}
                                                 &mdash;

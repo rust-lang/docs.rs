@@ -7,6 +7,7 @@ use crate::{
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
 };
+use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
 use docs_rs_database::build::{AnyBuild, BuildLog};
@@ -111,7 +112,14 @@ pub(crate) async fn build_details_handler(
         };
 
         let output = if let Some(ref filename) = current_filename {
-            build.build_log(filename).fetch(&storage).await?
+            let blob = build
+                .build_log(filename)
+                .fetch(&storage)
+                .await?
+                .materialize(storage.config().max_file_size_for(&filename))
+                .await?;
+
+            String::from_utf8(blob.content).context("non-utf8 build log")?
         } else {
             "".to_string()
         };
