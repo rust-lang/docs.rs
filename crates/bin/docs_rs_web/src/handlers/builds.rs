@@ -177,7 +177,7 @@ pub(super) async fn get_builds(
 
 #[cfg(test)]
 mod tests {
-    
+
     use crate::{
         Config,
         cache::CachePolicy,

@@ -909,6 +909,33 @@ mod tests {
     }
 
     #[test]
+    fn published_log_filenames_match_default_and_json_formats() {
+        let target = "x86_64-unknown-linux-gnu";
+        let mut build = snapshot(InProgress);
+        build.default_target = Some(target.into());
+        let build = AnyBuild::InProgress(build);
+        for (kind, expected) in [
+            (BuildLogKind::Html, "x86_64-unknown-linux-gnu.txt"),
+            (BuildLogKind::Json, "x86_64-unknown-linux-gnu_json.txt"),
+        ] {
+            let log = NewBuildLog::builder()
+                .target(target)
+                .kind(kind)
+                .log("output")
+                .successful(true)
+                .build();
+            assert_eq!(log.filename(), expected);
+            assert_eq!(
+                log.storage_path(build.id()),
+                format!("build-logs/1/{expected}")
+            );
+            if matches!(kind, BuildLogKind::Html) {
+                assert_eq!(build.default_log_filename().as_deref(), Some(expected));
+            }
+        }
+    }
+
+    #[test]
     fn display_status_only_downgrades_success() {
         for logs in [
             vec![],
@@ -1002,7 +1029,7 @@ mod tests {
         assert_eq!(persisted.logs(), previous);
         assert!(
             storage
-                .exists(&format!("build-logs/{}/new", build.id()))
+                .exists(&format!("build-logs/{}/new.txt", build.id()))
                 .await?
         );
         Ok(())
@@ -1020,7 +1047,7 @@ mod tests {
         assert_eq!(build.default_target(), None);
         build
             .publish_build_log()
-            .target("target.txt")
+            .target("target")
             .log("log")
             .successful(false)
             .save(&mut conn, &storage)
@@ -1271,7 +1298,7 @@ mod tests {
     async fn batch_logs_register_successful_uploads_with_one_connection() -> Result<()> {
         let metrics = TestMetrics::new();
         let storage = TestStorage::from_kind(StorageKind::Memory, metrics.provider()).await?;
-        storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected")));
+        storage.reject_uploads_for_testing(Some(|path| path.ends_with("rejected.txt")));
         let mut config = Config::test_config()?;
         config.max_pool_size = 1;
         let db = TestDatabase::new(&config, metrics.provider()).await?;
@@ -1327,7 +1354,10 @@ mod tests {
         .await?;
         assert_eq!(
             logs,
-            vec![("target".into(), true), ("target_json".into(), false)]
+            vec![
+                ("target.txt".into(), true),
+                ("target_json.txt".into(), false)
+            ]
         );
         assert_eq!(build.logs(), logs.as_slice());
         assert_eq!(
@@ -1338,13 +1368,13 @@ mod tests {
                 .map(|log| (log.filename().to_owned(), log.successful()))
                 .collect::<Vec<_>>(),
             vec![
-                ("target".into(), Some(true)),
-                ("target_json".into(), Some(false))
+                ("target.txt".into(), Some(true)),
+                ("target_json.txt".into(), Some(false))
             ]
         );
         assert_eq!(
             build
-                .build_log("target")
+                .build_log("target.txt")
                 .fetch(&storage)
                 .await?
                 .materialize(ByteSize::MAX)
@@ -1435,14 +1465,14 @@ mod tests {
         let build_id = build.id();
         build
             .publish_build_log()
-            .target("target.txt")
+            .target("target")
             .log("failed")
             .successful(false)
             .save(&mut conn, &storage)
             .await?;
         build
             .publish_build_log()
-            .target("target.txt")
+            .target("target")
             .log("succeeded")
             .successful(true)
             .save(&mut conn, &storage)
