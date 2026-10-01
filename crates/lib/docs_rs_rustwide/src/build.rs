@@ -1,6 +1,8 @@
 use crate::{
     BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
-    StepFailure, StepReport, StepResult, TargetBuildResult, command::PrepareCommand,
+    StepFailure, StepReport, StepResult, TargetBuildResult,
+    cargo_messages::{CargoMessage, CargoMessages},
+    command::PrepareCommand,
     utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
@@ -63,13 +65,13 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
             value,
             duration: duration.into(),
             log: None,
-            cargo_messages: Vec::new(),
+            cargo_messages: None,
         }),
         Err(error) => Err(StepReport {
             value: error,
             duration: duration.into(),
             log: None,
-            cargo_messages: Vec::new(),
+            cargo_messages: None,
         }),
     }
 }
@@ -94,13 +96,13 @@ fn capture_rustwide_step<T>(
 
 fn capture_rustwide_step_with_cargo_messages<T>(
     max_log_size: ByteSize,
-    run: impl FnOnce(&mut Vec<serde_json::Value>) -> Result<T, BuildStepError>,
+    run: impl FnOnce(&mut CargoMessages) -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
     let mut cargo_messages = Vec::new();
     let mut result = capture_rustwide_step(max_log_size, || run(&mut cargo_messages));
     match &mut result {
-        Ok(report) => report.cargo_messages = cargo_messages,
-        Err(report) => report.cargo_messages = cargo_messages,
+        Ok(report) => report.cargo_messages = Some(cargo_messages),
+        Err(report) => report.cargo_messages = Some(cargo_messages),
     }
     result
 }
@@ -202,20 +204,17 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         line: &str,
         actions: &mut ProcessLinesActions,
-        cargo_messages: &mut Vec<serde_json::Value>,
+        cargo_messages: &mut CargoMessages,
     ) {
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+        let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
             return;
         };
-        let Some(reason) = message.get("reason").and_then(serde_json::Value::as_str) else {
+        let Some(reason) = message.reason() else {
             return;
         };
 
         if reason == "compiler-message" {
-            if let Some(rendered) = message
-                .pointer("/message/rendered")
-                .and_then(serde_json::Value::as_str)
-            {
+            if let Some(rendered) = message.rendered() {
                 actions.replace_with_lines(rendered.lines());
             } else {
                 actions.remove_line();

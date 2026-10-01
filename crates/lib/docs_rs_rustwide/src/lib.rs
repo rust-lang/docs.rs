@@ -9,6 +9,7 @@
 
 mod args;
 mod build;
+mod cargo_messages;
 mod command;
 pub mod logging;
 mod release;
