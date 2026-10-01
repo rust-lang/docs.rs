@@ -61,7 +61,12 @@ impl<'a> CommandArgs<'a> {
     }
 
     pub(super) fn finish(&self) -> Vec<String> {
-        let mut cargo_args = vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
+        let mut cargo_args = vec![
+            "rustdoc".into(),
+            "--lib".into(),
+            "-Zrustdoc-map".into(),
+            "--message-format=json".into(),
+        ];
 
         cargo_args.extend(self.feature_args());
         cargo_args.extend(self.rustc_config_args());
@@ -244,6 +249,7 @@ mod tests {
             vec!["--output-format".into(), "json".into()],
         );
         assert!(args.starts_with(&["rustdoc".into(), "--lib".into()]));
+        assert!(args.iter().any(|arg| arg == "--message-format=json"));
         assert!(args.iter().any(|arg| arg == "--offline"));
         assert!(args.iter().any(|arg| arg == "-j2"));
         assert_eq!(
@@ -482,11 +488,17 @@ cargo-args = ["--verbose"]
             .rustdoc_args([r#"label="a value with spaces""#])
             .finish();
         assert_eq!(
-            &args[..4],
-            ["rustdoc", "--lib", "-Zrustdoc-map", "--config"]
+            &args[..5],
+            [
+                "rustdoc",
+                "--lib",
+                "-Zrustdoc-map",
+                "--message-format=json",
+                "--config",
+            ]
         );
         assert_eq!(
-            &args[5..],
+            &args[6..],
             [
                 "--offline",
                 "-Zunstable-options",

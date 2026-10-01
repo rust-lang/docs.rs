@@ -14,7 +14,7 @@ use docs_rs_types::{
 use docsrs_metadata::{BuildTargets, HOST_TARGET, Metadata};
 use rustwide::{
     Build,
-    cmd::Command,
+    cmd::{Command, ProcessLinesActions},
     logging::{self, LogStorage},
 };
 use std::{
@@ -139,6 +139,7 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
+    cargo_messages: RefCell<Vec<serde_json::Value>>,
 }
 
 #[bon]
@@ -167,6 +168,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             limits,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
+            cargo_messages: RefCell::new(Vec::new()),
         })
     }
 
@@ -181,6 +183,31 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             command = command.env(key, value);
         }
         command
+    }
+
+    fn process_cargo_message(&self, line: &str, actions: &mut ProcessLinesActions) {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+            return;
+        };
+        let Some(reason) = message.get("reason").and_then(serde_json::Value::as_str) else {
+            return;
+        };
+
+        if reason == "compiler-message" {
+            if let Some(rendered) = message
+                .pointer("/message/rendered")
+                .and_then(serde_json::Value::as_str)
+            {
+                actions.replace_with_lines(rendered.lines());
+            } else {
+                actions.remove_line();
+            }
+            self.cargo_messages.borrow_mut().push(message);
+        } else {
+            // Cargo protocol records are not user output. Removing them keeps the captured build
+            // log readable and leaves non-JSON process output untouched.
+            actions.remove_line();
+        }
     }
 
     /// Prepare the Cargo command used by docs.rs for one documentation target.
@@ -336,6 +363,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             cargo_metadata: self.cargo_metadata.borrow().clone(),
             default_target: default_target_build,
             other_targets: target_results,
+            cargo_messages: self.cargo_messages.take(),
         }
     }
 
@@ -426,10 +454,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_rustwide_step(|| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                self.process_cargo_message(line, actions)
+            };
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
@@ -458,10 +490,14 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         self.capture_rustwide_step(|| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                self.process_cargo_message(line, actions)
+            };
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .run()
                 .map_err(BuildStepError::Command)?;
 
@@ -545,6 +581,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         collect_compiler_metrics: bool,
     ) -> StepResult<HtmlOutput> {
         self.capture_rustwide_step(|| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                self.process_cargo_message(line, actions)
+            };
             let mut command = self
                 .command(target)
                 .rustdoc_arg(format!("--emit={emit}"))
@@ -565,6 +604,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             command
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .run()
                 .map_err(BuildStepError::Command)?;
 
