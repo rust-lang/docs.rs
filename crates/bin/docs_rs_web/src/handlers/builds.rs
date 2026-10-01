@@ -177,7 +177,7 @@ pub(super) async fn get_builds(
 
 #[cfg(test)]
 mod tests {
-    use super::get_builds;
+    
     use crate::{
         Config,
         cache::CachePolicy,
@@ -191,7 +191,7 @@ mod tests {
     use docs_rs_build_limits::Overrides;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus, ByteSize, Duration, SimpleBuildError,
+        ByteSize, Duration, SimpleBuildError,
         testing::{FOO, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;

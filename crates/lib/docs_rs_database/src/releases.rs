@@ -484,7 +484,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Config, build::AnyBuild, testing::TestDatabase};
+    use crate::{Config, testing::TestDatabase};
     use docs_rs_cargo_metadata::CargoMetadata;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
