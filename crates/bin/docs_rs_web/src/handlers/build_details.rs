@@ -85,7 +85,10 @@ pub(crate) async fn build_details_handler(
 
     let (output, logs, current_filename) = if build.has_legacy_output() {
         // legacy case, for old builds the build log was stored in the database.
-        let output = build.fetch_legacy_output(&mut conn).await?;
+        let output = build
+            .fetch_legacy_output(&mut conn)
+            .await?
+            .expect("we checked that it exists");
         (output, Vec::new(), None)
     } else {
         // NOTE: we want to give back the db connection to the pool

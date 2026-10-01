@@ -5,7 +5,7 @@
 use crate::releases::update_build_status;
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
-use docs_rs_storage::{AsyncStorage, PathNotFoundError, StreamingBlob};
+use docs_rs_storage::{AsyncStorage, StreamingBlob};
 use docs_rs_types::{
     BuildError, BuildId, BuildStatus, ByteSize, Duration, KrateName, ReleaseId, Version,
 };
@@ -284,7 +284,10 @@ impl AnyBuild {
         pub fn build_log(&self, filename: &str) -> BuildLog;
     }
 
-    pub async fn fetch_legacy_output(&self, conn: &mut sqlx::PgConnection) -> Result<String> {
+    pub async fn fetch_legacy_output(
+        &self,
+        conn: &mut sqlx::PgConnection,
+    ) -> Result<Option<String>> {
         match self {
             Self::InProgress(build) => build.fetch_legacy_output(conn).await,
             Self::Finished(build) => build.fetch_legacy_output(conn).await,
@@ -489,13 +492,17 @@ impl<State> Build<State> {
     }
 
     /// Fetch legacy database output lazily. Missing output is a not-found error.
-    pub async fn fetch_legacy_output(&self, conn: &mut sqlx::PgConnection) -> Result<String> {
-        sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
-            .bind(self.id.0)
-            .fetch_optional(&mut *conn)
-            .await?
-            .flatten()
-            .ok_or_else(|| PathNotFoundError.into())
+    pub async fn fetch_legacy_output(
+        &self,
+        conn: &mut sqlx::PgConnection,
+    ) -> Result<Option<String>> {
+        Ok(
+            sqlx::query_scalar::<_, Option<String>>("SELECT output FROM builds WHERE id = $1")
+                .bind(self.id.0)
+                .fetch_optional(&mut *conn)
+                .await?
+                .flatten(),
+        )
     }
 
     /// List registered logs, falling back to storage for older attempts without
@@ -1225,24 +1232,24 @@ mod tests {
             .await?;
         let legacy = AnyBuild::open(&mut conn, build.id()).await?;
         assert!(legacy.list_build_logs(&storage).await?.is_empty());
-        assert_eq!(legacy.fetch_legacy_output(&mut conn).await?, "legacy log");
+        assert_eq!(
+            legacy.fetch_legacy_output(&mut conn).await?.unwrap(),
+            "legacy log"
+        );
         // Content is read at fetch time, not carried by the build snapshot.
         sqlx::query("UPDATE builds SET output = 'updated log' WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        assert_eq!(legacy.fetch_legacy_output(&mut conn).await?, "updated log");
+        assert_eq!(
+            legacy.fetch_legacy_output(&mut conn).await?.unwrap(),
+            "updated log"
+        );
         sqlx::query("UPDATE builds SET output = NULL WHERE id = $1")
             .bind(build.id().0)
             .execute(&mut *conn)
             .await?;
-        assert!(
-            legacy
-                .fetch_legacy_output(&mut conn)
-                .await
-                .unwrap_err()
-                .is::<PathNotFoundError>()
-        );
+        assert!(legacy.fetch_legacy_output(&mut conn).await?.is_none());
         Ok(())
     }
 
@@ -1303,7 +1310,7 @@ mod tests {
         assert!(builds[1].has_legacy_output());
         assert!(builds[1].list_build_logs(&storage).await?.is_empty());
         assert_eq!(
-            builds[1].fetch_legacy_output(&mut conn).await?,
+            builds[1].fetch_legacy_output(&mut conn).await?.unwrap(),
             "legacy log"
         );
         assert!(matches!(&builds[0], AnyBuild::InProgress(_)));
