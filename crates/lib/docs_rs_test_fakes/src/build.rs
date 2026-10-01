@@ -200,7 +200,7 @@ impl FakeBuild {
             } else {
                 build
                     .publish_build_log()
-                    .target(format!("{default_target}.txt"))
+                    .target(default_target)
                     .log(s3_build_log.as_str())
                     .successful(*successful)
                     .save(conn, storage)
@@ -219,7 +219,7 @@ impl FakeBuild {
             } else {
                 build
                     .publish_build_log()
-                    .target(format!("{target}.txt"))
+                    .target(target)
                     .log(log.as_str())
                     .successful(*successful)
                     .save(conn, storage)
