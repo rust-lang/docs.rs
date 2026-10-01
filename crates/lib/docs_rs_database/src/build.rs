@@ -168,15 +168,26 @@ struct BuildRow {
 
 // All reads fetch log existence, never the potentially large legacy contents.
 const READ_BUILDS: &str = r#"
-    SELECT b.id, b.build_status, b.build_started, b.build_finished,
-           b.rustc_version, b.docsrs_version, b.memory_peak, b.documentation_size,
-           b.errors, b.error_kind, b.output IS NOT NULL AS has_legacy_output,
-           r.default_target,
-           (SELECT array_agg(row(l.log_filename, l.success) ORDER BY l.log_filename)
-            FROM builds_logs l WHERE l.build_id = b.id) AS logs
+    SELECT
+        b.id,
+        b.build_status,
+        b.build_started,
+        b.build_finished,
+        b.rustc_version,
+        b.docsrs_version,
+        b.memory_peak,
+        b.documentation_size,
+        b.errors,
+        b.error_kind,
+        b.output IS NOT NULL AS has_legacy_output,
+        r.default_target,
+        (
+            SELECT array_agg(row(l.log_filename, l.success) ORDER BY l.log_filename)
+            FROM builds_logs l WHERE l.build_id = b.id
+        ) AS logs
     FROM builds b
-    JOIN releases r ON r.id = b.rid
-    JOIN crates c ON c.id = r.crate_id
+    INNER JOIN releases r ON r.id = b.rid
+    INNER JOIN JOIN crates c ON c.id = r.crate_id
     WHERE ($1::text IS NULL OR c.name = $1)
       AND ($2::text IS NULL OR r.version = $2)
       AND ($3::integer IS NULL OR b.id = $3)
