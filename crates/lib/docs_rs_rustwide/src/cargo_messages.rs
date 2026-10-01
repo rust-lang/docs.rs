@@ -1,4 +1,3 @@
-use anyhow::Result;
 use rustwide::cmd::ProcessLinesActions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,6 +7,12 @@ use serde_json::Value;
 pub struct RawCargoMessage(serde_json::Value);
 
 impl RawCargoMessage {
+    fn is_build_started(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-started")
+            && self.0.get("run_id").is_some()
+    }
+
     fn is_build_finished(&self) -> bool {
         self.reason()
             .is_some_and(|reason| reason == "build-finished")
@@ -77,6 +82,7 @@ impl CargoMessageCollector {
         if message.is_compiler_artifact()
             || message.is_build_finished()
             || message.is_build_script_executed()
+            || message.is_build_started()
         {
             // useless noise, we just drop these from the log stream & storage.
             // We're reasonably sure these don't come from build-scripts etc.
@@ -90,7 +96,8 @@ impl CargoMessageCollector {
                 actions.replace_with_lines(rendered.lines());
             } else {
                 // compiler-messages without rendering shouldn't happen?
-                // just to be safe, we don't drop it and leave it in the logs.
+                // just to be safe, we don't drop it and leave it in the logs, but still
+                // add it to our cargo messages.
             }
             self.push(line, message);
         }
