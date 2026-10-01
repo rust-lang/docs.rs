@@ -4,10 +4,6 @@
 # * `db` -> postgres db
 # * `s3` -> rustfs
 #
-# Override host ports with DOCSRS_POSTGRES_PORT, DOCSRS_S3_PORT, and
-# DOCSRS_S3_CONSOLE_PORT. Use a distinct COMPOSE_PROJECT_NAME per workspace
-# to keep containers, networks, and volumes separate.
-#
 # optional profile: `web`:
 # * `web` -> webserver
 #
@@ -251,7 +247,7 @@ services:
         ports:
             # Use a non-standard port on the host to avoid conflicting
             # with existing postgres servers
-            - "127.0.0.1:${DOCSRS_POSTGRES_PORT:-15432}:5432"
+            - "127.0.0.1:15432:5432"
         healthcheck:
             <<: *healthcheck-interval
             test: pg_isready --username cratesfyi
@@ -260,8 +256,8 @@ services:
         image: rustfs/rustfs:latest
         command: /data
         ports:
-            - "127.0.0.1:${DOCSRS_S3_PORT:-9000}:9000"
-            - "127.0.0.1:${DOCSRS_S3_CONSOLE_PORT:-9001}:9001"
+            - "127.0.0.1:9000:9000"
+            - "127.0.0.1:9001:9001"
         volumes:
             - rustfs-data:/data
         environment:
@@ -292,7 +288,7 @@ services:
         command:
             - -c
             - >-
-                aws --endpoint-url http://s3:9000 s3api head-bucket --bucket "$$DOCSRS_S3_BUCKET" >/dev/null 2>&1
+                aws --endpoint-url http://s3:9000 s3api head-bucket --bucket "$$DOCSRS_S3_BUCKET"
                 || aws --endpoint-url http://s3:9000 s3api create-bucket --bucket "$$DOCSRS_S3_BUCKET"
         profiles:
             - manual
