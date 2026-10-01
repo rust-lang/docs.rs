@@ -825,6 +825,25 @@ mod backend_tests {
         Ok(())
     }
 
+    async fn test_store_file(storage: &AsyncStorage) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let source_path = dir.path().join("diagnostics.jsonl");
+        let content = b"{\"reason\":\"compiler-message\"}\n";
+        fs::write(&source_path, content).await?;
+
+        let compression = storage
+            .store_file("build-logs/1/target.jsonl", &source_path)
+            .await?;
+
+        assert_eq!(compression, CompressionAlgorithm::default());
+        let stored = storage
+            .get("build-logs/1/target.jsonl", ByteSize::MAX)
+            .await?;
+        assert_eq!(stored.content, content);
+
+        Ok(())
+    }
+
     async fn test_exists_without_remote_archive(storage: &AsyncStorage) -> Result<()> {
         // when remote and local index don't exist, any `exists_in_archive`  should
         // return `false`
@@ -1160,6 +1179,7 @@ mod backend_tests {
             test_get_object,
             test_get_range,
             test_get_too_big,
+            test_store_file,
             test_too_long_filename,
             test_list_prefix,
             test_delete_prefix,

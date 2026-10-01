@@ -1,9 +1,8 @@
+use crate::cargo_messages::{CargoMessage, CargoMessages};
 use anyhow::Result;
 use docs_rs_types::{BuildError, Duration};
 use rustwide::cmd::CommandError;
 use std::fmt;
-
-use crate::cargo_messages::{CargoMessage, CargoMessages};
 
 /// Failure of an individual build step.
 #[derive(Debug, thiserror::Error)]
