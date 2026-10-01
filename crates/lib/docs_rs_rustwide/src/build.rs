@@ -447,6 +447,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
                 .process_lines(&mut process_lines)
@@ -483,6 +484,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
                 .process_lines(&mut process_lines)
@@ -591,6 +593,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             }
 
             command
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
                 .process_lines(&mut process_lines)

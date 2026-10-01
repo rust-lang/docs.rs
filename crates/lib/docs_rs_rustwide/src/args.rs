@@ -16,6 +16,7 @@ pub(super) struct CommandArgs<'a> {
     // Explicit caller arguments, preserved in insertion order.
     cargo_args: Vec<String>,
     rustdoc_args: Vec<String>,
+    message_format_json: bool,
 }
 
 impl<'a> CommandArgs<'a> {
@@ -30,6 +31,7 @@ impl<'a> CommandArgs<'a> {
             jobs,
             cargo_args: Vec::new(),
             rustdoc_args: Vec::new(),
+            message_format_json: false,
         }
     }
 
@@ -60,13 +62,16 @@ impl<'a> CommandArgs<'a> {
         self
     }
 
+    pub(super) fn message_format_json(mut self) -> Self {
+        self.message_format_json = true;
+        self
+    }
+
     pub(super) fn finish(&self) -> Vec<String> {
-        let mut cargo_args = vec![
-            "rustdoc".into(),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--message-format=json".into(),
-        ];
+        let mut cargo_args = vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
+        if self.message_format_json {
+            cargo_args.push("--message-format=json".into());
+        }
 
         cargo_args.extend(self.feature_args());
         cargo_args.extend(self.rustc_config_args());

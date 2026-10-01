@@ -50,6 +50,11 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
         self
     }
 
+    pub fn message_format_json(mut self) -> Self {
+        self.args = self.args.message_format_json();
+        self
+    }
+
     #[instrument(skip_all)]
     pub fn prepare<'pl>(self) -> Result<Command<'ws, 'pl>> {
         let target = self.args.target();
