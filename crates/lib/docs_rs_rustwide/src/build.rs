@@ -943,7 +943,7 @@ mod policy_tests {
             .run(|build| {
                 fs::write(
                     build.build.host_source_dir().join("src/lib.rs"),
-                    "pub fn broken() { missing_identifier; }\n",
+                    "pub fn broken(_: MissingType) {}\n",
                 )?;
                 Ok(build.build_documentation(HOST_TARGET))
             })?
@@ -959,13 +959,13 @@ mod policy_tests {
             message.reason() == Some("compiler-message")
                 && message
                     .rendered()
-                    .is_some_and(|rendered| rendered.contains("missing_identifier"))
+                    .is_some_and(|rendered| rendered.contains("MissingType"))
         }));
 
         let log = failure
             .log()
             .expect("the failed command must retain its log");
-        assert!(log.contains("missing_identifier"));
+        assert!(log.contains("MissingType"));
         assert!(!log.contains(r#"{\"reason\":\"compiler-message\""#));
         Ok(())
     }
