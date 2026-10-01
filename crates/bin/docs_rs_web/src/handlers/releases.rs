@@ -871,7 +871,7 @@ mod tests {
     use docs_rs_registry_api::{CrateOwner, OwnerKind, SearchQuery, testing::TestRegistry};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus, SimpleBuildError,
+        SimpleBuildError,
         testing::{BAR, BAZ, FOO, V0_1, V1, V2, V3},
     };
     use kuchikiki::traits::TendrilSink;
