@@ -7,6 +7,32 @@ use serde_json::Value;
 pub struct RawCargoMessage(serde_json::Value);
 
 impl RawCargoMessage {
+    fn is_build_started(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-started")
+            && self.0.get("run_id").is_some()
+    }
+
+    fn is_build_finished(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-finished")
+            && self.0.get("success").is_some()
+    }
+
+    fn is_build_script_executed(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-script-executed")
+            && self.0.get("package_id").is_some()
+            && self.0.get("linked_libs").is_some()
+    }
+
+    fn is_compiler_artifact(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "compiler-artifact")
+            && self.0.get("package_id").is_some()
+            && self.0.get("manifest_path").is_some()
+    }
+
     fn is_compiler_message(&self) -> bool {
         self.reason()
             .is_some_and(|reason| reason == "compiler-message")
@@ -53,6 +79,14 @@ impl CargoMessageCollector {
             return;
         };
 
+        if message.is_compiler_artifact()
+            || message.is_build_finished()
+            || message.is_build_script_executed()
+            || message.is_build_started()
+        {
+            actions.remove_line();
+        }
+
         if message.is_compiler_message() {
             if let Some(rendered) = message.rendered() {
                 // if we have the rendered version in the json, replace the json log line
@@ -66,9 +100,7 @@ impl CargoMessageCollector {
             self.push(message);
         }
 
-        // Keep every other JSON line. `process_lines` does not expose whether a
-        // line came from Cargo's stdout or a build script's stderr, so a build
-        // script could produce something resembling another Cargo record.
+        // Other JSON lines are kept, as we don't know what they are.
     }
 
     fn push(&mut self, message: RawCargoMessage) {

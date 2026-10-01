@@ -962,7 +962,7 @@ mod policy_tests {
                 fs::write(
                     source.join("build.rs"),
                     r##"fn main() {
-    eprintln!("{}", r#"{"reason":"compiler-artifact","package_id":"build-script","manifest_path":"build-script"}"#);
+    eprintln!("{}", r#"{"source":"build-script"}"#);
     panic!("intentional build-script failure");
 }
 "##,
@@ -984,9 +984,7 @@ mod policy_tests {
         let log = failure
             .log()
             .expect("the failed command must retain its log");
-        assert!(log.contains(
-            r#"{"reason":"compiler-artifact","package_id":"build-script","manifest_path":"build-script"}"#
-        ));
+        assert!(log.contains(r#"{"source":"build-script"}"#));
         Ok(())
     }
 
