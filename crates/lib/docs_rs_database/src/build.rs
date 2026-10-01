@@ -118,6 +118,8 @@ pub struct Finished {
 
 #[derive(Debug)]
 pub struct EarlyFailure {
+    /// Historical early failures may lack a completion timestamp.
+    pub finished_at: Option<DateTime<Utc>>,
     pub errors: Option<String>,
     pub error_kind: Option<String>,
 }
@@ -157,6 +159,7 @@ pub struct Build<State> {
 
 #[derive(sqlx::FromRow)]
 struct BuildRow {
+    early_failure: bool,
     id: BuildId,
     build_status: BuildStatus,
     build_started: Option<DateTime<Utc>>,
@@ -179,6 +182,7 @@ const READ_BUILDS: &str = r#"
         b.build_status,
         b.build_started,
         b.build_finished,
+        b.early_failure,
         b.rustc_version,
         b.docsrs_version,
         b.memory_peak,
@@ -203,8 +207,8 @@ const READ_BUILDS: &str = r#"
 impl BuildRow {
     fn into_build(self) -> Result<AnyBuild> {
         let logs = self.logs.unwrap_or_default();
-        Ok(match (self.build_status, self.build_finished) {
-            (BuildStatus::InProgress, None) => AnyBuild::InProgress(Build {
+        Ok(match (self.build_status, self.early_failure) {
+            (BuildStatus::InProgress, false) if self.build_finished.is_none() => AnyBuild::InProgress(Build {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
@@ -212,18 +216,19 @@ impl BuildRow {
                 default_target: self.default_target,
                 state: InProgress,
             }),
-            (BuildStatus::Failure, None) => AnyBuild::EarlyFailure(Build {
+            (BuildStatus::Failure, true) => AnyBuild::EarlyFailure(Build {
                 id: self.id,
                 started_at: self.build_started,
                 logs,
                 has_legacy_output: self.has_legacy_output,
                 default_target: self.default_target,
                 state: EarlyFailure {
+                    finished_at: self.build_finished,
                     errors: self.errors,
                     error_kind: self.error_kind,
                 },
             }),
-            (status, finished_at) if status != BuildStatus::InProgress => {
+            (status, false) if status != BuildStatus::InProgress => {
                 AnyBuild::Finished(Build {
                     id: self.id,
                     started_at: self.build_started,
@@ -234,7 +239,7 @@ impl BuildRow {
                         status,
                         errors: self.errors,
                         error_kind: self.error_kind,
-                        finished_at,
+                        finished_at: self.build_finished,
                         rustc_version: self.rustc_version,
                         docsrs_version: self.docsrs_version,
                         memory_peak: self.memory_peak,
@@ -453,7 +458,7 @@ impl AnyBuild {
         let end = match self {
             Self::InProgress(_) => now,
             Self::Finished(build) => build.state.finished_at?,
-            Self::EarlyFailure(_) => return None,
+            Self::EarlyFailure(build) => build.state.finished_at?,
         };
         (end - self.started_at()?).to_std().ok().map(Into::into)
     }
@@ -746,19 +751,21 @@ impl Build<InProgress> {
         self.lock_in_progress(&mut transaction).await?;
         let conn = &mut *transaction;
         debug!("updating build with error");
-        let release_id = sqlx::query_scalar!(
+        let release_id = sqlx::query_scalar::<_, ReleaseId>(
             r#"UPDATE builds
          SET
              build_status = $1,
              errors = $2,
-             error_kind = $3
+             error_kind = $3,
+             early_failure = true,
+             build_finished = NOW()
          WHERE id = $4
-         RETURNING rid as "rid: ReleaseId" "#,
-            BuildStatus::Failure as BuildStatus,
-            error.as_ref().map(|err| err.to_string()),
-            error.as_ref().map(|err| err.kind()),
-            self.id.0,
+         RETURNING rid"#,
         )
+        .bind(BuildStatus::Failure)
+        .bind(error.as_ref().map(|err| err.to_string()))
+        .bind(error.as_ref().map(|err| err.kind()))
+        .bind(self.id.0)
         .fetch_one(&mut *conn)
         .await?;
 
@@ -888,6 +895,7 @@ mod tests {
         build.started_at = None;
         assert_eq!(AnyBuild::Finished(build).duration_at(now), None);
         let early = AnyBuild::EarlyFailure(snapshot(EarlyFailure {
+            finished_at: None,
             errors: None,
             error_kind: None,
         }));
@@ -965,6 +973,7 @@ mod tests {
                 BuildStatus::InProgress
             );
             let mut build = snapshot(EarlyFailure {
+                finished_at: None,
                 errors: None,
                 error_kind: None,
             });
