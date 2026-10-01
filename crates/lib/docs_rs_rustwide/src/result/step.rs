@@ -50,12 +50,13 @@ impl BuildStepError {
     }
 }
 
-/// A step's value or error together with its elapsed duration and captured log.
+/// A step's value or error together with its elapsed duration, captured log, and Cargo messages.
 #[derive(Debug)]
 pub struct StepReport<T> {
     pub(crate) value: T,
     pub(crate) duration: Duration,
     pub(crate) log: Option<String>,
+    pub(crate) cargo_messages: Vec<serde_json::Value>,
 }
 
 impl<T> StepReport<T> {
@@ -64,6 +65,7 @@ impl<T> StepReport<T> {
             value,
             duration,
             log,
+            cargo_messages: Vec::new(),
         }
     }
 
@@ -75,6 +77,11 @@ impl<T> StepReport<T> {
     /// Return the captured log, or `None` if it is absent or contains only whitespace.
     pub fn log(&self) -> Option<&str> {
         self.log.as_deref().filter(|log| !log.trim().is_empty())
+    }
+
+    /// Raw Cargo `compiler-message` records emitted while producing this log.
+    pub fn cargo_messages(&self) -> &[serde_json::Value] {
+        &self.cargo_messages
     }
 
     pub fn value(&self) -> &T {
@@ -110,6 +117,8 @@ pub trait StepResultExt<T> {
     fn duration(&self) -> Duration;
     /// Return the captured log, or `None` if it is absent or contains only whitespace.
     fn log(&self) -> Option<&str>;
+    /// Return the raw Cargo `compiler-message` records emitted while producing this step's log.
+    fn cargo_messages(&self) -> &[serde_json::Value];
     /// Consume the result, discarding duration and logs from either variant.
     fn into_inner(self) -> Result<T, BuildStepError>;
     /// Borrow the underlying value or error without consuming the report or its diagnostics.
@@ -128,6 +137,13 @@ impl<T> StepResultExt<T> for StepResult<T> {
         match self {
             Ok(report) => report.log(),
             Err(report) => report.log(),
+        }
+    }
+
+    fn cargo_messages(&self) -> &[serde_json::Value] {
+        match self {
+            Ok(report) => report.cargo_messages(),
+            Err(report) => report.cargo_messages(),
         }
     }
 

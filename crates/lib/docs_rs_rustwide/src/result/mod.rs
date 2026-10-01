@@ -213,11 +213,6 @@ pub struct ReleaseBuildResult {
     pub(crate) cargo_metadata: CargoMetadata,
     pub(crate) default_target: TargetBuildResult,
     pub(crate) other_targets: Vec<TargetBuildResult>,
-    /// Raw Cargo `compiler-message` records emitted while building this release.
-    ///
-    /// Cargo protocol records are rendered into each step's log; consumers can use these
-    /// messages to persist or otherwise process structured diagnostics.
-    pub(crate) cargo_messages: Vec<serde_json::Value>,
 }
 
 impl ReleaseBuildResult {
@@ -265,11 +260,6 @@ impl ReleaseBuildResult {
     pub fn targets(&self) -> impl Iterator<Item = &TargetBuildResult> {
         iter::once(&self.default_target).chain(self.other_targets.iter())
     }
-
-    /// Raw Cargo `compiler-message` records emitted while building this release.
-    pub fn cargo_messages(&self) -> &[serde_json::Value] {
-        &self.cargo_messages
-    }
 }
 
 #[cfg(test)]
@@ -301,16 +291,19 @@ mod tests {
                 value: html_output,
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: Vec::new(),
             }),
             rustdoc_json: Ok(StepReport {
                 value: RustdocJsonOutput::new(dummy_json_filename.to_path_buf()),
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: Vec::new(),
             }),
             coverage: Ok(StepReport {
                 value: None,
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: Vec::new(),
             }),
             regenerate_lockfile: None,
         }

@@ -63,11 +63,13 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
             value,
             duration: duration.into(),
             log: None,
+            cargo_messages: Vec::new(),
         }),
         Err(error) => Err(StepReport {
             value: error,
             duration: duration.into(),
             log: None,
+            cargo_messages: Vec::new(),
         }),
     }
 }
@@ -87,6 +89,20 @@ fn capture_rustwide_step<T>(
         Err(ref mut r) => r.log = log,
     }
 
+    result
+}
+
+fn capture_rustwide_step_with_cargo_messages<T>(
+    max_log_size: ByteSize,
+    cargo_messages: &RefCell<Vec<serde_json::Value>>,
+    run: impl FnOnce() -> Result<T, BuildStepError>,
+) -> StepResult<T> {
+    let mut result = capture_rustwide_step(max_log_size, run);
+    let cargo_messages = cargo_messages.take();
+    match &mut result {
+        Ok(report) => report.cargo_messages = cargo_messages,
+        Err(report) => report.cargo_messages = cargo_messages,
+    }
     result
 }
 
@@ -363,7 +379,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             cargo_metadata: self.cargo_metadata.borrow().clone(),
             default_target: default_target_build,
             other_targets: target_results,
-            cargo_messages: self.cargo_messages.take(),
         }
     }
 
@@ -559,6 +574,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             return Err(StepFailure {
                 duration: result.duration,
                 log: result.log,
+                cargo_messages: result.cargo_messages,
                 value: BuildStepError::Output(anyhow!(
                     "essential-files build did not produce {}",
                     static_files.display()
@@ -642,7 +658,11 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         run: impl FnOnce() -> Result<T, BuildStepError>,
     ) -> StepResult<T> {
-        capture_rustwide_step(self.limits.max_log_size(), run)
+        capture_rustwide_step_with_cargo_messages(
+            self.limits.max_log_size(),
+            &self.cargo_messages,
+            run,
+        )
     }
 
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
