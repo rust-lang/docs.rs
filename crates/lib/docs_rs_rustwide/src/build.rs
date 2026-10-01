@@ -1,9 +1,7 @@
 use crate::{
     BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
-    StepFailure, StepReport, StepResult, TargetBuildResult,
-    cargo_messages::{CargoMessage, CargoMessageCollector, CargoMessages},
-    command::PrepareCommand,
-    utils::copy_dir_all,
+    StepFailure, StepReport, StepResult, TargetBuildResult, cargo_messages::CargoMessageCollector,
+    command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -857,18 +855,6 @@ mod tests {
                 .unwrap()
                 .contains("installing additional target")
         );
-    }
-
-    #[test]
-    fn cargo_message_collection_respects_the_log_size_limit() {
-        let line = r#"{"reason":"compiler-message"}"#;
-        let message = serde_json::from_str(line).unwrap();
-        let mut collector = CargoMessageCollector::new(line.len() + 1);
-
-        collector.push(line, message);
-        collector.push(line, serde_json::from_str(line).unwrap());
-
-        assert_eq!(collector.into_messages().len(), 1);
     }
 
     #[test]

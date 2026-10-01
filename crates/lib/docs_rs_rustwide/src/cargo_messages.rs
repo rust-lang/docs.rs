@@ -71,3 +71,20 @@ impl CargoMessageCollector {
         self.messages
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collection_respects_the_log_size_limit() {
+        let line = r#"{"reason":"compiler-message"}"#;
+        let message = serde_json::from_str(line).unwrap();
+        let mut collector = CargoMessageCollector::new(line.len() + 1);
+
+        collector.push(line, message);
+        collector.push(line, serde_json::from_str(line).unwrap());
+
+        assert_eq!(collector.into_messages().len(), 1);
+    }
+}

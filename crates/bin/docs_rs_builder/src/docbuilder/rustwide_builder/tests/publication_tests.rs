@@ -263,12 +263,33 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
     assert!(row.errors.is_some());
     let entries = fetch_build_logs(&env, row.id)?;
     assert!(!entries.is_empty());
+    let mut found_jsonl = false;
     for (filename, success) in entries {
         assert!(!success);
         let blob = runtime
             .block_on(storage.get(&format!("build-logs/{}/{filename}", row.id), ByteSize::MAX))?;
-        assert!(String::from_utf8(blob.content)?.contains("intentional compile failure"));
+        if filename.ends_with(".jsonl") {
+            found_jsonl = true;
+            let messages: Vec<serde_json::Value> = blob
+                .content
+                .split(|byte| *byte == b'\n')
+                .filter(|line| !line.is_empty())
+                .map(serde_json::from_slice)
+                .collect::<Result<_, _>>()?;
+            assert!(messages.iter().any(|message| {
+                message["reason"] == "compiler-message"
+                    && message["message"]["rendered"]
+                        .as_str()
+                        .is_some_and(|rendered| rendered.contains("intentional compile failure"))
+            }));
+        } else {
+            assert!(String::from_utf8(blob.content)?.contains("intentional compile failure"));
+        }
     }
+    assert!(
+        found_jsonl,
+        "the failed build must publish a Cargo JSONL log"
+    );
     Ok(())
 }
 
