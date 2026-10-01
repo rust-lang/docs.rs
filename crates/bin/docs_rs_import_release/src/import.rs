@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_database::{
-    build::{AnyBuild, Build, InProgress},
+    build::{AnyBuild, Build, InProgress, NewBuildLog},
     releases::{finish_release, initialize_crate, initialize_release},
 };
 use docs_rs_registry_api::RegistryApi;
@@ -57,7 +57,7 @@ pub(crate) async fn import_test_release(
 
     let crate_id = initialize_crate(&mut *conn, name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build = AnyBuild::start(conn, release_id).await?;
+    let mut build = AnyBuild::start(conn, release_id).await?;
 
     let result = import_test_release_inner(
         &mut *conn,
@@ -68,7 +68,7 @@ pub(crate) async fn import_test_release(
         &version,
         crate_id,
         release_id,
-        &build,
+        &mut build,
     )
     .await;
 
@@ -106,9 +106,8 @@ async fn import_test_release_inner(
     version: &Version,
     crate_id: CrateId,
     release_id: ReleaseId,
-    build: &Build<InProgress>,
+    build: &mut Build<InProgress>,
 ) -> Result<ByteSize> {
-    let build_id = build.id();
     info!("download & inspect source from crates.io...");
     let source_dir = registry_api
         .download_and_extract_source(name, version)
@@ -174,14 +173,19 @@ async fn import_test_release_inner(
     };
 
     info!("uploading fake build logs");
-    for build_target in &all_targets {
-        storage
-            .store_one(
-                format!("build-logs/{build_id}/{build_target}.txt"),
-                format!("fake build output\nbuild target: {}", build_target),
-            )
-            .await?;
-    }
+    build
+        .publish_build_logs(
+            &mut *conn,
+            storage,
+            all_targets.iter().map(|target| {
+                NewBuildLog::builder()
+                    .target(target)
+                    .log(format!("fake build output\nbuild target: {}", target))
+                    .successful(true)
+                    .build()
+            }),
+        )
+        .await?;
 
     info!("finding used rustdoc static files in HTML...");
     {
@@ -235,7 +239,7 @@ async fn import_test_release_inner(
         }
     }
 
-    info!("finish release & build");
+    info!("finish release");
     finish_release(
         &mut *conn,
         crate_id,

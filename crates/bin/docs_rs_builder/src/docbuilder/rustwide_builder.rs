@@ -1071,7 +1071,7 @@ mod tests {
                 .finish()
                 .rustc_version("some-version")
                 .docsrs_version("other-version")
-                .successful(BuildStatus::Success == BuildStatus::Success)
+                .successful(true)
                 .save(&mut *conn)
                 .await?;
             finish_release(
