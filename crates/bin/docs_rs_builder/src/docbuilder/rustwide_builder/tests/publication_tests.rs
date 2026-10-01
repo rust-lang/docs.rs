@@ -295,6 +295,80 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
 
 #[test]
 #[ignore]
+fn successful_build_with_a_warning_publishes_cargo_jsonl() -> Result<()> {
+    let env = environment()?;
+    let runtime = env.runtime();
+    let storage = env.storage()?;
+    let name = KrateName::from_static("warning-jsonl");
+    mock_package(
+        &env,
+        &name,
+        &V0_1,
+        Some("lib.rs"),
+        r#"
+#![warn(missing_docs)]
+
+pub struct MissingDocs;
+"#,
+    )?;
+
+    let summary = env.build_builder()?.build_package(&name, &V0_1)?;
+    assert!(summary.successful);
+    let row = fetch_build_result(&env, &name)?;
+    let entries = fetch_build_logs(&env, row.id)?;
+    let (filename, success) = entries
+        .iter()
+        .find(|(filename, _)| filename.ends_with(".jsonl"))
+        .expect("the warning must publish a Cargo JSONL log");
+    assert!(*success);
+
+    let blob = runtime
+        .block_on(storage.get(&format!("build-logs/{}/{filename}", row.id), ByteSize::MAX))?;
+    let messages: Vec<serde_json::Value> = blob
+        .content
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(serde_json::from_slice)
+        .collect::<Result<_, _>>()?;
+    assert!(messages.iter().any(|message| {
+        message["reason"] == "compiler-message"
+            && message["message"]["level"] == "warning"
+            && message["message"]["rendered"]
+                .as_str()
+                .is_some_and(|rendered| rendered.contains("missing documentation"))
+    }));
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn cargo_jsonl_upload_failure_requests_reattempt() -> Result<()> {
+    let env = environment()?;
+    let storage = env.storage()?;
+    let name = KrateName::from_static("jsonl-upload-failure");
+    mock_package(
+        &env,
+        &name,
+        &V0_1,
+        Some("lib.rs"),
+        "compile_error!(\"intentional compile failure\");",
+    )?;
+    storage.reject_uploads_for_testing(Some(|path| path.ends_with(".jsonl")));
+
+    let summary = env.build_builder()?.build_package(&name, &V0_1)?;
+    assert!(!summary.successful);
+    assert!(summary.should_reattempt);
+    let row = fetch_build_result(&env, &name)?;
+    assert_eq!(row.status, BuildStatus::Failure);
+    assert!(
+        row.errors
+            .is_some_and(|error| error.contains("injected upload failure"))
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
 fn registry_metadata_errors_are_nonfatal() -> Result<()> {
     let env = environment()?;
     let name = KrateName::from_static("missing-registry-metadata");

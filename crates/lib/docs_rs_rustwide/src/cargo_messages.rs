@@ -7,32 +7,6 @@ use serde_json::Value;
 pub struct RawCargoMessage(serde_json::Value);
 
 impl RawCargoMessage {
-    fn is_build_started(&self) -> bool {
-        self.reason()
-            .is_some_and(|reason| reason == "build-started")
-            && self.0.get("run_id").is_some()
-    }
-
-    fn is_build_finished(&self) -> bool {
-        self.reason()
-            .is_some_and(|reason| reason == "build-finished")
-            && self.0.get("success").is_some()
-    }
-
-    fn is_build_script_executed(&self) -> bool {
-        self.reason()
-            .is_some_and(|reason| reason == "build-script-executed")
-            && self.0.get("package_id").is_some()
-            && self.0.get("linked_libs").is_some()
-    }
-
-    fn is_compiler_artifact(&self) -> bool {
-        self.reason()
-            .is_some_and(|reason| reason == "compiler-artifact")
-            && self.0.get("package_id").is_some()
-            && self.0.get("manifest_path").is_some()
-    }
-
     fn is_compiler_message(&self) -> bool {
         self.reason()
             .is_some_and(|reason| reason == "compiler-message")
@@ -79,16 +53,6 @@ impl CargoMessageCollector {
             return;
         };
 
-        if message.is_compiler_artifact()
-            || message.is_build_finished()
-            || message.is_build_script_executed()
-            || message.is_build_started()
-        {
-            // useless noise, we just drop these from the log stream & storage.
-            // We're reasonably sure these don't come from build-scripts etc.
-            actions.remove_line();
-        }
-
         if message.is_compiler_message() {
             if let Some(rendered) = message.rendered() {
                 // if we have the rendered version in the json, replace the json log line
@@ -99,14 +63,21 @@ impl CargoMessageCollector {
                 // just to be safe, we don't drop it and leave it in the logs, but still
                 // add it to our cargo messages.
             }
-            self.push(line, message);
+            self.push(message);
         }
 
-        // other json lines are kept, we don't know what they are
+        // Keep every other JSON line. `process_lines` does not expose whether a
+        // line came from Cargo's stdout or a build script's stderr, so a build
+        // script could produce something resembling another Cargo record.
     }
 
-    fn push(&mut self, line: &str, message: RawCargoMessage) {
-        let record_bytes = line.len().saturating_add(1);
+    fn push(&mut self, message: RawCargoMessage) {
+        // JSONL serialization is compact, irrespective of whitespace in the
+        // line Cargo originally wrote. Account for the bytes we will upload.
+        let record_bytes = serde_json::to_vec(&message)
+            .expect("a serde_json::Value always serializes")
+            .len()
+            .saturating_add(1);
         if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
             self.messages.push(message);
             self.retained_bytes += record_bytes;
@@ -124,13 +95,23 @@ mod tests {
 
     #[test]
     fn collection_respects_the_log_size_limit() {
-        let line = r#"{"reason":"compiler-message"}"#;
+        let line = r#" { "reason": "compiler-message" } "#;
         let message = serde_json::from_str(line).unwrap();
-        let mut collector = CargoMessageCollector::new(line.len() + 1);
+        let serialized_bytes = serde_json::to_vec(&message).unwrap().len() + 1;
+        assert!(serialized_bytes < line.len() + 1);
+        let mut collector = CargoMessageCollector::new(serialized_bytes);
 
-        collector.push(line, message);
-        collector.push(line, serde_json::from_str(line).unwrap());
+        collector.push(message);
+        collector.push(serde_json::from_str(line).unwrap());
 
         assert_eq!(collector.into_messages().len(), 1);
+    }
+
+    #[test]
+    fn non_cargo_json_is_not_a_compiler_message() {
+        let message =
+            serde_json::from_str::<RawCargoMessage>(r#"{"source":"build-script"}"#).unwrap();
+
+        assert!(!message.is_compiler_message());
     }
 }
