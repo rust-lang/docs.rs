@@ -1,6 +1,5 @@
 mod build;
 mod errored_build;
-mod finished_build;
 mod github_stats;
 mod legacy;
 

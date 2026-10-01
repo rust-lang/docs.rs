@@ -38,12 +38,14 @@ where
     let version = version.try_into()?;
     let crate_id = initialize_crate(&mut *conn, &name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build_id = FakeBuild::early_error()
-        .error(build_error)
-        .create(&mut *conn, release_id)
+    let build = docs_rs_database::build::AnyBuild::start(&mut *conn, release_id)
+        .await?
+        .fail_early()
+        .error(&build_error)
+        .save(&mut *conn)
         .await?;
 
-    Ok((release_id, build_id))
+    Ok((release_id, build.id()))
 }
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
