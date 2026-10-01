@@ -128,8 +128,8 @@ mod tests {
         assert!(serialized_bytes < line.len() + 1);
         let mut collector = CargoMessageCollector::new(serialized_bytes);
 
-        collector.push(message);
-        collector.push(serde_json::from_str(line).unwrap());
+        collector.push(line, message);
+        collector.push(line, serde_json::from_str(line).unwrap());
 
         assert_eq!(collector.into_messages().len(), 1);
     }
