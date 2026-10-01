@@ -5,9 +5,37 @@ use serde_json::Value;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct CargoMessage(serde_json::Value);
+
 // TODO: nicer debug impl
 //
 impl CargoMessage {
+    fn is_build_finished(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-finished")
+            && self.0.get("success").is_some()
+    }
+
+    fn is_build_script_executed(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "build-script-executed")
+            && self.0.get("package_id").is_some()
+            && self.0.get("linked_libs").is_some()
+    }
+
+    fn is_compiler_artifact(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "compiler-artifact")
+            && self.0.get("package_id").is_some()
+            && self.0.get("manifest_path").is_some()
+    }
+
+    fn is_compiler_message(&self) -> bool {
+        self.reason()
+            .is_some_and(|reason| reason == "compiler-message")
+            && self.0.get("package_id").is_some()
+            && self.0.get("manifest_path").is_some()
+    }
+
     pub fn reason(&self) -> Option<&str> {
         self.0.get("reason").and_then(Value::as_str)
     }
@@ -38,25 +66,37 @@ impl CargoMessageCollector {
     }
 
     pub(crate) fn process_line(&mut self, line: &str, actions: &mut ProcessLinesActions) {
+        let line = line.trim();
+        if !(line.starts_with('{') && line.ends_with('}')) {
+            return;
+        }
+
         let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
             return;
         };
-        let Some(reason) = message.reason() else {
-            return;
-        };
 
-        if reason == "compiler-message" {
-            if let Some(rendered) = message.rendered() {
-                actions.replace_with_lines(rendered.lines());
-            } else {
-                actions.remove_line();
-            }
-            self.push(line, message);
-        } else {
-            // Cargo protocol records are not user output. Removing them keeps the captured build
-            // log readable and leaves non-JSON process output untouched.
+        if message.is_compiler_artifact()
+            || message.is_build_finished()
+            || message.is_build_script_executed()
+        {
+            // useless noise, we just drop these from the log stream & storage.
+            // We're reasonably sure these don't come from build-scripts etc.
             actions.remove_line();
         }
+
+        if message.is_compiler_message() {
+            if let Some(rendered) = message.rendered() {
+                // if we have the rendered version in the json, replace the json log line
+                // with the rendered version.
+                actions.replace_with_lines(rendered.lines());
+            } else {
+                // compiler-messages without rendering shouldn't happen?
+                // just to be safe, we don't drop it and leave it in the logs.
+            }
+            self.push(line, message);
+        }
+
+        // other json lines are kept, we don't know what they are
     }
 
     fn push(&mut self, line: &str, message: CargoMessage) {
