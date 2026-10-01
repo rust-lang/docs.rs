@@ -94,10 +94,10 @@ fn capture_rustwide_step<T>(
 
 fn capture_rustwide_step_with_cargo_messages<T>(
     max_log_size: ByteSize,
-    cargo_messages: &RefCell<Vec<serde_json::Value>>,
-    run: impl FnOnce() -> Result<T, BuildStepError>,
+    run: impl FnOnce(&RefCell<Vec<serde_json::Value>>) -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
-    let mut result = capture_rustwide_step(max_log_size, run);
+    let cargo_messages = RefCell::new(Vec::new());
+    let mut result = capture_rustwide_step(max_log_size, || run(&cargo_messages));
     let cargo_messages = cargo_messages.take();
     match &mut result {
         Ok(report) => report.cargo_messages = cargo_messages,
@@ -155,7 +155,6 @@ pub struct ReleaseBuild<'build, 'ws> {
     pub(crate) limits: &'build Limits,
     pub(crate) resource_suffix: String,
     fetched_build_std_targets: RefCell<HashSet<String>>,
-    cargo_messages: RefCell<Vec<serde_json::Value>>,
 }
 
 #[bon]
@@ -184,7 +183,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             limits,
             resource_suffix,
             fetched_build_std_targets: RefCell::new(HashSet::new()),
-            cargo_messages: RefCell::new(Vec::new()),
         })
     }
 
@@ -201,7 +199,12 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         command
     }
 
-    fn process_cargo_message(&self, line: &str, actions: &mut ProcessLinesActions) {
+    fn process_cargo_message(
+        &self,
+        line: &str,
+        actions: &mut ProcessLinesActions,
+        cargo_messages: &RefCell<Vec<serde_json::Value>>,
+    ) {
         let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
             return;
         };
@@ -218,7 +221,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             } else {
                 actions.remove_line();
             }
-            self.cargo_messages.borrow_mut().push(message);
+            cargo_messages.borrow_mut().push(message);
         } else {
             // Cargo protocol records are not user output. Removing them keeps the captured build
             // log readable and leaves non-JSON process output untouched.
@@ -468,9 +471,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions)
+                self.process_cargo_message(line, actions, cargo_messages)
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
@@ -504,9 +507,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions)
+                self.process_cargo_message(line, actions, cargo_messages)
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
@@ -596,9 +599,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         emit: Emit,
         collect_compiler_metrics: bool,
     ) -> StepResult<HtmlOutput> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions)
+                self.process_cargo_message(line, actions, cargo_messages)
             };
             let mut command = self
                 .command(target)
@@ -654,20 +657,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.build.host_target_dir().join("metrics")
     }
 
-    fn capture_rustwide_step<T>(
-        &self,
-        run: impl FnOnce() -> Result<T, BuildStepError>,
-    ) -> StepResult<T> {
-        capture_rustwide_step_with_cargo_messages(
-            self.limits.max_log_size(),
-            &self.cargo_messages,
-            run,
-        )
-    }
-
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> StepResult<()> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step(self.limits.max_log_size(), || {
             let source_dir = self.build.host_source_dir();
             debug!("removing invalid lockfile");
             fs::remove_file(source_dir.join("Cargo.lock"))
