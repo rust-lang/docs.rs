@@ -263,13 +263,13 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
     assert!(row.errors.is_some());
     let entries = fetch_build_logs(&env, row.id)?;
     assert!(!entries.is_empty());
-    let mut found_jsonl = false;
+    let mut found_diagnostics = false;
     for (filename, success) in entries {
         assert!(!success);
         let blob = runtime
             .block_on(storage.get(&format!("build-logs/{}/{filename}", row.id), ByteSize::MAX))?;
-        if filename.ends_with(".jsonl") {
-            found_jsonl = true;
+        if filename.ends_with(".diagnostics.jsonl") {
+            found_diagnostics = true;
             let messages: Vec<serde_json::Value> = blob
                 .content
                 .split(|byte| *byte == b'\n')
@@ -287,19 +287,19 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
         }
     }
     assert!(
-        found_jsonl,
-        "the failed build must publish a Cargo JSONL log"
+        found_diagnostics,
+        "the failed build must publish a Cargo diagnostics log"
     );
     Ok(())
 }
 
 #[test]
 #[ignore]
-fn successful_build_with_a_warning_publishes_cargo_jsonl() -> Result<()> {
+fn successful_build_with_a_warning_publishes_cargo_diagnostics() -> Result<()> {
     let env = environment()?;
     let runtime = env.runtime();
     let storage = env.storage()?;
-    let name = KrateName::from_static("warning-jsonl");
+    let name = KrateName::from_static("warning-diagnostics");
     mock_package(
         &env,
         &name,
@@ -318,8 +318,8 @@ pub struct MissingDocs;
     let entries = fetch_build_logs(&env, row.id)?;
     let (filename, success) = entries
         .iter()
-        .find(|(filename, _)| filename.ends_with(".jsonl"))
-        .expect("the warning must publish a Cargo JSONL log");
+        .find(|(filename, _)| filename.ends_with(".diagnostics.jsonl"))
+        .expect("the warning must publish a Cargo diagnostics log");
     assert!(*success);
 
     let blob = runtime
@@ -342,10 +342,10 @@ pub struct MissingDocs;
 
 #[test]
 #[ignore]
-fn cargo_jsonl_upload_failure_requests_reattempt() -> Result<()> {
+fn cargo_diagnostics_upload_failure_requests_reattempt() -> Result<()> {
     let env = environment()?;
     let storage = env.storage()?;
-    let name = KrateName::from_static("jsonl-upload-failure");
+    let name = KrateName::from_static("diagnostics-upload-failure");
     mock_package(
         &env,
         &name,
@@ -353,7 +353,7 @@ fn cargo_jsonl_upload_failure_requests_reattempt() -> Result<()> {
         Some("lib.rs"),
         "compile_error!(\"intentional compile failure\");",
     )?;
-    storage.reject_uploads_for_testing(Some(|path| path.ends_with(".jsonl")));
+    storage.reject_uploads_for_testing(Some(|path| path.ends_with(".diagnostics.jsonl")));
 
     let summary = env.build_builder()?.build_package(&name, &V0_1)?;
     assert!(!summary.successful);
