@@ -1,7 +1,7 @@
 use crate::{
     BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
     StepFailure, StepReport, StepResult, TargetBuildResult,
-    cargo_messages::{CargoMessage, CargoMessages},
+    cargo_messages::{CargoMessage, CargoMessageCollector, CargoMessages},
     command::PrepareCommand,
     utils::copy_dir_all,
 };
@@ -106,57 +106,6 @@ fn capture_rustwide_step_with_cargo_messages<T>(
         Err(report) => report.cargo_messages = Some(cargo_messages),
     }
     result
-}
-
-/// Retain whole Cargo JSONL records up to the same byte limit as the step log.
-struct CargoMessageCollector {
-    messages: CargoMessages,
-    retained_bytes: usize,
-    max_bytes: usize,
-}
-
-impl CargoMessageCollector {
-    fn new(max_bytes: usize) -> Self {
-        Self {
-            messages: Vec::new(),
-            retained_bytes: 0,
-            max_bytes,
-        }
-    }
-
-    fn process_line(&mut self, line: &str, actions: &mut ProcessLinesActions) {
-        let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
-            return;
-        };
-        let Some(reason) = message.reason() else {
-            return;
-        };
-
-        if reason == "compiler-message" {
-            if let Some(rendered) = message.rendered() {
-                actions.replace_with_lines(rendered.lines());
-            } else {
-                actions.remove_line();
-            }
-            self.push(line, message);
-        } else {
-            // Cargo protocol records are not user output. Removing them keeps the captured build
-            // log readable and leaves non-JSON process output untouched.
-            actions.remove_line();
-        }
-    }
-
-    fn push(&mut self, line: &str, message: CargoMessage) {
-        let record_bytes = line.len().saturating_add(1);
-        if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
-            self.messages.push(message);
-            self.retained_bytes += record_bytes;
-        }
-    }
-
-    fn into_messages(self) -> CargoMessages {
-        self.messages
-    }
 }
 
 /// Load Cargo metadata for a source tree with the configured toolchain.
