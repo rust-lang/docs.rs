@@ -36,7 +36,7 @@ use rustwide::{Crate, SandboxStatistics, Toolchain};
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io::BufReader,
+    io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -396,9 +396,21 @@ impl RustwideBuilder {
                 target.documentation(),
                 target.documentation_succeeded(),
             )?);
+            build_logs.extend(self.publish_json_log(
+                build_id,
+                format!("{}.jsonl", target.target()),
+                target.documentation(),
+                target.documentation_succeeded(),
+            )?);
             build_logs.extend(self.publish_build_log(
                 build_id,
                 format!("{}_json.txt", target.target()),
+                target.rustdoc_json(),
+                target.rustdoc_json().is_ok(),
+            )?);
+            build_logs.extend(self.publish_json_log(
+                build_id,
+                format!("{}_json.jsonl", target.target()),
                 target.rustdoc_json(),
                 target.rustdoc_json().is_ok(),
             )?);
@@ -533,6 +545,32 @@ impl RustwideBuilder {
         });
         local_storage.close()?;
         Ok(build_succeeded)
+    }
+
+    fn publish_json_log<T>(
+        &self,
+        build_id: BuildId,
+        filename: String,
+        step: &StepResult<T>,
+        successful: bool,
+    ) -> Result<Option<(String, bool)>> {
+        let Some(messages) = step.cargo_messages() else {
+            error!(filename, successful, "missing cargo messages log");
+            return Ok(None);
+        };
+
+        let mut writer = BufWriter::new(tempfile::NamedTempFile::new()?);
+        for message in messages {
+            serde_json::to_writer(&mut writer, &message)?;
+            writeln!(&mut writer)?;
+        }
+        writer.flush()?;
+
+        let temp_path = writer.into_inner()?.into_temp_path();
+
+        self.blocking_storage
+            .store_file(format!("build-logs/{build_id}/{filename}"), temp_path)?;
+        Ok(Some((filename, successful)))
     }
 
     fn publish_build_log<T>(

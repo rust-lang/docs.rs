@@ -29,7 +29,10 @@ use std::{
     pin::Pin,
     sync::Arc,
 };
-use tokio::{fs, io, io::AsyncWriteExt as _};
+use tokio::{
+    fs,
+    io::{self, AsyncWriteExt as _},
+};
 use tokio_util::bytes::Bytes;
 use tracing::{info_span, instrument, trace, warn};
 
@@ -500,6 +503,34 @@ impl AsyncStorage {
         self.backend
             .upload_stream(StreamUpload {
                 path,
+                mime,
+                source: StreamUploadSource::Bytes(content.into()),
+                compression: Some(alg),
+            })
+            .await?;
+
+        Ok(alg)
+    }
+
+    // Read a local file, compress it, and upload to S3.
+    #[instrument(skip_all)]
+    pub async fn store_file(
+        &self,
+        target_path: impl Into<String> + fmt::Debug,
+        source_path: impl AsRef<Path> + fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        let target_path = target_path.into();
+        let alg = CompressionAlgorithm::default();
+
+        let mut source_file = io::BufReader::new(fs::File::open(&source_path.as_ref()).await?);
+        let mut content = Vec::new();
+        compress_async(&mut source_file, &mut content, alg).await?;
+
+        let mime = detect_mime(&target_path).to_owned();
+
+        self.backend
+            .upload_stream(StreamUpload {
+                path: target_path,
                 mime,
                 source: StreamUploadSource::Bytes(content.into()),
                 compression: Some(alg),
