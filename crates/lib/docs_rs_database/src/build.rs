@@ -193,7 +193,7 @@ const READ_BUILDS: &str = r#"
         ) AS logs
     FROM builds b
     INNER JOIN releases r ON r.id = b.rid
-    INNER JOIN JOIN crates c ON c.id = r.crate_id
+    INNER JOIN crates c ON c.id = r.crate_id
     WHERE ($1::text IS NULL OR c.name = $1)
       AND ($2::text IS NULL OR r.version = $2)
       AND ($3::integer IS NULL OR b.id = $3)
