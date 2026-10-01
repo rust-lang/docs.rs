@@ -27,14 +27,17 @@ impl BuildLogKind {
             Self::Json => "_json",
         }
     }
+    fn ext(&self) -> &'static str {
+        return "txt";
+    }
 }
 
-fn build_log_filename(target: &str, suffix: &str) -> String {
-    format!("{target}{suffix}")
+fn build_log_filename(target: &str, kind: BuildLogKind) -> String {
+    format!("{target}{}.{}", kind.suffix(), kind.ext())
 }
 
 fn build_log_storage_path(build_id: BuildId, filename: &str) -> String {
-    format!("build-logs/{build_id}/{filename}",)
+    format!("build-logs/{build_id}/{filename}")
 }
 
 async fn collect_log_uploads<F: std::future::Future>(
@@ -57,14 +60,11 @@ pub struct NewBuildLog {
 
 impl NewBuildLog {
     fn filename(&self) -> String {
-        build_log_filename(&self.target, self.kind.suffix())
+        build_log_filename(&self.target, self.kind)
     }
 
     fn storage_path(&self, build_id: BuildId) -> String {
-        build_log_storage_path(
-            build_id,
-            &build_log_filename(&self.target, self.kind.suffix()),
-        )
+        build_log_storage_path(build_id, &build_log_filename(&self.target, self.kind))
     }
 }
 
@@ -392,7 +392,7 @@ impl AnyBuild {
 
     pub fn default_log_filename(&self) -> Option<String> {
         self.default_target()
-            .map(|default_target| format!("{default_target}.txt"))
+            .map(|default_target| build_log_filename(default_target, BuildLogKind::Html))
     }
 
     pub async fn list_build_logs(&self, storage: &AsyncStorage) -> Result<Vec<BuildLog>> {
