@@ -859,7 +859,15 @@ mod tests {
                 .await?;
         }
         let listed = build.list_build_logs(&storage).await?;
-        assert_eq!(listed[0].fetch(&storage).await?, "a.txt");
+        assert_eq!(
+            listed[0]
+                .fetch(&storage)
+                .await?
+                .materialize(ByteSize::MAX)
+                .await?
+                .content,
+            b"a.txt"
+        );
         assert_eq!(
             listed
                 .into_iter()
@@ -867,7 +875,16 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![("a.txt".into(), None), ("b.txt".into(), None)]
         );
-        assert_eq!(build.build_log("a.txt").fetch(&storage).await?, "a.txt");
+        assert_eq!(
+            build
+                .build_log("a.txt")
+                .fetch(&storage)
+                .await?
+                .materialize(ByteSize::MAX)
+                .await?
+                .content,
+            b"a.txt"
+        );
         let error = build
             .build_log("missing.txt")
             .fetch(&storage)
@@ -1050,7 +1067,16 @@ mod tests {
                 ("target_json".into(), Some(false))
             ]
         );
-        assert_eq!(build.build_log("target").fetch(&storage).await?, "html");
+        assert_eq!(
+            build
+                .build_log("target")
+                .fetch(&storage)
+                .await?
+                .materialize(ByteSize::MAX)
+                .await?
+                .content,
+            b"html"
+        );
         for (filename, _) in logs {
             assert!(
                 storage

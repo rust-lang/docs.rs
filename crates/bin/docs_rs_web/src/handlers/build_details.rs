@@ -116,7 +116,7 @@ pub(crate) async fn build_details_handler(
                 .build_log(filename)
                 .fetch(&storage)
                 .await?
-                .materialize(storage.config().max_file_size_for(&filename))
+                .materialize(storage.config().max_file_size_for(filename))
                 .await?;
 
             String::from_utf8(blob.content).context("non-utf8 build log")?
