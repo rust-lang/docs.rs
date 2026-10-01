@@ -124,6 +124,28 @@ impl CargoMessageCollector {
         }
     }
 
+    fn process_line(&mut self, line: &str, actions: &mut ProcessLinesActions) {
+        let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
+            return;
+        };
+        let Some(reason) = message.reason() else {
+            return;
+        };
+
+        if reason == "compiler-message" {
+            if let Some(rendered) = message.rendered() {
+                actions.replace_with_lines(rendered.lines());
+            } else {
+                actions.remove_line();
+            }
+            self.push(line, message);
+        } else {
+            // Cargo protocol records are not user output. Removing them keeps the captured build
+            // log readable and leaves non-JSON process output untouched.
+            actions.remove_line();
+        }
+    }
+
     fn push(&mut self, line: &str, message: CargoMessage) {
         let record_bytes = line.len().saturating_add(1);
         if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
@@ -228,33 +250,6 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             command = command.env(key, value);
         }
         command
-    }
-
-    fn process_cargo_message(
-        &self,
-        line: &str,
-        actions: &mut ProcessLinesActions,
-        cargo_messages: &mut CargoMessageCollector,
-    ) {
-        let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
-            return;
-        };
-        let Some(reason) = message.reason() else {
-            return;
-        };
-
-        if reason == "compiler-message" {
-            if let Some(rendered) = message.rendered() {
-                actions.replace_with_lines(rendered.lines());
-            } else {
-                actions.remove_line();
-            }
-            cargo_messages.push(line, message);
-        } else {
-            // Cargo protocol records are not user output. Removing them keeps the captured build
-            // log readable and leaves non-JSON process output untouched.
-            actions.remove_line();
-        }
     }
 
     /// Prepare the Cargo command used by docs.rs for one documentation target.
@@ -501,7 +496,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions, cargo_messages)
+                cargo_messages.process_line(line, actions)
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
@@ -537,7 +532,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
         capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions, cargo_messages)
+                cargo_messages.process_line(line, actions)
             };
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
@@ -629,7 +624,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ) -> StepResult<HtmlOutput> {
         capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
             let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
-                self.process_cargo_message(line, actions, cargo_messages)
+                cargo_messages.process_line(line, actions)
             };
             let mut command = self
                 .command(target)
