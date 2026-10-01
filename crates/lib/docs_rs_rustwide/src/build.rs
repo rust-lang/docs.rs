@@ -942,6 +942,52 @@ mod policy_tests {
         Ok(())
     }
 
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn build_script_json_output_is_kept_in_the_log() -> Result<()> {
+        let mut environment = environment()?;
+        let step = environment
+            .release(&fixture())
+            .run(|build| {
+                let source = build.build.host_source_dir();
+                let manifest = source.join("Cargo.toml");
+                let contents = fs::read_to_string(&manifest)?;
+                fs::write(
+                    manifest,
+                    contents.replace(
+                        "edition = \"2024\"",
+                        "edition = \"2024\"\nbuild = \"build.rs\"",
+                    ),
+                )?;
+                fs::write(
+                    source.join("build.rs"),
+                    r##"fn main() {
+    eprintln!("{}", r#"{"source":"build-script"}"#);
+    panic!("intentional build-script failure");
+}
+"##,
+                )?;
+                Ok(build.build_documentation(HOST_TARGET))
+            })?
+            .into_inner();
+
+        let failure = step.expect_err("the build script must fail");
+        assert!(matches!(failure.value(), BuildStepError::Command(_)));
+        assert!(
+            failure
+                .cargo_messages()
+                .expect("Cargo commands always collect their messages")
+                .is_empty(),
+            "the build script's JSON is not a Cargo compiler message"
+        );
+
+        let log = failure
+            .log()
+            .expect("the failed command must retain its log");
+        assert!(log.contains(r#"{"source":"build-script"}"#));
+        Ok(())
+    }
+
     // Installed after Rustwide's preparation, which normally removes Cargo config.
     // Fail only the selected rustdoc mode, leaving metadata and other modes real.
     fn install_failing_rustdoc_wrapper(build: &ReleaseBuild<'_, '_>, failure: &str) -> Result<()> {

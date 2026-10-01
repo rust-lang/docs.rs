@@ -19,7 +19,7 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, CargoMessage, ReleaseBuildResult, StepResult,
+    BUILDER_VERSION, BuildEnvironment, RawCargoMessage, ReleaseBuildResult, StepResult,
     StepResultExt as _, TargetBuildResult, ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
@@ -45,7 +45,7 @@ use tracing::{debug, error, info, info_span, instrument, warn};
 
 fn create_jsonl_file<M>(messages: impl IntoIterator<Item = M>) -> Result<tempfile::TempPath>
 where
-    M: Borrow<CargoMessage>,
+    M: Borrow<RawCargoMessage>,
 {
     let mut writer = BufWriter::new(tempfile::NamedTempFile::new()?);
     for message in messages {

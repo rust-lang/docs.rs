@@ -26,7 +26,7 @@ mod workspace_lock;
 use std::sync::LazyLock;
 
 pub use build::ReleaseBuild;
-pub use cargo_messages::{CargoMessage, CargoMessages};
+pub use cargo_messages::{RawCargoMessage, RawCargoMessages};
 pub use command::PrepareCommand;
 pub use release::{Fetched, ReleaseContext, Unfetched};
 pub use result::{

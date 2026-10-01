@@ -1,14 +1,13 @@
+use anyhow::Result;
 use rustwide::cmd::ProcessLinesActions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct CargoMessage(serde_json::Value);
+pub struct RawCargoMessage(serde_json::Value);
 
-// TODO: nicer debug impl
-//
-impl CargoMessage {
+impl RawCargoMessage {
     fn is_build_finished(&self) -> bool {
         self.reason()
             .is_some_and(|reason| reason == "build-finished")
@@ -47,11 +46,11 @@ impl CargoMessage {
     }
 }
 
-pub type CargoMessages = Vec<CargoMessage>;
+pub type RawCargoMessages = Vec<RawCargoMessage>;
 
 /// Retain whole Cargo JSONL records up to the same byte limit as the step log.
 pub(crate) struct CargoMessageCollector {
-    messages: CargoMessages,
+    messages: RawCargoMessages,
     retained_bytes: usize,
     max_bytes: usize,
 }
@@ -71,7 +70,7 @@ impl CargoMessageCollector {
             return;
         }
 
-        let Ok(message) = serde_json::from_str::<CargoMessage>(line) else {
+        let Ok(message) = serde_json::from_str::<RawCargoMessage>(line) else {
             return;
         };
 
@@ -99,7 +98,7 @@ impl CargoMessageCollector {
         // other json lines are kept, we don't know what they are
     }
 
-    fn push(&mut self, line: &str, message: CargoMessage) {
+    fn push(&mut self, line: &str, message: RawCargoMessage) {
         let record_bytes = line.len().saturating_add(1);
         if record_bytes <= self.max_bytes.saturating_sub(self.retained_bytes) {
             self.messages.push(message);
@@ -107,7 +106,7 @@ impl CargoMessageCollector {
         }
     }
 
-    pub(crate) fn into_messages(self) -> CargoMessages {
+    pub(crate) fn into_messages(self) -> RawCargoMessages {
         self.messages
     }
 }

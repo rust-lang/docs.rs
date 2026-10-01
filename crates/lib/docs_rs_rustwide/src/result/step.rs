@@ -1,4 +1,4 @@
-use crate::cargo_messages::{CargoMessage, CargoMessages};
+use crate::cargo_messages::{RawCargoMessage, RawCargoMessages};
 use anyhow::Result;
 use docs_rs_types::{BuildError, Duration};
 use rustwide::cmd::CommandError;
@@ -57,7 +57,7 @@ pub struct StepReport<T> {
     pub(crate) value: T,
     pub(crate) duration: Duration,
     pub(crate) log: Option<String>,
-    pub(crate) cargo_messages: Option<Vec<CargoMessage>>,
+    pub(crate) cargo_messages: Option<Vec<RawCargoMessage>>,
 }
 
 impl<T> StepReport<T> {
@@ -81,7 +81,7 @@ impl<T> StepReport<T> {
     }
 
     /// Raw Cargo `compiler-message` records emitted while producing this log.
-    pub fn cargo_messages(&self) -> Option<&CargoMessages> {
+    pub fn cargo_messages(&self) -> Option<&RawCargoMessages> {
         self.cargo_messages.as_ref()
     }
 
@@ -119,7 +119,7 @@ pub trait StepResultExt<T> {
     /// Return the captured log, or `None` if it is absent or contains only whitespace.
     fn log(&self) -> Option<&str>;
     /// Return the raw Cargo `compiler-message` records emitted while producing this step's log.
-    fn cargo_messages(&self) -> Option<&CargoMessages>;
+    fn cargo_messages(&self) -> Option<&RawCargoMessages>;
     /// Consume the result, discarding duration and logs from either variant.
     fn into_inner(self) -> Result<T, BuildStepError>;
     /// Borrow the underlying value or error without consuming the report or its diagnostics.
@@ -141,7 +141,7 @@ impl<T> StepResultExt<T> for StepResult<T> {
         }
     }
 
-    fn cargo_messages(&self) -> Option<&CargoMessages> {
+    fn cargo_messages(&self) -> Option<&RawCargoMessages> {
         match self {
             Ok(report) => report.cargo_messages(),
             Err(report) => report.cargo_messages(),
