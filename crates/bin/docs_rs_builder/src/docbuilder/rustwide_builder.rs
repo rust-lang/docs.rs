@@ -573,7 +573,7 @@ impl RustwideBuilder {
             .cargo_messages()
             .filter(|messages| !messages.is_empty())
         {
-            let filename = format!("{filename_stem}.jsonl");
+            let filename = format!("{filename_stem}.diagnostics.jsonl");
             match create_jsonl_file(messages.iter()) {
                 Ok(rendered_file) => {
                     self.blocking_storage
