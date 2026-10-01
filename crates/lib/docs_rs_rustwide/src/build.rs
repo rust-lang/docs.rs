@@ -934,6 +934,42 @@ mod policy_tests {
         )
     }
 
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn compiler_messages_are_collected_while_the_log_keeps_the_rendered_error() -> Result<()> {
+        let mut environment = environment()?;
+        let step = environment
+            .release(&fixture())
+            .run(|build| {
+                fs::write(
+                    build.build.host_source_dir().join("src/lib.rs"),
+                    "pub fn broken() { missing_identifier; }\n",
+                )?;
+                Ok(build.build_documentation(HOST_TARGET))
+            })?
+            .into_inner();
+
+        let failure = step.expect_err("the crate must not build");
+        assert!(matches!(failure.value(), BuildStepError::Command(_)));
+
+        let messages = failure
+            .cargo_messages()
+            .expect("Cargo commands always collect their messages");
+        assert!(messages.iter().any(|message| {
+            message.reason() == Some("compiler-message")
+                && message
+                    .rendered()
+                    .is_some_and(|rendered| rendered.contains("missing_identifier"))
+        }));
+
+        let log = failure
+            .log()
+            .expect("the failed command must retain its log");
+        assert!(log.contains("missing_identifier"));
+        assert!(!log.contains(r#"{\"reason\":\"compiler-message\""#));
+        Ok(())
+    }
+
     // Installed after Rustwide's preparation, which normally removes Cargo config.
     // Fail only the selected rustdoc mode, leaving metadata and other modes real.
     fn install_failing_rustdoc_wrapper(build: &ReleaseBuild<'_, '_>, failure: &str) -> Result<()> {
