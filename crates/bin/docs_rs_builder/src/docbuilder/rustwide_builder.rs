@@ -34,6 +34,7 @@ use futures_util::future::try_join_all;
 use regex::Regex;
 use rustwide::{Crate, SandboxStatistics, Toolchain};
 use std::{
+    borrow::Borrow,
     collections::HashSet,
     fs::{self, File},
     io::{BufReader, BufWriter, Write},
@@ -44,11 +45,11 @@ use tracing::{debug, error, info, info_span, instrument, warn};
 
 fn create_jsonl_file<M>(messages: impl IntoIterator<Item = M>) -> Result<tempfile::TempPath>
 where
-    M: AsRef<CargoMessage>,
+    M: Borrow<CargoMessage>,
 {
     let mut writer = BufWriter::new(tempfile::NamedTempFile::new()?);
     for message in messages {
-        let message = message.as_ref();
+        let message = message.borrow();
         serde_json::to_writer(&mut writer, message)?;
         writeln!(&mut writer)?;
     }
@@ -407,13 +408,13 @@ impl RustwideBuilder {
         for target in release_build_result.targets() {
             build_logs.extend(self.publish_build_log(
                 build_id,
-                format!("{}.txt", target.target()),
+                target.target().to_string(),
                 target.documentation(),
                 target.documentation_succeeded(),
             )?);
             build_logs.extend(self.publish_build_log(
                 build_id,
-                format!("{}_json.txt", target.target()),
+                format!("{}_json", target.target()),
                 target.rustdoc_json(),
                 target.rustdoc_json().is_ok(),
             )?);
@@ -568,16 +569,19 @@ impl RustwideBuilder {
             error!(filename_stem, successful, "missing build log");
         };
 
-        if let Some(messages) = step.cargo_messages() {
+        if let Some(messages) = step
+            .cargo_messages()
+            .filter(|messages| !messages.is_empty())
+        {
             let filename = format!("{filename_stem}.jsonl");
-            match create_jsonl_file(messages.as_ref()) {
+            match create_jsonl_file(messages.iter()) {
                 Ok(rendered_file) => {
                     self.blocking_storage
                         .store_file(format!("build-logs/{build_id}/{filename}"), rendered_file)?;
                     logs.push((filename, successful));
                 }
-                Err(err) => {
-                    error!(filename_stem, successful, "couldn't render jsonl log");
+                Err(error) => {
+                    error!(filename_stem, successful, %error, "couldn't render jsonl log");
                 }
             }
         }
