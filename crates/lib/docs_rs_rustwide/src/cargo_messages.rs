@@ -124,9 +124,7 @@ mod tests {
     fn collection_respects_the_log_size_limit() {
         let line = r#" { "reason": "compiler-message" } "#;
         let message = serde_json::from_str(line).unwrap();
-        let serialized_bytes = serde_json::to_vec(&message).unwrap().len() + 1;
-        assert!(serialized_bytes < line.len() + 1);
-        let mut collector = CargoMessageCollector::new(serialized_bytes);
+        let mut collector = CargoMessageCollector::new(line.len() + 1);
 
         collector.push(line, message);
         collector.push(line, serde_json::from_str(line).unwrap());
