@@ -318,8 +318,8 @@ impl AnyBuild {
 
         let build_id = sqlx::query_scalar!(
             r#"INSERT INTO builds(rid, build_status, build_server, build_started)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id as "id: BuildId" "#,
+               VALUES ($1, $2, $3, NOW())
+               RETURNING id as "id: BuildId" "#,
             release_id.0,
             BuildStatus::InProgress as BuildStatus,
             hostname.to_str().unwrap_or(""),
