@@ -94,11 +94,10 @@ fn capture_rustwide_step<T>(
 
 fn capture_rustwide_step_with_cargo_messages<T>(
     max_log_size: ByteSize,
-    run: impl FnOnce(&RefCell<Vec<serde_json::Value>>) -> Result<T, BuildStepError>,
+    run: impl FnOnce(&mut Vec<serde_json::Value>) -> Result<T, BuildStepError>,
 ) -> StepResult<T> {
-    let cargo_messages = RefCell::new(Vec::new());
-    let mut result = capture_rustwide_step(max_log_size, || run(&cargo_messages));
-    let cargo_messages = cargo_messages.take();
+    let mut cargo_messages = Vec::new();
+    let mut result = capture_rustwide_step(max_log_size, || run(&mut cargo_messages));
     match &mut result {
         Ok(report) => report.cargo_messages = cargo_messages,
         Err(report) => report.cargo_messages = cargo_messages,
@@ -203,7 +202,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         &self,
         line: &str,
         actions: &mut ProcessLinesActions,
-        cargo_messages: &RefCell<Vec<serde_json::Value>>,
+        cargo_messages: &mut Vec<serde_json::Value>,
     ) {
         let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
             return;
@@ -221,7 +220,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             } else {
                 actions.remove_line();
             }
-            cargo_messages.borrow_mut().push(message);
+            cargo_messages.push(message);
         } else {
             // Cargo protocol records are not user output. Removing them keeps the captured build
             // log readable and leaves non-JSON process output untouched.
