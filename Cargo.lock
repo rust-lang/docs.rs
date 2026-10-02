@@ -582,6 +582,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-sqs"
+version = "1.111.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2f03f27e4c84c425cb0aad20f91a55e4a6ef3398e4b380331329a1240ec6595"
+dependencies = [
+ "arc-swap",
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-schema",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "http 1.5.0",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sts"
 version = "1.118.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2631,6 +2657,9 @@ name = "docs_rs_watcher"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "aws-config",
+ "aws-sdk-sqs",
  "chrono",
  "clap",
  "crates-index",
@@ -2656,10 +2685,12 @@ dependencies = [
  "opentelemetry",
  "pretty_assertions",
  "rayon",
+ "serde_json",
  "sqlx",
  "test-case",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]
