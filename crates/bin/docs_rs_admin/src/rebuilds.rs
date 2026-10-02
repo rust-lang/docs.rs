@@ -67,10 +67,7 @@ mod tests {
     use super::*;
     use crate::testing::TestEnvironment;
     use docs_rs_test_fakes::FakeBuild;
-    use docs_rs_types::{
-        BuildStatus,
-        testing::{BAR, FOO, V1, V2},
-    };
+    use docs_rs_types::testing::{BAR, FOO, V1, V2};
     use pretty_assertions::assert_eq;
 
     /// Verifies whether a rebuild is queued for all releases with the latest build performed with a specific nightly version of rustdoc
@@ -96,15 +93,13 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
-                        .build_status(BuildStatus::Failure),
+                    FakeBuild::finished()
+                        .rustc_version(format!(
+                            "rustc 1.84.0-nightly (e7c0d2750 {})",
+                            nightly.format("%Y-%m-%d")
+                        ))
+                        .successful(false)
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -158,15 +153,13 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
-                        .build_status(BuildStatus::Failure),
+                    FakeBuild::finished()
+                        .rustc_version(format!(
+                            "rustc 1.84.0-nightly (e7c0d2750 {})",
+                            nightly.format("%Y-%m-%d")
+                        ))
+                        .successful(false)
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -213,15 +206,13 @@ mod tests {
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
-                    FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
-                        .build_status(BuildStatus::Failure),
+                    FakeBuild::finished()
+                        .rustc_version(format!(
+                            "rustc 1.84.0-nightly (e7c0d2750 {})",
+                            nightly.format("%Y-%m-%d")
+                        ))
+                        .successful(false)
+                        .build(),
                 ])
                 .create()
                 .await?;

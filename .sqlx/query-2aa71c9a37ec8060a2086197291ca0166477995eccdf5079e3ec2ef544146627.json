@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO builds_logs(build_id, log_filename, success)\n         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])\n         ON CONFLICT (build_id, log_filename) DO UPDATE SET success = EXCLUDED.success",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "TextArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2aa71c9a37ec8060a2086197291ca0166477995eccdf5079e3ec2ef544146627"
+}

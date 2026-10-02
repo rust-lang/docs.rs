@@ -3,10 +3,8 @@ use anyhow::{Context, Result, anyhow};
 use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, DocCoverage,
-    Feature, KrateName, ReleaseId, Version,
+    ByteSize, CompressionAlgorithm, CrateId, DocCoverage, Feature, KrateName, ReleaseId, Version,
 };
-use docs_rs_utils::rustc_version::parse_rustc_date;
 use futures_util::stream::TryStreamExt;
 use slug::slugify;
 use std::{
@@ -15,7 +13,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 /// Adds a package into database.
 ///
@@ -211,105 +209,6 @@ pub async fn add_doc_coverage(
     .await?)
 }
 
-/// Adds a build into database
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip(conn))]
-pub async fn finish_build<E>(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    rustc_version: &str,
-    docsrs_version: &str,
-    build_status: BuildStatus,
-    documentation_size: Option<ByteSize>,
-    memory_peak: Option<u64>,
-    build_error: Option<&E>,
-) -> Result<()>
-where
-    E: BuildError,
-{
-    debug!("updating build after finishing");
-    let hostname = hostname::get()?;
-
-    let rustc_date = match parse_rustc_date(rustc_version) {
-        Ok(date) => Some(date),
-        Err(err) => {
-            // in the database we see cases where the rustc version is missing
-            // in the builds-table. In this case & if we can't parse the version
-            // we just want to log an error, but still finish the build.
-            error!(
-                "Failed to parse date from rustc version \"{}\": {:?}",
-                rustc_version, err
-            );
-            None
-        }
-    };
-
-    let release_id = sqlx::query_scalar!(
-        r#"UPDATE builds
-         SET
-             rustc_version = $1,
-             docsrs_version = $2,
-             build_status = $3,
-             build_server = $4,
-             errors = $5,
-             documentation_size = $6,
-             rustc_nightly_date = $7,
-             build_finished = NOW(),
-             error_kind = $8,
-             memory_peak = $9
-         WHERE
-            id = $10
-         RETURNING rid as "rid: ReleaseId" "#,
-        rustc_version,
-        docsrs_version,
-        build_status as BuildStatus,
-        hostname.to_str().unwrap_or(""),
-        build_error.map(|err| err.to_string()),
-        documentation_size as _,
-        rustc_date,
-        build_error.map(|err| err.kind()),
-        memory_peak.map(|v| v as i64),
-        build_id as _,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(())
-}
-
-#[instrument(skip(conn))]
-pub async fn update_build_with_error<E>(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    build_error: Option<&E>,
-) -> Result<BuildId>
-where
-    E: BuildError,
-{
-    debug!("updating build with error");
-    let release_id = sqlx::query_scalar!(
-        r#"UPDATE builds
-         SET
-             build_status = $1,
-             errors = $2,
-             error_kind = $3
-         WHERE id = $4
-         RETURNING rid as "rid: ReleaseId" "#,
-        BuildStatus::Failure as BuildStatus,
-        build_error.map(|err| err.to_string()),
-        build_error.map(|err| err.kind()),
-        build_id.0,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(build_id)
-}
-
 pub async fn initialize_crate(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<CrateId> {
     sqlx::query_scalar!(
         "INSERT INTO crates (name)
@@ -347,43 +246,6 @@ pub async fn initialize_release(
     update_build_status(conn, release_id).await?;
 
     Ok(release_id)
-}
-
-pub async fn initialize_build(
-    conn: &mut sqlx::PgConnection,
-    release_id: ReleaseId,
-) -> Result<BuildId> {
-    let hostname = hostname::get()?;
-
-    sqlx::query!(
-        r#"UPDATE builds
-           SET
-               build_status = 'failure',
-               errors = $1,
-               build_finished = NOW()
-           WHERE
-               rid = $2
-               AND build_status = 'in_progress'"#,
-        "build aborted: builder process restarted before completion",
-        release_id as _,
-    )
-    .execute(&mut *conn)
-    .await?;
-
-    let build_id = sqlx::query_scalar!(
-        r#"INSERT INTO builds(rid, build_status, build_server, build_started)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id as "id: BuildId" "#,
-        release_id.0,
-        BuildStatus::InProgress as BuildStatus,
-        hostname.to_str().unwrap_or(""),
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok(build_id)
 }
 
 /// Reads features and converts them to Vec<Feature> with default being first
@@ -619,36 +481,16 @@ where
     Ok(())
 }
 
-pub async fn add_build_logs(
-    conn: &mut sqlx::PgConnection,
-    build_id: BuildId,
-    builds_logs: Vec<(String, bool)>,
-) -> Result<()> {
-    let (logs_filename, successes): (Vec<String>, Vec<bool>) = builds_logs.into_iter().unzip();
-
-    sqlx::query!(
-        "INSERT INTO builds_logs(build_id, log_filename, success)
-         SELECT $1, * FROM UNNEST($2::text[], $3::bool[])",
-        build_id as _,
-        &logs_filename as &[String],
-        &successes as &[bool],
-    )
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{Config, testing::TestDatabase};
-    use chrono::NaiveDate;
     use docs_rs_cargo_metadata::CargoMetadata;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_registry_api::OwnerKind;
     use docs_rs_types::{
-        KrateName, SimpleBuildError,
+        KrateName,
         testing::{DEFAULT_TARGET, KRATE, V0_1, V1},
     };
     use std::{collections::BTreeMap, iter, slice};
@@ -756,199 +598,6 @@ mod test {
         .await?;
 
         assert!(release_time.is_some());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_set_build_to_error() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
-
-        update_build_with_error(
-            &mut conn,
-            build_id,
-            Some(&SimpleBuildError("error message".into())),
-        )
-        .await?;
-
-        let row = sqlx::query!(
-            r#"SELECT
-                rustc_version,
-                docsrs_version,
-                build_started,
-                build_status as "build_status: BuildStatus",
-                errors,
-                error_kind
-               FROM builds
-               WHERE id = $1"#,
-            build_id as _
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert!(row.rustc_version.is_none());
-        assert!(row.docsrs_version.is_none());
-        assert!(row.build_started.is_some());
-        assert_eq!(row.build_status, BuildStatus::Failure);
-        assert_eq!(row.errors, Some("build error: error message".into()));
-        assert_eq!(row.error_kind, Some("SimpleBuildError".into()));
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_finish_build_success_valid_rustc_date() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
-
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc 1.84.0-nightly (e7c0d2750 2024-10-15)",
-            "docsrs_version",
-            BuildStatus::Success,
-            None,
-            None,
-            None::<&SimpleBuildError>,
-        )
-        .await?;
-
-        let row = sqlx::query!(
-            r#"SELECT
-                rustc_version,
-                docsrs_version,
-                build_status as "build_status: BuildStatus",
-                errors,
-                error_kind,
-                rustc_nightly_date
-                FROM builds
-                WHERE id = $1"#,
-            build_id.0
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert_eq!(
-            row.rustc_version,
-            Some("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)".into())
-        );
-        assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
-        assert_eq!(row.build_status, BuildStatus::Success);
-        assert_eq!(
-            row.rustc_nightly_date,
-            Some(NaiveDate::from_ymd_opt(2024, 10, 15).unwrap())
-        );
-        assert!(row.errors.is_none());
-        assert!(row.error_kind.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_finish_build_success_invalid_rustc_date() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
-
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc_version",
-            "docsrs_version",
-            BuildStatus::Success,
-            Some(42u64.into()),
-            Some(23),
-            None::<&SimpleBuildError>,
-        )
-        .await?;
-
-        let row = sqlx::query!(
-            r#"SELECT
-                rustc_version,
-                docsrs_version,
-                build_status as "build_status: BuildStatus",
-                documentation_size,
-                memory_peak,
-                errors,
-                error_kind,
-                rustc_nightly_date
-                FROM builds
-                WHERE id = $1"#,
-            build_id.0
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert_eq!(row.rustc_version, Some("rustc_version".into()));
-        assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
-        assert_eq!(row.build_status, BuildStatus::Success);
-        assert_eq!(row.documentation_size, Some(42));
-        assert_eq!(row.memory_peak, Some(23));
-        assert!(row.rustc_nightly_date.is_none());
-        assert!(row.errors.is_none());
-        assert!(row.error_kind.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_finish_build_error() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V0_1).await?;
-        let build_id = initialize_build(&mut conn, release_id).await?;
-
-        finish_build(
-            &mut conn,
-            build_id,
-            "rustc_version",
-            "docsrs_version",
-            BuildStatus::Failure,
-            None,
-            None,
-            Some(&SimpleBuildError("error message".into())),
-        )
-        .await?;
-
-        let row = sqlx::query!(
-            r#"SELECT
-                rustc_version,
-                docsrs_version,
-                build_status as "build_status: BuildStatus",
-                documentation_size,
-                errors,
-                error_kind
-               FROM builds
-               WHERE id = $1"#,
-            build_id as _
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert_eq!(row.rustc_version, Some("rustc_version".into()));
-        assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
-        assert_eq!(row.build_status, BuildStatus::Failure);
-        assert_eq!(row.errors, Some("build error: error message".into()));
-        assert_eq!(row.error_kind, Some("SimpleBuildError".into()));
-        assert!(row.documentation_size.is_none());
-
         Ok(())
     }
 
@@ -1387,77 +1036,6 @@ mod test {
 
         let same_release_id = initialize_release(&mut conn, crate_id, &V1).await?;
         assert_eq!(release_id, same_release_id);
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_initialize_build() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
-
-        let build_id = initialize_build(&mut conn, release_id).await?;
-
-        let id = sqlx::query_scalar!(
-            r#"SELECT id as "id: BuildId" FROM builds WHERE rid = $1"#,
-            release_id.0
-        )
-        .fetch_one(&mut *conn)
-        .await?;
-
-        assert_eq!(build_id, id);
-
-        let another_build_id = initialize_build(&mut conn, release_id).await?;
-        assert_ne!(build_id, another_build_id);
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_initialize_build_marks_previous_attempt_as_failure() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-        let crate_id = initialize_crate(&mut conn, &KRATE).await?;
-        let release_id = initialize_release(&mut conn, crate_id, &V1).await?;
-
-        let first_build_id = initialize_build(&mut conn, release_id).await?;
-        let second_build_id = initialize_build(&mut conn, release_id).await?;
-
-        assert_ne!(first_build_id, second_build_id);
-
-        let builds = sqlx::query!(
-            r#"SELECT
-                id as "id: BuildId",
-                build_status as "build_status: BuildStatus",
-                errors,
-                build_finished
-               FROM builds
-               WHERE rid = $1
-               ORDER BY id ASC"#,
-            release_id.0,
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-
-        assert_eq!(builds.len(), 2);
-
-        assert_eq!(builds[0].id, first_build_id);
-        assert_eq!(builds[0].build_status, BuildStatus::Failure);
-        assert_eq!(
-            builds[0].errors,
-            Some("build aborted: builder process restarted before completion".into())
-        );
-        assert!(builds[0].build_finished.is_some());
-
-        assert_eq!(builds[1].id, second_build_id);
-        assert_eq!(builds[1].build_status, BuildStatus::InProgress);
-        assert!(builds[1].build_finished.is_none());
 
         Ok(())
     }

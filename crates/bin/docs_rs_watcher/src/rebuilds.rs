@@ -96,7 +96,9 @@ mod tests {
             .name(&FOO)
             .version(V1)
             .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                FakeBuild::finished()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
+                    .build(),
             ])
             .create()
             .await?;
@@ -142,7 +144,9 @@ mod tests {
             .name(&FOO)
             .version(V1)
             .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                FakeBuild::finished()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
+                    .build(),
             ])
             .create()
             .await?;
@@ -173,7 +177,9 @@ mod tests {
             .name(&BAZ)
             .version(V1)
             .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
+                FakeBuild::finished()
+                    .rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)")
+                    .build(),
             ])
             .create()
             .await?;

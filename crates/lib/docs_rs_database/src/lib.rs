@@ -1,3 +1,4 @@
+pub mod build;
 mod config;
 pub mod crate_details;
 mod errors;

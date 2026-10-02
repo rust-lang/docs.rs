@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO builds(rid, build_status, build_server, build_started)\n               VALUES ($1, $2, $3, NOW())\n               RETURNING id as \"id: BuildId\" ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: BuildId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "builds",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        {
+          "Custom": {
+            "name": "build_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "success",
+                "failure",
+                "partial_failure"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "81fa3453a6964635bce4b88d6b5ce2bf62a8046abb5b88ed4ae9d6c9139b25a3"
+}
