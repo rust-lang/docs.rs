@@ -263,12 +263,107 @@ fn command_failure_is_recorded_without_queue_reattempt() -> Result<()> {
     assert!(row.errors.is_some());
     let entries = fetch_build_logs(&env, row.id)?;
     assert!(!entries.is_empty());
+    let mut found_diagnostics = false;
     for (filename, success) in entries {
         assert!(!success);
         let blob = runtime
             .block_on(storage.get(&format!("build-logs/{}/{filename}", row.id), ByteSize::MAX))?;
-        assert!(String::from_utf8(blob.content)?.contains("intentional compile failure"));
+        if filename.ends_with(".diagnostics.jsonl") {
+            found_diagnostics = true;
+            let messages: Vec<serde_json::Value> = blob
+                .content
+                .split(|byte| *byte == b'\n')
+                .filter(|line| !line.is_empty())
+                .map(serde_json::from_slice)
+                .collect::<Result<_, _>>()?;
+            assert!(messages.iter().any(|message| {
+                message["reason"] == "compiler-message"
+                    && message["message"]["rendered"]
+                        .as_str()
+                        .is_some_and(|rendered| rendered.contains("intentional compile failure"))
+            }));
+        } else {
+            assert!(String::from_utf8(blob.content)?.contains("intentional compile failure"));
+        }
     }
+    assert!(
+        found_diagnostics,
+        "the failed build must publish a Cargo diagnostics log"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn successful_build_with_a_warning_publishes_cargo_diagnostics() -> Result<()> {
+    let env = environment()?;
+    let runtime = env.runtime();
+    let storage = env.storage()?;
+    let name = KrateName::from_static("warning-diagnostics");
+    mock_package(
+        &env,
+        &name,
+        &V0_1,
+        Some("lib.rs"),
+        r#"
+#![warn(missing_docs)]
+
+pub struct MissingDocs;
+"#,
+    )?;
+
+    let summary = env.build_builder()?.build_package(&name, &V0_1)?;
+    assert!(summary.successful);
+    let row = fetch_build_result(&env, &name)?;
+    let entries = fetch_build_logs(&env, row.id)?;
+    let (filename, success) = entries
+        .iter()
+        .find(|(filename, _)| filename.ends_with(".diagnostics.jsonl"))
+        .expect("the warning must publish a Cargo diagnostics log");
+    assert!(*success);
+
+    let blob = runtime
+        .block_on(storage.get(&format!("build-logs/{}/{filename}", row.id), ByteSize::MAX))?;
+    let messages: Vec<serde_json::Value> = blob
+        .content
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(serde_json::from_slice)
+        .collect::<Result<_, _>>()?;
+    assert!(messages.iter().any(|message| {
+        message["reason"] == "compiler-message"
+            && message["message"]["level"] == "warning"
+            && message["message"]["rendered"]
+                .as_str()
+                .is_some_and(|rendered| rendered.contains("missing documentation"))
+    }));
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn cargo_diagnostics_upload_failure_requests_reattempt() -> Result<()> {
+    let env = environment()?;
+    let storage = env.storage()?;
+    let name = KrateName::from_static("diagnostics-upload-failure");
+    mock_package(
+        &env,
+        &name,
+        &V0_1,
+        Some("lib.rs"),
+        "compile_error!(\"intentional compile failure\");",
+    )?;
+    storage.reject_uploads_for_testing(Some(|path| path.ends_with(".diagnostics.jsonl")));
+
+    let summary = env.build_builder()?.build_package(&name, &V0_1)?;
+    assert!(!summary.successful);
+    assert!(summary.should_reattempt);
+    let row = fetch_build_result(&env, &name)?;
+    assert_eq!(row.status, BuildStatus::Failure);
+    assert!(
+        row.errors
+            .is_some_and(|error| error.contains("injected upload failure"))
+    );
     Ok(())
 }
 

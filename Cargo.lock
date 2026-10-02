@@ -2479,6 +2479,7 @@ dependencies = [
  "log",
  "pretty_assertions",
  "rustwide",
+ "serde",
  "serde_json",
  "strum",
  "sysinfo",
