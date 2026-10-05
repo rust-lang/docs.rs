@@ -21,7 +21,7 @@ jobs:
       - name: Install development tools
         uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: >-
             --jobs=1 just cargo:mdbook cargo:mdbook-linkcheck2
             cargo:mdbook-mermaid
