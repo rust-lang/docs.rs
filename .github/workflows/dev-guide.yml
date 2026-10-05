@@ -19,7 +19,7 @@ jobs:
         run: rustup update stable && rustup default stable
 
       - name: Install development tools
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@v5
         with:
           version: 2026.9.17
           install_args: >-
