@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           version: 2026.9.17
           install_args: --jobs=1 just fd cargo:sqlx-cli
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           version: 2026.9.17
           install_args: --jobs=1 just cargo:cargo-nextest
@@ -96,7 +96,7 @@ jobs:
       - name: Expose GitHub cache credentials
         uses: crazy-max/ghaction-github-runtime@v4
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           version: 2026.9.17
           install_args: --jobs=1 just node cargo:sqlx-cli
@@ -123,7 +123,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
           version: 2026.9.17
           install_args: >-
