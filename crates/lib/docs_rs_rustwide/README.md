@@ -225,8 +225,7 @@ Environment lint defaults precede the crate's
 `PrepareCommand::rustdoc_args`. Later flags can override earlier settings
 according to Rust's lint precedence rules. For example, a crate can override an
 environment default denial with
-`rustdoc-args = ["-A",
-"rustdoc::invalid_html_tags"]`.
+`rustdoc-args = ["-A", "rustdoc::invalid_html_tags"]`.
 
 This policy configures rustdoc invocations, not rustc compilation of
 dependencies or other Cargo builds. Names can include rustdoc lints, compiler
