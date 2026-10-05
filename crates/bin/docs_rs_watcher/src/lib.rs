@@ -35,25 +35,29 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
     let queue = context.build_queue()?;
     let metrics = WatcherMetrics::new(context.meter_provider());
 
-    loop {
+    let mut fetch_from_registry = async || -> anyhow::Result<()> {
         if queue.is_locked().await? {
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
             let index = Index::from_config(config).await?;
 
-            match get_new_crates(context, &index, config, &metrics).await {
-                Ok(n) => debug!("{} crates added to queue", n),
-                Err(e) => {
-                    metrics.record_poll_error(EventSource::Git);
-                    error!(?e, "Failed to get new crates");
-                }
-            }
+            let added = get_new_crates(context, &index, config, &metrics).await?;
+            debug!("{} crates added to queue", added);
 
             if last_gc.elapsed() >= *config.registry_gc_interval {
                 index.run_git_gc().await;
                 last_gc = Instant::now();
             }
+        }
+
+        Ok(())
+    };
+
+    loop {
+        if let Err(err) = fetch_from_registry().await {
+            metrics.record_poll_error(EventSource::Git);
+            error!(?err, "Failed to get new crates");
         }
         time::sleep(*config.delay_between_registry_fetches).await;
     }
