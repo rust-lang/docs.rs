@@ -21,5 +21,13 @@ sqlx = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 
+[dev-dependencies]
+docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
+docs_rs_database = { path = "../docs_rs_database", features = ["testing"] }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
+docs_rs_storage = { path = "../docs_rs_storage", features = ["testing"] }
+docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
+tokio = { workspace = true }
+
 [lints]
 workspace = true

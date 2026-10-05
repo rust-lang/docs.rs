@@ -417,7 +417,7 @@ impl From<CrateDetails> for LimitedCrateDetails {
         } = value;
 
         let (latest_build_time, latest_build_rustc_version) = if let Some(b) = latest_build {
-            (b.build_time, b.rustc_version)
+            (b.build_time(), b.state().rustc_version.clone())
         } else {
             (None, None)
         };

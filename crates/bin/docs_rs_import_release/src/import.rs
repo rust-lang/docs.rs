@@ -5,9 +5,9 @@ use crate::{
 };
 use anyhow::{Result, anyhow, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
-use docs_rs_database::releases::{
-    finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-    update_build_with_error,
+use docs_rs_database::{
+    build::{AnyBuild, Build, InProgress, NewBuildLog},
+    releases::{finish_release, initialize_crate, initialize_release},
 };
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
@@ -18,7 +18,7 @@ use docs_rs_rustdoc_json::{
 use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use docs_rs_storage::{compress, decompress, rustdoc_json_path};
 use docs_rs_types::{
-    BuildId, BuildStatus, CrateId, KrateName, ReleaseId, ReqVersion, SimpleBuildError, Version,
+    ByteSize, CrateId, KrateName, ReleaseId, ReqVersion, SimpleBuildError, Version,
 };
 use docs_rs_utils::{BUILD_VERSION, spawn_blocking};
 use docsrs_metadata::Metadata;
@@ -57,7 +57,7 @@ pub(crate) async fn import_test_release(
 
     let crate_id = initialize_crate(&mut *conn, name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build_id = initialize_build(&mut *conn, release_id).await?;
+    let mut build = AnyBuild::start(conn, release_id).await?;
 
     let result = import_test_release_inner(
         &mut *conn,
@@ -68,20 +68,31 @@ pub(crate) async fn import_test_release(
         &version,
         crate_id,
         release_id,
-        build_id,
+        &mut build,
     )
     .await;
 
-    if let Err(err) = &result {
-        update_build_with_error(
-            &mut *conn,
-            build_id,
-            Some(&SimpleBuildError(format!("{err:?}"))),
-        )
-        .await?;
+    match result {
+        Ok(documentation_size) => {
+            build
+                .finish()
+                .rustc_version("rustc 1.95.0-nightly (873d4682c 2026-01-25)")
+                .docsrs_version(BUILD_VERSION)
+                .successful(true)
+                .documentation_size(documentation_size)
+                .save(conn)
+                .await?;
+            Ok(())
+        }
+        Err(err) => {
+            build
+                .fail_early()
+                .error(&SimpleBuildError(format!("{err:?}")))
+                .save(conn)
+                .await?;
+            Err(err)
+        }
     }
-
-    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -95,8 +106,8 @@ async fn import_test_release_inner(
     version: &Version,
     crate_id: CrateId,
     release_id: ReleaseId,
-    build_id: BuildId,
-) -> Result<()> {
+    build: &mut Build<InProgress>,
+) -> Result<ByteSize> {
     info!("download & inspect source from crates.io...");
     let source_dir = registry_api
         .download_and_extract_source(name, version)
@@ -162,14 +173,19 @@ async fn import_test_release_inner(
     };
 
     info!("uploading fake build logs");
-    for build_target in &all_targets {
-        storage
-            .store_one(
-                format!("build-logs/{build_id}/{build_target}.txt"),
-                format!("fake build output\nbuild target: {}", build_target),
-            )
-            .await?;
-    }
+    build
+        .publish_build_logs(
+            &mut *conn,
+            storage,
+            all_targets.iter().map(|target| {
+                NewBuildLog::builder()
+                    .target(target)
+                    .log(format!("fake build output\nbuild target: {}", target))
+                    .successful(true)
+                    .build()
+            }),
+        )
+        .await?;
 
     info!("finding used rustdoc static files in HTML...");
     {
@@ -223,7 +239,7 @@ async fn import_test_release_inner(
         }
     }
 
-    info!("finish release & build");
+    info!("finish release");
     finish_release(
         &mut *conn,
         crate_id,
@@ -241,17 +257,5 @@ async fn import_test_release_inner(
     )
     .await?;
 
-    finish_build(
-        &mut *conn,
-        build_id,
-        "rustc 1.95.0-nightly (873d4682c 2026-01-25)",
-        BUILD_VERSION,
-        BuildStatus::Success,
-        Some(doc_stats.original_size),
-        None,
-        None::<&SimpleBuildError>,
-    )
-    .await?;
-
-    Ok(())
+    Ok(doc_stats.original_size)
 }

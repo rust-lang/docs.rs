@@ -7,9 +7,9 @@ use docs_rs_cargo_metadata::MetadataPackage;
 use docs_rs_context::Context;
 use docs_rs_database::{
     Pool,
+    build::{AnyBuild, Build, BuildLogKind, CompletionError, Finished, InProgress, NewBuildLog},
     releases::{
-        add_build_logs, add_doc_coverage, finish_build, finish_release, initialize_build,
-        initialize_crate, initialize_release, update_build_with_error,
+        add_doc_coverage, finish_release, initialize_crate, initialize_release,
         update_crate_data_in_database,
     },
     service_config::{ConfigName, get_config, set_config},
@@ -19,15 +19,15 @@ use docs_rs_registry_api::ReleaseData;
 use docs_rs_repository_stats::{RepositoryStatsUpdater, workspaces};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
 use docs_rs_rustwide::{
-    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResult, StepResultExt as _,
-    TargetBuildResult, ToolchainExt as _, utils::copy_dir_all,
+    BUILDER_VERSION, BuildEnvironment, ReleaseBuildResult, StepResultExt as _, TargetBuildResult,
+    ToolchainExt as _, utils::copy_dir_all,
 };
 use docs_rs_storage::{
     ArchiveStatistics, AsyncStorage, Storage, compress, rustdoc_archive_path, rustdoc_json_path,
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildId, BuildStatus, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
+    BuildStatus, ByteSize, CompressionAlgorithm, CrateId, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::{Handle, RUSTDOC_STATIC_STORAGE_PREFIX, spawn_blocking};
 use futures_util::future::try_join_all;
@@ -214,60 +214,50 @@ impl RustwideBuilder {
         name: &KrateName,
         version: &Version,
     ) -> Result<BuildPackageSummary> {
-        let (crate_id, release_id, build_id) = self.runtime.block_on(async {
+        let (crate_id, release_id, build) = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
             let crate_id = initialize_crate(&mut conn, name).await?;
             let release_id = initialize_release(&mut conn, crate_id, version).await?;
-            let build_id = initialize_build(&mut conn, release_id).await?;
-            Ok::<_, Error>((crate_id, release_id, build_id))
+            let build = AnyBuild::start(&mut conn, release_id).await?;
+            Ok::<_, Error>((crate_id, release_id, build))
         })?;
 
-        let result = self.build_package_inner(name, version, crate_id, release_id, build_id);
-        self.finish_package_build(build_id, result)
-    }
-
-    fn finish_package_build(
-        &self,
-        build_id: BuildId,
-        result: Result<bool>,
-    ) -> Result<BuildPackageSummary> {
-        match result {
-            Ok(successful) => Ok(BuildPackageSummary {
-                successful,
-                should_reattempt: false,
-            }),
-            Err(err) => self.runtime.block_on(async {
-                // NOTE: this might hide some errors from us, while only surfacing them in the build
-                // result.
-                // At some point we might introduce a special error type which additionally reports
-                // to sentry.
-                let mut conn = self.db.get_async().await?;
-
-                update_build_with_error(&mut conn, build_id, Some(&RustwideBuildError::Other(err)))
-                    .await?;
-
-                Ok(BuildPackageSummary {
-                    successful: false,
-                    should_reattempt: true,
-                })
-            }),
+        match self.build_release(name, version) {
+            Ok(Some(release)) => self
+                .publish_release(name, version, crate_id, release_id, build, release)
+                .map(|(_, summary)| summary),
+            Ok(None) => self.finish_uncompiled_build(build, Ok(())),
+            Err(err) => self.finish_uncompiled_build(build, Err(err)),
         }
     }
 
-    #[instrument(skip(self))]
-    #[allow(clippy::too_many_arguments)]
-    fn build_package_inner(
-        &mut self,
-        name: &KrateName,
-        version: &Version,
-        crate_id: CrateId,
-        release_id: ReleaseId,
-        build_id: BuildId,
-    ) -> Result<bool> {
-        let Some(release) = self.build_release(name, version)? else {
-            return Ok(false);
-        };
-        self.publish_release(name, version, crate_id, release_id, build_id, release)
+    fn finish_uncompiled_build(
+        &self,
+        build: Build<InProgress>,
+        result: Result<()>,
+    ) -> Result<BuildPackageSummary> {
+        self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            match result {
+                Ok(()) => {
+                    // A blacklisted release has no compiler results. Close the
+                    // attempt rather than leaving it in progress indefinitely.
+                    build.fail_early().save(&mut conn).await?;
+                    Ok(BuildPackageSummary {
+                        successful: false,
+                        should_reattempt: false,
+                    })
+                }
+                Err(err) => {
+                    let error = RustwideBuildError::Other(err);
+                    build.fail_early().error(&error).save(&mut conn).await?;
+                    Ok(BuildPackageSummary {
+                        successful: false,
+                        should_reattempt: true,
+                    })
+                }
+            }
+        })
     }
 
     #[instrument(skip(self))]
@@ -334,232 +324,251 @@ impl RustwideBuilder {
         version: &Version,
         crate_id: CrateId,
         release_id: ReleaseId,
-        build_id: BuildId,
+        mut build: Build<InProgress>,
         release: BuiltRelease,
-    ) -> Result<bool> {
+    ) -> Result<(Build<Finished>, BuildPackageSummary)> {
         let BuiltRelease {
             result: release_build_result,
             statistics: build_statistics,
             source_dir,
             source_stats,
         } = release;
-        let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
-        let mut algs = HashSet::from([source_stats.alg]);
-        let cargo_metadata = release_build_result.cargo_metadata();
-
-        if release_build_result
-            .targets()
-            .any(|t| t.regenerate_lockfile().is_some())
-        {
-            self.builder_metrics.lockfile_regenerated.add(1, &[]);
-        }
-
-        let build_succeeded = release_build_result.build_succeeded();
-        let has_docs = release_build_result.has_docs();
-        let default_target = release_build_result.default_target().target().to_string();
-
-        let mut successful_targets = Vec::new();
-        let documentation_size = if has_docs {
-            copy_target_docs(release_build_result.default_target(), local_storage.path())?;
-            successful_targets.push(default_target.clone());
-
-            for target in release_build_result.other_targets() {
-                if target.documentation_succeeded() {
-                    copy_target_docs(target, local_storage.path())?;
-                    successful_targets.push(target.target().to_string());
-                }
+        let rustc_version = match self.environment.rustc_version() {
+            Ok(version) => version,
+            Err(err) => {
+                let error = RustwideBuildError::Other(err);
+                self.runtime.block_on(async {
+                    let mut conn = self.db.get_async().await?;
+                    build.fail_early().error(&error).save(&mut conn).await
+                })?;
+                return Err(error.into());
             }
-
-            let doc_stats = self.runtime.block_on(self.storage.store_all_in_archive(
-                &rustdoc_archive_path(name, version),
-                local_storage.path(),
-            ))?;
-            self.builder_metrics
-                .record_documentation_size(doc_stats.original_size);
-            algs.insert(doc_stats.alg);
-            Some(doc_stats.original_size)
-        } else {
-            None
         };
-
-        info!("uploading build logs...");
-
-        // NOTE: right now we only upload logs for the html build & the json build.
-        // The new library also collects logs from all other steps, I didn't dig into
-        // if these would be useful for crate developers at all, and leave them as they
-        // are right now.
-        let mut build_logs = Vec::new();
-        for target in release_build_result.targets() {
-            build_logs.extend(self.publish_build_log(
-                build_id,
-                format!("{}.txt", target.target()),
-                target.documentation(),
-                target.documentation_succeeded(),
-            )?);
-            build_logs.extend(self.publish_build_log(
-                build_id,
-                format!("{}_json.txt", target.target()),
-                target.rustdoc_json(),
-                target.rustdoc_json().is_ok(),
-            )?);
-        }
-
-        self.publish_json(build_id, name, version, &release_build_result);
-
-        let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-
-        self.runtime
-            .block_on(add_build_logs(&mut async_conn, build_id, build_logs))?;
-
+        let docsrs_version = format!("docsrs {BUILDER_VERSION}");
+        let build_succeeded = release_build_result.build_succeeded();
+        let memory_peak = build_statistics.memory_peak_bytes().map(ByteSize::b);
         let build_error = release_build_result
             .default_target()
             .documentation()
             .as_inner()
-            .err();
+            .err()
+            .map(CompletionError::new);
+        let mut documentation_size = None;
+        let result = (|| -> Result<bool> {
+            let local_storage = tempfile::tempdir_in(&self.config.temp_dir)?;
+            let mut algs = HashSet::from([source_stats.alg]);
+            let cargo_metadata = release_build_result.cargo_metadata();
 
-        let rustc_version = self.environment.rustc_version()?;
-        let docsrs_version = format!("docsrs {BUILDER_VERSION}");
-        let mut async_conn = self.runtime.block_on(self.db.get_async())?;
-        self.runtime.block_on(finish_build(
-            &mut async_conn,
-            build_id,
-            &rustc_version,
-            &docsrs_version,
-            if build_succeeded {
-                BuildStatus::Success
-            } else {
-                BuildStatus::Failure
-            },
-            documentation_size,
-            build_statistics.memory_peak_bytes(),
-            build_error,
-        ))?;
-
-        if build_succeeded {
-            self.builder_metrics.successful_builds.add(1, &[]);
-        } else if cargo_metadata.root().is_library() {
-            self.builder_metrics.failed_builds.add(1, &[]);
-        } else {
-            self.builder_metrics.non_library_builds.add(1, &[]);
-        }
-
-        let release_data = match self
-            .runtime
-            .block_on(self.registry_api.get_release_data(name, version))
-        {
-            Ok(data) => data,
-            Err(err) => {
-                error!(%name, %version, ?err, "could not fetch releases-data");
-                None
+            if release_build_result
+                .targets()
+                .any(|t| t.regenerate_lockfile().is_some())
+            {
+                self.builder_metrics.lockfile_regenerated.add(1, &[]);
             }
-        }
-        .unwrap_or_else(ReleaseData::dummy);
 
-        let cargo_metadata = cargo_metadata.root();
-        let repository = self.get_repo(cargo_metadata)?;
-        let current_release_build_status = self.runtime.block_on(
-            sqlx::query_scalar!(
-                r#"
+            let build_succeeded = release_build_result.build_succeeded();
+            let has_docs = release_build_result.has_docs();
+            let default_target = release_build_result.default_target().target().to_string();
+
+            let mut successful_targets = Vec::new();
+            documentation_size = if has_docs {
+                copy_target_docs(release_build_result.default_target(), local_storage.path())?;
+                successful_targets.push(default_target.clone());
+
+                for target in release_build_result.other_targets() {
+                    if target.documentation_succeeded() {
+                        copy_target_docs(target, local_storage.path())?;
+                        successful_targets.push(target.target().to_string());
+                    }
+                }
+
+                let doc_stats = self.runtime.block_on(self.storage.store_all_in_archive(
+                    &rustdoc_archive_path(name, version),
+                    local_storage.path(),
+                ))?;
+                self.builder_metrics
+                    .record_documentation_size(doc_stats.original_size);
+                algs.insert(doc_stats.alg);
+                Some(doc_stats.original_size)
+            } else {
+                None
+            };
+
+            info!("uploading build logs...");
+
+            // NOTE: right now we only upload logs for the html build & the json build.
+            // The new library also collects logs from all other steps, I didn't dig into
+            // if these would be useful for crate developers at all, and leave them as they
+            // are right now.
+            let logs = release_build_result.targets().flat_map(|target| {
+                [
+                    (
+                        BuildLogKind::Html,
+                        target.documentation().log(),
+                        target.documentation_succeeded(),
+                    ),
+                    (
+                        BuildLogKind::Json,
+                        target.rustdoc_json().log(),
+                        target.rustdoc_json().is_ok(),
+                    ),
+                ]
+                .into_iter()
+                .filter_map(move |(kind, log, successful)| {
+                    log.map(|log| {
+                        NewBuildLog::builder()
+                            .target(target.target())
+                            .kind(kind)
+                            .log(log)
+                            .successful(successful)
+                            .build()
+                    })
+                })
+            });
+            let mut async_conn = self.runtime.block_on(self.db.get_async())?;
+            self.runtime.block_on(build.publish_build_logs(
+                &mut async_conn,
+                &self.storage,
+                logs,
+            ))?;
+
+            self.publish_json(name, version, &release_build_result);
+
+            if build_succeeded {
+                self.builder_metrics.successful_builds.add(1, &[]);
+            } else if cargo_metadata.root().is_library() {
+                self.builder_metrics.failed_builds.add(1, &[]);
+            } else {
+                self.builder_metrics.non_library_builds.add(1, &[]);
+            }
+
+            let release_data = match self
+                .runtime
+                .block_on(self.registry_api.get_release_data(name, version))
+            {
+                Ok(data) => data,
+                Err(err) => {
+                    error!(%name, %version, ?err, "could not fetch releases-data");
+                    None
+                }
+            }
+            .unwrap_or_else(ReleaseData::dummy);
+
+            let cargo_metadata = cargo_metadata.root();
+            let repository = self.get_repo(cargo_metadata)?;
+            let current_release_build_status = self.runtime.block_on(
+                sqlx::query_scalar!(
+                    r#"
                     SELECT build_status AS "build_status: BuildStatus"
                     FROM release_build_status
                     WHERE rid = $1
                     "#,
-                release_id.0,
-            )
-            .fetch_optional(&mut *async_conn),
-        )?;
+                    release_id.0,
+                )
+                .fetch_optional(&mut *async_conn),
+            )?;
 
-        if !build_succeeded && current_release_build_status == Some(BuildStatus::Success) {
-            info!(
-                "build was unsuccessful, but the release was already successfully built in the past. Skipping release record update."
-            );
-            return Ok(false);
-        }
+            if !build_succeeded && current_release_build_status == Some(BuildStatus::Success) {
+                info!(
+                    "build was unsuccessful, but the release was already successfully built in the past. Skipping release record update."
+                );
+                return Ok(false);
+            }
 
-        let has_examples = source_dir.path().join("examples").is_dir();
-        self.runtime.block_on(finish_release(
-            &mut async_conn,
-            crate_id,
-            release_id,
-            cargo_metadata,
-            source_dir.path(),
-            &default_target,
-            successful_targets,
-            &release_data,
-            has_docs,
-            has_examples,
-            algs,
-            repository,
-            source_stats.original_size,
-        ))?;
-
-        if let Some(repository_id) = repository {
-            self.runtime.block_on(workspaces::update_repository_stats(
+            let has_examples = source_dir.path().join("examples").is_dir();
+            self.runtime.block_on(finish_release(
                 &mut async_conn,
-                repository_id,
+                crate_id,
+                release_id,
+                cargo_metadata,
+                source_dir.path(),
+                &default_target,
+                successful_targets,
+                &release_data,
+                has_docs,
+                has_examples,
+                algs,
+                repository,
+                source_stats.original_size,
             ))?;
-        }
 
-        if let Ok(Some(doc_coverage)) = release_build_result.default_target().coverage().as_inner()
-        {
-            self.runtime
-                .block_on(add_doc_coverage(&mut async_conn, release_id, *doc_coverage))?;
-        }
-
-        match self
-            .runtime
-            .block_on(self.registry_api.get_crate_data(name))
-        {
-            Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
-                &mut async_conn,
-                name,
-                &crate_data,
-            ))?,
-            Err(err) => {
-                error!(%name, %version, ?err, "could not fetch crate & owner data");
+            if let Some(repository_id) = repository {
+                self.runtime.block_on(workspaces::update_repository_stats(
+                    &mut async_conn,
+                    repository_id,
+                ))?;
             }
-        }
 
-        if build_succeeded {
-            for prefix in &["rustdoc", "sources"] {
-                let prefix = format!("{prefix}/{name}/{version}/");
-                debug!("cleaning old storage folder {}", prefix);
-                self.blocking_storage.delete_prefix(&prefix)?;
+            if let Ok(Some(doc_coverage)) =
+                release_build_result.default_target().coverage().as_inner()
+            {
+                self.runtime.block_on(add_doc_coverage(
+                    &mut async_conn,
+                    release_id,
+                    *doc_coverage,
+                ))?;
             }
-        }
 
-        self.runtime.block_on(async move {
-            drop(async_conn);
-        });
-        local_storage.close()?;
-        Ok(build_succeeded)
-    }
+            match self
+                .runtime
+                .block_on(self.registry_api.get_crate_data(name))
+            {
+                Ok(crate_data) => self.runtime.block_on(update_crate_data_in_database(
+                    &mut async_conn,
+                    name,
+                    &crate_data,
+                ))?,
+                Err(err) => {
+                    error!(%name, %version, ?err, "could not fetch crate & owner data");
+                }
+            }
 
-    fn publish_build_log<T>(
-        &self,
-        build_id: BuildId,
-        filename: String,
-        step: &StepResult<T>,
-        successful: bool,
-    ) -> Result<Option<(String, bool)>> {
-        let Some(log) = step.log() else {
-            error!(filename, successful, "missing build log");
-            return Ok(None);
+            if build_succeeded {
+                for prefix in &["rustdoc", "sources"] {
+                    let prefix = format!("{prefix}/{name}/{version}/");
+                    debug!("cleaning old storage folder {}", prefix);
+                    self.blocking_storage.delete_prefix(&prefix)?;
+                }
+            }
+
+            self.runtime.block_on(async move {
+                drop(async_conn);
+            });
+            local_storage.close()?;
+            Ok(build_succeeded)
+        })();
+        let (successful, should_reattempt, error) = match result {
+            Ok(successful) => (successful, false, build_error),
+            Err(err) => (
+                false,
+                true,
+                Some(CompletionError::new(&RustwideBuildError::Other(err))),
+            ),
         };
-
-        self.blocking_storage
-            .store_one(format!("build-logs/{build_id}/{filename}"), log.to_owned())?;
-        Ok(Some((filename, successful)))
+        let finished = self.runtime.block_on(async {
+            let mut conn = self.db.get_async().await?;
+            build
+                .finish()
+                .rustc_version(&rustc_version)
+                .docsrs_version(&docsrs_version)
+                .successful(build_succeeded && !should_reattempt)
+                .maybe_documentation_size(documentation_size)
+                .maybe_memory_peak(memory_peak)
+                .maybe_error(error.as_ref())
+                .save(&mut conn)
+                .await
+        })?;
+        Ok((
+            finished,
+            BuildPackageSummary {
+                successful,
+                should_reattempt,
+            },
+        ))
     }
 
     #[instrument(skip(self, release))]
-    fn publish_json(
-        &self,
-        build_id: BuildId,
-        name: &KrateName,
-        version: &Version,
-        release: &ReleaseBuildResult,
-    ) {
+    fn publish_json(&self, name: &KrateName, version: &Version, release: &ReleaseBuildResult) {
         info!("uploading rustdoc json files...");
 
         for (target, json) in release.targets().filter_map(|target_result| {
@@ -680,8 +689,7 @@ mod tests {
     use docs_rs_registry_api::ReleaseData;
     use docs_rs_rustwide::{DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION};
     use docs_rs_types::{
-        BuildStatus, ByteSize, CompressionAlgorithm, ReleaseId, SimpleBuildError, Version,
-        testing::V0_1,
+        BuildStatus, ByteSize, CompressionAlgorithm, ReleaseId, Version, testing::V0_1,
     };
     use docs_rs_utils::block_on_async_with_conn;
     use docsrs_metadata::DEFAULT_TARGETS;
@@ -1058,18 +1066,14 @@ mod tests {
         let release_id = block_on_async_with_conn!(env, |mut conn| async {
             let crate_id = initialize_crate(&mut *conn, &crate_).await?;
             let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-            let build_id = initialize_build(&mut *conn, release_id).await?;
-            finish_build(
-                &mut *conn,
-                build_id,
-                "some-version",
-                "other-version",
-                BuildStatus::Success,
-                None,
-                None,
-                None::<&SimpleBuildError>,
-            )
-            .await?;
+            let build = AnyBuild::start(&mut *conn, release_id).await?;
+            build
+                .finish()
+                .rustc_version("some-version")
+                .docsrs_version("other-version")
+                .successful(true)
+                .save(&mut *conn)
+                .await?;
             finish_release(
                 &mut *conn,
                 crate_id,

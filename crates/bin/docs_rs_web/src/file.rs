@@ -13,7 +13,9 @@ use axum_extra::{
     headers::{ContentLength, ContentType, LastModified},
 };
 use docs_rs_headers::IfNoneMatch;
-use docs_rs_storage::{AsyncStorage, Blob, StreamingBlob};
+#[cfg(test)]
+use docs_rs_storage::Blob;
+use docs_rs_storage::{AsyncStorage, StreamingBlob};
 use std::time::SystemTime;
 use tokio_util::io::ReaderStream;
 use tracing::warn;
@@ -24,8 +26,10 @@ use tracing::warn;
 const FASTLY_CACHE_MAX_OBJECT_SIZE: usize = 100 * 1024 * 1024; // 100 MB
 
 #[derive(Debug)]
+#[cfg(test)]
 pub(crate) struct File(pub(crate) Blob);
 
+#[cfg(test)]
 impl File {
     /// Gets file from database
     pub(super) async fn from_path(storage: &AsyncStorage, path: &str) -> Result<File> {

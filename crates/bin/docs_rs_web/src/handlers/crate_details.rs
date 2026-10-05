@@ -5,7 +5,7 @@ use crate::{
         DbConnection,
         rustdoc::{PageKind, RustdocParams},
     },
-    handlers::builds::{self, Build},
+    handlers::builds,
     impl_axum_webpage,
     match_release::{MatchedRelease, match_version},
     metadata::MetaData,
@@ -20,6 +20,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
+use docs_rs_database::build::{AnyBuild, Build, Finished};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
 use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
@@ -46,7 +47,7 @@ pub(crate) struct CrateDetails {
     build_status: BuildStatus,
     pub latest_build_id: Option<BuildId>,
     last_successful_build: Option<Version>,
-    pub latest_build: Option<Build>,
+    pub latest_build: Option<Build<Finished>>,
     pub rustdoc_status: Option<bool>,
     pub repository_url: Option<String>,
     pub homepage_url: Option<String>,
@@ -222,9 +223,13 @@ impl CrateDetails {
         let latest_build = builds
             .into_iter()
             .filter(|build| {
-                build.build_status == BuildStatus::Success && build.build_time.is_some()
+                build.display_status() == BuildStatus::Success && build.build_time().is_some()
             })
-            .max_by_key(|build| build.build_time);
+            .filter_map(|build| match build {
+                AnyBuild::Finished(build) => Some(build),
+                AnyBuild::InProgress(_) | AnyBuild::EarlyFailure(_) => None,
+            })
+            .max_by_key(Build::build_time);
 
         let mut crate_details = CrateDetails {
             name: krate.name,
@@ -1223,9 +1228,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
-                ])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 
@@ -2105,9 +2108,9 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::Success),
-                    FakeBuild::default().build_status(BuildStatus::Failure),
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
+                    FakeBuild::finished().successful(true).build(),
+                    FakeBuild::finished().successful(false).build(),
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -2131,8 +2134,8 @@ path = "src/lib.rs"
                 .name("dummy")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::Failure),
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
+                    FakeBuild::finished().successful(false).build(),
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -2155,9 +2158,7 @@ path = "src/lib.rs"
                 .await
                 .name("dummy")
                 .version("0.1.0")
-                .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
-                ])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 

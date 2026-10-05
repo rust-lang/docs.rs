@@ -15,34 +15,22 @@ use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
 };
-use chrono::{DateTime, Utc};
 use constant_time_eq::constant_time_eq;
 use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
+use docs_rs_database::build::AnyBuild;
 use docs_rs_headers::CanonicalUrl;
-use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildStatus, KrateName, ReqVersion, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Build {
-    id: BuildId,
-    pub rustc_version: Option<String>,
-    docsrs_version: Option<String>,
-    pub build_status: BuildStatus,
-    pub build_time: Option<DateTime<Utc>>,
-    build_duration: Option<Duration>,
-    memory_peak: Option<i64>,
-    errors: Option<String>,
-}
-
 #[derive(Template)]
 #[template(path = "crate/builds.html")]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct BuildsPage {
     metadata: MetaData,
-    builds: Vec<Build>,
+    builds: Vec<AnyBuild>,
     limits: Limits,
     canonical_url: CanonicalUrl,
     params: RustdocParams,
@@ -183,60 +171,13 @@ pub(super) async fn get_builds(
     conn: &mut sqlx::PgConnection,
     name: &KrateName,
     version: &Version,
-) -> Result<Vec<Build>> {
-    Ok(sqlx::query_as!(
-        Build,
-        r#"SELECT
-            builds.id as "id: BuildId",
-            builds.rustc_version,
-            builds.docsrs_version,
-            CASE
-                WHEN builds.build_status = 'success'::build_status THEN
-                    CASE
-                        WHEN COALESCE(
-                            (SELECT bool_and(builds_logs.success)
-                             FROM builds_logs
-                             WHERE builds_logs.build_id = builds.id),
-                            TRUE
-                        ) = TRUE THEN 'success'::build_status
-                        ELSE 'partial_failure'::build_status
-                    END
-                ELSE builds.build_status
-            END as "build_status!: BuildStatus",
-            COALESCE(builds.build_finished, builds.build_started) as build_time,
-            CASE
-                WHEN builds.build_started IS NULL
-                    -- for old builds, `build_started` is empty.
-                    THEN NULL
-                ELSE
-                    CASE
-                        -- for in-progress builds we show the duration until now
-                        WHEN builds.build_status = 'in_progress' THEN (CURRENT_TIMESTAMP - builds.build_started)
-                        -- there are broken builds where the status is `error`, and `build_finished` is NULL
-                        WHEN builds.build_finished IS NULL THEN NULL
-                        -- for finished builds we can show the full duration
-                        ELSE (builds.build_finished - builds.build_started)
-                    END
-            END AS "build_duration?: Duration",
-            builds.memory_peak,
-            builds.errors
-         FROM builds
-         INNER JOIN releases ON releases.id = builds.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE
-            crates.name = $1 AND
-            releases.version = $2
-         ORDER BY builds.id DESC"#,
-        name as _,
-        version as _,
-    )
-    .fetch_all(&mut *conn)
-    .await?)
+) -> Result<Vec<AnyBuild>> {
+    AnyBuild::for_release(conn, name, version).await
 }
 
 #[cfg(test)]
 mod tests {
-    use super::get_builds;
+
     use crate::{
         Config,
         cache::CachePolicy,
@@ -250,12 +191,11 @@ mod tests {
     use docs_rs_build_limits::Overrides;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
-        BuildStatus, ByteSize, Duration, SimpleBuildError,
-        testing::{FOO, V0_1, V1, V2},
+        ByteSize, Duration, SimpleBuildError,
+        testing::{FOO, V1, V2},
     };
     use kuchikiki::traits::TendrilSink;
     use reqwest::StatusCode;
-    use test_case::{test_case, test_matrix};
     use tower::ServiceExt;
 
     #[test]
@@ -286,9 +226,8 @@ mod tests {
                 .collect();
 
             assert_eq!(rows.len(), 1);
-            // Should have 4 mdashes: rustc_version, docsrs_version, build_time, build_duration
-            // (peak_memory_bytes shows "100 MB" from the dummy value)
-            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 4);
+            // Early failures have timing data, but no compiler versions or memory peak.
+            assert_eq!(rows[0].chars().filter(|&c| c == '—').count(), 3);
 
             Ok(())
         });
@@ -302,20 +241,20 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
-                    FakeBuild::default()
+                        .docsrs_version("docs.rs 1.0.0")
+                        .build(),
+                    FakeBuild::finished()
                         .successful(false)
                         .rustc_version("rustc (blabla 2020-01-01)")
-                        .docsrs_version("docs.rs 2.0.0"),
-                    FakeBuild::default()
+                        .docsrs_version("docs.rs 2.0.0")
+                        .build(),
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2021-01-01)")
-                        .docsrs_version("docs.rs 3.0.0"),
-                    FakeBuild::default()
-                        .build_status(BuildStatus::InProgress)
-                        .rustc_version("rustc (blabla 2022-01-01)")
-                        .docsrs_version("docs.rs 4.0.0"),
+                        .docsrs_version("docs.rs 3.0.0")
+                        .build(),
+                    FakeBuild::in_progress(),
                 ])
                 .create()
                 .await?;
@@ -346,17 +285,18 @@ mod tests {
         async_wrapper(|env| async move {
             // Use a specific memory value: 256 MiB = 256 * 1024 * 1024 = 268435456 bytes
             // filesizeformat uses decimal (1000-based), so this will display as ~268.43 MB
-            let test_memory_bytes: u64 = 256 * 1024 * 1024;
+            let test_memory_bytes = ByteSize::mib(256);
 
             env.fake_release()
                 .await
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
                         .docsrs_version("docs.rs 1.0.0")
-                        .memory_peak(test_memory_bytes),
+                        .memory_peak(test_memory_bytes)
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -643,9 +583,10 @@ mod tests {
                 .name("aquarelle")
                 .version(V1)
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
+                        .docsrs_version("docs.rs 1.0.0")
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -655,9 +596,10 @@ mod tests {
                 .name("aquarelle")
                 .version(V2)
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
+                        .docsrs_version("docs.rs 1.0.0")
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -690,9 +632,10 @@ mod tests {
                 .name("foo")
                 .version(V1)
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
+                        .docsrs_version("docs.rs 1.0.0")
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -715,9 +658,10 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .rustc_version("rustc (blabla 2019-01-01)")
-                        .docsrs_version("docs.rs 1.0.0"),
+                        .docsrs_version("docs.rs 1.0.0")
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -726,139 +670,5 @@ mod tests {
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
             Ok(())
         });
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    #[test_case(BuildStatus::Success)]
-    #[test_case(BuildStatus::Failure)]
-    #[test_case(BuildStatus::InProgress)]
-    async fn get_builds_legacy_logs_just_passes_build_status(
-        build_status: BuildStatus,
-    ) -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        env.fake_release()
-            .await
-            .name(FOO)
-            .version(V0_1)
-            .builds(vec![
-                FakeBuild::default()
-                    .build_status(build_status)
-                    .legacy_build_logs(true),
-            ])
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-
-        assert_eq!(
-            get_builds(&mut conn, &FOO, &V0_1)
-                .await?
-                .into_iter()
-                .map(|b| b.build_status)
-                .next()
-                .unwrap(),
-            build_status,
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    #[test_matrix(
-        [BuildStatus::InProgress, BuildStatus::Failure],
-        [true, false]
-    )]
-    async fn get_builds_new_logs_just_passes_build_status_if_not_success(
-        build_status: BuildStatus,
-        build_log_success: bool,
-    ) -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        env.fake_release()
-            .await
-            .name(FOO)
-            .version(V0_1)
-            .builds(vec![
-                FakeBuild::default()
-                    .build_status(build_status)
-                    .s3_build_log("some log", build_log_success),
-            ])
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-
-        assert_eq!(
-            get_builds(&mut conn, &FOO, &V0_1)
-                .await?
-                .into_iter()
-                .map(|b| b.build_status)
-                .next()
-                .unwrap(),
-            build_status,
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn get_builds_new_logs_all_logs_ok_means_success() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        env.fake_release()
-            .await
-            .name(FOO)
-            .version(V0_1)
-            .builds(vec![
-                FakeBuild::default()
-                    .build_status(BuildStatus::Success)
-                    .s3_build_log("some log", true)
-                    .build_log_for_other_target("other-target", "other log", true),
-            ])
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-
-        assert_eq!(
-            get_builds(&mut conn, &FOO, &V0_1)
-                .await?
-                .into_iter()
-                .map(|b| b.build_status)
-                .next()
-                .unwrap(),
-            BuildStatus::Success,
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn get_builds_new_logs_partial_success() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-        env.fake_release()
-            .await
-            .name(FOO)
-            .version(V0_1)
-            .builds(vec![
-                FakeBuild::default()
-                    .build_status(BuildStatus::Success)
-                    .s3_build_log("some log", true)
-                    .build_log_for_other_target("other-target", "other log", false),
-            ])
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-
-        assert_eq!(
-            get_builds(&mut conn, &FOO, &V0_1)
-                .await?
-                .into_iter()
-                .map(|b| b.build_status)
-                .next()
-                .unwrap(),
-            BuildStatus::PartialFailure
-        );
-
-        Ok(())
     }
 }

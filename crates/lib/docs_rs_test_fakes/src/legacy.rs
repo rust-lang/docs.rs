@@ -1,12 +1,10 @@
-use crate::FakeGithubStats;
+use crate::{FakeBuild, FakeGithubStats};
 use anyhow::{Context as _, Result, bail};
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
     Pool,
-    releases::{
-        add_build_logs, initialize_build, initialize_crate, initialize_release, update_build_status,
-    },
+    releases::{initialize_crate, initialize_release},
 };
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_rustdoc_json::{RUSTDOC_JSON_COMPRESSION_ALGORITHMS, RustdocJsonFormatVersion};
@@ -15,14 +13,9 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, ByteSize, DocCoverage, KrateName, ReleaseId,
-    SimpleBuildError, Version, VersionReq,
+    BuildError, BuildId, ByteSize, DocCoverage, KrateName, ReleaseId, Version, VersionReq,
 };
-use std::{
-    collections::{BTreeMap, HashMap},
-    fmt, iter,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, fmt, iter, sync::Arc};
 use tracing::debug;
 
 /// Create a fake release in the database that failed before the build.
@@ -45,25 +38,14 @@ where
     let version = version.try_into()?;
     let crate_id = initialize_crate(&mut *conn, &name).await?;
     let release_id = initialize_release(&mut *conn, crate_id, &version).await?;
-    let build_id = initialize_build(&mut *conn, release_id).await?;
+    let build = docs_rs_database::build::AnyBuild::start(&mut *conn, release_id)
+        .await?
+        .fail_early()
+        .error(&build_error)
+        .save(&mut *conn)
+        .await?;
 
-    sqlx::query_scalar!(
-        "UPDATE builds
-         SET
-             build_status = 'failure',
-             errors = $2,
-             error_kind = $3
-         WHERE id = $1",
-        build_id.0,
-        build_error.to_string(),
-        build_error.kind(),
-    )
-    .execute(&mut *conn)
-    .await?;
-
-    update_build_status(conn, release_id).await?;
-
-    Ok((release_id, build_id))
+    Ok((release_id, build.id()))
 }
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
@@ -88,19 +70,6 @@ pub struct FakeRelease<'a> {
     github_stats_id: Option<i32>,
     doc_coverage: Option<DocCoverage>,
     no_cargo_toml: bool,
-}
-
-pub struct FakeBuild {
-    s3_build_log: Option<(String, bool)>,
-    other_build_logs: HashMap<String, (String, bool)>,
-    db_build_log: Option<String>,
-    rustc_version: String,
-    docsrs_version: String,
-    build_status: BuildStatus,
-    memory_peak: Option<u64>,
-    /// new build logs: we have a record in the `builds_logs` table for each log, including a status
-    /// old build logs: people have to run `s3 ls` with prefix to know which build logs exist
-    legacy_build_logs: bool,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -208,7 +177,7 @@ impl<'a> FakeRelease<'a> {
         );
         Self {
             has_docs: false,
-            builds: Some(vec![FakeBuild::default().successful(false)]),
+            builds: Some(vec![FakeBuild::finished().successful(false).build()]),
             ..self
         }
     }
@@ -581,160 +550,5 @@ impl<'a> FakeRelease<'a> {
         }
 
         Ok(release_id)
-    }
-}
-
-impl FakeBuild {
-    pub fn rustc_version(self, rustc_version: impl Into<String>) -> Self {
-        Self {
-            rustc_version: rustc_version.into(),
-            ..self
-        }
-    }
-
-    pub fn docsrs_version(self, docsrs_version: impl Into<String>) -> Self {
-        Self {
-            docsrs_version: docsrs_version.into(),
-            ..self
-        }
-    }
-
-    pub fn s3_build_log(self, build_log: impl Into<String>, successful: bool) -> Self {
-        Self {
-            s3_build_log: Some((build_log.into(), successful)),
-            ..self
-        }
-    }
-
-    pub fn build_log_for_other_target(
-        mut self,
-        target: impl Into<String>,
-        build_log: impl Into<String>,
-        successful: bool,
-    ) -> Self {
-        self.other_build_logs
-            .insert(target.into(), (build_log.into(), successful));
-        self
-    }
-
-    pub fn db_build_log(self, build_log: impl Into<String>) -> Self {
-        Self {
-            db_build_log: Some(build_log.into()),
-            ..self
-        }
-    }
-
-    pub fn no_s3_build_log(self) -> Self {
-        Self {
-            s3_build_log: None,
-            ..self
-        }
-    }
-
-    pub fn successful(self, successful: bool) -> Self {
-        self.build_status(if successful {
-            BuildStatus::Success
-        } else {
-            BuildStatus::Failure
-        })
-    }
-
-    pub fn build_status(self, build_status: BuildStatus) -> Self {
-        Self {
-            build_status,
-            ..self
-        }
-    }
-
-    pub fn memory_peak(self, memory_peak: u64) -> Self {
-        Self {
-            memory_peak: Some(memory_peak),
-            ..self
-        }
-    }
-
-    pub fn legacy_build_logs(self, legacy_build_logs: bool) -> Self {
-        Self {
-            legacy_build_logs,
-            ..self
-        }
-    }
-
-    async fn create(
-        &self,
-        conn: &mut sqlx::PgConnection,
-        storage: &AsyncStorage,
-        release_id: ReleaseId,
-        default_target: &str,
-    ) -> Result<()> {
-        let build_id = docs_rs_database::releases::initialize_build(&mut *conn, release_id).await?;
-
-        docs_rs_database::releases::finish_build(
-            &mut *conn,
-            build_id,
-            &self.rustc_version,
-            &self.docsrs_version,
-            self.build_status,
-            Some(ByteSize::b(42)),
-            self.memory_peak,
-            None::<&SimpleBuildError>,
-        )
-        .await?;
-
-        if let Some(db_build_log) = self.db_build_log.as_deref() {
-            sqlx::query!(
-                "UPDATE builds SET output = $2 WHERE id = $1",
-                build_id.0,
-                db_build_log
-            )
-            .execute(&mut *conn)
-            .await?;
-        }
-
-        let prefix = format!("build-logs/{build_id}/");
-
-        let mut log_filenames = Vec::new();
-
-        if let Some((s3_build_log, successful)) = &self.s3_build_log {
-            log_filenames.push((format!("{default_target}.txt"), *successful));
-            storage
-                .store_one(
-                    format!("{prefix}{default_target}.txt"),
-                    s3_build_log.clone(),
-                )
-                .await?;
-        }
-
-        for (target, (log, successful)) in &self.other_build_logs {
-            if target == default_target {
-                bail!("build log for default target has to be set via `s3_build_log`");
-            }
-            log_filenames.push((format!("{target}.txt"), *successful));
-            storage
-                .store_one(format!("{prefix}{target}.txt"), log.clone())
-                .await?;
-        }
-
-        if !self.legacy_build_logs && !log_filenames.is_empty() {
-            add_build_logs(&mut *conn, build_id, log_filenames).await?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Default for FakeBuild {
-    /// create a default fake _finished_ build
-    fn default() -> Self {
-        Self {
-            s3_build_log: Some(("It works!".into(), true)),
-            db_build_log: None,
-            other_build_logs: HashMap::new(),
-            rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
-            docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
-            build_status: BuildStatus::Success,
-            memory_peak: Some(23),
-            legacy_build_logs: false,
-        }
     }
 }

@@ -2,7 +2,6 @@ use crate::{
     cache::CachePolicy,
     error::{AxumNope, AxumResult},
     extractors::{DbConnection, Path, rustdoc::RustdocParams},
-    file::File,
     impl_axum_webpage,
     match_release::match_version,
     metadata::MetaData,
@@ -11,32 +10,20 @@ use crate::{
 use anyhow::Context as _;
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use chrono::{DateTime, Utc};
+use docs_rs_database::build::{AnyBuild, BuildLog};
 use docs_rs_storage::AsyncStorage;
 use docs_rs_types::{BuildId, BuildStatus};
-use futures_util::TryStreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BuildDetails {
-    id: BuildId,
-    rustc_version: Option<String>,
-    docsrs_version: Option<String>,
-    build_status: BuildStatus,
-    build_time: Option<DateTime<Utc>>,
-    output: String,
-    errors: Option<String>,
-    error_kind: Option<String>,
-}
-
 #[derive(Template)]
 #[template(path = "crate/build_details.html")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 struct BuildDetailsPage {
     metadata: MetaData,
-    build_details: BuildDetails,
-    all_log_filenames: Vec<(String, Option<bool>)>,
+    build: AnyBuild,
+    output: String,
+    logs: Vec<BuildLog>,
     current_filename: Option<String>,
     params: RustdocParams,
 }
@@ -83,36 +70,9 @@ pub(crate) async fn build_details_handler(
         })?
         .into_version();
 
-    let row = sqlx::query!(
-        r#"SELECT
-             builds.rustc_version,
-             builds.docsrs_version,
-             builds.build_status as "build_status: BuildStatus",
-             COALESCE(builds.build_finished, builds.build_started) as build_time,
-             builds.output,
-             builds.errors,
-             builds.error_kind,
-             releases.default_target,
-             (
-                 SELECT array_agg(row(bl.log_filename, bl.success))
-                 FROM (
-                     SELECT log_filename, success
-                     FROM builds_logs
-                     WHERE builds_logs.build_id = builds.id
-                     ORDER BY log_filename
-                 ) bl
-             ) AS "logs: Vec<(String, bool)>"
-         FROM builds
-         INNER JOIN releases ON releases.id = builds.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3"#,
-        id.0,
-        params.name() as _,
-        version as _
-    )
-    .fetch_optional(&mut *conn)
-    .await?
-    .ok_or(AxumNope::BuildNotFound)?;
+    let build = AnyBuild::find_for_release(&mut conn, params.name(), &version, id)
+        .await?
+        .ok_or(AxumNope::BuildNotFound)?;
 
     let metadata = MetaData::from_crate(
         &mut conn,
@@ -123,89 +83,58 @@ pub(crate) async fn build_details_handler(
     .await?;
     let params = params.apply_metadata(&metadata);
 
-    // NOTE: we want to give back the db connection to the pool
-    // before we do the long S3 requests.
-    drop(conn);
-
-    let (output, all_log_filenames, current_filename) = if let Some(output) = row.output {
+    let (output, logs, current_filename) = if build.has_legacy_output() {
         // legacy case, for old builds the build log was stored in the database.
+        let output = build
+            .fetch_legacy_output(&mut conn)
+            .await?
+            .expect("we checked that it exists");
         (output, Vec::new(), None)
     } else {
-        // for newer builds we have the build logs stored in S3.
-        // For a long time only for one target, then we started storing the logs for other targets
-        // toFor a long time only for one target, then we started storing the logs for other
-        // targets. In any case, all the logfiles are put into a folder we can just query.
-        let prefix = format!("build-logs/{id}/");
+        // NOTE: we want to give back the db connection to the pool
+        // before we do the long S3 requests.
+        drop(conn);
 
-        // A list of `(path, build_successful)`.
-        let all_log_filenames: Vec<(String, Option<bool>)> = if let Some(logs) = row.logs
-            && !logs.is_empty()
-        {
-            logs.into_iter()
-                .map(|(path, success)| (path, Some(success)))
-                .collect()
-        } else {
-            storage
-                .list_prefix(&prefix) // the result from S3 is ordered by key
-                .await
-                .map_ok(|path| {
-                    (
-                        path.strip_prefix(&prefix)
-                            .expect("since we query for the prefix, it has to be always there")
-                            .to_owned(),
-                        None,
-                    )
-                })
-                .try_collect()
-                .await?
-        };
+        let logs = build.list_build_logs(&storage).await?;
 
         let current_filename = if let Some(filename) = build_params.filename {
             // if we have a given filename in the URL, we use that one.
             Some(filename)
-        } else if let Some(default_target) = row.default_target {
+        } else if let Some(default_filename) = build.default_log_filename() {
             // without a filename in the URL, we try to show the build log
             // for the default target, if we have one.
-            let wanted_filename = format!("{default_target}.txt");
-            if all_log_filenames
-                .iter()
-                .any(|(filename, _)| *filename == wanted_filename)
-            {
-                Some(wanted_filename)
-            } else {
-                None
-            }
+            logs.iter()
+                .any(|log| log.filename() == default_filename)
+                .then_some(default_filename)
         } else {
             // this can only happen when `releases.default_target` is NULL,
             // which is the case for in-progress builds or builds which errored
             // before we could determine the target.
-            // For the "error" case we show `row.errors`, which should contain what we need to see.
+            // For early failures we show the build's error instead.
             None
         };
 
-        let file_content = if let Some(ref filename) = current_filename {
-            let file = File::from_path(&storage, &format!("{prefix}{filename}")).await?;
-            String::from_utf8(file.0.content).context("non utf8")?
+        let output = if let Some(ref filename) = current_filename {
+            let blob = build
+                .build_log(filename)
+                .fetch(&storage)
+                .await?
+                .materialize(storage.config().max_file_size_for(filename))
+                .await?;
+
+            String::from_utf8(blob.content).context("non-utf8 build log")?
         } else {
             "".to_string()
         };
 
-        (file_content, all_log_filenames, current_filename)
+        (output, logs, current_filename)
     };
 
     Ok(BuildDetailsPage {
         metadata,
-        build_details: BuildDetails {
-            id,
-            rustc_version: row.rustc_version,
-            docsrs_version: row.docsrs_version,
-            build_status: row.build_status,
-            build_time: row.build_time,
-            output,
-            errors: row.errors,
-            error_kind: row.error_kind,
-        },
-        all_log_filenames,
+        build,
+        output,
+        logs,
         current_filename,
         params,
     }
@@ -335,9 +264,10 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .no_s3_build_log()
-                        .db_build_log("A build log"),
+                        .db_build_log("A build log")
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -376,7 +306,11 @@ mod tests {
                 .await
                 .name("foo")
                 .version("0.1.0")
-                .builds(vec![FakeBuild::default().s3_build_log("A build log", true)])
+                .builds(vec![
+                    FakeBuild::finished()
+                        .s3_build_log("A build log", true)
+                        .build(),
+                ])
                 .create()
                 .await?;
 
@@ -429,9 +363,10 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .s3_build_log("A build log", true)
-                        .build_log_for_other_target("other_target", "other target build log", true),
+                        .build_log_for_other_target("other_target", "other target build log", true)
+                        .build(),
                 ])
                 .create()
                 .await?;
@@ -496,9 +431,10 @@ mod tests {
                 .name("foo")
                 .version("0.1.0")
                 .builds(vec![
-                    FakeBuild::default()
+                    FakeBuild::finished()
                         .s3_build_log("A build log", true)
-                        .db_build_log("Another build log"),
+                        .db_build_log("Another build log")
+                        .build(),
                 ])
                 .create()
                 .await?;
