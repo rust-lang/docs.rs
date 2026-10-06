@@ -8,8 +8,30 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
+
+/// Pool timing buckets covering fast acquisitions and long connection holds.
+const POOL_TIME_HISTOGRAM_BUCKETS: &[Duration; 18] = &[
+    Duration::from_micros(100),
+    Duration::from_micros(500),
+    Duration::from_millis(1),
+    Duration::from_millis(5),
+    Duration::from_millis(10),
+    Duration::from_millis(25),
+    Duration::from_millis(50),
+    Duration::from_millis(100),
+    Duration::from_millis(250),
+    Duration::from_millis(500),
+    Duration::from_secs(1),
+    Duration::from_millis(2500),
+    Duration::from_secs(5),
+    Duration::from_secs(10),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+    Duration::from_secs(120),
+];
 
 #[derive(Debug)]
 pub(crate) struct PoolMetrics {
@@ -29,17 +51,17 @@ impl PoolMetrics {
         let meter = meter_provider.meter("pool");
         const PREFIX: &str = "docsrs.db.pool";
         let pending_acquires = Arc::new(AtomicU64::new(0));
-        // Include fast acquisitions as well as the configured 30-second timeout.
-        let boundaries = vec![
-            0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-            15.0, 30.0, 60.0, 120.0,
-        ];
         Self {
             acquire_duration: meter
                 .f64_histogram(format!("{PREFIX}.acquire_duration"))
                 .with_description("Time to acquire a connection, including creation and validation")
                 .with_unit("s")
-                .with_boundaries(boundaries.clone())
+                .with_boundaries(
+                    POOL_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(Duration::as_secs_f64)
+                        .collect(),
+                )
                 .build(),
             acquires: meter
                 .u64_counter(format!("{PREFIX}.acquires"))
@@ -50,7 +72,12 @@ impl PoolMetrics {
                 .f64_histogram(format!("{PREFIX}.connection_hold_duration"))
                 .with_description("Time a connection is held by a caller, excluding pool return")
                 .with_unit("s")
-                .with_boundaries(boundaries)
+                .with_boundaries(
+                    POOL_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(Duration::as_secs_f64)
+                        .collect(),
+                )
                 .build(),
             _pending_acquires: meter
                 .u64_observable_gauge(format!("{PREFIX}.pending_acquires"))
