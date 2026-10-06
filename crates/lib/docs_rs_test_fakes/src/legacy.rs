@@ -129,7 +129,6 @@ impl<'a> FakeRelease<'a> {
                 }],
                 targets: vec![Target::dummy_lib("fake_package".into(), None)],
                 readme: None,
-                keywords: vec!["fake".into(), "package".into()],
                 features: [
                     ("default".into(), vec!["feature1".into(), "feature3".into()]),
                     ("feature1".into(), Vec::new()),

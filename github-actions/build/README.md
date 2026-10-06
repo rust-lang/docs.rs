@@ -110,9 +110,9 @@ HTML, and missing library documentation fail the action. `strict: 'true'`
 additionally makes auxiliary build failures fatal.
 
 Set `experimental: "true"` to pass `--experimental` to the runner and enable
-proposed docs.rs defaults, currently denying `rustdoc::invalid_html_tags`.
-These defaults may change between releases. This is separate
-from `strict`, which only changes how build-step failures affect the result.
+proposed docs.rs defaults, currently denying `rustdoc::invalid_html_tags`. These
+defaults may change between releases. This is separate from `strict`, which only
+changes how build-step failures affect the result.
 
 ```yaml
 - uses: rust-lang/docs.rs/github-actions/build@main

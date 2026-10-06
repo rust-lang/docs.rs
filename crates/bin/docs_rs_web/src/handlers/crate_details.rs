@@ -28,7 +28,6 @@ use docs_rs_types::{
     BuildId, BuildStatus, ByteSize, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
 };
 use futures_util::stream::TryStreamExt;
-use serde_json::Value;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -50,7 +49,6 @@ pub(crate) struct CrateDetails {
     pub rustdoc_status: Option<bool>,
     pub repository_url: Option<String>,
     pub homepage_url: Option<String>,
-    keywords: Option<Value>,
     have_examples: Option<bool>, // need to check this manually
     pub target_name: Option<String>,
     releases: Vec<Release>,
@@ -122,7 +120,6 @@ impl CrateDetails {
                 releases.rustdoc_status,
                 releases.repository_url,
                 releases.homepage_url,
-                releases.keywords,
                 releases.have_examples,
                 releases.target_name,
                 repositories.host as "repo_host?",
@@ -242,7 +239,6 @@ impl CrateDetails {
             rustdoc_status: krate.rustdoc_status,
             repository_url: krate.repository_url,
             homepage_url: krate.homepage_url,
-            keywords: krate.keywords,
             have_examples: krate.have_examples,
             target_name: krate.target_name,
             releases: prefetched_releases,
