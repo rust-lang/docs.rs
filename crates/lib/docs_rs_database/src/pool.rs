@@ -1,6 +1,10 @@
-use crate::{Config, errors::PoolError, metrics::PoolMetrics};
+use crate::{
+    Config,
+    errors::PoolError,
+    metrics::{ConnectionHoldMetricsGuard, PoolMetrics},
+};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use futures_util::{future::BoxFuture, stream::BoxStream};
+use futures_util::{TryStreamExt, future::BoxFuture, stream::BoxStream};
 use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
@@ -91,14 +95,29 @@ impl Pool {
     }
 
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
+        self.acquire().await.map_err(PoolError::AsyncClientError)
+    }
+
+    /// Shared acquisition path for explicit clients and the Executor implementation.
+    async fn acquire(&self) -> Result<AsyncPoolClient, sqlx::Error> {
+        let guard = self.otel_metrics.start_acquire();
         match self.async_pool.acquire().await {
-            Ok(conn) => Ok(AsyncPoolClient {
-                inner: Some(conn),
-                runtime: self.runtime.clone(),
-            }),
+            Ok(conn) => {
+                guard.finish("success");
+                Ok(AsyncPoolClient {
+                    inner: Some(conn),
+                    runtime: self.runtime.clone(),
+                    hold_metrics: Some(self.otel_metrics.start_hold()),
+                })
+            }
             Err(err) => {
+                guard.finish(if matches!(err, sqlx::Error::PoolTimedOut) {
+                    "timeout"
+                } else {
+                    "error"
+                });
                 self.otel_metrics.failed_connections.add(1, &[]);
-                Err(PoolError::AsyncClientError(err))
+                Err(err)
             }
         }
     }
@@ -129,7 +148,13 @@ where
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
-        self.async_pool.fetch_many(query)
+        Box::pin(async_stream::try_stream! {
+            let mut conn = self.acquire().await?;
+            let mut stream = (&mut *conn).fetch_many(query);
+            while let Some(item) = stream.try_next().await? {
+                yield item;
+            }
+        })
     }
 
     fn fetch_optional<'e, 'q: 'e, E>(
@@ -140,7 +165,10 @@ where
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
-        self.async_pool.fetch_optional(query)
+        Box::pin(async move {
+            let mut conn = self.acquire().await?;
+            (&mut *conn).fetch_optional(query).await
+        })
     }
 
     fn prepare_with<'e>(
@@ -151,7 +179,10 @@ where
     where
         'c: 'e,
     {
-        self.async_pool.prepare_with(sql, parameters)
+        Box::pin(async move {
+            let mut conn = self.acquire().await?;
+            (&mut *conn).prepare_with(sql, parameters).await
+        })
     }
 
     fn describe<'e>(
@@ -161,7 +192,10 @@ where
     where
         'c: 'e,
     {
-        self.async_pool.describe(sql)
+        Box::pin(async move {
+            let mut conn = self.acquire().await?;
+            (&mut *conn).describe(sql).await
+        })
     }
 }
 
@@ -171,6 +205,7 @@ where
 #[derive(Debug)]
 pub struct AsyncPoolClient {
     inner: Option<sqlx::pool::PoolConnection<sqlx::postgres::Postgres>>,
+    hold_metrics: Option<ConnectionHoldMetricsGuard>,
     runtime: runtime::Handle,
 }
 
@@ -190,7 +225,72 @@ impl DerefMut for AsyncPoolClient {
 
 impl Drop for AsyncPoolClient {
     fn drop(&mut self) {
+        drop(self.hold_metrics.take());
         let _guard = self.runtime.enter();
         drop(self.inner.take())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use docs_rs_opentelemetry::testing::TestMetrics;
+
+    #[tokio::test]
+    async fn all_acquisition_paths_record_failures() {
+        let telemetry = TestMetrics::new();
+        let async_pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        async_pool.close().await;
+        let pool = Pool {
+            otel_metrics: Arc::new(PoolMetrics::new(async_pool.clone(), telemetry.provider())),
+            async_pool,
+            runtime: runtime::Handle::current(),
+        };
+        assert!(pool.get_async().await.is_err());
+        assert!(
+            (&pool)
+                .fetch_optional(sqlx::query("SELECT 1"))
+                .await
+                .is_err()
+        );
+        let mut stream = (&pool).fetch_many(sqlx::query("SELECT 1"));
+        assert!(stream.try_next().await.is_err());
+        assert!(
+            (&pool)
+                .prepare_with(SqlStr::from_static("SELECT 1"), &[])
+                .await
+                .is_err()
+        );
+        assert!(
+            (&pool)
+                .describe(SqlStr::from_static("SELECT 1"))
+                .await
+                .is_err()
+        );
+        let collected = telemetry.collected_metrics();
+        assert_eq!(
+            collected
+                .get_metric("pool", "docsrs.db.pool.acquires")
+                .unwrap()
+                .get_u64_counter()
+                .value(),
+            5
+        );
+        assert_eq!(
+            collected
+                .get_metric("pool", "docsrs.db.pool.failed_connections")
+                .unwrap()
+                .get_u64_counter()
+                .value(),
+            5
+        );
+        assert_eq!(
+            collected
+                .get_metric("pool", "docsrs.db.pool.acquire_duration")
+                .unwrap()
+                .get_f64_histogram()
+                .count(),
+            5
+        );
     }
 }

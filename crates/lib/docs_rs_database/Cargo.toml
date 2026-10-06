@@ -19,6 +19,7 @@ testing = [
 ]
 
 [dependencies]
+async-stream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }
