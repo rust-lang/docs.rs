@@ -16,7 +16,7 @@ pub(crate) struct PoolMetrics {
     pub(crate) failed_connections: Counter<u64>,
     acquire_duration: Histogram<f64>,
     acquires: Counter<u64>,
-    connection_hold_duration: Histogram<f64>,
+    pub(crate) connection_hold_duration: Histogram<f64>,
     pending_acquires: Arc<AtomicU64>,
     _pending_acquires: ObservableGauge<u64>,
     _idle_connections: ObservableGauge<u64>,
@@ -110,13 +110,6 @@ impl PoolMetrics {
             outcome: "cancelled",
         }
     }
-
-    pub(crate) fn start_hold(&self) -> ConnectionHoldMetricsGuard {
-        ConnectionHoldMetricsGuard {
-            duration: self.connection_hold_duration.clone(),
-            started: Instant::now(),
-        }
-    }
 }
 
 /// Dropping an unfinished acquisition still decrements pending and records cancellation.
@@ -142,19 +135,6 @@ impl Drop for AcquireMetricsGuard {
         self.metrics
             .pending_acquires
             .fetch_sub(1, Ordering::Relaxed);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct ConnectionHoldMetricsGuard {
-    duration: Histogram<f64>,
-    started: Instant,
-}
-
-impl Drop for ConnectionHoldMetricsGuard {
-    fn drop(&mut self) {
-        self.duration
-            .record(self.started.elapsed().as_secs_f64(), &[]);
     }
 }
 
@@ -197,29 +177,5 @@ mod tests {
                 1
             );
         }
-    }
-
-    #[tokio::test]
-    async fn hold_is_recorded_only_when_released() {
-        let telemetry = TestMetrics::new();
-        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
-        let metrics = PoolMetrics::new(pool, telemetry.provider());
-        let hold = metrics.start_hold();
-        assert!(
-            telemetry
-                .collected_metrics()
-                .get_metric("pool", "docsrs.db.pool.connection_hold_duration")
-                .is_err()
-        );
-        drop(hold);
-        assert_eq!(
-            telemetry
-                .collected_metrics()
-                .get_metric("pool", "docsrs.db.pool.connection_hold_duration")
-                .unwrap()
-                .get_f64_histogram()
-                .count(),
-            1
-        );
     }
 }

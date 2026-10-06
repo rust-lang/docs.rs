@@ -1,8 +1,4 @@
-use crate::{
-    Config,
-    errors::PoolError,
-    metrics::{ConnectionHoldMetricsGuard, PoolMetrics},
-};
+use crate::{Config, errors::PoolError, metrics::PoolMetrics};
 use docs_rs_opentelemetry::AnyMeterProvider;
 use futures_util::{TryStreamExt, future::BoxFuture, stream::BoxStream};
 use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
@@ -10,6 +6,7 @@ use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
     time::Duration,
+    time::Instant,
 };
 use tokio::runtime;
 use tracing::debug;
@@ -107,7 +104,8 @@ impl Pool {
                 Ok(AsyncPoolClient {
                     inner: Some(conn),
                     runtime: self.runtime.clone(),
-                    hold_metrics: Some(self.otel_metrics.start_hold()),
+                    hold_duration: self.otel_metrics.connection_hold_duration.clone(),
+                    acquired_at: Instant::now(),
                 })
             }
             Err(err) => {
@@ -205,7 +203,8 @@ where
 #[derive(Debug)]
 pub struct AsyncPoolClient {
     inner: Option<sqlx::pool::PoolConnection<sqlx::postgres::Postgres>>,
-    hold_metrics: Option<ConnectionHoldMetricsGuard>,
+    hold_duration: opentelemetry::metrics::Histogram<f64>,
+    acquired_at: Instant,
     runtime: runtime::Handle,
 }
 
@@ -225,7 +224,8 @@ impl DerefMut for AsyncPoolClient {
 
 impl Drop for AsyncPoolClient {
     fn drop(&mut self) {
-        drop(self.hold_metrics.take());
+        self.hold_duration
+            .record(self.acquired_at.elapsed().as_secs_f64(), &[]);
         let _guard = self.runtime.enter();
         drop(self.inner.take())
     }
@@ -291,6 +291,34 @@ mod tests {
                 .get_f64_histogram()
                 .count(),
             5
+        );
+    }
+    #[tokio::test]
+    async fn hold_is_recorded_only_when_released() {
+        let telemetry = TestMetrics::new();
+        let pool = sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap();
+        let metrics = PoolMetrics::new(pool, telemetry.provider());
+        let client = AsyncPoolClient {
+            inner: None,
+            hold_duration: metrics.connection_hold_duration.clone(),
+            acquired_at: Instant::now(),
+            runtime: runtime::Handle::current(),
+        };
+        assert!(
+            telemetry
+                .collected_metrics()
+                .get_metric("pool", "docsrs.db.pool.connection_hold_duration")
+                .is_err()
+        );
+        drop(client);
+        assert_eq!(
+            telemetry
+                .collected_metrics()
+                .get_metric("pool", "docsrs.db.pool.connection_hold_duration")
+                .unwrap()
+                .get_f64_histogram()
+                .count(),
+            1
         );
     }
 }
