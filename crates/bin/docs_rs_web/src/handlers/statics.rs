@@ -206,7 +206,6 @@ mod tests {
     use super::*;
     use crate::{
         handlers::apply_middleware,
-        page::TemplateData,
         testing::{
             AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
             async_wrapper,
@@ -218,7 +217,7 @@ mod tests {
         HeaderMap,
         header::{CONTENT_LENGTH, CONTENT_TYPE, ETAG},
     };
-    use std::{fs, sync::Arc};
+    use std::fs;
     use test_case::test_case;
     use tower::ServiceExt as _;
 
@@ -422,12 +421,7 @@ mod tests {
 
         /// build a small axum app with middleware, but just with the static router only.
         async fn build_static_app(env: &TestEnvironment, root: impl AsRef<Path>) -> Result<Router> {
-            let template_data = Arc::new(TemplateData::new(1).unwrap());
-            let state = crate::state::AppState::new(
-                env.config().clone(),
-                env.context().clone(),
-                template_data,
-            )?;
+            let state = crate::state::AppState::new(env.config().clone(), env.context().clone())?;
             Ok(apply_middleware(
                 build_static_router(root, state.metrics()).with_state(()),
                 state,

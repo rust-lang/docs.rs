@@ -15,7 +15,7 @@ pub(crate) mod status;
 
 use crate::Config;
 use crate::middleware::csp;
-use crate::page::{self, TemplateData};
+use crate::page;
 use crate::state::AppState;
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
@@ -94,7 +94,7 @@ fn apply_middleware(router: AxumRouter<AppState>, state: AppState) -> AxumRouter
                     csp::csp_middleware,
                 ))
                 .layer(middleware::from_fn_with_state(
-                    state.templates().clone(),
+                    state.clone(),
                     page::web_page::render_templates_middleware,
                 ))
                 .layer(middleware::from_fn_with_state(
@@ -108,9 +108,8 @@ fn apply_middleware(router: AxumRouter<AppState>, state: AppState) -> AxumRouter
 pub(crate) async fn build_axum_app(
     config: Arc<Config>,
     context: Arc<Context>,
-    template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
-    let state = AppState::new(config, context, template_data)?;
+    let state = AppState::new(config, context)?;
     Ok(apply_middleware(
         routes::build_axum_routes(state.metrics())?,
         state,
@@ -123,8 +122,6 @@ pub async fn run_web_server(
     config: Arc<Config>,
     context: Arc<Context>,
 ) -> Result<(), Error> {
-    let template_data = Arc::new(TemplateData::new(config.render_threads)?);
-
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
     tracing::info!(
@@ -133,9 +130,7 @@ pub async fn run_web_server(
         axum_addr.port()
     );
 
-    let app = build_axum_app(config, context, template_data)
-        .await?
-        .into_make_service();
+    let app = build_axum_app(config, context).await?.into_make_service();
     let listener = tokio::net::TcpListener::bind(axum_addr)
         .await
         .context("error binding socket for web server")?;

@@ -25,6 +25,7 @@ macro_rules! impl_axum_webpage {
         $(,)?
     ) => {
         impl $crate::page::web_page::AddCspNonce for $page {
+            #[tracing::instrument(name = "render_execution", skip_all, fields(page = stringify!($page)))]
             fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
                 let values: (&str, &dyn std::any::Any) = ("csp_nonce", &csp_nonce);
                 self.render_with_values(&values)
@@ -83,6 +84,7 @@ macro_rules! impl_axum_webpage {
                 response.extensions_mut().insert($crate::page::web_page::DelayedTemplateRender {
                     template: std::sync::Arc::new(Box::new(self)),
                     cpu_intensive_rendering,
+                    page: stringify!($page),
                 });
                 response
             }
@@ -97,6 +99,7 @@ macro_rules! impl_axum_webpage {
 pub(crate) struct DelayedTemplateRender {
     pub template: Arc<Box<dyn AddCspNonce + Send + Sync>>,
     pub cpu_intensive_rendering: bool,
+    pub page: &'static str,
 }
 
 fn render_response(
@@ -109,13 +112,14 @@ fn render_response(
             let DelayedTemplateRender {
                 template,
                 cpu_intensive_rendering,
+                page,
             } = render;
             let mut template = Arc::into_inner(template).unwrap();
             let csp_nonce_clone = csp_nonce.clone();
 
             let result: Result<String, anyhow::Error> = if cpu_intensive_rendering {
                 templates
-                    .render_in_threadpool(move || {
+                    .render_in_threadpool(page, move || {
                         template
                             .render_with_csp_nonce(csp_nonce_clone)
                             .map_err(|err| err.into())

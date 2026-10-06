@@ -63,7 +63,7 @@ where
                 // Also this lets us limit the threadpool size and through that the CPU usage.
                 let render_span = tracing::info_span!("render_task");
                 template_data
-                    .render_in_threadpool(move || {
+                    .render_in_threadpool("RustdocPage", move || {
                         use lol_html::html_content::{ContentType, Element};
                         use lol_html::{HtmlRewriter, MemorySettings, Settings};
 
