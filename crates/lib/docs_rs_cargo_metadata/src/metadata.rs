@@ -53,7 +53,6 @@ pub struct Package {
     pub dependencies: Vec<Dependency>,
     pub targets: Vec<Target>,
     pub readme: Option<String>,
-    pub keywords: Vec<String>,
     pub features: BTreeMap<String, Vec<String>>,
 }
 

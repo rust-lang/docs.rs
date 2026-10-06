@@ -243,9 +243,8 @@ environment; concurrent invocations must use different workspace directories.
 ## Configuration
 
 Use `--experimental` to opt into proposed docs.rs build defaults. Currently this
-denies `rustdoc::invalid_html_tags`. The
-experimental defaults may change between releases; without the flag they are not
-enabled.
+denies `rustdoc::invalid_html_tags`. The experimental defaults may change
+between releases; without the flag they are not enabled.
 
 ```console
 docs_rs_build --experimental
