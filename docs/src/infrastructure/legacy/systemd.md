@@ -62,6 +62,29 @@ nginx's response timeout must allow enough time. The connection backlog is
 finite, so socket activation does not guarantee uninterrupted service for long
 restarts or heavy traffic. nginx can continue proxying to `127.0.0.1:3000`.
 
+### Testing the listener
+
+The listener tests bind loopback sockets and do not require a database or a full
+webserver context:
+
+```bash
+SQLX_OFFLINE=true cargo test -p docs_rs_web --lib handlers::listener::tests
+```
+
+On Linux, an additional opt-in test uses `systemd-socket-activate` to pass a real
+listening socket to a child process. It checks that the inherited address takes
+precedence over the fallback address and that a connection queued before the
+child starts can be accepted and answered. This requires the systemd utility,
+but does not require root or a running systemd manager:
+
+```bash
+SQLX_OFFLINE=true cargo test -p docs_rs_web --lib handlers::listener::tests::systemd_socket_activation -- --ignored
+```
+
+These tests require permission to bind local TCP sockets. The activation test
+checks the socket-passing protocol, rather than deployment unit dependencies or
+the graceful shutdown of the complete daemon.
+
 ## `prune-disk-space`
 
 This scheduled daily systemd task performs cleanup to free disk space.
