@@ -110,7 +110,6 @@ impl CrateDetails {
                 releases.version,
                 releases.description,
                 releases.dependencies,
-                releases.readme,
                 releases.description_long,
                 releases.release_time,
                 release_build_status.build_status as "build_status!: BuildStatus",
@@ -229,7 +228,7 @@ impl CrateDetails {
             description: krate.description,
             owners: Vec::new(),
             dependencies,
-            readme: krate.readme,
+            readme: None,
             rustdoc: krate.description_long,
             release_time: krate.release_time,
             build_status: krate.build_status,
@@ -1917,23 +1916,6 @@ mod tests {
             env.fake_release()
                 .await
                 .name("dummy")
-                .version("0.1.0")
-                .readme_only_database("database readme")
-                .create()
-                .await?;
-
-            env.fake_release()
-                .await
-                .name("dummy")
-                .version("0.2.0")
-                .readme_only_database("database readme")
-                .source_file("README.md", b"storage readme")
-                .create()
-                .await?;
-
-            env.fake_release()
-                .await
-                .name("dummy")
                 .version("0.3.0")
                 .source_file("README.md", b"storage readme")
                 .create()
@@ -1943,7 +1925,6 @@ mod tests {
                 .await
                 .name("dummy")
                 .version("0.4.0")
-                .readme_only_database("database readme")
                 .source_file("MEREAD", b"storage meread")
                 .source_file("Cargo.toml", br#"package.readme = "MEREAD""#)
                 .create()
@@ -1953,7 +1934,6 @@ mod tests {
                 .await
                 .name("dummy")
                 .version("0.5.0")
-                .readme_only_database("database readme")
                 .source_file("README.md", b"storage readme")
                 .no_cargo_toml()
                 .create()
@@ -1968,8 +1948,6 @@ mod tests {
                 }
             };
 
-            check_readme("/crate/dummy/0.1.0".into(), "database readme".into()).await;
-            check_readme("/crate/dummy/0.2.0".into(), "storage readme".into()).await;
             check_readme("/crate/dummy/0.3.0".into(), "storage readme".into()).await;
             check_readme("/crate/dummy/0.4.0".into(), "storage meread".into()).await;
 

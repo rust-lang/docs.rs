@@ -82,8 +82,6 @@ pub struct FakeRelease<'a> {
     registry_release_data: ReleaseData,
     has_docs: bool,
     has_examples: bool,
-    /// This stores the content, while `package.readme` stores the filename
-    readme: Option<&'a str>,
     github_stats: Option<FakeGithubStats>,
     github_stats_id: Option<i32>,
     doc_coverage: Option<DocCoverage>,
@@ -148,7 +146,6 @@ impl<'a> FakeRelease<'a> {
             registry_release_data: ReleaseData::dummy(),
             has_docs: true,
             has_examples: false,
-            readme: None,
             github_stats: None,
             github_stats_id: None,
             doc_coverage: None,
@@ -294,15 +291,8 @@ impl<'a> FakeRelease<'a> {
     }
 
     /// NOTE: this should be markdown. It will be rendered as HTML when served.
-    pub fn readme(mut self, content: &'a str) -> Self {
-        self.readme = Some(content);
+    pub fn readme(self, content: &'a str) -> Self {
         self.source_file("README.md", content.as_bytes())
-    }
-
-    /// NOTE: this should be markdown. It will be rendered as HTML when served.
-    pub fn readme_only_database(mut self, content: &'a str) -> Self {
-        self.readme = Some(content);
-        self
     }
 
     pub fn add_owner(mut self, owner: CrateOwner) -> Self {
@@ -498,9 +488,6 @@ impl<'a> FakeRelease<'a> {
 
         let crate_tmp = create_temp_dir();
         let crate_dir = crate_tmp.path();
-        if let Some(markdown) = self.readme {
-            fs::write(crate_dir.join("README.md"), markdown)?;
-        }
         store_files_into(&self.source_files, crate_dir)?;
 
         let default_target = self.default_target.unwrap_or("x86_64-unknown-linux-gnu");
