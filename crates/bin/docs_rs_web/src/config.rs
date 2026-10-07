@@ -76,6 +76,7 @@ impl<S: State> ConfigBuilder<S> {
     pub(crate) fn test_config(self) -> Result<ConfigBuilder<S>> {
         Ok(self
             .load_environment()?
+            .render_threads(1)
             // set stale content serving so Cache::ForeverInCdn and Cache::ForeverInCdnAndStaleInBrowser
             // are actually different.
             .cache_control_stale_while_revalidate(Duration::from_days(1)))

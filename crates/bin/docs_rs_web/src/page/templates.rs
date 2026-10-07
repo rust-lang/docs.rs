@@ -1,7 +1,9 @@
-use crate::handlers::rustdoc::RustdocPage;
+use crate::{handlers::rustdoc::RustdocPage, metrics::WebMetrics};
 use anyhow::{Context as _, Result};
 use askama::Template;
+use opentelemetry::KeyValue;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::trace;
 
 #[derive(Template)]
@@ -39,13 +41,15 @@ pub(crate) struct TemplateData {
     /// tokio will wait until all tasks are finished when shutting
     /// down.
     rendering_threadpool: rayon_core::ThreadPool,
+    pub(crate) metrics: Arc<WebMetrics>,
 }
 
 impl TemplateData {
-    pub(crate) fn new(num_threads: usize) -> Result<Self> {
+    pub(crate) fn new(num_threads: usize, metrics: Arc<WebMetrics>) -> Result<Self> {
         trace!("Loading templates");
 
         let data = Self {
+            metrics,
             rendering_threadpool: rayon_core::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
                 .thread_name(move |idx| format!("docsrs-render {idx}"))
@@ -63,15 +67,23 @@ impl TemplateData {
     /// sync task to finish.
     ///
     /// Use this instead of `spawn_blocking` so we don't block tokio.
-    pub(crate) async fn render_in_threadpool<F, R>(self: &Arc<Self>, render_fn: F) -> Result<R>
+    pub(crate) async fn render_in_threadpool<F, R>(
+        self: &Arc<Self>,
+        page: &'static str,
+        render_fn: F,
+    ) -> Result<R>
     where
         F: FnOnce() -> Result<R> + Send + 'static,
         R: Send + 'static,
     {
         let span = tracing::Span::current();
         let (send, recv) = tokio::sync::oneshot::channel();
+        let queued_at = Instant::now();
+        let wait_time = self.metrics.render_wait_time.clone();
         self.rendering_threadpool.spawn({
             move || {
+                let attrs = [KeyValue::new("page", page)];
+                wait_time.record(queued_at.elapsed().as_secs_f64(), &attrs);
                 let _guard = span.enter();
                 // the job may have been queued on the thread-pool for a while,
                 // if the request was closed in the meantime the receiver should have

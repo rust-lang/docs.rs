@@ -18,6 +18,7 @@ pub(crate) struct WebMetrics {
 
     routes_visited: Counter<u64>,
     response_time: Histogram<f64>,
+    pub(crate) render_wait_time: Histogram<f64>,
 }
 
 impl WebMetrics {
@@ -36,6 +37,17 @@ impl WebMetrics {
             routes_visited: meter
                 .u64_counter(format!("{PREFIX}.routes_visited"))
                 .with_unit("1")
+                .build(),
+            render_wait_time: meter
+                .f64_histogram(format!("{PREFIX}.render_wait_time"))
+                .with_description("Time from submission until a render worker starts the job")
+                .with_unit("s")
+                .with_boundaries(
+                    RESPONSE_TIME_HISTOGRAM_BUCKETS
+                        .iter()
+                        .map(|d| d.as_secs_f64())
+                        .collect(),
+                )
                 .build(),
             response_time: meter
                 .f64_histogram(format!("{PREFIX}.response_time"))
@@ -270,5 +282,46 @@ mod tests {
 
             Ok(())
         })
+    }
+
+    #[test]
+    fn render_wait_is_recorded_for_success_and_errors() {
+        async_wrapper(|env| async move {
+            let state = crate::state::AppState::new(env.config().clone(), env.context().clone())?;
+            let templates = state.templates();
+            assert!(std::sync::Arc::ptr_eq(state.metrics(), &templates.metrics));
+            templates
+                .render_in_threadpool("SourcePage", || Ok(()))
+                .await?;
+            assert!(
+                templates
+                    .render_in_threadpool("RustdocPage", || -> anyhow::Result<()> {
+                        anyhow::bail!("render failed")
+                    })
+                    .await
+                    .is_err()
+            );
+            let collected = env.collected_metrics();
+            {
+                let metric = collected.get_metric("web", "docsrs.web.render_wait_time")?;
+                let AggregatedMetrics::F64(MetricData::Histogram(histogram)) = metric.data() else {
+                    panic!("Expected render duration histogram");
+                };
+                let pages: HashMap<_, _> = histogram
+                    .data_points()
+                    .map(|dp| {
+                        let attrs: Vec<_> = dp.attributes().collect();
+                        assert_eq!(attrs.len(), 1);
+                        assert_eq!(attrs[0].key.as_str(), "page");
+                        (attrs[0].value.to_string(), dp.count())
+                    })
+                    .collect();
+                assert_eq!(
+                    pages,
+                    HashMap::from([("SourcePage".to_owned(), 1), ("RustdocPage".to_owned(), 1)])
+                );
+            }
+            Ok(())
+        });
     }
 }

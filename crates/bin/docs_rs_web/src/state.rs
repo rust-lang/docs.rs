@@ -23,15 +23,13 @@ struct AppStateInner {
 }
 
 impl AppState {
-    pub(crate) fn new(
-        config: Arc<Config>,
-        context: Arc<Context>,
-        templates: Arc<TemplateData>,
-    ) -> Result<Self> {
+    pub(crate) fn new(config: Arc<Config>, context: Arc<Context>) -> Result<Self> {
         Self::validate_context(context.as_ref())?;
+        let metrics = Arc::new(WebMetrics::new(&context.meter_provider));
+        let templates = Arc::new(TemplateData::new(config.render_threads, metrics.clone())?);
 
         Ok(Self(Arc::new(AppStateInner {
-            metrics: Arc::new(WebMetrics::new(&context.meter_provider)),
+            metrics,
             context,
             config,
             templates,
