@@ -1,0 +1,2 @@
+ALTER TABLE releases ADD COLUMN readme VARCHAR(51200);
+

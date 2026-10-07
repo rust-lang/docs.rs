@@ -43,7 +43,6 @@ pub async fn finish_release(
         .map(Into::into)
         .collect();
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
-    let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
 
@@ -64,15 +63,14 @@ pub async fn finish_release(
                homepage_url = $10,
                description = $11,
                description_long = $12,
-               readme = $13,
-               have_examples = $14,
-               doc_targets = $15,
-               is_library = $16,
-               documentation_url = $17,
-               default_target = $18,
-               features = $19,
-               repository_id = $20,
-               source_size = $21
+               have_examples = $13,
+               doc_targets = $14,
+               is_library = $15,
+               documentation_url = $16,
+               default_target = $17,
+               features = $18,
+               repository_id = $19,
+               source_size = $20
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
@@ -86,7 +84,6 @@ pub async fn finish_release(
         metadata_pkg.homepage,
         metadata_pkg.description,
         rustdoc,
-        readme,
         has_examples,
         serde_json::to_value(doc_targets)?,
         is_library,
@@ -393,28 +390,6 @@ fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
             .map(|(name, subfeatures)| Feature::new(name.clone(), subfeatures.clone())),
     );
     features
-}
-
-/// Reads readme if there is any read defined in Cargo.toml of a Package
-fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md"));
-
-    if !readme_path.exists() {
-        return Ok(None);
-    }
-
-    let readme = fs::read_to_string(readme_path)?;
-
-    if readme.is_empty() {
-        Ok(None)
-    } else if readme.len() > 51200 {
-        Ok(Some(format!(
-            "(Readme ignored due to being too long. ({} > 51200))",
-            readme.len()
-        )))
-    } else {
-        Ok(Some(readme))
-    }
 }
 
 fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
