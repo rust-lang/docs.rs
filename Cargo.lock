@@ -2704,6 +2704,7 @@ dependencies = [
  "http-body-util",
  "indoc",
  "kuchikiki",
+ "listenfd",
  "lol_html",
  "md5",
  "mime",
@@ -5586,6 +5587,17 @@ name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+
+[[package]]
+name = "listenfd"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b87bc54a4629b4294d0b3ef041b64c40c611097a677d9dc07b2c67739fe39dba"
+dependencies = [
+ "libc",
+ "uuid",
+ "winapi",
+]
 
 [[package]]
 name = "litemap"
