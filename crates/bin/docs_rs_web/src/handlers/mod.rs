@@ -127,18 +127,32 @@ pub async fn run_web_server(
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
-    tracing::info!(
-        "Starting web server on `{}:{}`",
-        axum_addr.ip(),
-        axum_addr.port()
-    );
-
     let app = build_axum_app(config, context, template_data)
         .await?
         .into_make_service();
-    let listener = tokio::net::TcpListener::bind(axum_addr)
-        .await
-        .context("error binding socket for web server")?;
+    // Both the standalone web binary and the legacy daemon use this path.
+    // The inherited listener takes precedence over the configured bind address.
+    let mut listenfd = listenfd::ListenFd::from_env();
+    if listenfd.len() > 1 {
+        bail!("expected exactly one socket activation descriptor");
+    }
+    let listener = match listenfd
+        .take_tcp_listener(0)
+        .context("error acquiring socket activation listener")?
+    {
+        Some(listener) => {
+            listener
+                .set_nonblocking(true)
+                .context("error making socket activation listener nonblocking")?;
+            tokio::net::TcpListener::from_std(listener)
+                .context("error registering socket activation listener with Tokio")?
+        }
+        None => tokio::net::TcpListener::bind(axum_addr)
+            .await
+            .context("error binding socket for web server")?,
+    };
+
+    tracing::info!("Starting web server on `{}`", listener.local_addr()?);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
