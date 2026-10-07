@@ -7,6 +7,7 @@ use std::{
     path::{self, Path, PathBuf},
     sync::Arc,
 };
+use strum::EnumString;
 use tracing::warn;
 
 fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
@@ -14,6 +15,23 @@ fn ensure_absolute_path(path: PathBuf) -> io::Result<PathBuf> {
         Ok(path)
     } else {
         Ok(path::absolute(&path)?)
+    }
+}
+
+#[derive(Debug, Copy, Clone, EnumString, Default)]
+#[strum(serialize_all = "snake_case")]
+pub enum EvictionPolicy {
+    #[default]
+    TinyLfu,
+    Lru,
+}
+
+impl From<EvictionPolicy> for moka::policy::EvictionPolicy {
+    fn from(value: EvictionPolicy) -> Self {
+        match value {
+            EvictionPolicy::TinyLfu => moka::policy::EvictionPolicy::tiny_lfu(),
+            EvictionPolicy::Lru => moka::policy::EvictionPolicy::lru(),
+        }
     }
 }
 
@@ -42,6 +60,13 @@ pub struct ArchiveIndexCacheConfig {
     // We use this to pre-allocate the in-memory cache so it can avoid
     // resizes during early traffic.
     pub expected_count: usize,
+
+    // configure the cache eviction policy:
+    // TinyLfu or Lru.
+    //
+    // We might drop this config once the metrics show which option is better for
+    // our workload.
+    pub eviction_policy: EvictionPolicy,
 }
 
 impl AppConfig for ArchiveIndexCacheConfig {
@@ -59,6 +84,8 @@ impl AppConfig for ArchiveIndexCacheConfig {
             )?)?,
             max_size: env("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE", ByteSize::gib(50))?,
             ttl: env("DOCSRS_ARCHIVE_INDEX_CACHE_TTL", Duration::from_days(1))?,
+            eviction_policy: maybe_env("DOCSRS_ARCHIVE_INDEX_CACHE_EVICTION_POLICY")?
+                .unwrap_or_default(),
             expected_count: env("DOCSRS_ARCHIVE_INDEX_EXPECTED_COUNT", 100_000usize)?,
         })
     }

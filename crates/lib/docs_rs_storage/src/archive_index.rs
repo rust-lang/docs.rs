@@ -271,6 +271,8 @@ impl Cache {
         let metrics_for_eviction = metrics.clone();
         let manager = CacheManager::builder()
             .initial_capacity(config.expected_count)
+            // configured eviction policy
+            .eviction_policy(config.eviction_policy.into())
             // Time to idle (TTI): A cached entry will be expired after
             // the specified duration past from get or insert.
             // We don't set TTL (time to live), which would be just time-after-insert.
