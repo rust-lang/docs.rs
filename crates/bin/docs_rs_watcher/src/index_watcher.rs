@@ -84,8 +84,7 @@ impl TryFrom<crates_index_diff::CrateVersion> for CrateVersion {
             version: value.version.parse()?,
             publish_time: value
                 .publish_time
-                .map(|publish_time| publish_time.parse())
-                .transpose()?,
+                .and_then(|publish_time| publish_time.parse::<DateTime<Utc>>().ok()),
             yanked: value.yanked,
         })
     }
