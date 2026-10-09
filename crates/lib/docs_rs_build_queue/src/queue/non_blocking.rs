@@ -85,6 +85,8 @@ impl AsyncBuildQueue {
         Ok(())
     }
 
+    /// Enqueue a build.
+    /// Duplicate requests preserve the original enqueue time.
     pub async fn add_crate(
         &self,
         name: &KrateName,
@@ -99,8 +101,7 @@ impl AsyncBuildQueue {
              ON CONFLICT (name, version) DO UPDATE
                 SET priority = EXCLUDED.priority,
                     attempt = 0,
-                    last_attempt = NULL
-            ;",
+                    last_attempt = NULL",
             name as _,
             version as _,
             priority,
@@ -158,7 +159,8 @@ impl AsyncBuildQueue {
                 name as "name: KrateName",
                 version as "version: Version",
                 priority,
-                attempt
+                attempt,
+                enqueued_at
              FROM queue
              ORDER BY priority ASC, attempt ASC, id ASC"#,
         )
@@ -323,6 +325,20 @@ mod tests {
 
     const FAILED_KRATE: KrateName = KrateName::from_static("failed_crate");
     const REPO: &str = "owner1/repo1";
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn duplicate_enqueue_preserves_timestamp() -> Result<()> {
+        let env = TestEnv::new().await?;
+        let queue = env.queue();
+        queue.add_crate(&KRATE, &V1, 0).await?;
+        let enqueued_at = queue.queued_crates().await?[0].enqueued_at;
+        assert!(enqueued_at.is_some());
+        queue.add_crate(&KRATE, &V1, 9).await?;
+        let rows = queue.queued_crates().await?;
+        assert_eq!(rows[0].enqueued_at, enqueued_at);
+        assert_eq!(rows[0].priority, 9);
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_add_duplicate_doesnt_fail_last_priority_wins() -> Result<()> {

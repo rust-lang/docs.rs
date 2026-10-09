@@ -1550,9 +1550,9 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "31.0.1"
+version = "32.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b8b91f6711f62d8dcaac526bdc87ab4661594f52290c648473610098759b478"
+checksum = "c19f2bc03877b9040ab9c2103a93d0ecc807eca864c45f15e0927e82b7094a7b"
 dependencies = [
  "ahash",
  "bstr",
