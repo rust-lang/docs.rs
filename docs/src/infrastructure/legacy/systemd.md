@@ -15,9 +15,10 @@ reads these files to provide the environment in which the services run.
 
 ## Web socket activation
 
-Both `docs_rs_web` and the legacy `cratesfyi daemon` accept a single TCP listening
-socket from systemd. When supplied, this socket takes precedence over the web
-bind address. Without socket activation, the server binds its address as usual.
+Both `docs_rs_web` and the legacy `cratesfyi daemon` accept a single TCP
+listening socket from systemd. When supplied, this socket takes precedence over
+the web bind address. Without socket activation, the server binds its address as
+usual.
 
 For the legacy `docs.rs.service`, create `/etc/systemd/system/docs.rs.socket`:
 
@@ -40,10 +41,10 @@ Requires=docs.rs.socket
 After=docs.rs.socket
 ```
 
-For the standalone web service, use its service name for the socket unit instead.
-Keep the existing service command, user, and environment settings. The command
-must execute the backend directly, or use `exec` in a shell wrapper, so that the
-socket activation PID identifies the backend process.
+For the standalone web service, use its service name for the socket unit
+instead. Keep the existing service command, user, and environment settings. The
+command must execute the backend directly, or use `exec` in a shell wrapper, so
+that the socket activation PID identifies the backend process.
 
 After installing a backend version with socket activation support, switch over
 with the following commands. This initial switch briefly interrupts traffic:
