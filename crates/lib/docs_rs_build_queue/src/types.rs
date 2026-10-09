@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use docs_rs_types::{KrateName, Version};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -7,6 +8,7 @@ pub struct QueuedCrate {
     pub version: Version,
     pub priority: i32,
     pub attempt: i32,
+    pub enqueued_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]

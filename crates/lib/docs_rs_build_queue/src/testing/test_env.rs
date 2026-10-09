@@ -84,6 +84,10 @@ impl BlockingTestEnv {
         }
     }
 
+    pub(crate) fn collected_metrics(&self) -> docs_rs_opentelemetry::testing::CollectedMetrics {
+        self.inner.metrics.collected_metrics()
+    }
+
     pub(crate) fn queued_builds(&self) -> Result<u64> {
         let collected_metrics = self.inner.metrics.collected_metrics();
 
