@@ -431,7 +431,7 @@ impl RustwideBuilder {
                 BuildStatus::Failure
             },
             documentation_size,
-            build_statistics.memory_peak_bytes(),
+            build_statistics.memory_peak_bytes().map(Into::into),
             build_error,
         ))?;
 
