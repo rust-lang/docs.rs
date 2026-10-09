@@ -58,7 +58,7 @@ format-just:
       --type file \
       --threads 1 \
       '^(Justfile|.+\.just)$' . \
-      --exec just _format_justfile {} || exit_code=1
+      --exec just _format_justfile {}
 
 # Format maintained Markdown files with Deno.
 [group('linting')]
@@ -70,7 +70,7 @@ format-markdown:
       --exclude 'crates/lib/font-awesome-as-a-crate/' \
       --exclude 'crates/bin/docs_rs_web/assets/syntaxes/' \
       --exclude 'crates/bin/docs_rs_web/static/' \
-      --exec just _format_markdown {} || exit_code=1
+      --exec just _format_markdown {}
 
 # Run Clippy for the complete workspace.
 [group('linting')]
