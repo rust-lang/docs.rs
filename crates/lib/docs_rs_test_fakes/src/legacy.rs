@@ -95,7 +95,7 @@ pub struct FakeBuild {
     rustc_version: String,
     docsrs_version: String,
     build_status: BuildStatus,
-    memory_peak: Option<u64>,
+    memory_peak: Option<ByteSize>,
     /// new build logs: we have a record in the `builds_logs` table for each log, including a status
     /// old build logs: people have to run `s3 ls` with prefix to know which build logs exist
     legacy_build_logs: bool,
@@ -632,7 +632,7 @@ impl FakeBuild {
         }
     }
 
-    pub fn memory_peak(self, memory_peak: u64) -> Self {
+    pub fn memory_peak(self, memory_peak: ByteSize) -> Self {
         Self {
             memory_peak: Some(memory_peak),
             ..self
@@ -719,7 +719,7 @@ impl Default for FakeBuild {
             rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
             docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
             build_status: BuildStatus::Success,
-            memory_peak: Some(23),
+            memory_peak: Some(23u64.into()),
             legacy_build_logs: false,
         }
     }
