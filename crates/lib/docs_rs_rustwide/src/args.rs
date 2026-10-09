@@ -18,6 +18,7 @@ pub(super) struct CommandArgs<'a> {
     // Explicit caller arguments, preserved in insertion order.
     cargo_args: Vec<String>,
     rustdoc_args: Vec<String>,
+    message_format_json: bool,
 }
 
 impl<'a> CommandArgs<'a> {
@@ -34,6 +35,7 @@ impl<'a> CommandArgs<'a> {
             jobs,
             cargo_args: Vec::new(),
             rustdoc_args: Vec::new(),
+            message_format_json: false,
         }
     }
 
@@ -64,8 +66,16 @@ impl<'a> CommandArgs<'a> {
         self
     }
 
+    pub(super) fn message_format_json(mut self) -> Self {
+        self.message_format_json = true;
+        self
+    }
+
     pub(super) fn finish(&self) -> Vec<String> {
         let mut cargo_args = vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
+        if self.message_format_json {
+            cargo_args.push("--message-format=json".into());
+        }
 
         cargo_args.extend(self.feature_args());
         cargo_args.extend(self.rustc_config_args());
@@ -512,7 +522,7 @@ cargo-args = ["--verbose"]
         .finish();
         assert_eq!(
             &args[..4],
-            ["rustdoc", "--lib", "-Zrustdoc-map", "--config"]
+            ["rustdoc", "--lib", "-Zrustdoc-map", "--config",]
         );
         assert_eq!(
             &args[5..],
@@ -527,5 +537,22 @@ cargo-args = ["--verbose"]
         let mut expected = vec!["--cfg", "docsrs", "--cfg", r#"label="a value with spaces""#];
         expected.extend(UNCONDITIONAL_RUSTDOC_ARGS);
         assert_eq!(rustdoc_flags(&args), expected);
+    }
+
+    #[test_case(false)]
+    #[test_case(true)]
+    fn optionally_enables_cargo_json_message_format(message_format_json: bool) {
+        let metadata = Metadata::default();
+        let command = CommandArgs::new(&metadata, "target", None);
+        let args = if message_format_json {
+            command.message_format_json().finish()
+        } else {
+            command.finish()
+        };
+
+        assert_eq!(
+            args.iter().any(|arg| arg == "--message-format=json"),
+            message_format_json
+        );
     }
 }
