@@ -4,13 +4,13 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_watcher::{
     start_background_queue_rebuild, start_background_repository_stats_updater,
-    start_background_service_metric_collector, watch_registry,
+    start_background_service_metric_collector,
 };
 use docs_rs_web::run_web_server;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::info;
 
 fn start_registry_watcher(
     config: Arc<docs_rs_watcher::Config>,
@@ -21,9 +21,7 @@ fn start_registry_watcher(
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        if let Err(err) = watch_registry(&config, &context).await {
-            error!(?err, "error starting registry watcher");
-        }
+        docs_rs_watcher::watch(&config, &context).await;
 
         anyhow::Ok(())
     });
