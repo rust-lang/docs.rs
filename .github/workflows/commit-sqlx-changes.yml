@@ -36,9 +36,9 @@ jobs:
           git rebase origin/main
 
       - name: Install development tools
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: --jobs=1 just cargo:sqlx-cli
 
       - name: restore build & cargo cache

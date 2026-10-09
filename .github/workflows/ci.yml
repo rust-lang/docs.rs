@@ -20,9 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
@@ -45,9 +45,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
@@ -96,9 +96,9 @@ jobs:
       - name: Expose GitHub cache credentials
         uses: crazy-max/ghaction-github-runtime@v4
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: --jobs=1 just node cargo:sqlx-cli
 
       - name: Run end-to-end GUI tests
@@ -123,9 +123,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
         with:
-          version: 2026.9.17
+          version: 2026.10.2
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
             cargo:cargo-udeps cargo:cargo-sort typos
