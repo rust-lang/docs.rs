@@ -1,38 +1,20 @@
 #![warn(missing_docs)]
 
-//! Collect information that allows you to build a crate the same way that docs.rs would.
+//! Parse docs.rs build metadata from a crate's Cargo.toml.
 //!
-//! This library is intended for use in docs.rs and crater, but might be helpful to others.
-//! See <https://docs.rs/about/metadata> for more information about the flags that can be set.
-//!
-//! This crate can only be used with nightly versions of `cargo` and `rustdoc`, because it
-//! will always have the flag `-Z unstable-options`.
-//!
-//! Here is an example use of the crate:
+//! This library exposes feature selections, compiler arguments, environment
+//! variables, and documentation targets. Command construction and execution live
+//! in `docs_rs_rustwide`.
+//! See <https://docs.rs/about/metadata> for supported metadata settings.
 //!
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use std::process::Command;
 //! use docsrs_metadata::Metadata;
 //!
-//! // First, we need to parse Cargo.toml.
-//! let source_root = env!("CARGO_MANIFEST_DIR");
-//! let metadata = Metadata::from_crate_root(&source_root)?;
-//!
-//! // Next, learn what arguments we need to pass to `cargo`.
+//! let metadata = Metadata::from_crate_root(env!("CARGO_MANIFEST_DIR"))?;
 //! let targets = metadata.targets(/* include_default_targets: */ true);
-//! let mut cargo_args = metadata.cargo_args(&[], &[]);
-//! cargo_args.push(targets.default_target.into());
-//!
-//! // Now, set up the `Command`
-//! let mut cmd = Command::new("cargo");
-//! cmd.args(cargo_args);
-//! for (key, value) in metadata.environment_variables() {
-//!     cmd.env(key, value);
-//! }
-//!
-//! // Finally, run `cargo doc` on the directory.
-//! let result = cmd.output()?;
+//! println!("default documentation target: {}", targets.default_target);
+//! println!("additional rustdoc arguments: {:?}", metadata.rustdoc_args);
 //! # Ok(())
 //! # }
 //! ```
@@ -110,18 +92,18 @@ pub struct Metadata {
     /// List of features to pass on to `cargo`.
     ///
     /// By default, docs.rs will only build default features.
-    features: Option<Vec<String>>,
+    pub features: Option<Vec<String>>,
 
     /// Whether to pass `--all-features` to `cargo`.
     #[serde(default)]
-    all_features: bool,
+    pub all_features: bool,
 
     /// Whether to pass `--no-default-features` to `cargo`.
     //
     /// By default, Docs.rs will build default features.
     /// Set `no-default-features` to `true` if you want to build only certain features.
     #[serde(default)]
-    no_default_features: bool,
+    pub no_default_features: bool,
 
     /// See [`BuildTargets`].
     default_target: Option<String>,
@@ -129,17 +111,17 @@ pub struct Metadata {
 
     /// List of command line arguments for `rustc`.
     #[serde(default)]
-    rustc_args: Vec<String>,
+    pub rustc_args: Vec<String>,
 
     /// List of command line arguments for `rustdoc`.
     #[serde(default)]
-    rustdoc_args: Vec<String>,
+    pub rustdoc_args: Vec<String>,
 
     /// List of command line arguments for `cargo`.
     ///
     /// These cannot be a subcommand, they may only be options.
     #[serde(default)]
-    cargo_args: Vec<String>,
+    pub cargo_args: Vec<String>,
 
     /// List of additional targets to be generated. See [`BuildTargets`].
     #[serde(default)]
@@ -254,90 +236,6 @@ impl Metadata {
             default_target,
             other_targets: targets,
         }
-    }
-
-    /// Return the arguments that should be passed to `cargo`.
-    ///
-    /// This will always include `rustdoc --lib`.
-    /// This will never include `--target`.
-    ///
-    /// You can pass `additional_args` to cargo, as well as `rustdoc_args` to `rustdoc`.
-    /// Do not depend on modifying the `Vec` after it's returned; additional arguments
-    /// appended may be passed to rustdoc instead.
-    ///
-    /// Note that this does not necessarily reproduce the HTML _output_ of docs.rs exactly.
-    /// For example, the links may point somewhere different than they would on docs.rs.
-    /// However, rustdoc will see exactly the same code as it would on docs.rs, even counting `cfg`s.
-    pub fn cargo_args(&self, additional_args: &[String], rustdoc_args: &[String]) -> Vec<String> {
-        let mut cargo_args: Vec<String> =
-            vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
-
-        if let Some(features) = &self.features {
-            cargo_args.push("--features".into());
-            cargo_args.push(features.join(" "));
-        }
-
-        if self.all_features {
-            cargo_args.push("--all-features".into());
-        }
-
-        if self.no_default_features {
-            cargo_args.push("--no-default-features".into());
-        }
-
-        // Unconditionally set `--cfg docsrs` as it has become a de-facto way to
-        // distinguish docs.rs.
-        //
-        // See https://github.com/rust-lang/docs.rs/issues/2389.
-        let mut all_rustdoc_args = vec!["--cfg".into(), "docsrs".into()];
-        all_rustdoc_args.extend_from_slice(&self.rustdoc_args);
-        all_rustdoc_args.extend_from_slice(rustdoc_args);
-
-        // Pass `RUSTFLAGS` and `RUSTDOCFLAGS` using `cargo --config`, which handles whitespace correctly.
-        if !self.rustc_args.is_empty() {
-            cargo_args.push("--config".into());
-            let rustflags = toml::Value::try_from(&self.rustc_args)
-                .expect("serializing a string should never fail")
-                .to_string();
-            cargo_args.push(format!("build.rustflags={rustflags}"));
-            if !self.proc_macro {
-                // Proc-macro crates are built only for the host and we deliberately omits
-                // --target for them, so Cargo already applies build.rustflags to their build.
-                // Enabling host config instead suppresses build.rustdocflags for that host build,
-                // dropping custom rustdoc flags and JSON output.
-                cargo_args.push("-Zhost-config".into());
-                cargo_args.push("-Ztarget-applies-to-host".into());
-                cargo_args.push("--config".into());
-                cargo_args.push(format!("host.rustflags={rustflags}"));
-            }
-        }
-
-        cargo_args.push("--config".into());
-        let rustdocflags = toml::Value::try_from(&all_rustdoc_args)
-            .expect("serializing a string should never fail")
-            .to_string();
-        cargo_args.push(format!("build.rustdocflags={rustdocflags}"));
-
-        cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
-        cargo_args.reserve(cargo_args.len() + self.cargo_args.len());
-        let mut cargo_args_iter = self.cargo_args.iter().peekable();
-        while let Some(arg) = cargo_args_iter.next() {
-            // custom `-Z rustdoc-scrape-examples` is unnecessary since we add it ourselves,
-            // and it breaks rustdoc json & coverage builds.
-            if arg == "-Zrustdoc-scrape-examples" {
-                continue;
-            }
-            if arg == "-Z"
-                && let Some(next_arg) = cargo_args_iter.peek()
-                && next_arg.as_str() == "rustdoc-scrape-examples"
-            {
-                cargo_args_iter.next();
-                continue;
-            }
-
-            cargo_args.push(arg.to_owned());
-        }
-        cargo_args
     }
 
     /// Return the environment variables that should be set when building this crate.
@@ -720,170 +618,14 @@ mod test_targets {
 }
 
 #[cfg(test)]
-mod test_calculations {
+mod test_environment {
     use super::*;
 
-    fn default_cargo_args(extra_args: &[String]) -> Vec<String> {
-        let mut args = vec!["rustdoc".into(), "--lib".into(), "-Zrustdoc-map".into()];
-        args.extend_from_slice(extra_args);
-        args.extend_from_slice(&[
-            "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
-        ]);
-        args
-    }
-
     #[test]
-    fn test_defaults() {
-        let metadata = Metadata::default();
-        assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args(&[]));
-        let env = metadata.environment_variables();
+    fn default_environment() {
+        let env = Metadata::default().environment_variables();
         assert_eq!(env.get("DOCS_RS").map(String::as_str), Some("1"));
         assert!(!env.contains_key("RUSTDOCFLAGS"));
         assert!(!env.contains_key("RUSTFLAGS"));
-    }
-
-    #[test]
-    fn test_features() {
-        // all features
-        let metadata = Metadata {
-            all_features: true,
-            ..Metadata::default()
-        };
-        let expected_args = default_cargo_args(&["--all-features".into()]);
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // no default features
-        let metadata = Metadata {
-            no_default_features: true,
-            ..Metadata::default()
-        };
-        let expected_args = default_cargo_args(&["--no-default-features".into()]);
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // allow passing both even though it's nonsense; cargo will give an error anyway
-        let metadata = Metadata {
-            all_features: true,
-            no_default_features: true,
-            ..Metadata::default()
-        };
-        let expected_args =
-            default_cargo_args(&["--all-features".into(), "--no-default-features".into()]);
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // explicit empty vec
-        let metadata = Metadata {
-            features: Some(vec![]),
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            "rustdoc".into(),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--features".into(),
-            String::new(),
-            "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // one feature
-        let metadata = Metadata {
-            features: Some(vec!["some_feature".into()]),
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            String::from("rustdoc"),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--features".into(),
-            "some_feature".into(),
-            "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // multiple features
-        let metadata = Metadata {
-            features: Some(vec!["feature1".into(), "feature2".into()]),
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            String::from("rustdoc"),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--features".into(),
-            "feature1 feature2".into(),
-            "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs"]"#.into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // rustdocflags
-        let metadata = Metadata {
-            rustdoc_args: vec![
-                "-Z".into(),
-                "unstable-options".into(),
-                "--static-root-path".into(),
-                "/".into(),
-            ],
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            String::from("rustdoc"),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--config".into(),
-            r#"build.rustdocflags=["--cfg", "docsrs", "-Z", "unstable-options", "--static-root-path", "/"]"#.into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // rustcflags
-        let metadata = Metadata {
-            rustc_args: vec!["--cfg".into(), "x".into()],
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            String::from("rustdoc"),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--config".into(),
-            "build.rustflags=[\"--cfg\", \"x\"]".into(),
-            "-Zhost-config".into(),
-            "-Ztarget-applies-to-host".into(),
-            "--config".into(),
-            "host.rustflags=[\"--cfg\", \"x\"]".into(),
-            "--config".into(),
-            "build.rustdocflags=[\"--cfg\", \"docsrs\"]".into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // cargo flags
-        let metadata = Metadata {
-            cargo_args: vec!["-Zbuild-std".into()],
-            ..Metadata::default()
-        };
-        let expected_args = vec![
-            String::from("rustdoc"),
-            "--lib".into(),
-            "-Zrustdoc-map".into(),
-            "--config".into(),
-            "build.rustdocflags=[\"--cfg\", \"docsrs\"]".into(),
-            "-Zbuild-std".into(),
-        ];
-        assert_eq!(metadata.cargo_args(&[], &[]), expected_args);
-
-        // We add `-Zrustdoc-scrape-examples` ourselves, so providing it in metadata will
-        // be ignored.
-        for cargo_args in [
-            vec!["-Zrustdoc-scrape-examples".into()],
-            vec!["-Z".into(), "rustdoc-scrape-examples".into()],
-        ] {
-            let metadata = Metadata {
-                cargo_args,
-                ..Metadata::default()
-            };
-            assert_eq!(metadata.cargo_args(&[], &[]), default_cargo_args(&[]));
-        }
     }
 }

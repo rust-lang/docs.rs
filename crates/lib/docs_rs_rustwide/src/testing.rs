@@ -5,6 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Temporarily pinned because newer nightlies ICE when rustdoc uses `-Zmetrics-dir`.
+pub const COMPILER_METRICS_TEST_TOOLCHAIN: &str = "nightly-2026-09-26";
+
 /// Persistent workspace used by integration tests. BuildEnvironment owns its lock.
 ///
 /// For better build speed, should be shared across tests using the rustwide builder:

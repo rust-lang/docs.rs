@@ -14,6 +14,9 @@ inputs:
   strict:
     description: Also fail on JSON, coverage, or additional-target build failures.
     default: 'false'
+  experimental:
+    description: Enable experimental docs.rs build defaults. Accepts true or false.
+    default: 'false'
 
 outputs:
   workspace:
@@ -30,6 +33,7 @@ runs:
       env:
         CRATE_PATH: ${{ inputs.path }}
         STRICT: ${{ inputs.strict }}
+        EXPERIMENTAL: ${{ inputs.experimental }}
         SMALL_IMAGE: ${{ inputs.small-image }}
       run: |
         if [[ "$RUNNER_OS" != Linux ]]; then
@@ -39,6 +43,10 @@ runs:
         case "$STRICT" in
           true|false) ;;
           *) echo '::error::strict must be true or false'; exit 1 ;;
+        esac
+        case "$EXPERIMENTAL" in
+          true|false) ;;
+          *) echo '::error::experimental must be true or false'; exit 1 ;;
         esac
         case "$SMALL_IMAGE" in
           true|false) ;;
@@ -82,7 +90,7 @@ runs:
 
     - name: Restore the rustwide workspace
       id: workspace-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.prepare.outputs.workspace }}
         # Rustwide manages changes to packages, images, and toolchains itself.
@@ -122,6 +130,7 @@ runs:
         CRATE_PATH: ${{ inputs.path }}
         PACKAGE: ${{ inputs.package }}
         STRICT: ${{ inputs.strict }}
+        EXPERIMENTAL: ${{ inputs.experimental }}
         SMALL_IMAGE: ${{ inputs.small-image }}
         BUILD_WORKSPACE: ${{ steps.prepare.outputs.workspace }}
       run: |
@@ -135,11 +144,14 @@ runs:
         if [[ "$STRICT" == true ]]; then
           args+=(--strict)
         fi
+        if [[ "$EXPERIMENTAL" == true ]]; then
+          args+=(--experimental)
+        fi
         docs_rs_build "${args[@]}" -- "$CRATE_PATH"
 
     - name: Save the rustwide workspace
       if: ${{ !cancelled() && steps.build.outcome != 'skipped' && steps.build.outcome != '' && steps.workspace-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ${{ steps.prepare.outputs.workspace }}
         key: ${{ steps.workspace-cache.outputs.cache-primary-key }}

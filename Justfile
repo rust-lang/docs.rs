@@ -1,5 +1,7 @@
 set shell := ["bash", "-Eeuo", "pipefail", "-c"]
 set ignore-comments
+set unstable
+set lists
 set dotenv-load
 set dotenv-override
 

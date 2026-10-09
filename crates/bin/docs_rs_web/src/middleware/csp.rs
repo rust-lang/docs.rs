@@ -1,6 +1,8 @@
 use crate::config::Config;
 use axum::{
-    extract::Request as AxumHttpRequest, middleware::Next, response::Response as AxumResponse,
+    extract::{Request as AxumHttpRequest, State},
+    middleware::Next,
+    response::Response as AxumResponse,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use std::{
@@ -98,12 +100,12 @@ enum ContentType {
     Other,
 }
 
-pub(crate) async fn csp_middleware(mut req: AxumHttpRequest, next: Next) -> AxumResponse {
-    let csp_report_only = req
-        .extensions()
-        .get::<Arc<Config>>()
-        .expect("missing config extension in request")
-        .csp_report_only;
+pub(crate) async fn csp_middleware(
+    State(config): State<Arc<Config>>,
+    mut req: AxumHttpRequest,
+    next: Next,
+) -> AxumResponse {
+    let csp_report_only = config.csp_report_only;
 
     let csp = Arc::new(Csp::new());
     req.extensions_mut().insert(csp.clone());

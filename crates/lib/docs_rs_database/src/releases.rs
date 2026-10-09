@@ -7,10 +7,7 @@ use docs_rs_types::{
     Feature, KrateName, ReleaseId, Version,
 };
 use docs_rs_utils::rustc_version::parse_rustc_date;
-use futures_util::stream::TryStreamExt;
-use slug::slugify;
 use std::{
-    collections::{HashMap, HashSet},
     fmt, fs,
     io::{BufRead, BufReader},
     path::Path,
@@ -46,7 +43,6 @@ pub async fn finish_release(
         .map(Into::into)
         .collect();
     let rustdoc = get_rustdoc(metadata_pkg, source_dir).unwrap_or(None);
-    let readme = get_readme(metadata_pkg, source_dir).unwrap_or(None);
     let features = get_features(metadata_pkg);
     let is_library = metadata_pkg.is_library();
 
@@ -67,16 +63,14 @@ pub async fn finish_release(
                homepage_url = $10,
                description = $11,
                description_long = $12,
-               readme = $13,
-               keywords = $14,
-               have_examples = $15,
-               doc_targets = $16,
-               is_library = $17,
-               documentation_url = $18,
-               default_target = $19,
-               features = $20,
-               repository_id = $21,
-               source_size = $22
+               have_examples = $13,
+               doc_targets = $14,
+               is_library = $15,
+               documentation_url = $16,
+               default_target = $17,
+               features = $18,
+               repository_id = $19,
+               source_size = $20
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
@@ -90,8 +84,6 @@ pub async fn finish_release(
         metadata_pkg.homepage,
         metadata_pkg.description,
         rustdoc,
-        readme,
-        serde_json::to_value(&metadata_pkg.keywords)?,
         has_examples,
         serde_json::to_value(doc_targets)?,
         is_library,
@@ -108,7 +100,6 @@ pub async fn finish_release(
         return Err(anyhow!("Failed to update release"));
     }
 
-    add_keywords_into_database(conn, metadata_pkg, release_id).await?;
     add_compression_into_database(conn, compression_algorithms.into_iter(), release_id).await?;
 
     update_latest_version_id(&mut *conn, crate_id)
@@ -221,7 +212,7 @@ pub async fn finish_build<E>(
     docsrs_version: &str,
     build_status: BuildStatus,
     documentation_size: Option<ByteSize>,
-    memory_peak: Option<u64>,
+    memory_peak: Option<ByteSize>,
     build_error: Option<&E>,
 ) -> Result<()>
 where
@@ -268,7 +259,7 @@ where
         documentation_size as _,
         rustc_date,
         build_error.map(|err| err.kind()),
-        memory_peak.map(|v| v as i64),
+        memory_peak as _,
         build_id as _,
     )
     .fetch_one(&mut *conn)
@@ -401,28 +392,6 @@ fn get_features(pkg: &MetadataPackage) -> Vec<Feature> {
     features
 }
 
-/// Reads readme if there is any read defined in Cargo.toml of a Package
-fn get_readme(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
-    let readme_path = source_dir.join(pkg.readme.as_deref().unwrap_or("README.md"));
-
-    if !readme_path.exists() {
-        return Ok(None);
-    }
-
-    let readme = fs::read_to_string(readme_path)?;
-
-    if readme.is_empty() {
-        Ok(None)
-    } else if readme.len() > 51200 {
-        Ok(Some(format!(
-            "(Readme ignored due to being too long. ({} > 51200))",
-            readme.len()
-        )))
-    } else {
-        Ok(Some(readme))
-    }
-}
-
 fn get_rustdoc(pkg: &MetadataPackage, source_dir: &Path) -> Result<Option<String>> {
     if let Some(src_path) = &pkg.targets.first().and_then(|t| t.src_path.as_ref()) {
         let src_path = Path::new(src_path);
@@ -467,58 +436,6 @@ fn read_rust_doc(file_path: &Path) -> Result<Option<String>> {
     } else {
         Ok(Some(rustdoc))
     }
-}
-
-/// Adds keywords into database
-async fn add_keywords_into_database(
-    conn: &mut sqlx::PgConnection,
-    pkg: &MetadataPackage,
-    release_id: ReleaseId,
-) -> Result<()> {
-    let wanted_keywords: HashMap<String, String> = pkg
-        .keywords
-        .iter()
-        .map(|kw| (slugify(kw), kw.clone()))
-        .collect();
-
-    let existing_keyword_slugs: HashSet<String> = sqlx::query!(
-        "SELECT slug FROM keywords WHERE slug = ANY($1)",
-        &wanted_keywords.keys().cloned().collect::<Vec<_>>()[..],
-    )
-    .fetch(&mut *conn)
-    .map_ok(|row| row.slug)
-    .try_collect()
-    .await?;
-
-    // we create new keywords one-by-one, since most of the time we already have them,
-    // and because support for multi-record inserts is a mess without adding a new
-    // library
-    for (slug, name) in wanted_keywords
-        .iter()
-        .filter(|(k, _)| !(existing_keyword_slugs.contains(*k)))
-    {
-        sqlx::query!(
-            "INSERT INTO keywords (name, slug) VALUES ($1, $2)",
-            name,
-            slug
-        )
-        .execute(&mut *conn)
-        .await?;
-    }
-
-    sqlx::query!(
-        "INSERT INTO keyword_rels (rid, kid)
-        SELECT $1 as rid, id as kid
-        FROM keywords
-        WHERE slug = ANY($2)
-        ON CONFLICT DO NOTHING;",
-        release_id.0,
-        &wanted_keywords.keys().cloned().collect::<Vec<_>>()[..],
-    )
-    .execute(&mut *conn)
-    .await?;
-
-    Ok(())
 }
 
 #[instrument(skip(conn))]
@@ -651,23 +568,17 @@ mod test {
         KrateName, SimpleBuildError,
         testing::{DEFAULT_TARGET, KRATE, V0_1, V1},
     };
+    use futures_util::stream::TryStreamExt;
     use std::{collections::BTreeMap, iter, slice};
     use test_case::test_case;
 
-    /// miminmal fake release for the tests in this module (keyword tests mostly).
-    async fn fake_release_with_keywords<K, KL>(
+    /// miminmal fake release for the tests in this module
+    async fn fake_release(
         conn: &mut sqlx::PgConnection,
         name: &KrateName,
         version: &Version,
-        keywords: KL,
         registry_data: &ReleaseData,
-    ) -> Result<ReleaseId>
-    where
-        K: Into<String>,
-        KL: IntoIterator<Item = K>,
-    {
-        let keywords: Vec<_> = keywords.into_iter().map(Into::into).collect();
-
+    ) -> Result<ReleaseId> {
         let tempdir = tempfile::tempdir()?;
 
         let crate_id = initialize_crate(&mut *conn, name).await?;
@@ -688,7 +599,6 @@ mod test {
                 dependencies: Vec::new(),
                 targets: Vec::new(),
                 readme: None,
-                keywords,
                 features: BTreeMap::new(),
             },
             tempdir.path(),
@@ -712,14 +622,7 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        let release_id = fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V0_1,
-            iter::empty::<String>(),
-            &ReleaseData::dummy(),
-        )
-        .await?;
+        let release_id = fake_release(&mut conn, &KRATE, &V0_1, &ReleaseData::dummy()).await?;
         let release_time = sqlx::query_scalar!(
             "SELECT release_time FROM releases WHERE id = $1",
             release_id.0,
@@ -737,11 +640,10 @@ mod test {
         let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
         let mut conn = db.async_conn().await?;
 
-        let release_id = fake_release_with_keywords(
+        let release_id = fake_release(
             &mut conn,
             &KRATE,
             &V0_1,
-            iter::empty::<String>(),
             &ReleaseData {
                 release_time: None,
                 yanked: false,
@@ -871,7 +773,7 @@ mod test {
             "docsrs_version",
             BuildStatus::Success,
             Some(42u64.into()),
-            Some(23),
+            Some(23u64.into()),
             None::<&SimpleBuildError>,
         )
         .await?;
@@ -948,145 +850,6 @@ mod test {
         assert_eq!(row.errors, Some("build error: error message".into()));
         assert_eq!(row.error_kind, Some("SimpleBuildError".into()));
         assert!(row.documentation_size.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn new_keywords() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-
-        let mut conn = db.async_conn().await?;
-
-        let release_id = fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V0_1,
-            ["kw 1", "kw 2"],
-            &ReleaseData::dummy(),
-        )
-        .await?;
-
-        let kw_r = sqlx::query!(
-            r#"SELECT
-                        kw.name as "name!",
-                        kw.slug as "slug!"
-                   FROM keywords as kw
-                   INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
-                   WHERE kwr.rid = $1
-                   ORDER BY kw.name,kw.slug"#,
-            release_id.0
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(|row| (row.name, row.slug))
-        .collect::<Vec<_>>();
-
-        assert_eq!(kw_r[0], ("kw 1".into(), "kw-1".into()));
-        assert_eq!(kw_r[1], ("kw 2".into(), "kw-2".into()));
-
-        let all_kw = sqlx::query!("SELECT slug FROM keywords ORDER BY slug")
-            .fetch_all(&mut *conn)
-            .await?
-            .into_iter()
-            .map(|row| row.slug)
-            .collect::<Vec<_>>();
-
-        assert_eq!(all_kw, vec![String::from("kw-1"), "kw-2".into()]);
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn keyword_conflict_when_rebuilding_release() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-
-        fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V0_1,
-            ["kw 3", "kw 4"],
-            &ReleaseData::dummy(),
-        )
-        .await?;
-
-        // same version so we have the same release
-        fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V0_1,
-            ["kw 3", "kw 4"],
-            &ReleaseData::dummy(),
-        )
-        .await?;
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn updated_keywords() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
-        let mut conn = db.async_conn().await?;
-
-        fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V1,
-            ["kw 3", "kw 4"],
-            &ReleaseData::dummy(),
-        )
-        .await?;
-
-        let release_id = fake_release_with_keywords(
-            &mut conn,
-            &KRATE,
-            &V1,
-            ["kw 1", "kw 2"],
-            &ReleaseData::dummy(),
-        )
-        .await?;
-
-        let mut conn = db.async_conn().await?;
-        let kw_r = sqlx::query!(
-            r#"SELECT
-                    kw.name as "name!",
-                    kw.slug as "slug!"
-                 FROM keywords as kw
-                 INNER JOIN keyword_rels as kwr on kw.id = kwr.kid
-                 WHERE kwr.rid = $1
-                 ORDER BY kw.name,kw.slug"#,
-            release_id.0
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(|row| (row.name, row.slug))
-        .collect::<Vec<_>>();
-
-        assert_eq!(kw_r[0], ("kw 1".into(), "kw-1".into()));
-        assert_eq!(kw_r[1], ("kw 2".into(), "kw-2".into()));
-
-        let all_kw = sqlx::query!("SELECT slug FROM keywords ORDER BY slug")
-            .fetch_all(&mut *conn)
-            .await?
-            .into_iter()
-            .map(|row| row.slug)
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            all_kw,
-            vec![
-                String::from("kw-1"),
-                "kw-2".into(),
-                "kw-3".into(),
-                "kw-4".into(),
-            ]
-        );
 
         Ok(())
     }
@@ -1547,7 +1310,6 @@ mod test {
                 dependencies: Vec::new(),
                 targets: Vec::new(),
                 readme: None,
-                keywords: Vec::new(),
                 features: BTreeMap::new(),
             },
             tempdir.path(),

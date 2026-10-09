@@ -89,7 +89,7 @@ async fn watch_registry(
     let mut last_gc = Instant::now();
     let queue = context.build_queue()?;
 
-    loop {
+    let mut fetch_from_registry = async || -> anyhow::Result<()> {
         if queue.is_locked().await? {
             debug!("Queue is locked, skipping checking new crates");
         } else {
@@ -108,6 +108,15 @@ async fn watch_registry(
                 index.run_git_gc().await;
                 last_gc = Instant::now();
             }
+        }
+
+        Ok(())
+    };
+
+    loop {
+        if let Err(err) = fetch_from_registry().await {
+            metrics.record_poll_error(EventSource::Git);
+            error!(?err, "Failed to get new crates");
         }
         time::sleep(*config.delay_between_registry_fetches).await;
     }

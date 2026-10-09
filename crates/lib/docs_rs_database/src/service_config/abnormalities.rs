@@ -9,3 +9,9 @@ pub struct Abnormality {
     #[serde(default)]
     pub explanation: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Alert {
+    pub alert_id: usize,
+    pub text: String,
+}

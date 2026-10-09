@@ -17,6 +17,7 @@ mod metrics;
 pub(crate) mod middleware;
 mod page;
 mod routes;
+mod state;
 #[cfg(test)]
 pub(crate) mod testing;
 mod utils;

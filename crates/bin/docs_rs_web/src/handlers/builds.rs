@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use askama::Template;
-use axum::{Json, extract::Extension, response::IntoResponse};
+use axum::{Json, extract::State, response::IntoResponse};
 use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
@@ -59,7 +59,7 @@ impl BuildsPage {
 pub(crate) async fn build_list_handler(
     params: RustdocParams,
     mut conn: DbConnection,
-    Extension(context): Extension<Arc<Context>>,
+    State(context): State<Arc<Context>>,
 ) -> AxumResult<impl IntoResponse> {
     let version = match_version(&mut conn, params.name(), params.req_version())
         .await?
@@ -145,8 +145,8 @@ async fn build_trigger_check(
 pub(crate) async fn build_trigger_rebuild_handler(
     Path((name, version)): Path<(KrateName, Version)>,
     mut conn: DbConnection,
-    Extension(build_queue): Extension<Arc<AsyncBuildQueue>>,
-    Extension(config): Extension<Arc<Config>>,
+    State(build_queue): State<Arc<AsyncBuildQueue>>,
+    State(config): State<Arc<Config>>,
     opt_auth_header: Option<TypedHeader<Authorization<Bearer>>>,
 ) -> JsonAxumResult<impl IntoResponse> {
     let expected_token =
@@ -346,7 +346,7 @@ mod tests {
         async_wrapper(|env| async move {
             // Use a specific memory value: 256 MiB = 256 * 1024 * 1024 = 268435456 bytes
             // filesizeformat uses decimal (1000-based), so this will display as ~268.43 MB
-            let test_memory_bytes: u64 = 256 * 1024 * 1024;
+            let test_memory_bytes = ByteSize::mib(256);
 
             env.fake_release()
                 .await

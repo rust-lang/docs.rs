@@ -14,14 +14,14 @@ pub(crate) mod statics;
 pub(crate) mod status;
 
 use crate::Config;
-use crate::metrics::WebMetrics;
 use crate::middleware::csp;
 use crate::page::{self, TemplateData};
+use crate::state::AppState;
 use crate::{cache, routes};
 use anyhow::{Context as _, Error, Result, anyhow, bail};
 use axum::{
     Router as AxumRouter,
-    extract::{Extension, MatchedPath, Request as AxumRequest},
+    extract::{MatchedPath, Request as AxumRequest},
     http::StatusCode,
     middleware,
     middleware::Next,
@@ -69,46 +69,40 @@ async fn set_sentry_transaction_name_from_axum_route(
     next.run(request).await
 }
 
-async fn apply_middleware(
-    router: AxumRouter,
-    config: Arc<Config>,
-    context: Arc<Context>,
-    template_data: Option<Arc<TemplateData>>,
-) -> Result<AxumRouter> {
-    let has_templates = template_data.is_some();
-    let web_metrics = Arc::new(WebMetrics::new(&context.meter_provider));
-
-    Ok(router.layer(
-        ServiceBuilder::new()
-            .layer(TraceLayer::new_for_http())
-            .layer(sentry_tower::NewSentryLayer::new_from_top())
-            .layer(sentry_tower::SentryHttpLayer::new().enable_transaction())
-            .layer(middleware::from_fn(
-                set_sentry_transaction_name_from_axum_route,
-            ))
-            .layer(CatchPanicLayer::new())
-            .layer(option_layer(
-                config
-                    .report_request_timeouts
-                    .then_some(middleware::from_fn(log_timeouts_to_sentry)),
-            ))
-            .layer(option_layer(config.request_timeout.map(|to| {
-                TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to.into())
-            })))
-            .layer(Extension(context.clone()))
-            .layer(Extension(context.pool()?.clone()))
-            .layer(Extension(context.build_queue()?.clone()))
-            .layer(Extension(web_metrics))
-            .layer(Extension(config.clone()))
-            .layer(Extension(context.registry_api()?.clone()))
-            .layer(Extension(context.storage()?.clone()))
-            .layer(option_layer(template_data.map(Extension)))
-            .layer(middleware::from_fn(csp::csp_middleware))
-            .layer(option_layer(has_templates.then_some(middleware::from_fn(
-                page::web_page::render_templates_middleware,
-            ))))
-            .layer(middleware::from_fn(crate::cache::cache_middleware)),
-    ))
+fn apply_middleware(router: AxumRouter<AppState>, state: AppState) -> AxumRouter {
+    let config = state.config();
+    router
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+                .layer(sentry_tower::NewSentryLayer::new_from_top())
+                .layer(sentry_tower::SentryHttpLayer::new().enable_transaction())
+                .layer(middleware::from_fn(
+                    set_sentry_transaction_name_from_axum_route,
+                ))
+                .layer(CatchPanicLayer::new())
+                .layer(option_layer(
+                    config
+                        .report_request_timeouts
+                        .then_some(middleware::from_fn(log_timeouts_to_sentry)),
+                ))
+                .layer(option_layer(config.request_timeout.map(|to| {
+                    TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, to.into())
+                })))
+                .layer(middleware::from_fn_with_state(
+                    config.clone(),
+                    csp::csp_middleware,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    state.templates().clone(),
+                    page::web_page::render_templates_middleware,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    config.clone(),
+                    crate::cache::cache_middleware,
+                )),
+        )
+        .with_state(state)
 }
 
 pub(crate) async fn build_axum_app(
@@ -116,13 +110,11 @@ pub(crate) async fn build_axum_app(
     context: Arc<Context>,
     template_data: Arc<TemplateData>,
 ) -> Result<AxumRouter, Error> {
-    apply_middleware(
-        routes::build_axum_routes()?,
-        config,
-        context,
-        Some(template_data),
-    )
-    .await
+    let state = AppState::new(config, context, template_data)?;
+    Ok(apply_middleware(
+        routes::build_axum_routes(state.metrics())?,
+        state,
+    ))
 }
 
 #[instrument(skip_all)]
@@ -135,18 +127,32 @@ pub async fn run_web_server(
 
     let axum_addr = addr.unwrap_or(DEFAULT_BIND);
 
-    tracing::info!(
-        "Starting web server on `{}:{}`",
-        axum_addr.ip(),
-        axum_addr.port()
-    );
-
     let app = build_axum_app(config, context, template_data)
         .await?
         .into_make_service();
-    let listener = tokio::net::TcpListener::bind(axum_addr)
-        .await
-        .context("error binding socket for web server")?;
+    // Both the standalone web binary and the legacy daemon use this path.
+    // The inherited listener takes precedence over the configured bind address.
+    let mut listenfd = listenfd::ListenFd::from_env();
+    if listenfd.len() > 1 {
+        bail!("expected exactly one socket activation descriptor");
+    }
+    let listener = match listenfd
+        .take_tcp_listener(0)
+        .context("error acquiring socket activation listener")?
+    {
+        Some(listener) => {
+            listener
+                .set_nonblocking(true)
+                .context("error making socket activation listener nonblocking")?;
+            tokio::net::TcpListener::from_std(listener)
+                .context("error registering socket activation listener with Tokio")?
+        }
+        None => tokio::net::TcpListener::bind(axum_addr)
+            .await
+            .context("error binding socket for web server")?,
+    };
+
+    tracing::info!("Starting web server on `{}`", listener.local_addr()?);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

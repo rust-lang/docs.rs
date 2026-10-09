@@ -43,6 +43,7 @@ impl<T> BuildResult<T> {
 #[derive(Clone, Debug)]
 pub struct HtmlOutput {
     pub(crate) path: PathBuf,
+    pub(crate) compiler_metrics: Option<Vec<PathBuf>>,
 }
 
 impl AsRef<Path> for HtmlOutput {
@@ -52,8 +53,11 @@ impl AsRef<Path> for HtmlOutput {
 }
 
 impl HtmlOutput {
-    pub(crate) fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub(crate) fn new(path: PathBuf, compiler_metrics: Option<Vec<PathBuf>>) -> Self {
+        Self {
+            path,
+            compiler_metrics,
+        }
     }
 
     /// Path to the generated HTML documentation directory.
@@ -130,8 +134,6 @@ pub struct TargetBuildResult {
     pub(crate) rustdoc_json: StepResult<RustdocJsonOutput>,
     /// Documentation coverage build result.
     pub(crate) coverage: StepResult<Option<DocCoverage>>,
-    /// Compiler metrics files copied out of this target's HTML build.
-    pub(crate) compiler_metrics: Option<Vec<PathBuf>>,
     /// optionally regenerate lockfile
     pub(crate) regenerate_lockfile: Option<StepResult<()>>,
 }
@@ -183,7 +185,10 @@ impl TargetBuildResult {
     }
 
     pub fn compiler_metrics(&self) -> Option<&[PathBuf]> {
-        self.compiler_metrics.as_deref()
+        self.documentation()
+            .as_ref()
+            .ok()
+            .and_then(|html_output| html_output.value.compiler_metrics.as_deref())
     }
 
     pub fn rustdoc_json(&self) -> &StepResult<RustdocJsonOutput> {
@@ -282,7 +287,6 @@ mod tests {
             target: "x86_64-unknown-linux-gnu".into(),
             is_default: true,
             duration: Some(Duration::ZERO),
-            compiler_metrics: None,
             documentation: Ok(StepReport {
                 value: html_output,
                 log: None,
@@ -306,7 +310,7 @@ mod tests {
     fn documentation_success_requires_documentation_directory() {
         let temporary = tempfile::tempdir().unwrap();
         let path = temporary.path().join("docs");
-        let result = target_result(HtmlOutput::new(path.clone()));
+        let result = target_result(HtmlOutput::new(path.clone(), None));
 
         assert!(!result.documentation().as_inner().unwrap().exists());
         assert!(result.build_succeeded());

@@ -1,7 +1,7 @@
 use crate::support::{TestEnvironment, build_local, fixture, test_workspace};
 use anyhow::{Context as _, Result};
-use docs_rs_rustwide::{BuildEnvironment, CpuLimit, StepResultExt};
-use rustwide::Crate;
+use docs_rs_rustwide::{BuildEnvironment, CpuLimit, RustdocLints, StepResultExt};
+use rustwide::{Crate, Toolchain};
 use std::fs;
 use test_case::test_case;
 
@@ -48,6 +48,41 @@ fn independent_steps_preserve_artifacts_in_any_order(order: [&str; 3]) -> Result
         }
         Ok(())
     })?;
+    Ok(())
+}
+
+#[test_case(false)]
+#[test_case(true)]
+#[ignore = "requires Docker and a Rust toolchain"]
+fn invalid_html_tags_follow_environment_lint_policy(deny: bool) -> Result<()> {
+    let workspace = test_workspace();
+    let builder = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image());
+    let mut environment = if deny {
+        builder
+            .rustdoc_lints(RustdocLints::default().deny(RustdocLints::INVALID_HTML_TAGS))
+            .build()?
+    } else {
+        builder.build()?
+    };
+    let release = build_local(&mut environment, "invalid-html-tags")?.into_inner();
+
+    assert_eq!(release.build_succeeded(), !deny);
+    assert_eq!(release.has_docs(), !deny);
+    let documentation = release.default_target().documentation();
+    assert_eq!(documentation.is_err(), deny);
+    let log = documentation.log().context("missing rustdoc build log")?;
+    let level = if deny { "error" } else { "warning" };
+    assert!(
+        log.contains(&format!("{level}: unclosed HTML tag `div`")),
+        "{log}"
+    );
+    if deny {
+        assert!(log.contains("-D rustdoc::invalid-html-tags"), "{log}");
+    }
     Ok(())
 }
 
@@ -141,6 +176,30 @@ fn builds_proc_macro(crate_name: &str, version: &str) -> Result<()> {
 
 #[test]
 #[ignore = "requires Docker, network access, and a Rust toolchain"]
+fn builds_ring_without_lints_cap() -> Result<()> {
+    let workspace = test_workspace();
+    let mut environment = BuildEnvironment::builder(workspace.as_path())
+        .wait_for_workspace_lock(true)
+        .fast_init(true)
+        .validate_host_resources(false)
+        .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
+        .build()?;
+    // ring originally motivated --cap-lints warn; keep the explicit cap supported.
+    let krate = Crate::crates_io("ring", "0.17.14");
+    let release = environment
+        .release(&krate)
+        .run(|build| Ok(build.build_docs()))?
+        .into_inner();
+
+    assert!(release.build_succeeded());
+    assert!(release.has_docs());
+    assert!(release.default_target().coverage().is_ok());
+    assert!(release.default_target().rustdoc_json().is_ok());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires Docker, network access, and a Rust toolchain"]
 fn passes_rustflags_to_build_scripts() -> Result<()> {
     let mut test = TestEnvironment::new()?;
     let krate = Crate::crates_io("proc-macro2", "1.0.95");
@@ -200,13 +259,34 @@ fn collects_compiler_metrics() -> Result<()> {
         .fast_init(true)
         .validate_host_resources(false)
         .sandbox_image(docs_rs_rustwide::testing::test_sandbox_image())
+        .toolchain(Toolchain::dist(
+            docs_rs_rustwide::testing::COMPILER_METRICS_TEST_TOOLCHAIN,
+        ))
         .compiler_metrics_collection_path(metrics.path())
         .build()?;
 
     let release = build_local(&mut environment, "hello-world")?.into_inner();
-    let metric_files = release.default_target().compiler_metrics().unwrap();
+    assert!(release.has_docs());
+
+    let metric_files = release
+        .default_target()
+        .compiler_metrics()
+        .expect("compiler metrics should be collected");
     assert_eq!(metric_files.len(), 1);
-    let _: serde_json::Value = serde_json::from_slice(&fs::read(&metric_files[0])?)?;
+
+    let metric_file = &metric_files[0];
+    assert_eq!(metric_file.extension().unwrap().to_str().unwrap(), "json");
+    assert!(
+        metric_file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("unstable_feature_usage_metrics-"))
+    );
+
+    let metric: serde_json::Value = serde_json::from_slice(&fs::read(metric_file)?)?;
+    assert!(metric["lib_features"].is_array());
+    assert!(metric["lang_features"].is_array());
+
     Ok(())
 }
 

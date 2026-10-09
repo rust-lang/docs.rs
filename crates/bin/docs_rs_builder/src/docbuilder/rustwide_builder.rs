@@ -431,7 +431,7 @@ impl RustwideBuilder {
                 BuildStatus::Failure
             },
             documentation_size,
-            build_statistics.memory_peak_bytes(),
+            build_statistics.memory_peak_bytes().map(Into::into),
             build_error,
         ))?;
 
@@ -1086,7 +1086,6 @@ mod tests {
                     dependencies: vec![],
                     targets: vec![],
                     readme: None,
-                    keywords: vec![],
                     features: BTreeMap::new(),
                 },
                 Path::new("/unknown/"),
