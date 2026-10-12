@@ -265,9 +265,68 @@ div.landing {
     }
 }
 
+.build-queue-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+
+    .recent-releases-container {
+        overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 800px) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.build-queue-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+    padding-bottom: 50px;
+
+    .build-metrics-graph {
+        display: block;
+        width: 400px;
+        max-width: 100%;
+        height: 200px;
+        border: 0;
+    }
+
+}
+
+html[data-docs-rs-theme="dark"],
+html[data-docs-rs-theme="ayu"] {
+    .build-queue-metrics {
+        // Keep graph blending scoped to the page background in this column.
+        isolation: isolate;
+        background-color: var(--color-background);
+    }
+
+    .build-metrics-graph {
+        filter: invert(1) hue-rotate(180deg);
+        // The inverted white background becomes black, which screen blending
+        // replaces with the theme background while keeping graph content visible.
+        mix-blend-mode: screen;
+    }
+}
+
 div.recent-releases-container {
     text-align: left;
     padding-bottom: 50px;
+
+    table.in-progress-builds {
+        // Leave room for the table's horizontal margins inside the queue column.
+        width: calc(100% - 2em);
+        box-sizing: border-box;
+        table-layout: fixed;
+        overflow-wrap: anywhere;
+
+        th, td {
+            padding: 4px 0.5em;
+        }
+    }
 
     ul,
     li {

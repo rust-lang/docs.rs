@@ -27,105 +27,121 @@ centered
             </div>
         {%- endif %}
 
-        <div class="recent-releases-container">
-            <div class="release">
-                <strong>Currently being built</strong>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>release</th>
-                        <th>running for</th>
-                        <th>average duration</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {%- if !in_progress_builds.is_empty() %}
-                    {% for release in in_progress_builds -%}
-                        {%- set release_params = RustdocParams::new(release.name).with_req_version(release.version) -%}
+        <div class="{% if !graph_urls.is_empty() %}build-queue-layout{% endif %}">
+            <div class="recent-releases-container">
+                <div class="release">
+                    <strong>Currently being built</strong>
+                </div>
+                <table class="in-progress-builds">
+                    <thead>
                         <tr>
-                            <td>
-                                <a href="{{ release_params.builds_url() }}">
-                                    {{ release.name }} {{ release.version }}
-                                </a>
-                            </td>
-                            <td>
-                                {%- if let Some(elapsed) = release.elapsed -%}
-                                    {{ elapsed|format_duration }}
-                                {%- else -%}
-                                    &mdash;
-                                {%- endif -%}
-                            </td>
-                            <td>
-                                {%- if let Some(average_duration) = release.average_duration -%}
-                                    {{ average_duration|format_duration }}
-                                {%- else -%}
-                                    &mdash;
-                                {%- endif -%}
-                            </td>
+                            <th>release</th>
+                            <th>running for</th>
+                            <th>average duration</th>
                         </tr>
-                    {%- endfor %}
-                {%- else %}
-                    <tr>
-                        <td colspan=3><strong>There is nothing currently being built</strong></td>
-                    </tr>
-                {%- endif %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                    {%- if !in_progress_builds.is_empty() %}
+                        {% for release in in_progress_builds -%}
+                            {%- set release_params = RustdocParams::new(release.name).with_req_version(release.version) -%}
+                            <tr>
+                                <td>
+                                    <a href="{{ release_params.builds_url() }}">
+                                        {{ release.name }} {{ release.version }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {%- if let Some(elapsed) = release.elapsed -%}
+                                        {{ elapsed|format_duration }}
+                                    {%- else -%}
+                                        &mdash;
+                                    {%- endif -%}
+                                </td>
+                                <td>
+                                    {%- if let Some(average_duration) = release.average_duration -%}
+                                        {{ average_duration|format_duration }}
+                                    {%- else -%}
+                                        &mdash;
+                                    {%- endif -%}
+                                </td>
+                            </tr>
+                        {%- endfor %}
+                    {%- else %}
+                        <tr>
+                            <td colspan="3"><strong>There is nothing currently being built</strong></td>
+                        </tr>
+                    {%- endif %}
+                    </tbody>
+                </table>
 
-            <div class="release">
-                <strong>Build Queue</strong>
-            </div>
+                <div class="release">
+                    <strong>Build Queue</strong>
+                </div>
 
-            <ol class="queue-list">
-                {%- if !queue.is_empty() -%}
-                    {% for crate_item in queue -%}
-                        <li>
-                            <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
-                                {{- crate_item.name }} {{ crate_item.version -}}
-                            </a>
-
-                            {% if crate_item.priority != 0 -%}
-                                (priority: {{ crate_item.priority }})
-                            {%- endif %}
-                        </li>
-                    {%- endfor %}
-                {%- else %}
-                    <strong>There is nothing in the build queue</strong>
-                {%- endif %}
-            </ol>
-
-            <div class="release">
-                <strong>Rebuild Queue</strong>
-            </div>
-
-            <div class="about">
-                <p>
-                    We continuously rebuild the latest versions for all crates so they can
-                    benefit from new features in rustdoc.
-                </p>
-                {%- if !expand_rebuild_queue -%}
-                    {% let rebuild_queue_len = rebuild_queue.len() %}
-                    <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
-                    <p><a href="?expand=1">Show</a></p>
-                {%- endif -%}
-            </div>
-
-            {%- if expand_rebuild_queue -%}
-                <ol class="rebuild-queue-list">
-                    {%- if !rebuild_queue.is_empty() -%}
-                        {% for crate_item in rebuild_queue -%}
+                <ol class="queue-list">
+                    {%- if !queue.is_empty() -%}
+                        {% for crate_item in queue -%}
                             <li>
                                 <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
                                     {{- crate_item.name }} {{ crate_item.version -}}
                                 </a>
+
+                                {% if crate_item.priority != 0 -%}
+                                    (priority: {{ crate_item.priority }})
+                                {%- endif %}
                             </li>
                         {%- endfor %}
                     {%- else %}
-                        <strong>There is nothing in the rebuild queue</strong>
+                        <strong>There is nothing in the build queue</strong>
                     {%- endif %}
                 </ol>
-            {%- endif -%}
+
+                <div class="release">
+                    <strong>Rebuild Queue</strong>
+                </div>
+
+                <div class="about">
+                    <p>
+                        We continuously rebuild the latest versions for all crates so they can
+                        benefit from new features in rustdoc.
+                    </p>
+                    {%- if !expand_rebuild_queue -%}
+                        {% let rebuild_queue_len = rebuild_queue.len() %}
+                        <p>There are currently {{ rebuild_queue_len }} crate{{ rebuild_queue_len|pluralize }} in the rebuild queue.</p>
+                        <p><a href="?expand=1">Show</a></p>
+                    {%- endif -%}
+                </div>
+
+                {%- if expand_rebuild_queue -%}
+                    <ol class="rebuild-queue-list">
+                        {%- if !rebuild_queue.is_empty() -%}
+                            {% for crate_item in rebuild_queue -%}
+                                <li>
+                                    <a href="https://crates.io/crates/{{ crate_item.name }}/{{ crate_item.version }}">
+                                        {{- crate_item.name }} {{ crate_item.version -}}
+                                    </a>
+                                </li>
+                            {%- endfor %}
+                        {%- else %}
+                            <strong>There is nothing in the rebuild queue</strong>
+                        {%- endif %}
+                    </ol>
+                {%- endif -%}
+            </div>
+            {% if !graph_urls.is_empty() %}
+            <aside class="build-queue-metrics" aria-label="Build metrics">
+                {% for url in graph_urls %}
+                <iframe
+                    class="build-metrics-graph"
+                    src="{{ url }}"
+                    title="Build metrics graph {{ loop.index }}"
+                    width="400"
+                    height="200"
+                    frameborder="0"
+                ></iframe>
+                {% endfor %}
+            </aside>
+            {% endif %}
         </div>
     </div>
 {%- endblock body -%}
