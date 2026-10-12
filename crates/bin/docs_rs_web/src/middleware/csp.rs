@@ -6,16 +6,19 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use std::{
+    collections::BTreeSet,
     fmt::Write,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
+use url::Url;
 
 pub(crate) struct Csp {
     nonce: String,
     suppress: AtomicBool,
+    frame_origins: Mutex<BTreeSet<String>>,
 }
 
 impl Csp {
@@ -28,6 +31,7 @@ impl Csp {
         Self {
             nonce: b64.encode(random),
             suppress: AtomicBool::new(false),
+            frame_origins: Mutex::new(BTreeSet::new()),
         }
     }
 
@@ -37,6 +41,15 @@ impl Csp {
 
     pub(crate) fn nonce(&self) -> &str {
         &self.nonce
+    }
+
+    pub(crate) fn allow_frame(&self, url: &Url) {
+        if matches!(url.scheme(), "http" | "https") {
+            self.frame_origins
+                .lock()
+                .unwrap()
+                .insert(url.origin().ascii_serialization());
+        }
     }
 
     fn render(&self, content_type: ContentType) -> Option<String> {
@@ -68,6 +81,16 @@ impl Csp {
     }
 
     fn render_html(&self, result: &mut String) {
+        {
+            let origins = self.frame_origins.lock().unwrap();
+            if !origins.is_empty() {
+                result.push_str("; frame-src");
+                for origin in origins.iter() {
+                    write!(result, " {origin}").unwrap();
+                }
+            }
+        };
+
         // Allow loading any CSS file from the current origin.
         result.push_str("; style-src 'self'");
 
@@ -186,6 +209,30 @@ mod tests {
                     .into()
             ),
             csp.render(ContentType::Svg)
+        );
+    }
+
+    #[test]
+    fn test_csp_frame_origins() {
+        let csp = Csp::new();
+        assert!(!csp.render(ContentType::Html).unwrap().contains("frame-src"));
+
+        let url = "https://app.datadoghq.com/graph/embed?token=test"
+            .parse()
+            .unwrap();
+        csp.allow_frame(&url);
+        csp.allow_frame(&url);
+        csp.allow_frame(&"https://example.com:8443/graph".parse().unwrap());
+        assert!(
+            csp.render(ContentType::Html)
+                .unwrap()
+                .contains("; frame-src https://app.datadoghq.com https://example.com:8443;")
+        );
+        assert!(!csp.render(ContentType::Svg).unwrap().contains("frame-src"));
+        assert!(
+            !csp.render(ContentType::Other)
+                .unwrap()
+                .contains("frame-src")
         );
     }
 
