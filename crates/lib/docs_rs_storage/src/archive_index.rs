@@ -812,7 +812,7 @@ where
             };
 
             tx_entries
-                .blocking_send((entry.name().to_string(), start, end, compression_raw))
+                .blocking_send((entry.name()?.to_string(), start, end, compression_raw))
                 .map_err(|_| anyhow!("archive index receiver dropped"))?;
         }
         drop(archive);
