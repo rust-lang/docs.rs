@@ -6,6 +6,7 @@ pub(crate) mod build_status;
 pub(crate) mod builds;
 pub(crate) mod crate_details;
 pub(crate) mod features;
+pub(crate) mod health;
 pub(crate) mod releases;
 pub(crate) mod rustdoc;
 pub(crate) mod sitemap;

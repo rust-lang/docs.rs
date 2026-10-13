@@ -163,7 +163,7 @@ services:
             - "./ignored/rustsec-advisory-db:/opt/docsrs/rustsec-advisory-db"
         healthcheck:
             <<: *healthcheck-interval
-            test: curl --silent --fail localhost:3000/
+            test: curl --silent --fail --max-time 2 http://localhost:3000/-/health
         profiles:
             - web
             - full
