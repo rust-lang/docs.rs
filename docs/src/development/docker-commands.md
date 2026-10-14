@@ -25,20 +25,19 @@ Build all application images with:
 $ just docker-build
 ```
 
-After building, run the same packaged-binary smoke tests as CI with:
+Every runtime stage runs its packaged binary with `--help` during the build,
+including `tini` and the runtime dependencies. A failed check fails the build
+before that image is exported or published. Successful checks are cached until
+an earlier image layer changes.
 
-```console
-$ just docker-smoke-test
-```
-
-Or build and smoke-test the complete default group in one command:
+The testing recipe also builds and checks the complete default group:
 
 ```console
 $ just docker-test
 ```
 
-The images are loaded into the local Docker daemon. For example, smoke-test the
-build-server image with:
+The images are loaded into the local Docker daemon. To repeat a runtime check
+manually, for example:
 
 ```console
 $ docker run --rm docs-rs-build-server:ci --help
