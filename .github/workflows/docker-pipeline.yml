@@ -67,3 +67,35 @@ jobs:
           # The web task definition continues to use the latest image tag.
           aws ecs update-service --service "$SERVICE" --cluster "$CLUSTER" --force-new-deployment
           aws ecs wait services-stable --services "$SERVICE" --cluster "$CLUSTER"
+
+      - name: Prepare release task
+        if: inputs.cluster != ''
+        id: release
+        env:
+          CLUSTER: ${{ inputs.cluster }}
+        shell: bash
+        run: |
+          aws ecs describe-task-definition --task-definition docs-rs-release \
+            --query taskDefinition --output json > release-task-definition.json
+
+          aws ecs describe-services --cluster "$CLUSTER" --services docs-rs-web \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration' --output json |
+            jq -er '
+              "subnets=\(.subnets | join(","))",
+                "security-groups=\(.securityGroups | join(","))",
+                "assign-public-ip=\(.assignPublicIp // "DISABLED")"
+            ' >> "$GITHUB_OUTPUT"
+
+      - name: Run release commands
+        if: inputs.cluster != ''
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: release-task-definition.json
+          cluster: ${{ inputs.cluster }}
+          run-task: true
+          run-task-launch-type: FARGATE
+          run-task-subnets: ${{ steps.release.outputs.subnets }}
+          run-task-security-groups: ${{ steps.release.outputs.security-groups }}
+          run-task-assign-public-IP: ${{ steps.release.outputs.assign-public-ip }}
+          wait-for-task-stopped: true
+          wait-max-delay-seconds: 15

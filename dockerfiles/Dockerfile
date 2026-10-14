@@ -226,7 +226,7 @@ FROM runtime-base AS cli
 
 WORKDIR /srv/docsrs
 
-COPY crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
+COPY --chmod=755 crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
 
 COPY --from=build-cli /artifacts/docs_rs_admin /usr/local/bin/
 
