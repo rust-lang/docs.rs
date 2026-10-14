@@ -7,20 +7,11 @@ on:
 jobs:
   prod:
     name: Production
-    runs-on: ubuntu-latest
-    environment: production
-    concurrency: production
     permissions:
       id-token: write
       contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Deploy to ECS
-        uses: ./.github/actions/deploy-ecs
-        with:
-          aws-iam: "760062276060:role/ci--rust-lang--docs.rs--production"
-          cluster: docs-rs-prod
+    uses: ./.github/workflows/docker-pipeline.yml
+    with:
+      environment: production
+      aws-iam: "760062276060:role/ci--rust-lang--docs.rs--production"
+      cluster: docs-rs-prod
