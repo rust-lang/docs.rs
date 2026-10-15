@@ -51,6 +51,9 @@ impl TestRegistry {
         #[builder(default)]
         retries: u32,
 
+        /// Optional token for registry API requests.
+        token: Option<http::HeaderValue>,
+
         /// custom index config, in case we want to test broken index config
         /// error handling.
         /// By default, we'll generate a correct `IndexConfig`, that fits
@@ -84,6 +87,7 @@ impl TestRegistry {
         let config_path = format!("/{index_prefix}/config.json");
         let config_mock = index_server
             .mock("GET", config_path.as_str())
+            .match_header("authorization", Matcher::Missing)
             .expect_at_least(1)
             .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
             .with_body(serde_json::to_vec(&serde_json::json!({
@@ -102,6 +106,7 @@ impl TestRegistry {
         let api = RegistryApi::new(
             index_url.clone(),
             retries,
+            token.clone(),
             Some(cargo_home.path()),
             &meter_provider,
         )
@@ -109,6 +114,7 @@ impl TestRegistry {
 
         let config = Arc::new(
             Config::builder()
+                .maybe_api_token(token)
                 .crates_io_api_call_retries(retries)
                 .sparse_index_host(index_url)
                 .build(),
@@ -163,6 +169,7 @@ impl TestRegistry {
         let index_mock = inner
             .index_server
             .mock("GET", crate_url.path())
+            .match_header("authorization", Matcher::Missing)
             .with_status(StatusCode::OK.as_u16().into())
             .with_body(payload)
             .create_async()
@@ -184,6 +191,7 @@ impl TestRegistry {
         let mock = inner
             .download_server
             .mock("GET", url.path())
+            .match_header("authorization", Matcher::Missing)
             .with_status(StatusCode::OK.as_u16().into())
             .with_body(archive)
             .create_async()
@@ -196,6 +204,7 @@ impl TestRegistry {
     /// `path` may include a query string, whose URL-encoded pairs are matched independently of
     /// their order. The closure can configure status, headers, and response body on the
     /// underlying Mockito mock.
+    /// The Authorization header must match the configured API token, or be absent without one.
     pub(crate) async fn create_api_mock<F>(&self, path: impl AsRef<str>, mut f: F)
     where
         F: FnMut(mockito::Mock) -> mockito::Mock,
@@ -210,7 +219,17 @@ impl TestRegistry {
             .collect();
 
         let mut inner = self.inner.lock().await;
-        let mut mock = inner.api_server.mock("GET", url.path());
+        let authorization = self
+            .config
+            .api_token
+            .as_ref()
+            .map_or(Matcher::Missing, |token| {
+                Matcher::Exact(token.to_str().unwrap().to_owned())
+            });
+        let mut mock = inner
+            .api_server
+            .mock("GET", url.path())
+            .match_header("authorization", authorization);
         if !query_matchers.is_empty() {
             mock = mock.match_query(Matcher::AllOf(query_matchers));
         }

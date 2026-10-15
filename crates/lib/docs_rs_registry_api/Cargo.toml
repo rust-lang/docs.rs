@@ -42,6 +42,7 @@ url = { workspace = true }
 [dev-dependencies]
 docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_crate_archive = { path = "../docs_rs_crate_archive", features = ["testing"] }
+docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
 mockito = { workspace = true }
 tempfile = { workspace = true }

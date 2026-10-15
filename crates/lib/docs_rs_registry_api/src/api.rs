@@ -13,7 +13,7 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, spawn_blocking};
 use futures_util::StreamExt as _;
-use reqwest::header::ACCEPT;
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -101,6 +101,7 @@ async fn fetch_index_config(
 pub struct RegistryApi {
     index_config: crates_index::IndexConfig,
     api_base: Url,
+    api_token: Option<HeaderValue>,
     pub(crate) sparse_index: crates_index::SparseIndex,
     client: ClientWithMiddleware,
     metrics: RegistryApiMetrics,
@@ -114,6 +115,7 @@ impl RegistryApi {
         Self::new(
             config.sparse_index_host.clone(),
             config.crates_io_api_call_retries,
+            config.api_token.clone(),
             None,
             meter_provider,
         )
@@ -128,6 +130,7 @@ impl RegistryApi {
     pub(crate) async fn new(
         sparse_base: Url,
         max_retries: u32,
+        api_token: Option<HeaderValue>,
         cargo_home: Option<&Path>,
         meter_provider: &AnyMeterProvider,
     ) -> Result<Self> {
@@ -152,6 +155,7 @@ impl RegistryApi {
         let index_config = fetch_index_config(&sparse_index, &client, &metrics).await?;
 
         Ok(Self {
+            api_token,
             api_base: index_config
                 .api
                 .as_deref()
@@ -296,15 +300,18 @@ impl RegistryApi {
     where
         T: DeserializeOwned,
     {
+        let mut request = self
+            .client
+            .get(url)
+            .header(ACCEPT, mime::APPLICATION_JSON.as_ref());
+
+        if let Some(token) = &self.api_token {
+            request = request.header(AUTHORIZATION, token);
+        }
+
         let response = self
             .metrics
-            .record_request(
-                operation,
-                self.client
-                    .get(url)
-                    .header(ACCEPT, mime::APPLICATION_JSON.as_ref())
-                    .send(),
-            )
+            .record_request(operation, request.send())
             .await?;
         let status = response.status();
 
@@ -484,6 +491,60 @@ mod tests {
         env.mock_index_response(&KRATE, payload).await;
 
         env.api().get_release_data(&KRATE, version).await
+    }
+
+    #[tokio::test]
+    #[test_case(None; "without token")]
+    #[test_case(Some("registry-token"); "with token")]
+    async fn test_registry_authentication(token: Option<&str>) -> anyhow::Result<()> {
+        let env = TestRegistry::builder()
+            .maybe_token(token.map(HeaderValue::from_str).transpose()?)
+            .build()
+            .await?;
+
+        let owner = CrateOwner {
+            avatar: "avatar".into(),
+            login: "owner".into(),
+            kind: OwnerKind::User,
+        };
+
+        env.create_api_mock("/api/v1/crates/krate/owners", |mock| {
+            mock.with_status(200)
+                .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .with_body(
+                    serde_json::json!({
+                        "users": [owner.clone()]
+                    })
+                    .to_string(),
+                )
+        })
+        .await;
+
+        let query = SearchQuery::from("foo");
+        env.mock_search(query.clone())
+            .crate_names(["foo"])
+            .create()
+            .await;
+        env.mock_index_response(&KRATE, [sparse_entry(&V1, None, false)])
+            .await;
+        env.mock_download(&KRATE, &V1, Vec::new()).await;
+
+        assert!(env.api().get_crate_from_index(&KRATE).await?.is_some());
+        assert_eq!(
+            env.api().search(&query).await?.crates,
+            vec![SearchCrate { name: "foo".into() }]
+        );
+        assert_eq!(env.api().get_crate_data(&KRATE).await?.owners, vec![owner]);
+
+        // The mock archive is empty; only the download request matters here.
+        assert!(
+            env.api()
+                .download_and_extract_source(&KRATE, &V1)
+                .await
+                .is_err()
+        );
+        env.assert_mocks().await;
+        Ok(())
     }
 
     #[tokio::test]
@@ -950,6 +1011,7 @@ mod tests {
         let err = RegistryApi::new(
             "https://index.example".parse().unwrap(),
             0,
+            None,
             Some(cargo_home.path()),
             docs_rs_opentelemetry::testing::TestMetrics::new().provider(),
         )
