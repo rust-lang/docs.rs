@@ -8,7 +8,7 @@ use url::Url;
 #[derive(Debug, bon::Builder)]
 /// Configuration for [`crate::RegistryApi`].
 pub struct Config {
-    /// Optional authentication token, sent in the Authorization header for registry API requests.
+    /// Optional authentication token, sent in the X-Docsrs-Authorization header for registry API requests.
     ///
     /// Crates.io itself ignores the token on the endpoints we use,
     /// we will check this header value on the NgWAF / CDN level to bypass the normal rate limits.

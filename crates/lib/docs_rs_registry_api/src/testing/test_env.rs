@@ -1,5 +1,6 @@
 use crate::{
     Config, RegistryApi, SearchCursor,
+    api::DOCSRS_AUTHORIZATION,
     models::{ApiError, ApiErrors, SearchCrate, SearchMeta, SearchResponse},
 };
 use anyhow::Result;
@@ -87,7 +88,7 @@ impl TestRegistry {
         let config_path = format!("/{index_prefix}/config.json");
         let config_mock = index_server
             .mock("GET", config_path.as_str())
-            .match_header("authorization", Matcher::Missing)
+            .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing)
             .expect_at_least(1)
             .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
             .with_body(serde_json::to_vec(&serde_json::json!({
@@ -169,7 +170,7 @@ impl TestRegistry {
         let index_mock = inner
             .index_server
             .mock("GET", crate_url.path())
-            .match_header("authorization", Matcher::Missing)
+            .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing)
             .with_status(StatusCode::OK.as_u16().into())
             .with_body(payload)
             .create_async()
@@ -191,7 +192,7 @@ impl TestRegistry {
         let mock = inner
             .download_server
             .mock("GET", url.path())
-            .match_header("authorization", Matcher::Missing)
+            .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing)
             .with_status(StatusCode::OK.as_u16().into())
             .with_body(archive)
             .create_async()
@@ -204,7 +205,7 @@ impl TestRegistry {
     /// `path` may include a query string, whose URL-encoded pairs are matched independently of
     /// their order. The closure can configure status, headers, and response body on the
     /// underlying Mockito mock.
-    /// The Authorization header must match the configured API token, or be absent without one.
+    /// The X-Docsrs-Authorization header must match the configured API token, or be absent without one.
     pub(crate) async fn create_api_mock<F>(&self, path: impl AsRef<str>, mut f: F)
     where
         F: FnMut(mockito::Mock) -> mockito::Mock,
@@ -219,7 +220,7 @@ impl TestRegistry {
             .collect();
 
         let mut inner = self.inner.lock().await;
-        let authorization = self
+        let authentication = self
             .config
             .api_token
             .as_ref()
@@ -229,7 +230,7 @@ impl TestRegistry {
         let mut mock = inner
             .api_server
             .mock("GET", url.path())
-            .match_header("authorization", authorization);
+            .match_header(DOCSRS_AUTHORIZATION.as_str(), authentication);
         if !query_matchers.is_empty() {
             mock = mock.match_query(Matcher::AllOf(query_matchers));
         }
