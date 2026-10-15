@@ -13,7 +13,7 @@ use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::{APP_USER_AGENT, spawn_blocking};
 use futures_util::StreamExt as _;
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
+use reqwest::header::{ACCEPT, HeaderName, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -21,6 +21,9 @@ use std::{ffi::OsStr, fmt, io, path::Path};
 use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
 use tracing::instrument;
 use url::Url;
+
+pub(crate) const DOCSRS_AUTHORIZATION: HeaderName =
+    HeaderName::from_static("x-docsrs-authorization");
 
 /// Send a `crates_index` request via reqwest.
 ///
@@ -306,7 +309,7 @@ impl RegistryApi {
             .header(ACCEPT, mime::APPLICATION_JSON.as_ref());
 
         if let Some(token) = &self.api_token {
-            request = request.header(AUTHORIZATION, token);
+            request = request.header(DOCSRS_AUTHORIZATION, token);
         }
 
         let response = self
