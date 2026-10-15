@@ -52,6 +52,7 @@ impl ReleaseData {
 
 /// An owner of a crate as reported by the registry API.
 #[derive(Debug, Clone)]
+#[cfg_attr(any(test, feature = "testing"), derive(Serialize, PartialEq))]
 pub struct CrateOwner {
     /// URL of the owner's avatar, if the API supplied one.
     pub avatar: String,
