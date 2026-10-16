@@ -16,7 +16,7 @@ use docs_rs_database::{
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
-use std::time::Instant;
+use std::{collections::HashSet, time::Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 trait ChangeExt {
@@ -163,9 +163,30 @@ pub(crate) async fn get_new_crates(
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
     metrics.record_events_received(EventSource::Git, changes.len());
+
+    let existing_crates: Option<HashSet<_>> = if config.only_existing_crates {
+        let mut conn = context.pool()?.get_async().await?;
+        Some(
+            sqlx::query_scalar!("SELECT name FROM crates")
+                .fetch_all(&mut *conn)
+                .await?
+                .into_iter()
+                .collect(),
+        )
+    } else {
+        None
+    };
+
     // NOTE: `Box::pin` to type-erase this future, otherwise we'll run into `recursion_limit`
     // errors.
-    let crates_added = Box::pin(process_changes(context, &changes, config, metrics)).await;
+    let crates_added = Box::pin(process_changes(
+        context,
+        &changes,
+        existing_crates.as_ref(),
+        config,
+        metrics,
+    ))
+    .await;
 
     if let Err(err) = context.build_queue()?.reevaluate_priorities().await {
         error!(?err, "error reevaluating queued release priorities");
@@ -181,13 +202,17 @@ pub(crate) async fn get_new_crates(
 
 async fn process_changes(
     context: &Context,
-    changes: &Vec<Change>,
+    changes: impl IntoIterator<Item = &Change>,
+    existing_crates: Option<&HashSet<String>>,
     config: &Config,
     metrics: &WatcherMetrics,
 ) -> usize {
     let mut crates_added = 0;
 
-    for change in changes {
+    for change in changes
+        .into_iter()
+        .filter(|change| existing_crates.is_none_or(|existing| existing.contains(change.name())))
+    {
         let start = Instant::now();
         let crate_name = change.name();
         let crate_version = change.version();
@@ -439,8 +464,45 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_build_queue::PRIORITY_DEFAULT;
     use docs_rs_types::testing::{KRATE, V1, V2};
-
     use pretty_assertions::assert_eq;
+    use test_case::test_case;
+
+    #[test_case(None, true; "default mode")]
+    #[test_case(Some(false), false; "empty allowlist")]
+    #[test_case(Some(true), true; "known crate")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn registry_changes_for_unknown_crates(
+        known_crate: Option<bool>,
+        should_queue: bool,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let metrics = WatcherMetrics::new(env.meter_provider());
+        let existing_crates = known_crate.map(|known| {
+            if known {
+                HashSet::from([KRATE.to_string()])
+            } else {
+                HashSet::new()
+            }
+        });
+        let changes = [Change::Added(CrateVersion::default().into())];
+
+        assert_eq!(
+            process_changes(
+                &env,
+                &changes,
+                existing_crates.as_ref(),
+                env.config(),
+                &metrics
+            )
+            .await,
+            usize::from(should_queue)
+        );
+        assert_eq!(
+            env.build_queue()?.has_build_queued(&KRATE, &V1).await?,
+            should_queue
+        );
+        Ok(())
+    }
 
     #[test_case::test_case(Some(-600), false; "new release")]
     #[test_case::test_case(Some(-600), true; "existing queue entry")]
@@ -684,6 +746,7 @@ mod tests {
                 // Should error out, but the error should be handled gracefully
                 Change::VersionDeleted(non_existing_version.into()),
             ],
+            None,
             env.config(),
             &metrics,
         )

@@ -6,9 +6,13 @@ use docs_rs_registry_api::RegistryApi;
 use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::run_blocking;
 use rayon::iter::ParallelIterator;
+use std::collections::HashSet;
 use tracing::debug;
 
-pub(super) async fn load(config: &Config) -> Result<Crates> {
+pub(super) async fn load(
+    config: &Config,
+    existing_crates: Option<HashSet<KrateName>>,
+) -> Result<Crates> {
     let registry_index_path = config.registry_index_path.clone();
     let registry_url = config
         .registry_url
@@ -28,20 +32,27 @@ pub(super) async fn load(config: &Config) -> Result<Crates> {
 
         let mut result: Crates = index
             .crates_parallel()
-            .map(|krate| {
-                krate.map(|krate| {
-                    let mut releases = releases_from_index(&krate);
+            .filter_map(|krate| {
+                let krate = match krate {
+                    Ok(krate) => krate,
+                    Err(err) => return Some(Err(err)),
+                };
 
-                    releases.sort_by(|lhs, rhs| lhs.version.cmp(&rhs.version));
+                let name: KrateName = krate
+                    .name()
+                    .parse()
+                    .expect("all crate names in the index are valid");
 
-                    Crate {
-                        name: krate
-                            .name()
-                            .parse()
-                            .expect("all crate names in the index vare valid"),
-                        releases,
-                    }
-                })
+                if let Some(existing_crates) = &existing_crates
+                    && !existing_crates.contains(&name)
+                {
+                    return None;
+                }
+
+                Some(Ok(Crate {
+                    name,
+                    releases: releases_from_index(&krate),
+                }))
             })
             .collect::<Result<_, _>>()?;
 
