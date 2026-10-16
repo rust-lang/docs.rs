@@ -50,9 +50,9 @@ target "build-server" {
 }
 
 target "registry-watcher" {
-  inherits = ["common"]
+  inherits = ["publishable"]
   target   = "registry-watcher"
-  tags     = ["docs-rs-registry-watcher:ci"]
+  tags     = image_tags("docs-rs-registry-watcher")
 }
 
 target "cli" {
