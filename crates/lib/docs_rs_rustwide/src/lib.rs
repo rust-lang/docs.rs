@@ -9,6 +9,7 @@
 
 mod args;
 mod build;
+mod cargo_messages;
 mod command;
 pub mod logging;
 mod release;
@@ -25,6 +26,7 @@ mod workspace_lock;
 use std::sync::LazyLock;
 
 pub use build::ReleaseBuild;
+pub use cargo_messages::{RawCargoMessage, RawCargoMessages};
 pub use command::PrepareCommand;
 pub use release::{Fetched, ReleaseContext, Unfetched};
 pub use result::{

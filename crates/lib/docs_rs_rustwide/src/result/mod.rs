@@ -291,16 +291,19 @@ mod tests {
                 value: html_output,
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: None,
             }),
             rustdoc_json: Ok(StepReport {
                 value: RustdocJsonOutput::new(dummy_json_filename.to_path_buf()),
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: None,
             }),
             coverage: Ok(StepReport {
                 value: None,
                 log: None,
                 duration: Duration::ZERO,
+                cargo_messages: None,
             }),
             regenerate_lockfile: None,
         }
