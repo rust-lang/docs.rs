@@ -9,6 +9,9 @@ pub struct Config {
     pub registry_index_path: PathBuf,
     pub registry_url: Option<String>,
 
+    /// Only ingest registry changes for crates already present in the database.
+    pub only_existing_crates: bool,
+
     /// How long to wait between registry checks
     pub delay_between_registry_fetches: Duration,
 
@@ -30,6 +33,7 @@ impl AppConfig for Config {
         Ok(Self {
             registry_index_path: env("REGISTRY_INDEX_PATH", prefix.join("crates.io-index"))?,
             registry_url: maybe_env("REGISTRY_URL")?,
+            only_existing_crates: env("DOCSRS_ONLY_EXISTING_CRATES", false)?,
             delay_between_registry_fetches: env(
                 "DOCSRS_DELAY_BETWEEN_REGISTRY_FETCHES",
                 Duration::from_mins(1),

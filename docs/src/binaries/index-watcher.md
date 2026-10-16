@@ -29,3 +29,34 @@ $ just watcher queue set-last-seen-reference <GIT_REF>
 ```
 
 Omit the reference, or pass `--head`, to reset it to the index's current HEAD.
+
+## Watching a subset of crates
+
+Set `DOCSRS_ONLY_EXISTING_CRATES=true` to keep a smaller database in
+environments such as staging. The setting defaults to `false`, which watches all
+crates.
+
+With this setting enabled:
+
+- Live registry ingestion only processes changes for crates with a row in the
+  `crates` table. An empty database therefore queues no builds.
+- Full database synchronization only considers crates with stored releases or
+  queued builds. Crate rows without either are ignored.
+- Synchronizing a single named crate still queues its missing releases, even if
+  the crate is not yet in the database.
+
+To add a crate, manually queue a build, build or import a release, or
+synchronize that crate explicitly:
+
+```console
+$ just watcher database synchronize <CRATE_NAME>
+```
+
+A manually queued build runs normally. Once the builder creates the crate's row
+in `crates`, live ingestion starts tracking future changes for it. The queue
+entry alone does not enable live ingestion. A `crates` row is sufficient even
+before any releases are stored.
+
+The registry cursor advances past ignored changes, so adding a crate does not
+replay them. Explicit synchronization queues missing releases from its history.
+Automatic rebuilds already select existing releases from the database.
