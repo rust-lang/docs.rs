@@ -9,11 +9,13 @@ use crate::{
     impl_axum_webpage,
     match_release::match_version,
     metrics::WebMetrics,
+    middleware::csp::Csp,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
 };
 use anyhow::{Context as _, Result, anyhow};
 use askama::Template;
 use axum::{
+    Extension,
     extract::{Query, State},
     response::{IntoResponse, Response as AxumResponse},
 };
@@ -34,6 +36,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 use tracing::{error, trace, warn};
+use url::Url;
 
 /// Number of release in home page
 const RELEASES_IN_HOME: i64 = 15;
@@ -766,6 +769,7 @@ struct BuildQueuePage {
     in_progress_builds: Vec<InProgressBuild>,
     expand_rebuild_queue: bool,
     show_length_warning: bool,
+    graph_urls: Vec<Url>,
 }
 
 impl_axum_webpage! { BuildQueuePage }
@@ -784,7 +788,9 @@ pub(crate) struct BuildQueueParams {
 }
 
 pub(crate) async fn build_queue_handler(
+    State(config): State<Arc<Config>>,
     State(build_queue): State<Arc<AsyncBuildQueue>>,
+    Extension(csp): Extension<Arc<Csp>>,
     mut conn: DbConnection,
     Query(params): Query<BuildQueueParams>,
 ) -> AxumResult<impl IntoResponse> {
@@ -846,6 +852,10 @@ pub(crate) async fn build_queue_handler(
         }
     });
 
+    for url in &config.build_queue_graph_urls {
+        csp.allow_frame(url);
+    }
+
     Ok(BuildQueuePage {
         description: "crate documentation scheduled to build & deploy",
         queue,
@@ -853,6 +863,7 @@ pub(crate) async fn build_queue_handler(
         in_progress_builds,
         expand_rebuild_queue: params.expand.is_some(),
         show_length_warning,
+        graph_urls: config.build_queue_graph_urls.clone(),
     })
 }
 
@@ -880,6 +891,42 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use test_case::test_case;
+
+    #[test_case(0)]
+    #[test_case(1)]
+    #[test_case(3)]
+    fn test_build_queue_optional_graphs(count: usize) {
+        let urls: Vec<url::Url> = (0..count)
+            .map(|index| {
+                format!("https://app.datadoghq.com/graph/embed?token={index}&legend=true")
+                    .parse()
+                    .unwrap()
+            })
+            .collect();
+        let mut page = BuildQueuePage {
+            description: "test",
+            queue: Vec::new(),
+            rebuild_queue: Vec::new(),
+            in_progress_builds: Vec::new(),
+            expand_rebuild_queue: false,
+            show_length_warning: false,
+            graph_urls: urls.clone(),
+        };
+        let html =
+            kuchikiki::parse_html().one(page.render_with_csp_nonce("test-nonce".into()).unwrap());
+        let frames: Vec<_> = html
+            .select(".build-queue-metrics iframe")
+            .unwrap()
+            .collect();
+        assert_eq!(frames.len(), count);
+        for (frame, url) in frames.iter().zip(&urls) {
+            assert_eq!(frame.attributes.borrow().get("src"), Some(url.as_str()));
+        }
+        assert_eq!(
+            html.select(".build-queue-layout").unwrap().count(),
+            usize::from(count > 0)
+        );
+    }
 
     #[test]
     fn test_release_list_with_incomplete_release_and_successful_build() {

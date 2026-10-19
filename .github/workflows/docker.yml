@@ -9,31 +9,29 @@ on:
     - cron: "0 0 * * *"
 
 jobs:
-  docker:
+  test_docker_build:
     name: Test Docker images
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+    # PRs, branch pushes, and scheduled runs only build the images.
+    if: >-
+      github.event_name != 'push' ||
+      github.ref != 'refs/heads/main' ||
+      github.repository != 'rust-lang/docs.rs'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docker-pipeline.yml
 
-      - uses: jdx/mise-action@v5
-        with:
-          version: 2026.10.8
-          install_args: --jobs=1 just
-
-      - name: setup docker buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: build docker images
-        uses: docker/bake-action@v7
-        with:
-          source: .
-          files: docker-bake.hcl
-          # All targets share a cache scope so their common Dockerfile stages
-          # can be reused across images and CI runs.
-          set: |
-            *.args.GIT_SHA=${{ github.sha }}
-            *.cache-from=type=gha,scope=docs-rs-images
-            *.cache-to=type=gha,mode=max,scope=docs-rs-images
-
-      - name: smoke test packaged binaries
-        run: just docker-smoke-test
+  deploy_staging:
+    name: Build docker images & deploy to staging
+    # Only a push to main in the upstream repository publishes and deploys.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'rust-lang/docs.rs'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/docker-pipeline.yml
+    with:
+      environment: staging
+      aws-iam: "519825364412:role/ci--rust-lang--docs.rs--staging"
+      cluster: docs-rs-staging

@@ -1,0 +1,112 @@
+name: Docker pipeline
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub deployment environment; empty for CI only
+        type: string
+        default: ""
+      aws-iam:
+        description: Account and role to assume for publishing and deployment
+        type: string
+        default: ""
+      cluster:
+        description: ECS cluster; empty to skip publishing and deployment
+        type: string
+        default: ""
+
+jobs:
+  docker:
+    name: Build and test Docker images
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency: docker-${{ inputs.environment || github.run_id }}
+    env:
+      GIT_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Configure AWS credentials
+        if: inputs.cluster != ''
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.aws-iam }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        if: inputs.cluster != ''
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, smoke-test, and optionally publish Docker images
+        uses: docker/bake-action@v7
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        with:
+          source: .
+          files: docker-bake.hcl
+          # Each runtime stage runs its smoke test before exporting the image.
+          # ECR_REGISTRY enables publishing for targets with ECR repositories.
+          set: |
+            *.cache-from=type=gha,scope=docs-rs-images
+            *.cache-to=type=gha,mode=max,scope=docs-rs-images
+
+      - name: Deploy web service
+        if: inputs.cluster != ''
+        env:
+          CLUSTER: ${{ inputs.cluster }}
+          SERVICE: docs-rs-web
+        shell: bash
+        run: |
+          # The web task definition continues to use the latest image tag.
+          aws ecs update-service --service "$SERVICE" --cluster "$CLUSTER" --force-new-deployment
+          aws ecs wait services-stable --services "$SERVICE" --cluster "$CLUSTER"
+
+      - name: Prepare release task
+        if: inputs.cluster != ''
+        id: release
+        env:
+          CLUSTER: ${{ inputs.cluster }}
+        shell: bash
+        run: |
+          aws ecs describe-task-definition --task-definition docs-rs-release \
+            --query taskDefinition --output json > release-task-definition.json
+
+          aws ecs describe-services --cluster "$CLUSTER" --services docs-rs-web \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration' --output json |
+            jq -er '
+              "subnets=\(.subnets | join(","))",
+                "security-groups=\(.securityGroups | join(","))",
+                "assign-public-ip=\(.assignPublicIp // "DISABLED")"
+            ' >> "$GITHUB_OUTPUT"
+
+      - name: Run release commands
+        if: inputs.cluster != ''
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: release-task-definition.json
+          cluster: ${{ inputs.cluster }}
+          run-task: true
+          run-task-launch-type: FARGATE
+          run-task-subnets: ${{ steps.release.outputs.subnets }}
+          run-task-security-groups: ${{ steps.release.outputs.security-groups }}
+          run-task-assign-public-IP: ${{ steps.release.outputs.assign-public-ip }}
+          wait-for-task-stopped: true
+          wait-max-delay-seconds: 15
+
+      - name: Deploy registry watcher
+        if: inputs.cluster != ''
+        env:
+          CLUSTER: ${{ inputs.cluster }}
+          SERVICE: docs-rs-registry-watcher
+        shell: bash
+        run: |
+          # Release migrations must succeed before the new watcher starts.
+          aws ecs update-service --service "$SERVICE" --cluster "$CLUSTER" --force-new-deployment
+          aws ecs wait services-stable --services "$SERVICE" --cluster "$CLUSTER"

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.99.0-slim-trixie AS chef
+FROM rust:1.99.1-slim-trixie AS chef
 
 # We only pay the installation cost once,
 # it will be cached from the second build onwards
@@ -154,6 +154,9 @@ COPY crates/bin/docs_rs_web/vendor /srv/docsrs/vendor
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_web"]
 CMD ["0.0.0.0:3000"]
 
+# Check the packaged binary and runtime dependencies before exporting the image.
+RUN ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_web", "--help"]
+
 
 ########################
 #  Build server stage  #
@@ -185,6 +188,8 @@ COPY --from=build-build-server /artifacts/docs_rs_builder /usr/local/bin/
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_builder"]
 CMD ["start"]
 
+RUN ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_builder", "--help"]
+
 
 ############################
 #  Registry watcher stage  #
@@ -206,6 +211,8 @@ COPY --from=build-registry-watcher /artifacts/docs_rs_watcher /usr/local/bin/
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_watcher"]
 CMD ["start", "--repository-stats-updater", "--queue-rebuilds"]
 
+RUN ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_watcher", "--help"]
+
 ###############
 #  CLI stage  #
 ###############
@@ -219,8 +226,10 @@ FROM runtime-base AS cli
 
 WORKDIR /srv/docsrs
 
-COPY crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
+COPY --chmod=755 crates/bin/docs_rs_admin/bin/docs_rs_release.sh /usr/local/bin/
 
 COPY --from=build-cli /artifacts/docs_rs_admin /usr/local/bin/
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_admin"]
+
+RUN ["/usr/bin/tini", "--", "/usr/local/bin/docs_rs_admin", "--help"]

@@ -2,6 +2,19 @@ variable "GIT_SHA" {
   default = "dev"
 }
 
+variable "ECR_REGISTRY" {
+  default = ""
+}
+
+# Use local tags for development and registry tags for publishing.
+function "image_tags" {
+  params = [repository]
+  result = ECR_REGISTRY == "" ? ["${repository}:ci"] : [
+    "${ECR_REGISTRY}/${repository}:${GIT_SHA}",
+    "${ECR_REGISTRY}/${repository}:latest",
+  ]
+}
+
 group "default" {
   targets = ["web-server", "build-server", "registry-watcher", "cli"]
 }
@@ -10,7 +23,6 @@ target "common" {
   context    = "."
   dockerfile = "dockerfiles/Dockerfile"
   platforms  = ["linux/amd64"]
-  # Load images into the local Docker daemon so CI can smoke-test them.
   output     = ["type=docker"]
   args = {
     GIT_SHA    = GIT_SHA
@@ -19,10 +31,16 @@ target "common" {
   }
 }
 
-target "web-server" {
+# Only targets with provisioned ECR repositories inherit this exporter.
+target "publishable" {
   inherits = ["common"]
+  output   = [ECR_REGISTRY == "" ? "type=docker" : "type=registry"]
+}
+
+target "web-server" {
+  inherits = ["publishable"]
   target   = "web-server"
-  tags     = ["docs-rs-web-server:ci"]
+  tags     = image_tags("docs-rs-web")
 }
 
 target "build-server" {
@@ -32,13 +50,13 @@ target "build-server" {
 }
 
 target "registry-watcher" {
-  inherits = ["common"]
+  inherits = ["publishable"]
   target   = "registry-watcher"
-  tags     = ["docs-rs-registry-watcher:ci"]
+  tags     = image_tags("docs-rs-registry-watcher")
 }
 
 target "cli" {
-  inherits = ["common"]
+  inherits = ["publishable"]
   target   = "cli"
-  tags     = ["docs-rs-cli:ci"]
+  tags     = image_tags("docs-rs-admin")
 }
