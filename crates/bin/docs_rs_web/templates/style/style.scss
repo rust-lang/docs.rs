@@ -327,10 +327,9 @@ div.recent-releases-container {
             text-align: left;
         }
 
-        th:nth-child(n + 2), td:nth-child(n + 2) {
-            width: 1%;
+        th:not(:first-child), td:not(:first-child) {
+            width: fit-content;
             white-space: nowrap;
-            text-align: right;
         }
     }
 
