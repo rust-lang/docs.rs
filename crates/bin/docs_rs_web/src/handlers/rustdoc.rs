@@ -2824,6 +2824,36 @@ mod test {
     }
 
     #[test]
+    fn permalink_retains_rustdoc_fragment() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("testing")
+                .version("0.1.0")
+                .rustdoc_file("testing/index.html")
+                .create()
+                .await?;
+
+            let dom = kuchikiki::parse_html().one(
+                env.web_app()
+                    .await
+                    .get("/testing/latest/testing/index.html#section")
+                    .await?
+                    .text()
+                    .await?,
+            );
+
+            let permalink = dom.select_first("#permalink").expect("permalink link");
+            assert_eq!(
+                permalink.attributes.borrow().get("data-fragment"),
+                Some("retain")
+            );
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn test_repository_link_in_topbar_dropdown_github() {
         async_wrapper(|env| async move {
             env.fake_release()
