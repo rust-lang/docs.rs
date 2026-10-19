@@ -33,8 +33,12 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
         .await
         .context("Loading crate data from database for consistency check")?;
 
+    let existing_crates = config
+        .only_existing_crates
+        .then(|| db_data.iter().map(|krate| krate.name.clone()).collect());
+
     tracing::info!("Loading data from index...");
-    let index_data = index::load(config)
+    let index_data = index::load(config, existing_crates)
         .await
         .context("Loading crate data from index for consistency check")?;
 
@@ -45,7 +49,8 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
     Ok(())
 }
 
-/// Check and resolve index inconsistencies for one crate.
+/// Check and resolve index inconsistencies for one explicitly selected crate.
+/// This also queues missing crates, regardless of `only_existing_crates`.
 pub async fn run_single_check(
     config: &Config,
     ctx: &Context,

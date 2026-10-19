@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                    id,\n                    name as \"name: KrateName\",\n                    version as \"version: Version\",\n                    priority,\n                    attempt,\n                    enqueued_at\n                 FROM queue\n                 WHERE\n                    last_attempt IS NULL OR last_attempt < NOW() - make_interval(secs => $1)\n                 ORDER BY priority ASC, attempt ASC, id ASC\n                 LIMIT 1\n                 FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name: KrateName",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version: Version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "priority",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "priority"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "enqueued_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "queue",
+            "name": "enqueued_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "efc6ebb804b401733ac677235782ae9cda169a7633121c9628d46d180579ec2a"
+}

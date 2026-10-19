@@ -1,7 +1,8 @@
 use clap::{ArgAction, Parser};
 use docs_rs_build_limits::Limits;
 use docs_rs_rustwide::{
-    BuildCores, CpuLimit, CpuQuota, ImagePullPolicy, SandboxImageSource, ToolchainExt as _,
+    BuildCores, CpuLimit, CpuQuota, ImagePullPolicy, RustdocLints, SandboxImageSource,
+    ToolchainExt as _,
 };
 use docs_rs_types::{ByteSize, Duration};
 use rustwide::{Toolchain, cmd::DockerRuntime};
@@ -83,6 +84,12 @@ pub(crate) struct Args {
     #[arg(long)]
     pub(crate) strict: bool,
 
+    /// Enable experimental docs.rs build defaults.
+    ///
+    /// Currently denies rustdoc::invalid_html_tags. These defaults may change between releases.
+    #[arg(long)]
+    experimental: bool,
+
     /// Sandbox memory limit
     #[arg(long, default_value_t = DEFAULT_LIMITS.memory)]
     memory: ByteSize,
@@ -119,6 +126,14 @@ pub(crate) struct Args {
 }
 
 impl Args {
+    pub(crate) fn rustdoc_lints(&self) -> RustdocLints {
+        if self.experimental {
+            RustdocLints::experimental()
+        } else {
+            RustdocLints::default()
+        }
+    }
+
     pub(crate) fn workspace_path(&self) -> PathBuf {
         self.workspace
             .clone()
@@ -187,6 +202,8 @@ mod tests {
             PathBuf::from("./target/docsrs-build")
         );
         assert_eq!(args.limits(), Limits::default());
+        assert!(!args.experimental);
+        assert_eq!(args.rustdoc_lints(), RustdocLints::default());
     }
 
     #[test]

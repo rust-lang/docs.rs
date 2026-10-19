@@ -10,7 +10,7 @@ use docs_rs_web::run_web_server;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tracing::info;
+use tracing::{error, info};
 
 fn start_registry_watcher(
     config: Arc<docs_rs_watcher::Config>,
@@ -21,7 +21,11 @@ fn start_registry_watcher(
         // space this out to prevent it from clashing against the queue-builder thread on launch
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        watch_registry(&config, &context).await
+        if let Err(err) = watch_registry(&config, &context).await {
+            error!(?err, "error starting registry watcher");
+        }
+
+        anyhow::Ok(())
     });
 
     Ok(())

@@ -2,8 +2,8 @@ use crate::{
     cache::CachePolicy,
     error::AxumNope,
     handlers::{
-        about, build_details, build_status, builds, crate_details, features, releases, rustdoc,
-        sitemap, source,
+        about, build_details, build_status, builds, crate_details, features, health, releases,
+        rustdoc, sitemap, source,
         statics::{build_static_router, static_root_dir},
         status,
     },
@@ -132,6 +132,7 @@ pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<
     // - `/{crate}/{version}/{target}`
     //
     Ok(AxumRouter::new()
+        .route("/-/health", get(health::health_check))
         // Well known resources, robots.txt and favicon.ico support redirection, the sitemap.xml
         // must live at the site root:
         //   https://developers.google.com/search/reference/robots_txt#handling-http-result-codes

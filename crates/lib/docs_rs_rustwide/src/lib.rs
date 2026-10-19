@@ -34,7 +34,7 @@ pub use result::{
 pub use rustwide_ext::ToolchainExt;
 pub use sandbox::{BuildCores, CpuLimit, CpuQuota, InvalidCpuQuota, ParseBuildCoresError};
 pub use workspace::{
-    BuildEnvironment, ImagePullPolicy, MaintenanceResult, SANDBOX_IMAGE_LINUX,
+    BuildEnvironment, ImagePullPolicy, MaintenanceResult, RustdocLints, SANDBOX_IMAGE_LINUX,
     SANDBOX_IMAGE_LINUX_MICRO, SandboxImageSource,
 };
 

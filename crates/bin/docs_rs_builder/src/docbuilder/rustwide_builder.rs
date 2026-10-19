@@ -1090,7 +1090,6 @@ mod tests {
                     dependencies: vec![],
                     targets: vec![],
                     readme: None,
-                    keywords: vec![],
                     features: BTreeMap::new(),
                 },
                 Path::new("/unknown/"),

@@ -44,6 +44,11 @@ mod duration_impl {
             Self::from_hours(days * 24)
         }
 
+        pub const fn from_weeks(weeks: u64) -> Duration {
+            // nightly only API, we already add it because it's nice.
+            Self::from_days(weeks * 7)
+        }
+
         /// Round to the nearest millisecond, rounding half milliseconds up.
         /// Saturates at the largest representable whole-millisecond duration.
         pub fn round_to_millis(self) -> Self {

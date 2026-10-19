@@ -26,6 +26,7 @@ impl<'release_build, 'build, 'ws> PrepareCommand<'release_build, 'build, 'ws> {
                 &release_build.docsrs_metadata,
                 target,
                 release_build.environment.cargo_jobs(),
+                release_build.environment.rustdoc_lints(),
             ),
         }
     }

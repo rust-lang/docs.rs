@@ -2,6 +2,8 @@ use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::maybe_env;
 use docs_rs_types::{ByteSize, Duration};
+use tracing::warn;
+use url::Url;
 
 #[derive(Debug, bon::Builder)]
 #[builder(on(_, overwritable))]
@@ -39,6 +41,10 @@ pub struct Config {
     #[builder(default)]
     pub(crate) csp_report_only: bool,
 
+    /// Graph embed URLs, displayed in order. An empty list hides the metrics column.
+    #[builder(default, with=FromIterator::from_iter)]
+    pub(crate) build_queue_graph_urls: Vec<Url>,
+
     // Cache-Control header, for versioned URLs.
     // If both are absent, don't generate the header. If only one is present,
     // generate just that directive.
@@ -56,6 +62,18 @@ use config_builder::State;
 impl<S: State> ConfigBuilder<S> {
     pub(crate) fn load_environment(self) -> Result<ConfigBuilder<S>> {
         Ok(self
+            .build_queue_graph_urls(
+                maybe_env::<String>("DOCSRS_BUILD_QUEUE_GRAPH_URLS")?
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .filter_map(|value| {
+                        Url::parse(value)
+                            .inspect_err(|err| {
+                                warn!(value, ?err, "ignoring invalid build queue graph url")
+                            })
+                            .ok()
+                    }),
+            )
             .maybe_cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
             .maybe_max_parse_memory(maybe_env("DOCSRS_MAX_PARSE_MEMORY")?)
             .maybe_render_threads(maybe_env("DOCSRS_RENDER_THREADS")?)

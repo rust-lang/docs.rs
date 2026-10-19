@@ -5,6 +5,7 @@ use crate::{
     metrics::{EventSource, WatcherMetrics},
 };
 use anyhow::{Context as _, Result};
+use chrono::{DateTime, Utc};
 use crates_index_diff::Change;
 use docs_rs_build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use docs_rs_context::Context;
@@ -15,7 +16,7 @@ use docs_rs_database::{
 };
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
-use std::time::Instant;
+use std::{collections::HashSet, time::Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 trait ChangeExt {
@@ -58,6 +59,7 @@ impl ChangeExt for Change {
 pub(crate) struct CrateVersion {
     pub name: KrateName,
     pub version: Version,
+    pub publish_time: Option<DateTime<Utc>>,
     pub yanked: bool,
 }
 
@@ -67,6 +69,7 @@ impl Default for CrateVersion {
         Self {
             name: docs_rs_types::testing::KRATE,
             version: docs_rs_types::testing::V1,
+            publish_time: None,
             yanked: false,
         }
     }
@@ -79,6 +82,9 @@ impl TryFrom<crates_index_diff::CrateVersion> for CrateVersion {
         Ok(Self {
             name: value.name.parse()?,
             version: value.version.parse()?,
+            publish_time: value
+                .publish_time
+                .and_then(|publish_time| publish_time.parse::<DateTime<Utc>>().ok()),
             yanked: value.yanked,
         })
     }
@@ -91,6 +97,7 @@ impl From<CrateVersion> for crates_index_diff::CrateVersion {
             name: value.name.to_string().into(),
             version: value.version.to_string().into(),
             yanked: value.yanked,
+            publish_time: value.publish_time.map(|time| time.to_rfc3339().into()),
             ..Default::default()
         }
     }
@@ -156,9 +163,30 @@ pub(crate) async fn get_new_crates(
     debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
 
     metrics.record_events_received(EventSource::Git, changes.len());
+
+    let existing_crates: Option<HashSet<_>> = if config.only_existing_crates {
+        let mut conn = context.pool()?.get_async().await?;
+        Some(
+            sqlx::query_scalar!("SELECT name FROM crates")
+                .fetch_all(&mut *conn)
+                .await?
+                .into_iter()
+                .collect(),
+        )
+    } else {
+        None
+    };
+
     // NOTE: `Box::pin` to type-erase this future, otherwise we'll run into `recursion_limit`
     // errors.
-    let crates_added = Box::pin(process_changes(context, &changes, config, metrics)).await;
+    let crates_added = Box::pin(process_changes(
+        context,
+        &changes,
+        existing_crates.as_ref(),
+        config,
+        metrics,
+    ))
+    .await;
 
     if let Err(err) = context.build_queue()?.reevaluate_priorities().await {
         error!(?err, "error reevaluating queued release priorities");
@@ -174,13 +202,17 @@ pub(crate) async fn get_new_crates(
 
 async fn process_changes(
     context: &Context,
-    changes: &Vec<Change>,
+    changes: impl IntoIterator<Item = &Change>,
+    existing_crates: Option<&HashSet<String>>,
     config: &Config,
     metrics: &WatcherMetrics,
 ) -> usize {
     let mut crates_added = 0;
 
-    for change in changes {
+    for change in changes
+        .into_iter()
+        .filter(|change| existing_crates.is_none_or(|existing| existing.contains(change.name())))
+    {
         let start = Instant::now();
         let crate_name = change.name();
         let crate_version = change.version();
@@ -196,7 +228,7 @@ async fn process_changes(
             "crates.io index event"
         );
 
-        let success = match process_change(context, change, config).await {
+        let success = match process_change(context, change, config, metrics).await {
             Ok(added) => {
                 metrics.record_change_applied(EventSource::Git, change_type);
                 if added {
@@ -213,7 +245,7 @@ async fn process_changes(
             EventSource::Git,
             Some(change_type),
             success,
-            start.elapsed(),
+            start.elapsed().into(),
         );
     }
     crates_added
@@ -221,7 +253,12 @@ async fn process_changes(
 
 /// Process a crate change, returning whether the change was a crate addition or not.
 #[instrument(skip_all, fields(name, version))]
-async fn process_change(context: &Context, change: &Change, config: &Config) -> Result<bool> {
+async fn process_change(
+    context: &Context,
+    change: &Change,
+    config: &Config,
+    metrics: &WatcherMetrics,
+) -> Result<bool> {
     // 1: use the `CrateVersion` from `crates-index-diff`.
     let crate_version = change.first_crate_version();
 
@@ -234,9 +271,9 @@ async fn process_change(context: &Context, change: &Change, config: &Config) -> 
     let crate_version: CrateVersion = crate_version.clone().try_into()?;
 
     match change {
-        Change::Added(_release) => process_version_added(context, &crate_version).await?,
+        Change::Added(_release) => process_version_added(context, &crate_version, metrics).await?,
         Change::AddedAndYanked(_release) => {
-            process_version_added(context, &crate_version).await?;
+            process_version_added(context, &crate_version, metrics).await?;
             process_version_yank_status(context, &crate_version).await?;
         }
         Change::Unyanked(_release) | Change::Yanked(_release) => {
@@ -264,7 +301,11 @@ async fn process_version_yank_status(context: &Context, release: &CrateVersion) 
 }
 
 #[instrument(skip_all)]
-async fn process_version_added(context: &Context, release: &CrateVersion) -> Result<()> {
+async fn process_version_added(
+    context: &Context,
+    release: &CrateVersion,
+    metrics: &WatcherMetrics,
+) -> Result<()> {
     let build_queue = context.build_queue()?;
 
     let priority = build_queue.find_priority(&release.name).await?;
@@ -278,6 +319,15 @@ async fn process_version_added(context: &Context, release: &CrateVersion) -> Res
                 release.name, release.version
             )
         })?;
+
+    let enqueued_at = Utc::now();
+
+    if let Some(publish_time) = release.publish_time
+        && let Ok(elapsed) = (enqueued_at - publish_time).to_std()
+    {
+        metrics.record_release_enqueue_latency(elapsed.into());
+    }
+
     debug!(
         name=%release.name,
         version=%release.version,
@@ -414,13 +464,94 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_build_queue::PRIORITY_DEFAULT;
     use docs_rs_types::testing::{KRATE, V1, V2};
-
     use pretty_assertions::assert_eq;
+    use test_case::test_case;
+
+    #[test_case(None, true; "default mode")]
+    #[test_case(Some(false), false; "empty allowlist")]
+    #[test_case(Some(true), true; "known crate")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn registry_changes_for_unknown_crates(
+        known_crate: Option<bool>,
+        should_queue: bool,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let metrics = WatcherMetrics::new(env.meter_provider());
+        let existing_crates = known_crate.map(|known| {
+            if known {
+                HashSet::from([KRATE.to_string()])
+            } else {
+                HashSet::new()
+            }
+        });
+        let changes = [Change::Added(CrateVersion::default().into())];
+
+        assert_eq!(
+            process_changes(
+                &env,
+                &changes,
+                existing_crates.as_ref(),
+                env.config(),
+                &metrics
+            )
+            .await,
+            usize::from(should_queue)
+        );
+        assert_eq!(
+            env.build_queue()?.has_build_queued(&KRATE, &V1).await?,
+            should_queue
+        );
+        Ok(())
+    }
+
+    #[test_case::test_case(Some(-600), false; "new release")]
+    #[test_case::test_case(Some(-600), true; "existing queue entry")]
+    #[test_case::test_case(None, false; "missing publication time")]
+    #[test_case::test_case(Some(86400), false; "future publication time")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn release_enqueue_latency_uses_index_pubtime(
+        publish_offset_seconds: Option<i64>,
+        already_queued: bool,
+    ) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let publish_time =
+            publish_offset_seconds.map(|offset| Utc::now() + chrono::Duration::seconds(offset));
+        let index_release = crates_index_diff::CrateVersion {
+            name: KRATE.to_string().into(),
+            version: V1.to_string().into(),
+            publish_time: publish_time.map(|time| time.to_rfc3339().into()),
+            ..Default::default()
+        };
+        if already_queued {
+            env.build_queue()?
+                .add_crate(&KRATE, &V1, PRIORITY_DEFAULT)
+                .await?;
+        }
+        let metrics = WatcherMetrics::new(env.meter_provider());
+        let change = Change::Added(index_release);
+        // Repeated registry events still contribute latency observations.
+        for _ in 0..2 {
+            assert!(process_change(&env, &change, env.config(), &metrics).await?);
+        }
+        assert!(env.build_queue()?.has_build_queued(&KRATE, &V1).await?);
+        let collected = env.collected_metrics();
+        let metric = collected.get_metric("watcher", "docsrs.watcher.release_enqueue_latency");
+        if publish_offset_seconds == Some(-600) {
+            let metric = metric?;
+            let point = metric.get_f64_histogram();
+            assert_eq!(point.count(), 2);
+            assert!(point.sum() >= 1200. && point.sum() < 1320.);
+        } else {
+            assert!(metric.is_err());
+        }
+        Ok(())
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_process_version_added() -> Result<()> {
         let env = TestEnvironment::new().await?;
         let build_queue = env.build_queue()?;
+        let metrics = WatcherMetrics::new(env.meter_provider());
 
         let krate = CrateVersion {
             name: KRATE,
@@ -428,7 +559,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate).await?;
+        process_version_added(&env, &krate, &metrics).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].priority, PRIORITY_DEFAULT);
@@ -439,7 +570,7 @@ mod tests {
             ..Default::default()
         };
 
-        process_version_added(&env, &krate).await?;
+        process_version_added(&env, &krate, &metrics).await?;
         let queue = build_queue.queued_crates().await?;
         assert_eq!(queue.len(), 2);
         // The other queued version should be deprioritized
@@ -470,6 +601,7 @@ mod tests {
             name: KRATE,
             version: V1,
             yanked: true,
+            ..Default::default()
         };
         process_version_yank_status(&env, &krate).await?;
 
@@ -489,6 +621,7 @@ mod tests {
             name: KRATE,
             version: V1,
             yanked: false,
+            ..Default::default()
         };
         process_version_yank_status(&env, &krate).await?;
 
@@ -613,6 +746,7 @@ mod tests {
                 // Should error out, but the error should be handled gracefully
                 Change::VersionDeleted(non_existing_version.into()),
             ],
+            None,
             env.config(),
             &metrics,
         )

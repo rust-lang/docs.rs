@@ -123,7 +123,6 @@ async fn get_id(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<Optio
 // metaprogramming!
 // WARNING: these must be hard-coded and NEVER user input.
 const METADATA: &[(&str, &str)] = &[
-    ("keyword_rels", "rid"),
     ("builds", "rid"),
     ("compression_rels", "release"),
     ("doc_coverage", "release_id"),

@@ -1,21 +1,42 @@
 use docs_rs_crates_io::events::ChangeKind;
 use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
+use docs_rs_types::Duration;
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Histogram},
 };
-use std::{fmt, time::Duration};
+use std::{fmt, time::Duration as StdDuration};
+
+/// Publication-to-enqueue times from one second through one week.
+const RELEASE_ENQUEUE_LATENCY_BUCKETS: &[Duration; 16] = &[
+    Duration::from_secs(1),
+    Duration::from_secs(5),
+    Duration::from_secs(10),
+    Duration::from_secs(30),
+    Duration::from_mins(1),
+    Duration::from_mins(2),
+    Duration::from_mins(5),
+    Duration::from_mins(10),
+    Duration::from_mins(30),
+    Duration::from_hours(1),
+    Duration::from_hours(2),
+    Duration::from_hours(6),
+    Duration::from_hours(12),
+    Duration::from_days(1),
+    Duration::from_days(2),
+    Duration::from_weeks(1),
+];
 
 /// Shared response-time buckets through 2 minutes, then doubling through 64 minutes.
-const EVENT_PROCESSING_TIME_BUCKETS: &[Duration] = &{
-    let mut buckets = [Duration::ZERO; RESPONSE_TIME_HISTOGRAM_BUCKETS.len() + 5];
+const EVENT_PROCESSING_TIME_BUCKETS: &[StdDuration] = &{
+    let mut buckets = [StdDuration::ZERO; RESPONSE_TIME_HISTOGRAM_BUCKETS.len() + 5];
     let mut i = 0;
     while i < RESPONSE_TIME_HISTOGRAM_BUCKETS.len() {
         buckets[i] = RESPONSE_TIME_HISTOGRAM_BUCKETS[i];
         i += 1;
     }
     while i < buckets.len() {
-        buckets[i] = Duration::from_secs(buckets[i - 1].as_secs() * 2);
+        buckets[i] = StdDuration::from_secs(buckets[i - 1].as_secs() * 2);
         i += 1;
     }
     buckets
@@ -43,6 +64,7 @@ impl fmt::Display for EventSource {
 
 #[derive(Debug)]
 pub(crate) struct WatcherMetrics {
+    release_enqueue_latency: Histogram<f64>,
     /// received event count, by source
     events_received_total: Counter<u64>,
     /// poll errors, by source
@@ -58,6 +80,17 @@ impl WatcherMetrics {
         let meter = meter_provider.meter("watcher");
         const PREFIX: &str = "docsrs.watcher";
         Self {
+            release_enqueue_latency: meter
+                .f64_histogram(format!("{PREFIX}.release_enqueue_latency"))
+                .with_unit("s")
+                .with_boundaries(
+                    RELEASE_ENQUEUE_LATENCY_BUCKETS
+                        .iter()
+                        .map(|duration| duration.as_secs_f64())
+                        .collect(),
+                )
+                .with_description("Time from registry publication to successful enqueue")
+                .build(),
             events_received_total: meter
                 .u64_counter(format!("{PREFIX}.events_received_total"))
                 .with_unit("1")
@@ -81,6 +114,11 @@ impl WatcherMetrics {
                 .with_unit("s")
                 .build(),
         }
+    }
+
+    pub(crate) fn record_release_enqueue_latency(&self, elapsed: Duration) {
+        self.release_enqueue_latency
+            .record(elapsed.as_secs_f64(), &[]);
     }
 
     pub(crate) fn record_change_applied(&self, source: EventSource, kind: ChangeKind) {
