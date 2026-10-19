@@ -281,6 +281,7 @@ div.landing {
     gap: 4px;
     flex-wrap: wrap;
     justify-content: center;
+    align-content: flex-start;
 
     .build-metrics-graph {
         display: block;
