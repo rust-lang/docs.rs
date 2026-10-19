@@ -45,6 +45,14 @@ div.rustdoc {
         padding-top: 0;
     }
 
+    main {
+        padding-right: 0px;
+    }
+
+    .example-wrap pre {
+        overflow: auto;
+    }
+
     .sidebar {
         @media (min-width: 701px) {
             margin-top: $top-navbar-height;
