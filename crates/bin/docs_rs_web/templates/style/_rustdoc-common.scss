@@ -46,11 +46,7 @@ div.rustdoc {
     }
 
     main {
-        padding-right: 0px;
-    }
-
-    .example-wrap pre {
-        overflow: auto;
+        margin-top: 32px; /* Offset of the fixed navigation bar */
     }
 
     .sidebar {
