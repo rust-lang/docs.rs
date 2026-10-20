@@ -1,0 +1,20 @@
+// The permalink link should keep the anchor from the current URL.
+
+define-function: ("check-url-anchor", [anchor], block {
+    click: ".pure-menu-link.crate-name"
+    wait-for: ".crate-dropdown.pure-menu-active"
+    click: "#permalink"
+    assert-document-property: ({"URL": "#" + |anchor|}, ENDS_WITH)
+    // Since we clicked on the permalink, we should not have the `/latest/` part anymore.
+    assert-document-property-false: ({"URL": "/latest/"}, CONTAINS)
+})
+
+go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html#test"
+assert-document-property: ({"URL": "#test"}, ENDS_WITH)
+assert-document-property: ({"URL": "/latest/"}, CONTAINS)
+call-function: ("check-url-anchor", {"anchor": "test"})
+
+// We now click on a link in the sidebar to change the anchor.
+go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html"
+click: '//*[@id="rustdoc-toc"]//a[@href="#structs"]'
+call-function: ("check-url-anchor", {"anchor": "structs"})
