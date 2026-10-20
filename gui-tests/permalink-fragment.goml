@@ -1,9 +1,10 @@
 // The permalink link must retain the fragment from the current rustdoc page.
 go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html#section"
 wait-for: "#permalink"
+assert: "#permalink"
 assert-document-property: ({"URL": "#section"}, ENDS_WITH)
 
-// The fragment is added on mouseover because browsers do not send it to the server.
+// The fragment is already present while hovering; clicking follows the retained fragment.
 move-cursor-to: "#permalink"
 click: "#permalink"
 assert-document-property: ({"URL": "#section"}, ENDS_WITH)
