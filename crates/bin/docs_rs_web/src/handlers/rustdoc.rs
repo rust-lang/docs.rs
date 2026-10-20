@@ -2837,7 +2837,7 @@ mod test {
             let dom = kuchikiki::parse_html().one(
                 env.web_app()
                     .await
-                    .get("/testing/latest/testing/index.html#section")
+                    .get("/testing/latest/testing/index.html")
                     .await?
                     .text()
                     .await?,
