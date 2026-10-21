@@ -44,9 +44,9 @@ target "web-server" {
 }
 
 target "build-server" {
-  inherits = ["common"]
+  inherits = ["publishable"]
   target   = "build-server"
-  tags     = ["docs-rs-build-server:ci"]
+  tags     = image_tags("docs-rs-build-server")
 }
 
 target "registry-watcher" {
