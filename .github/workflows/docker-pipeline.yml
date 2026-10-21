@@ -16,6 +16,11 @@ on:
         type: string
         default: ""
 
+      builder-asg:
+        description: Builder Auto Scaling group; empty to skip builder deployment
+        type: string
+        default: ""
+
 jobs:
   docker:
     name: Build and test Docker images
@@ -110,3 +115,15 @@ jobs:
           # Release migrations must succeed before the new watcher starts.
           aws ecs update-service --service "$SERVICE" --cluster "$CLUSTER" --force-new-deployment
           aws ecs wait services-stable --services "$SERVICE" --cluster "$CLUSTER"
+
+      - name: Start builder rotation
+        if: inputs.cluster != '' && inputs.builder-asg != ''
+        env:
+          BUILDER_ASG: ${{ inputs.builder-asg }}
+        shell: bash
+        run: |
+          # Terraform owns the launch template, which uses latest in staging.
+          # Replace hosts asynchronously even though the template version has not changed.
+          aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name "$BUILDER_ASG" \
+            --preferences '{"MinHealthyPercentage":0,"MaxHealthyPercentage":100,"InstanceWarmup":120,"SkipMatching":false}'

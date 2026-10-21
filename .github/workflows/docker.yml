@@ -35,3 +35,4 @@ jobs:
       environment: staging
       aws-iam: "519825364412:role/ci--rust-lang--docs.rs--staging"
       cluster: docs-rs-staging
+      builder-asg: docs-rs-builders
