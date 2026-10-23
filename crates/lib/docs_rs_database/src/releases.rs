@@ -33,6 +33,7 @@ pub async fn finish_release(
     compression_algorithms: impl IntoIterator<Item = CompressionAlgorithm>,
     repository_id: Option<i32>,
     source_size: ByteSize,
+    source_file_count: u64,
 ) -> Result<()> {
     let source_dir = source_dir.as_ref();
     debug!("updating release data");
@@ -49,6 +50,8 @@ pub async fn finish_release(
     // NOTE: we're still inserting dummy data in case of empty release-data fields
     // or missing release data.
     let registry_data = registry_data.clone().for_database();
+    let source_file_count = i64::try_from(source_file_count)
+        .context("source file count exceeds PostgreSQL BIGINT range")?;
 
     let result = sqlx::query!(
         r#"UPDATE releases
@@ -70,7 +73,8 @@ pub async fn finish_release(
                default_target = $17,
                features = $18,
                repository_id = $19,
-               source_size = $20
+               source_size = $20,
+               source_file_count = $21
            WHERE id = $1"#,
         release_id.0,
         registry_data.release_time,
@@ -92,6 +96,7 @@ pub async fn finish_release(
         features as Vec<Feature>,
         repository_id,
         source_size as _,
+        source_file_count,
     )
     .execute(&mut *conn)
     .await?;
@@ -212,6 +217,7 @@ pub async fn finish_build<E>(
     docsrs_version: &str,
     build_status: BuildStatus,
     documentation_size: Option<ByteSize>,
+    documentation_file_count: Option<u64>,
     memory_peak: Option<ByteSize>,
     build_error: Option<&E>,
 ) -> Result<()>
@@ -220,6 +226,10 @@ where
 {
     debug!("updating build after finishing");
     let hostname = hostname::get()?;
+    let documentation_file_count = documentation_file_count
+        .map(i64::try_from)
+        .transpose()
+        .context("documentation file count exceeds PostgreSQL BIGINT range")?;
 
     let rustc_date = match parse_rustc_date(rustc_version) {
         Ok(date) => Some(date),
@@ -244,6 +254,7 @@ where
              build_server = $4,
              errors = $5,
              documentation_size = $6,
+             documentation_file_count = $11,
              rustc_nightly_date = $7,
              build_finished = NOW(),
              error_kind = $8,
@@ -261,6 +272,7 @@ where
         build_error.map(|err| err.kind()),
         memory_peak as _,
         build_id as _,
+        documentation_file_count,
     )
     .fetch_one(&mut *conn)
     .await?;
@@ -610,6 +622,7 @@ mod test {
             iter::empty(),
             None,
             24u64.into(),
+            7,
         )
         .await?;
 
@@ -721,6 +734,7 @@ mod test {
             BuildStatus::Success,
             None,
             None,
+            None,
             None::<&SimpleBuildError>,
         )
         .await?;
@@ -773,6 +787,7 @@ mod test {
             "docsrs_version",
             BuildStatus::Success,
             Some(42u64.into()),
+            Some(7),
             Some(23u64.into()),
             None::<&SimpleBuildError>,
         )
@@ -784,6 +799,7 @@ mod test {
                 docsrs_version,
                 build_status as "build_status: BuildStatus",
                 documentation_size,
+                documentation_file_count,
                 memory_peak,
                 errors,
                 error_kind,
@@ -799,6 +815,7 @@ mod test {
         assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
         assert_eq!(row.build_status, BuildStatus::Success);
         assert_eq!(row.documentation_size, Some(42));
+        assert_eq!(row.documentation_file_count, Some(7));
         assert_eq!(row.memory_peak, Some(23));
         assert!(row.rustc_nightly_date.is_none());
         assert!(row.errors.is_none());
@@ -825,6 +842,7 @@ mod test {
             BuildStatus::Failure,
             None,
             None,
+            None,
             Some(&SimpleBuildError("error message".into())),
         )
         .await?;
@@ -835,6 +853,7 @@ mod test {
                 docsrs_version,
                 build_status as "build_status: BuildStatus",
                 documentation_size,
+                documentation_file_count,
                 errors,
                 error_kind
                FROM builds
@@ -850,6 +869,7 @@ mod test {
         assert_eq!(row.errors, Some("build error: error message".into()));
         assert_eq!(row.error_kind, Some("SimpleBuildError".into()));
         assert!(row.documentation_size.is_none());
+        assert!(row.documentation_file_count.is_none());
 
         Ok(())
     }
@@ -1321,6 +1341,7 @@ mod test {
             iter::empty(),
             None,
             24u64.into(),
+            7,
         )
         .await?;
 

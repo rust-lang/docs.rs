@@ -548,6 +548,7 @@ impl<'a> FakeRelease<'a> {
             iter::once(stats.alg),
             repository,
             ByteSize::b(24),
+            23,
         )
         .await?;
         docs_rs_database::releases::update_crate_data_in_database(
@@ -662,6 +663,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(ByteSize::b(42)),
+            Some(33),
             self.memory_peak,
             None::<&SimpleBuildError>,
         )

@@ -359,7 +359,7 @@ impl RustwideBuilder {
         let default_target = release_build_result.default_target().target().to_string();
 
         let mut successful_targets = Vec::new();
-        let documentation_size = if has_docs {
+        let documentation_stats = if has_docs {
             copy_target_docs(release_build_result.default_target(), local_storage.path())?;
             successful_targets.push(default_target.clone());
 
@@ -377,7 +377,7 @@ impl RustwideBuilder {
             self.builder_metrics
                 .record_documentation_size(doc_stats.original_size);
             algs.insert(doc_stats.alg);
-            Some(doc_stats.original_size)
+            Some(doc_stats)
         } else {
             None
         };
@@ -430,7 +430,8 @@ impl RustwideBuilder {
             } else {
                 BuildStatus::Failure
             },
-            documentation_size,
+            documentation_stats.as_ref().map(|s| s.original_size),
+            documentation_stats.as_ref().map(|s| s.file_count),
             build_statistics.memory_peak_bytes().map(Into::into),
             build_error,
         ))?;
@@ -491,6 +492,7 @@ impl RustwideBuilder {
             algs,
             repository,
             source_stats.original_size,
+            source_stats.file_count,
         ))?;
 
         if let Some(repository_id) = repository {
@@ -776,12 +778,14 @@ mod tests {
                         r.default_target,
                         r.doc_targets,
                         r.source_size as "source_size!",
+                        r.source_file_count as "source_file_count!",
                         cov.total_items,
                         b.id as build_id,
                         b.build_status::TEXT as build_status,
                         b.docsrs_version,
                         b.rustc_version,
                         b.documentation_size,
+                        b.documentation_file_count,
                         b.memory_peak,
                         (
                             SELECT array_agg(row(bl.log_filename, bl.success))
@@ -815,7 +819,9 @@ mod tests {
         assert!(!row.rustc_version.unwrap().is_empty());
         assert_eq!(row.build_status.unwrap(), "success");
         assert!(row.source_size > 0);
+        assert!(row.source_file_count > 0);
         assert!(row.documentation_size.unwrap() > 0);
+        assert!(row.documentation_file_count.unwrap() > 0);
         assert!(row.memory_peak.unwrap() > 10 * 1024 * 1024); // 10 MiB, in my test it was > 100 MiB
         let mut logs = row.logs.unwrap();
         logs.sort();
@@ -1067,6 +1073,7 @@ mod tests {
                 BuildStatus::Success,
                 None,
                 None,
+                None,
                 None::<&SimpleBuildError>,
             )
             .await?;
@@ -1103,6 +1110,7 @@ mod tests {
                 iter::once(CompressionAlgorithm::Deflate),
                 None,
                 42usize.into(),
+                7,
             )
             .await?;
 
