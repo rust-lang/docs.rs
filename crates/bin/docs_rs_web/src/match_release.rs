@@ -376,9 +376,7 @@ mod tests {
                 .await
                 .name("foo")
                 .version("1.1.0")
-                .builds(vec![
-                    FakeBuild::default().build_status(BuildStatus::InProgress),
-                ])
+                .builds(vec![FakeBuild::in_progress()])
                 .create()
                 .await?;
 

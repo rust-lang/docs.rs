@@ -1,0 +1,1 @@
+DROP INDEX builds_logs_build_id_log_filename_idx;
