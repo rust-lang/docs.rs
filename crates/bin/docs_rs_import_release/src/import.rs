@@ -238,6 +238,7 @@ async fn import_test_release_inner(
         algs,
         repository_id,
         source_stats.original_size,
+        source_stats.file_count,
     )
     .await?;
 
@@ -248,6 +249,7 @@ async fn import_test_release_inner(
         BUILD_VERSION,
         BuildStatus::Success,
         Some(doc_stats.original_size),
+        Some(doc_stats.file_count),
         None,
         None::<&SimpleBuildError>,
     )
