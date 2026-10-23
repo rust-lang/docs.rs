@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod metrics;
 mod models;
+mod retry;
 #[cfg(any(test, feature = "testing"))]
 /// Test utilities for supplying a local, fully mocked registry.
 pub mod testing;

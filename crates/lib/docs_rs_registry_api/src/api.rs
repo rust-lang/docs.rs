@@ -6,6 +6,7 @@ use crate::{
         ApiErrors, CrateData, CrateOwner, OwnerKind, ReleaseData, Search, SearchCursor,
         SearchResponse,
     },
+    retry::RegistryApiRetryStrategy,
 };
 use anyhow::Context as _;
 use docs_rs_crate_archive::{SourceDir, unpack_crate_archive};
@@ -143,8 +144,9 @@ impl RegistryApi {
                 .gzip(true)
                 .build()?,
         )
-        .with(RetryTransientMiddleware::new_with_policy(
+        .with(RetryTransientMiddleware::new_with_policy_and_strategy(
             ExponentialBackoff::builder().build_with_max_retries(max_retries),
+            RegistryApiRetryStrategy,
         ))
         .build();
 
@@ -827,6 +829,24 @@ mod tests {
         assert!(matches!(
             env.api().search(&SearchQuery::from("foo")).await.unwrap_err(),
             Error::HttpError(error, _) if error.status() == Some(StatusCode::INTERNAL_SERVER_ERROR)
+        ));
+        env.assert_mocks().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_search_does_not_retry_rate_limit() -> Result<()> {
+        let env = TestRegistry::builder().retries(2u32).build().await?;
+        env.create_api_mock("/api/v1/crates?q=foo", |mock| {
+            mock.with_status(StatusCode::TOO_MANY_REQUESTS.as_u16().into())
+                .expect(1)
+        })
+        .await;
+
+        assert!(matches!(
+            env.api().search(&SearchQuery::from("foo")).await.unwrap_err(),
+            Error::CrateIoError(status, _) if status == StatusCode::TOO_MANY_REQUESTS
         ));
         env.assert_mocks().await;
 
