@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use anyhow::{Context as _, anyhow};
-use askama::Template;
+use askama::{NO_VALUES, Template};
 use async_stream::stream;
 use axum::body::Bytes;
 use docs_rs_types::ByteSize;
@@ -62,15 +62,18 @@ where
                 // offload potentially CPU intensive stuff from the tokio runtime.
                 // Also this lets us limit the threadpool size and through that the CPU usage.
                 let render_span = tracing::info_span!("render_task");
+
+                // These templates are small, so they are rendered on the runtime, before
+                // moving the CPU intensive HTML rewriting to the threadpool.
+                let head_html = Head::new(&data).async_render_with_values(NO_VALUES).await?;
+                let vendored_html = Vendored.async_render_with_values(NO_VALUES).await?;
+                let body_html = Body.async_render_with_values(NO_VALUES).await?;
+                let topbar_html = data.async_render_with_values(NO_VALUES).await?;
+
                 template_data
                     .render_in_threadpool(move || {
                         use lol_html::html_content::{ContentType, Element};
                         use lol_html::{HtmlRewriter, MemorySettings, Settings};
-
-                        let head_html = Head::new(&data).render().unwrap();
-                        let vendored_html = Vendored.render().unwrap();
-                        let body_html = Body.render().unwrap();
-                        let topbar_html = data.render().unwrap();
 
                         // Before: <body> ... rustdoc content ... </body>
                         // After:

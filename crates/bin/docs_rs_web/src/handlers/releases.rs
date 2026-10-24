@@ -2034,8 +2034,8 @@ mod tests {
         });
     }
 
-    #[test]
-    fn home_page_description_title_escapes_quotes() {
+    #[tokio::test]
+    async fn home_page_description_title_escapes_quotes() {
         let description = r#"A "quoted" crate description"#;
         let mut page = HomePage {
             recent_releases: vec![Release {
@@ -2050,8 +2050,11 @@ mod tests {
             }],
         };
 
-        let html =
-            kuchikiki::parse_html().one(page.render_with_csp_nonce("test-nonce".into()).unwrap());
+        let html = kuchikiki::parse_html().one(
+            page.render_with_csp_nonce("test-nonce".into())
+                .await
+                .unwrap(),
+        );
         let description_element = html
             .select_first(".recent-releases-container .description")
             .expect("missing release description");
