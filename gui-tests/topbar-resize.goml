@@ -13,6 +13,7 @@ define-function: (
         // topbar).
         assert-window-property: {"innerWidth": |width|}
         wait-for-document-property: {"documentElement"."clientWidth": |width|}
+        assert-css: ("body > .nav-container", {"position": "fixed"})
 
         assert-size: ("body > .nav-container", {"height": |top_navbar_height|})
 
