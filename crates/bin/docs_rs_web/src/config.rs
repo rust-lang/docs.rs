@@ -45,6 +45,9 @@ pub struct Config {
     #[builder(default, with=FromIterator::from_iter)]
     pub(crate) build_queue_graph_urls: Vec<Url>,
 
+    /// Public Datadog dashboard URL embedded on the release activity page.
+    pub(crate) release_activity_dashboard_url: Option<Url>,
+
     // Cache-Control header, for versioned URLs.
     // If both are absent, don't generate the header. If only one is present,
     // generate just that directive.
@@ -74,6 +77,9 @@ impl<S: State> ConfigBuilder<S> {
                             .ok()
                     }),
             )
+            .maybe_release_activity_dashboard_url(maybe_env(
+                "DOCSRS_RELEASE_ACTIVITY_DASHBOARD_URL",
+            )?)
             .maybe_cratesio_token(maybe_env("DOCSRS_CRATESIO_TOKEN")?)
             .maybe_max_parse_memory(maybe_env("DOCSRS_MAX_PARSE_MEMORY")?)
             .maybe_render_threads(maybe_env("DOCSRS_RENDER_THREADS")?)
