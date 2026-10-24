@@ -343,8 +343,12 @@ pub(crate) async fn releases_handler(
     conn: &mut sqlx::PgConnection,
     page: Option<i64>,
     release_type: ReleaseType,
+    max_page: i64,
 ) -> AxumResult<impl IntoResponse + use<>> {
     let page_number = page.unwrap_or(1);
+    if !(1..=max_page).contains(&page_number) {
+        return Err(AxumNope::ResourceNotFound);
+    }
 
     let (description, release_order, latest_only) = match release_type {
         ReleaseType::Recent => ("Recently uploaded crates", Order::ReleaseTime, false),
@@ -376,7 +380,7 @@ pub(crate) async fn releases_handler(
 
     // Show next and previous page buttons
     let (show_next_page, show_previous_page) = (
-        releases.len() == RELEASES_IN_RELEASES as usize,
+        page_number < max_page && releases.len() == RELEASES_IN_RELEASES as usize,
         page_number != 1,
     );
 
@@ -397,29 +401,57 @@ pub(crate) async fn releases_handler(
 pub(crate) async fn recent_releases_handler(
     page: Option<Path<i64>>,
     mut conn: DbConnection,
+    State(config): State<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Recent).await
+    releases_handler(
+        &mut conn,
+        page.map(|p| p.0),
+        ReleaseType::Recent,
+        config.release_lists_max_page,
+    )
+    .await
 }
 
 pub(crate) async fn releases_by_stars_handler(
     page: Option<Path<i64>>,
     mut conn: DbConnection,
+    State(config): State<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Stars).await
+    releases_handler(
+        &mut conn,
+        page.map(|p| p.0),
+        ReleaseType::Stars,
+        config.release_lists_max_page,
+    )
+    .await
 }
 
 pub(crate) async fn releases_recent_failures_handler(
     page: Option<Path<i64>>,
     mut conn: DbConnection,
+    State(config): State<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::RecentFailures).await
+    releases_handler(
+        &mut conn,
+        page.map(|p| p.0),
+        ReleaseType::RecentFailures,
+        config.release_lists_max_page,
+    )
+    .await
 }
 
 pub(crate) async fn releases_failures_by_stars_handler(
     page: Option<Path<i64>>,
     mut conn: DbConnection,
+    State(config): State<Arc<Config>>,
 ) -> AxumResult<impl IntoResponse> {
-    releases_handler(&mut conn, page.map(|p| p.0), ReleaseType::Failures).await
+    releases_handler(
+        &mut conn,
+        page.map(|p| p.0),
+        ReleaseType::Failures,
+        config.release_lists_max_page,
+    )
+    .await
 }
 
 pub(crate) async fn owner_handler(Path(owner): Path<String>) -> AxumResult<impl IntoResponse> {
@@ -2274,6 +2306,52 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn release_lists_respect_configured_page_limit() -> Result<()> {
+        let config = Config::builder()
+            .test_config()?
+            .release_lists_max_page(1)
+            .build();
+        let env = TestEnvironment::builder().config(config).build().await?;
+
+        for i in 0..RELEASES_IN_RELEASES {
+            env.fake_release()
+                .await
+                .name("paginated")
+                .version(format!("0.0.{i}"))
+                .create()
+                .await?;
+        }
+
+        let web = env.web_app().await;
+        let page = kuchikiki::parse_html().one(
+            web.assert_success("/releases/recent/1")
+                .await?
+                .text()
+                .await?,
+        );
+        assert_eq!(
+            page.select(".recent-releases-container > ul > li")
+                .unwrap()
+                .count(),
+            RELEASES_IN_RELEASES as usize
+        );
+        assert_eq!(page.select("div.pagination > a").unwrap().count(), 0);
+
+        for path in [
+            "/releases/recent/2",
+            "/releases/stars/2",
+            "/releases/recent-failures/2",
+            "/releases/failures/2",
+            "/releases/recent/0",
+            "/releases/recent/9223372036854775807",
+        ] {
+            web.assert_not_found(path).await?;
+        }
+
+        Ok(())
     }
 
     #[test]
