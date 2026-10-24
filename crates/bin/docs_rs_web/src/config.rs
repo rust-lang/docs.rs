@@ -37,6 +37,10 @@ pub struct Config {
     #[builder(default = 500u32)]
     pub(crate) random_crate_search_view_size: u32,
 
+    /// Last accessible page of each release list.
+    #[builder(default = 200i64)]
+    pub(crate) release_lists_max_page: i64,
+
     // Content Security Policy
     #[builder(default)]
     pub(crate) csp_report_only: bool,
@@ -80,6 +84,7 @@ impl<S: State> ConfigBuilder<S> {
             .maybe_request_timeout(maybe_env("DOCSRS_REQUEST_TIMEOUT")?)
             .maybe_report_request_timeouts(maybe_env("DOCSRS_REPORT_REQUEST_TIMEOUTS")?)
             .maybe_random_crate_search_view_size(maybe_env("DOCSRS_RANDOM_CRATE_SEARCH_VIEW_SIZE")?)
+            .maybe_release_lists_max_page(maybe_env("DOCSRS_RELEASE_LISTS_MAX_PAGE")?)
             .maybe_csp_report_only(maybe_env("DOCSRS_CSP_REPORT_ONLY")?)
             .maybe_cache_control_stale_while_revalidate(maybe_env(
                 "CACHE_CONTROL_STALE_WHILE_REVALIDATE",
