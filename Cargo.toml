@@ -56,7 +56,7 @@ regex = "1"
 reqwest = { version = "0.13", features = ["gzip", "http2", "json", "stream"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
-rustwide = { version = "0.27.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
+rustwide = { version = "0.28.0", default-features = false, features = ["tracing", "unstable", "unstable-toolchain-ci"] }
 sentry = { version = "0.49.0", default-features = false, features = [
     "backtrace",
     "contexts",
