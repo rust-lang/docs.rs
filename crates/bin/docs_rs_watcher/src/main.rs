@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_types::{KrateName, Version};
-use docs_rs_watcher::{Config, Index, index_watcher};
+use docs_rs_watcher::{Config, Index};
 use futures_util::FutureExt as _;
 use std::sync::Arc;
 
@@ -115,27 +115,29 @@ impl QueueSubcommand {
         match self {
             Self::GetLastSeenReference => {
                 let mut conn = ctx.pool()?.get_async().await?;
-                if let Some(reference) = index_watcher::last_seen_reference(&mut conn).await? {
+                let mut index = Index::from_config(&config, &mut conn).await?;
+                if let Some(reference) = index.last_seen_reference().await? {
                     println!("Last seen reference: {reference}");
                 } else {
                     println!("No last seen reference available");
                 }
+                index.commit().await?;
             }
 
             Self::SetLastSeenReference { reference, head } => {
+                let mut conn = ctx.pool()?.get_async().await?;
+                let mut index = Index::from_config(&config, &mut conn).await?;
                 let reference = match (reference, head) {
                     (Some(reference), false) => reference,
                     (None, true) => {
                         println!("Fetching changes to set reference to HEAD");
-                        let index = Index::from_config(&config).await?;
                         index.latest_commit_reference().await?
                     }
                     (_, _) => unreachable!(),
                 };
 
-                let mut conn = ctx.pool()?.get_async().await?;
-
-                index_watcher::set_last_seen_reference(&mut conn, reference).await?;
+                index.set_last_seen_reference(reference).await?;
+                index.commit().await?;
                 println!("Set last seen reference: {reference}");
             }
         }
