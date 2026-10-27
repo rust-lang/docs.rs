@@ -2,7 +2,7 @@
 
 use crate::{
     Config,
-    cache::CachePolicy,
+    cache::{CachePolicy, SURROGATE_KEY_DOCSRS_STATIC},
     error::{AxumNope, AxumResult},
     extractors::{DbConnection, Path, rustdoc::RustdocParams},
     handlers::{axum_redirect, rustdoc::OfficialCrateDescription},
@@ -729,65 +729,24 @@ pub(crate) async fn search_handler(
 #[template(path = "releases/activity.html")]
 #[derive(Debug, Clone, PartialEq)]
 struct ReleaseActivity {
-    description: &'static str,
-    dates: Vec<String>,
-    counts: Vec<i64>,
-    failures: Vec<i64>,
+    dashboard_url: Option<Url>,
 }
 
-impl_axum_webpage! { ReleaseActivity }
+impl_axum_webpage! {
+    ReleaseActivity,
+    cache_policy = |_| CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into())
+}
 
-pub(crate) async fn activity_handler(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
-    let rows: Vec<_> = sqlx::query!(
-        r#"WITH dates AS (
-               -- we need this series so that days in the statistic that don't have any releases are included
-               SELECT generate_series(
-                       CURRENT_DATE - INTERVAL '30 days',
-                       CURRENT_DATE - INTERVAL '1 day',
-                       '1 day'::interval
-                   )::date AS date_
-           ),
-           release_stats AS (
-               SELECT
-                   release_time::date AS date_,
-                   SUM(CAST(
-                       release_build_status.build_status != 'in_progress' AS INT
-                   )) AS counts,
-                   SUM(CAST((
-                       is_library = TRUE AND
-                       release_build_status.build_status = 'failure'
-                   ) AS INT)) AS failures
-               FROM releases
-               INNER JOIN release_build_status ON releases.id = release_build_status.rid
-
-               WHERE
-                   release_time >= CURRENT_DATE - INTERVAL '30 days' AND
-                   release_time < CURRENT_DATE
-               GROUP BY
-                   release_time::date
-           )
-           SELECT
-               dates.date_ AS "date!",
-               COALESCE(rs.counts, 0) AS "counts!",
-               COALESCE(rs.failures, 0) AS "failures!"
-           FROM
-               dates
-               LEFT OUTER JOIN Release_stats AS rs ON dates.date_ = rs.date_
-
-               ORDER BY
-                   dates.date_
-        "#)
-        .fetch(&mut *conn)
-        .try_collect().await.context("error fetching data")?;
+pub(crate) async fn activity_handler(
+    State(config): State<Arc<Config>>,
+    Extension(csp): Extension<Arc<Csp>>,
+) -> AxumResult<impl IntoResponse> {
+    if let Some(url) = &config.release_activity_dashboard_url {
+        csp.allow_frame(url);
+    }
 
     Ok(ReleaseActivity {
-        description: "Monthly release activity",
-        dates: rows
-            .iter()
-            .map(|row| row.date.format("%d %b").to_string())
-            .collect(),
-        counts: rows.iter().map(|rows| rows.counts).collect(),
-        failures: rows.iter().map(|rows| rows.failures).collect(),
+        dashboard_url: config.release_activity_dashboard_url.clone(),
     })
 }
 
@@ -908,7 +867,7 @@ mod tests {
         async_wrapper,
     };
     use anyhow::Error;
-    use chrono::{Duration, TimeZone};
+    use chrono::TimeZone;
     use docs_rs_database::releases::{
         finish_build, initialize_build, initialize_crate, initialize_release,
     };
@@ -1750,61 +1709,36 @@ mod tests {
         })
     }
 
-    #[test]
-    fn release_activity() {
-        async_wrapper(|env| async move {
-            let web = env.web_app().await;
+    #[test_case(false)]
+    #[test_case(true)]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn release_activity(configured: bool) -> Result<()> {
+        let url: Url = "https://p.datadoghq.com/sb/test-dashboard".parse().unwrap();
+        let env = TestEnvironment::builder()
+            .config(
+                Config::builder()
+                    .test_config()?
+                    .maybe_release_activity_dashboard_url(configured.then(|| url.clone()))
+                    .build(),
+            )
+            .build()
+            .await?;
+        let web = env.web_app().await;
+        let response = web.get("/releases/activity").await?;
+        assert!(response.status().is_success());
+        response.assert_cache_control(
+            CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+            env.config(),
+        );
 
-            let empty_data = format!("data: [{}]", vec!["0"; 30].join(", "));
-
-            // no data / only zeros without releases
-            let response = web.get("/releases/activity").await?;
-            assert!(response.status().is_success());
-            let text = response.text().await?;
-            assert_eq!(text.matches(&empty_data).count(), 2);
-
-            env.fake_release()
-                .await
-                .name("some_random_crate")
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("some_random_crate_that_failed")
-                .build_result_failed()
-                .create()
-                .await?;
-
-            // same when the release is on the current day, since we ignore today.
-            let response = web.get("/releases/activity").await?;
-            assert!(response.status().is_success());
-            assert_eq!(response.text().await?.matches(&empty_data).count(), 2);
-
-            env.fake_release()
-                .await
-                .name("some_random_crate_yesterday")
-                .release_time(Utc::now() - Duration::try_days(1).unwrap())
-                .create()
-                .await?;
-            env.fake_release()
-                .await
-                .name("some_random_crate_that_failed_yesterday")
-                .build_result_failed()
-                .release_time(Utc::now() - Duration::try_days(1).unwrap())
-                .create()
-                .await?;
-
-            // with releases yesterday we get the data we want
-            let response = web.get("/releases/activity").await?;
-            assert!(response.status().is_success());
-            let text = response.text().await?;
-            // counts contain both releases
-            assert!(text.contains(&format!("data: [{}, 2]", vec!["0"; 29].join(", "))));
-            // failures only one
-            assert!(text.contains(&format!("data: [{}, 1]", vec!["0"; 29].join(", "))));
-
-            Ok(())
-        })
+        let html = kuchikiki::parse_html().one(response.text().await?);
+        let frames: Vec<_> = html.select("iframe").unwrap().collect();
+        assert_eq!(frames.len(), usize::from(configured));
+        if configured {
+            assert_eq!(frames[0].attributes.borrow().get("src"), Some(url.as_str()));
+        }
+        assert_eq!(html.select("canvas").unwrap().count(), 0);
+        Ok(())
     }
 
     #[test]
