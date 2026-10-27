@@ -449,7 +449,9 @@ dependencies = [
  "flate2",
  "http 1.5.0",
  "log",
+ "rustls",
  "url",
+ "webpki-roots",
 ]
 
 [[package]]
