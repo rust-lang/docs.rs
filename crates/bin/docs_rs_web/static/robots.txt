@@ -3,6 +3,7 @@ Sitemap: https://docs.rs/sitemap.xml
 # confuse Google's duplicate detection, so we block crawling them.
 # https://docs.rs/about/redirections
 User-Agent: *
+Disallow: /releases
 Disallow: */^
 # %5E is '^', URL-encoded. Based on the Search Console, Google
 # may be encoding '^' before checking against robots.txt.
