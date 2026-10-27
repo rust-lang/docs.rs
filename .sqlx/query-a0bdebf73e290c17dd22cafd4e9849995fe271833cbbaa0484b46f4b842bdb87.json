@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases\n                         SET source_file_count = $2\n                         WHERE\n                            id = $1 AND\n                            source_file_count IS NULL\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a0bdebf73e290c17dd22cafd4e9849995fe271833cbbaa0484b46f4b842bdb87"
+}

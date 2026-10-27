@@ -1,8 +1,10 @@
+mod backfill_file_counts;
 mod rebuilds;
 #[cfg(test)]
 pub(crate) mod testing;
 
 use anyhow::{Context as _, Result, bail};
+use backfill_file_counts::backfill_file_counts;
 use chrono::{NaiveDate, Utc};
 use clap::{Parser, Subcommand};
 use docs_rs_build_limits::{Overrides, blacklist};
@@ -381,6 +383,9 @@ enum DatabaseSubcommand {
     /// Backfill GitHub/GitLab stats for crates.
     BackfillRepositoryStats,
 
+    /// Backfill source and documentation file counts from archive indexes.
+    BackfillFileCounts,
+
     /// Updates info for a crate from the registry's API
     UpdateCrateRegistryFields {
         #[arg(name = "CRATE")]
@@ -450,6 +455,10 @@ impl DatabaseSubcommand {
                 println!("rewrite crate count per repository...");
                 let mut conn = ctx.pool()?.get_async().await?;
                 workspaces::rewrite_repository_stats(&mut conn).await?;
+            }
+
+            Self::BackfillFileCounts => {
+                backfill_file_counts(&ctx).await?;
             }
 
             Self::UpdateCrateRegistryFields { name } => {
