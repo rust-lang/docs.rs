@@ -33,7 +33,7 @@ div.nav-container {
     left: 0;
     right: 0;
     top: 0;
-    position: sticky;
+    position: fixed;
     color: var(--color-navbar-standard);
     /* The font size must be specified in pixels because the height is specified in pixels. */
     font: 16px $font-family-sans;

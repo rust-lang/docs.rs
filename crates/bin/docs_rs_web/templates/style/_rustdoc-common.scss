@@ -45,6 +45,10 @@ div.rustdoc {
         padding-top: 0;
     }
 
+    main {
+        margin-top: 32px; /* Offset of the fixed navigation bar */
+    }
+
     .sidebar {
         @media (min-width: 701px) {
             margin-top: $top-navbar-height;
