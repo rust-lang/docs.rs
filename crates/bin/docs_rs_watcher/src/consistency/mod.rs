@@ -1,4 +1,4 @@
-use crate::{Config, db::delete, index_watcher::set_yanked};
+use crate::{Config, Index, db::delete, index_watcher::set_yanked};
 use anyhow::{Context as _, Result};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::PRIORITY_CONSISTENCY_CHECK;
@@ -14,7 +14,8 @@ mod index;
 
 /// consistency check
 ///
-/// will compare our database with the local crates.io index and
+/// will compare our database with the index at the watcher's last-seen commit
+/// (or HEAD if no checkpoint exists) and
 /// apply any changes that we find in the index but not our database.
 ///
 /// Differences that we check for, and the activities:
@@ -27,9 +28,12 @@ mod index;
 /// Even when activities fail, the command can just be re-run. While the diff calculation will
 /// be repeated, we won't re-execute fixing activities.
 pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<()> {
-    info!("Loading data from database...");
     let mut conn = ctx.pool()?.get_async().await?;
-    let db_data = db::load(&mut conn)
+    let mut registry_index = Index::from_config(config, &mut conn).await?;
+    let reference = registry_index.last_seen_reference().await?;
+
+    info!(?reference, "Loading data from database...");
+    let db_data = db::load(registry_index.connection())
         .await
         .context("Loading crate data from database for consistency check")?;
 
@@ -38,7 +42,7 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
         .then(|| db_data.iter().map(|krate| krate.name.clone()).collect());
 
     tracing::info!("Loading data from index...");
-    let index_data = index::load(config, existing_crates)
+    let index_data = index::load(&mut registry_index, existing_crates, reference)
         .await
         .context("Loading crate data from index for consistency check")?;
 
@@ -46,6 +50,7 @@ pub async fn run_check(config: &Config, ctx: &Context, dry_run: bool) -> Result<
     let result = handle_diff(config, ctx, diff.iter(), dry_run).await?;
     print_summary(&diff, &result, dry_run);
 
+    registry_index.commit().await?;
     Ok(())
 }
 
@@ -59,21 +64,23 @@ pub async fn run_single_check(
 ) -> Result<()> {
     info!(%name, "Loading crate data from database...");
     let mut conn = ctx.pool()?.get_async().await?;
-    let db_data = db::load_single(&mut conn, name)
+    let mut registry_index = Index::from_config(config, &mut conn).await?;
+    let db_data = db::load_single(registry_index.connection(), name)
         .await
         .context("Loading crate data from database for consistency check")?;
 
-    let registry_api = ctx.registry_api()?;
+    let reference = registry_index.last_seen_reference().await?;
 
-    info!(%name, "Loading crate data from sparse index...");
-    let index_data = index::load_single(registry_api, name)
+    info!(%name, ?reference, "Loading crate data from Git index...");
+    let index_data = index::load_single(&mut registry_index, name, reference)
         .await
-        .context("Loading crate data from sparse index for consistency check")?;
+        .context("Loading crate data from Git index for consistency check")?;
 
     let diff = diff::calculate_diff(db_data.iter(), index_data.iter());
     let result = handle_diff(config, ctx, diff.iter(), dry_run).await?;
     print_summary(&diff, &result, dry_run);
 
+    registry_index.commit().await?;
     Ok(())
 }
 
@@ -225,7 +232,7 @@ async fn set_release_time(
 mod tests {
     use super::diff::Difference;
     use super::*;
-    use crate::testing::TestEnvironment;
+    use crate::testing::{TestEnvironment, registry_history};
     use chrono::DateTime;
     use docs_rs_types::{
         Version,
@@ -251,6 +258,112 @@ mod tests {
                 .map(|row| row.get(0))
                 .collect(),
         )
+    }
+
+    #[test_case::test_case(false; "apply repairs")]
+    #[test_case::test_case(true; "dry run")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn sync_uses_checkpoint(dry_run: bool) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let (config, checkpoint, _) = registry_history(&env).await?;
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V1)
+            .yanked(false)
+            .create()
+            .await?;
+        let mut conn = env.async_conn().await?;
+        let mut registry_index = Index::from_config(&config, &mut conn).await?;
+        registry_index.set_last_seen_reference(checkpoint).await?;
+        registry_index.commit().await?;
+
+        let mut lock_conn = env.async_conn().await?;
+        let registry_index = Index::from_config(&config, &mut lock_conn).await?;
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(100),
+                run_check(&config, &env, dry_run),
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(
+            single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
+            vec![false]
+        );
+        registry_index.commit().await?;
+
+        run_check(&config, &env, dry_run).await?;
+        // HEAD unyanks V1 and publishes V2; neither change belongs to this sync.
+        assert_eq!(
+            single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
+            vec![!dry_run]
+        );
+        assert!(env.build_queue()?.queued_crates().await?.is_empty());
+        let mut registry_index = Index::from_config(&config, &mut conn).await?;
+        assert_eq!(
+            registry_index.last_seen_reference().await?,
+            Some(checkpoint)
+        );
+        registry_index.commit().await?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn sync_uses_head_without_checkpoint() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let (config, _, _) = registry_history(&env).await?;
+        env.fake_release()
+            .await
+            .name(KRATE)
+            .version(V1)
+            .yanked(true)
+            .create()
+            .await?;
+
+        run_check(&config, &env, false).await?;
+
+        // HEAD unyanks V1 and publishes V2, unlike the older checkpoint.
+        assert_eq!(
+            single_row::<bool>(&env, "SELECT yanked FROM releases").await?,
+            vec![false]
+        );
+        assert!(env.build_queue()?.has_build_queued(&KRATE, &V2).await?);
+        let mut conn = env.async_conn().await?;
+        let mut registry_index = Index::from_config(env.config(), &mut conn).await?;
+        assert_eq!(registry_index.last_seen_reference().await?, None);
+        registry_index.commit().await?;
+        Ok(())
+    }
+
+    #[test_case::test_case(false; "HEAD without checkpoint")]
+    #[test_case::test_case(true; "watcher checkpoint")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn single_sync_uses_git_snapshot(checkpoint_exists: bool) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let (config, checkpoint, _) = registry_history(&env).await?;
+        let mut conn = env.async_conn().await?;
+        let mut registry_index = Index::from_config(&config, &mut conn).await?;
+        let expected_reference = checkpoint_exists.then_some(checkpoint);
+        if let Some(reference) = expected_reference {
+            registry_index.set_last_seen_reference(reference).await?;
+        }
+        registry_index.commit().await?;
+
+        run_single_check(&config, &env, &KRATE, false).await?;
+        assert!(env.build_queue()?.has_build_queued(&KRATE, &V1).await?);
+        assert_eq!(
+            env.build_queue()?.has_build_queued(&KRATE, &V2).await?,
+            !checkpoint_exists
+        );
+        let mut registry_index = Index::from_config(&config, &mut conn).await?;
+        assert_eq!(
+            registry_index.last_seen_reference().await?,
+            expected_reference
+        );
+        registry_index.commit().await?;
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]

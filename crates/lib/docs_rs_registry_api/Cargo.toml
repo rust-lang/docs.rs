@@ -6,7 +6,7 @@ repository = "https://github.com/rust-lang/docs.rs"
 edition = "2024"
 
 [features]
-testing = ["dep:mockito"]
+testing = ["dep:mockito", "dep:gix"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -20,6 +20,7 @@ docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
 futures-util = { workspace = true }
+gix = { workspace = true, features = ["parallel", "sha1", "tree-editor"], optional = true }
 http = { workspace = true }
 mime = { workspace = true }
 mockito = { workspace = true, optional = true }
@@ -44,6 +45,7 @@ docs_rs_config = { path = "../docs_rs_config", features = ["testing"] }
 docs_rs_crate_archive = { path = "../docs_rs_crate_archive", features = ["testing"] }
 docs_rs_opentelemetry = { path = "../docs_rs_opentelemetry", features = ["testing"] }
 docs_rs_types = { path = "../docs_rs_types", features = ["testing"] }
+gix = { workspace = true, features = ["parallel", "sha1", "tree-editor"] }
 mockito = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }

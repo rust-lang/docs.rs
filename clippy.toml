@@ -5,11 +5,21 @@ reason = "use our own custom web::extractors::Path for a nicer error response"
 [[disallowed-types]]
 path = "crates_index_diff::Index"
 reason = """
-    Don't directly use crates_index_diff::Index because it might 
+    Don't directly use crates_index_diff::Index because it might
     lead to issues when used in async contexts.
-    We have our own wrapper struct (`crate::index::Index`) that is 
+    We have our own wrapper struct (`crate::index::Index`) that is
     async, and should be used instead.
 """
+
+[[disallowed-types]]
+path = "crates_index::GitIndex"
+reason = """
+    don't directly use crates_index::GitIndex because
+    we have our own wrapper struct (`docsr_rs_watcher::index::Index`)
+    that as async, and also manages synchronizations across
+    containers & servers.
+"""
+
 
 [[disallowed-types]]
 path = "semver::Version"

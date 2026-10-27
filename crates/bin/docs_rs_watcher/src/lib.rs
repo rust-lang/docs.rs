@@ -27,8 +27,7 @@ use tokio::time::{self, Instant};
 use tracing::{debug, error, info, trace};
 
 /// Run the registry watcher
-/// NOTE: this should only be run once, otherwise crates would be added
-/// to the queue multiple times.
+/// Registry polling and consistency checks share a database lock.
 pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
     let mut last_gc = Instant::now();
 
@@ -40,15 +39,21 @@ pub async fn watch_registry(config: &Config, context: &Context) -> Result<()> {
             debug!("Queue is locked, skipping checking new crates");
         } else {
             debug!("Checking new crates");
-            let index = Index::from_config(config).await?;
+            let mut conn = context.pool()?.get_async().await?;
+            let mut index = Index::from_config(config, &mut conn).await?;
 
-            let added = get_new_crates(context, &index, config, &metrics).await?;
+            let (added, new_reference) =
+                get_new_crates(context, &mut index, config, &metrics).await?;
             debug!("{} crates added to queue", added);
 
             if last_gc.elapsed() >= *config.registry_gc_interval {
+                debug!("running `git gc`");
+
                 index.run_git_gc().await;
                 last_gc = Instant::now();
             }
+            index.set_last_seen_reference(new_reference).await?;
+            index.commit().await?;
         }
 
         Ok(())

@@ -1,82 +1,66 @@
 use super::data::{Crate, Crates, Release, Releases};
-use crate::Config;
+use crate::Index;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use docs_rs_registry_api::RegistryApi;
+use crates_index_diff::gix::ObjectId;
 use docs_rs_types::{KrateName, Version};
-use docs_rs_utils::run_blocking;
 use rayon::iter::ParallelIterator;
 use std::collections::HashSet;
-use tracing::debug;
 
 pub(super) async fn load(
-    config: &Config,
+    index: &mut Index<'_>,
     existing_crates: Option<HashSet<KrateName>>,
+    reference: Option<ObjectId>,
 ) -> Result<Crates> {
-    let registry_index_path = config.registry_index_path.clone();
-    let registry_url = config
-        .registry_url
-        .as_deref()
-        .unwrap_or("https://github.com/rust-lang/crates.io-index")
-        .to_owned();
+    index
+        .with_full_index_at(reference, move |full_index| {
+            let mut result: Crates = full_index
+                .crates_parallel()
+                .filter_map(|krate| {
+                    let krate = match krate {
+                        Ok(krate) => krate,
+                        Err(err) => return Some(Err(err)),
+                    };
 
-    run_blocking("load-crates-index", move || {
-        debug!("Opening with `crates_index`");
-        let mut index = crates_index::GitIndex::with_path(
-            &registry_index_path,
-            // crates_index requires the repo url to match the existing origin or it tries to reinitialize the repo
-            &registry_url,
-        )?;
+                    let name: KrateName = krate
+                        .name()
+                        .parse()
+                        .expect("all crate names in the index are valid");
 
-        index.update()?;
+                    if let Some(existing_crates) = &existing_crates
+                        && !existing_crates.contains(&name)
+                    {
+                        return None;
+                    }
 
-        let mut result: Crates = index
-            .crates_parallel()
-            .filter_map(|krate| {
-                let krate = match krate {
-                    Ok(krate) => krate,
-                    Err(err) => return Some(Err(err)),
-                };
+                    Some(Ok(Crate {
+                        name,
+                        releases: releases_from_index(&krate),
+                    }))
+                })
+                .collect::<Result<_, _>>()?;
 
-                let name: KrateName = krate
-                    .name()
-                    .parse()
-                    .expect("all crate names in the index are valid");
+            result.sort_by(|lhs, rhs| lhs.name.cmp(&rhs.name));
 
-                if let Some(existing_crates) = &existing_crates
-                    && !existing_crates.contains(&name)
-                {
-                    return None;
-                }
-
-                Some(Ok(Crate {
-                    name,
-                    releases: releases_from_index(&krate),
-                }))
-            })
-            .collect::<Result<_, _>>()?;
-
-        result.sort_by(|lhs, rhs| lhs.name.cmp(&rhs.name));
-
-        Ok(result)
-    })
-    .await
+            Ok(result)
+        })
+        .await
 }
 
 pub(super) async fn load_single(
-    registry_api: &RegistryApi,
+    index: &mut Index<'_>,
     name: &KrateName,
+    reference: Option<ObjectId>,
 ) -> Result<Option<Crate>> {
-    let Some(krate) = registry_api.get_crate_from_index(name).await? else {
-        return Ok(None);
-    };
-
-    let releases = releases_from_index(&krate);
-
-    Ok(Some(Crate {
-        name: name.clone(),
-        releases,
-    }))
+    let name = name.clone();
+    index
+        .with_full_index_at(reference, move |full_index| {
+            Ok(full_index.crate_(name.as_str()).map(|krate| Crate {
+                name,
+                releases: releases_from_index(&krate),
+            }))
+        })
+        .await
 }
 
 fn releases_from_index(krate: &crates_index::Crate) -> Releases {

@@ -10,14 +10,11 @@ use crates_index_diff::Change;
 use docs_rs_build_queue::PRIORITY_MANUAL_FROM_CRATES_IO;
 use docs_rs_context::Context;
 use docs_rs_crates_io::events::ChangeKind;
-use docs_rs_database::{
-    crate_details::update_latest_version_id,
-    service_config::{ConfigName, get_config, set_config},
-};
+use docs_rs_database::crate_details::update_latest_version_id;
 use docs_rs_fastly::{Cdn, CdnBehaviour as _};
 use docs_rs_types::{CrateId, KrateName, Version};
 use std::{collections::HashSet, time::Instant};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
 
 trait ChangeExt {
     fn name(&self) -> &str;
@@ -103,25 +100,6 @@ impl From<CrateVersion> for crates_index_diff::CrateVersion {
     }
 }
 
-pub async fn last_seen_reference(
-    conn: &mut sqlx::PgConnection,
-) -> Result<Option<crates_index_diff::gix::ObjectId>> {
-    if let Some(value) = get_config::<String>(conn, ConfigName::LastSeenIndexReference).await? {
-        return Ok(Some(crates_index_diff::gix::ObjectId::from_hex(
-            value.as_bytes(),
-        )?));
-    }
-    Ok(None)
-}
-
-pub async fn set_last_seen_reference(
-    conn: &mut sqlx::PgConnection,
-    oid: crates_index_diff::gix::ObjectId,
-) -> Result<()> {
-    set_config(conn, ConfigName::LastSeenIndexReference, oid.to_string()).await?;
-    Ok(())
-}
-
 async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
     let Some(cdn) = &cdn else {
         info!(%krate, "no CDN configured, skipping crate invalidation");
@@ -135,32 +113,18 @@ async fn queue_crate_invalidation(krate: &KrateName, cdn: Option<&Cdn>) {
 
 /// Updates registry index repository and adds new crates into build queue.
 ///
-/// Returns the number of crates added
+/// Returns the number of crates added and the reference processed. The caller
+/// must save that reference through the index before releasing it.
+///
+/// The caller must keep the index alive until this operation completes.
 pub(crate) async fn get_new_crates(
     context: &Context,
-    index: &Index,
+    index: &mut Index<'_>,
     config: &Config,
     metrics: &WatcherMetrics,
-) -> Result<usize> {
-    let mut conn = context.pool()?.get_async().await?;
-
-    let last_seen_reference = last_seen_reference(&mut conn).await?;
-    let last_seen_reference = if let Some(oid) = last_seen_reference {
-        oid
-    } else {
-        warn!(
-            "no last-seen reference found in our database. We assume a fresh install and
-                     set the latest reference (HEAD) as last. This means we will then start to queue
-                     builds for new releases only from now on, and not for all existing releases."
-        );
-        index.latest_commit_reference().await?
-    };
-
-    index.set_last_seen_reference(last_seen_reference).await?;
-
+) -> Result<(usize, crates_index_diff::gix::ObjectId)> {
     let (changes, new_reference) = index.peek_changes_ordered().await?;
-
-    debug!(last_seen_reference=%last_seen_reference, new_reference=%new_reference, "queueing changes");
+    debug!(%new_reference, "queueing changes");
 
     metrics.record_events_received(EventSource::Git, changes.len());
 
@@ -192,12 +156,7 @@ pub(crate) async fn get_new_crates(
         error!(?err, "error reevaluating queued release priorities");
     }
 
-    // set the reference in the database
-    // so this survives recreating the registry watcher
-    // server.
-    set_last_seen_reference(&mut conn, new_reference).await?;
-
-    Ok(crates_added)
+    Ok((crates_added, new_reference))
 }
 
 async fn process_changes(
@@ -753,44 +712,6 @@ mod tests {
         .await;
 
         assert_eq!(added, 2);
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_last_seen_reference_in_db() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let mut conn = env.async_conn().await?;
-        let queue = env.build_queue()?;
-        queue.unlock().await?;
-        assert!(!queue.is_locked().await?);
-
-        // initial db ref is empty
-        assert_eq!(last_seen_reference(&mut conn).await?, None);
-        assert!(!queue.is_locked().await?);
-
-        let oid = crates_index_diff::gix::ObjectId::from_hex(
-            b"ffffffffffffffffffffffffffffffffffffffff",
-        )?;
-        set_last_seen_reference(&mut conn, oid).await?;
-
-        assert_eq!(last_seen_reference(&mut conn).await?, Some(oid));
-        assert!(!queue.is_locked().await?);
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_broken_db_reference_breaks() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        let mut conn = env.async_conn().await?;
-        set_config(&mut conn, ConfigName::LastSeenIndexReference, "invalid")
-            .await
-            .unwrap();
-
-        assert!(last_seen_reference(&mut conn).await.is_err());
-
         Ok(())
     }
 }

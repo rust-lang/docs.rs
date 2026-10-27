@@ -3,14 +3,19 @@ use crate::{
     api::DOCSRS_AUTHORIZATION,
     models::{ApiError, ApiErrors, SearchCrate, SearchMeta, SearchResponse},
 };
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use bon::bon;
 use docs_rs_types::KrateName;
 use docs_rs_utils::spawn_blocking;
+use gix::{ObjectId, objs::tree::EntryKind};
 use mockito::Matcher;
 use reqwest::{StatusCode, header::CONTENT_TYPE};
 use serde::Serialize;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -19,17 +24,23 @@ struct TestRegistryInner {
     index_server: mockito::ServerGuard,
     #[allow(dead_code)]
     download_server: mockito::ServerGuard,
-    mocks: Vec<mockito::Mock>,
+    // Some mock have a unique path whwen you mock twice,
+    // we'll drop the old mocks.
+    crate_mocks: HashMap<String, mockito::Mock>,
+    other_mocks: Vec<mockito::Mock>,
+    index_config: String,
+    git_index: Option<PathBuf>,
 }
 
 /// A local registry fixture backed by isolated mock HTTP servers.
 ///
 /// It provides a [`RegistryApi`] configured to use a temporary sparse-index cache, API server,
 /// and download server. Add only the responses required by the test; unknown sparse-index crate
-/// entries behave as not found.
+/// entries behave as not found. Enable the optional Git index to mirror those
+/// entries into a local repository with a commit for each update.
 pub struct TestRegistry {
-    #[allow(dead_code)]
-    cargo_home: tempfile::TempDir,
+    // cargo_home: tempfile::TempDir,
+    cargo_home: PathBuf,
     inner: Mutex<TestRegistryInner>,
     api: Arc<RegistryApi>,
     config: Arc<Config>,
@@ -62,7 +73,7 @@ impl TestRegistry {
         index_config: Option<crates_index::IndexConfig>,
         meter_provider: Option<docs_rs_opentelemetry::AnyMeterProvider>,
     ) -> Result<Self> {
-        let cargo_home = spawn_blocking(|| Ok(tempfile::tempdir()?)).await?;
+        let cargo_home = spawn_blocking(|| Ok(tempfile::tempdir()?.keep())).await?;
         let api_server = mockito::Server::new_async().await;
         let mut index_server = mockito::Server::new_async().await;
         let download_server = mockito::Server::new_async().await;
@@ -84,17 +95,19 @@ impl TestRegistry {
         // Persistent Cargo/Rustwide workspaces cache registry configuration by URL.
         // Ports can be reused after a test exits, so include the unique fixture directory
         // in the index URL to avoid reusing a previous registry's download endpoint.
-        let index_prefix = cargo_home.path().file_name().unwrap().to_str().unwrap();
+        let index_prefix = cargo_home.as_path().file_name().unwrap().to_str().unwrap();
         let config_path = format!("/{index_prefix}/config.json");
+        let index_config_payload = serde_json::to_string(&serde_json::json!({
+            "dl": index_config.dl,
+            "api": index_config.api,
+        }))?;
+
         let config_mock = index_server
             .mock("GET", config_path.as_str())
             .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing)
             .expect_at_least(1)
             .with_header(CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-            .with_body(serde_json::to_vec(&serde_json::json!({
-                "dl": index_config.dl,
-                "api": index_config.api,
-            }))?)
+            .with_body(index_config_payload.clone())
             .create_async()
             .await;
 
@@ -104,11 +117,12 @@ impl TestRegistry {
 
         let meter_provider = meter_provider
             .unwrap_or_else(|| Arc::new(docs_rs_opentelemetry::NoopMeterProvider::new()));
+
         let api = RegistryApi::new(
             index_url.clone(),
             retries,
             token.clone(),
-            Some(cargo_home.path()),
+            Some(cargo_home.as_path()),
             &meter_provider,
         )
         .await?;
@@ -127,7 +141,10 @@ impl TestRegistry {
                 api_server,
                 index_server,
                 download_server,
-                mocks: vec![config_mock, index_object_missing_mock],
+                crate_mocks: HashMap::from_iter([(config_path, config_mock)]),
+                other_mocks: vec![index_object_missing_mock],
+                index_config: index_config_payload,
+                git_index: None,
             }),
             api: Arc::new(api),
             config,
@@ -144,6 +161,9 @@ impl TestRegistry {
     /// Mock the sparse-index response for `krate`.
     ///
     /// Each item in `versions` is one JSON line from a sparse-index crate entry.
+    /// Replaces any previous response for this crate and, when Git is enabled,
+    /// commits the same payload to its index entry. An empty list returns 404
+    /// and removes the Git entry instead of writing an empty file.
     pub async fn mock_index_response<L>(
         &self,
         krate: &KrateName,
@@ -151,6 +171,58 @@ impl TestRegistry {
     ) where
         L: Serialize,
     {
+        let mut payload = Vec::with_capacity(4096);
+
+        for version in versions {
+            if !payload.is_empty() {
+                payload.push(b'\n');
+            }
+            serde_json::to_writer(&mut payload, &version).unwrap();
+        }
+
+        self.mock_index_payload(krate, Some(payload)).await;
+    }
+
+    /// Enable a local Git index and return its `file://` remote URL.
+    /// Starts with a config-only commit; later updates create one commit each.
+    /// Mocks registered before enabling Git remain sparse-only, so enable it
+    /// before updates when the test needs their history. Repeated calls return
+    /// the same URL without creating another repository or commit.
+    pub async fn enable_git_index(&self) -> Result<Url> {
+        let mut inner = self.inner.lock().await;
+        let path = if let Some(path) = &inner.git_index {
+            path.clone()
+        } else {
+            let path = self.cargo_home.as_path().join("git-index");
+            let mut entries = BTreeMap::new();
+            entries.insert("config.json".into(), inner.index_config.clone());
+            let init_path = path.clone();
+            spawn_blocking(move || Self::init_git_index(&init_path, entries)).await?;
+            inner.git_index = Some(path.clone());
+            path
+        };
+        Url::from_directory_path(&path)
+            .map_err(|_| anyhow::anyhow!("Invalid registry Git path: {}", path.display()))
+    }
+
+    /// Current Git commit in the registry repository.
+    pub async fn git_head(&self) -> Result<gix::ObjectId> {
+        let inner = self.inner.lock().await;
+        let path = inner
+            .git_index
+            .clone()
+            .context("Git index is not enabled")?;
+        spawn_blocking(move || Ok(gix::open(path)?.head_id()?.into())).await
+    }
+
+    /// Remove a crate from both the sparse index and the Git index, if enabled.
+    pub async fn mock_index_missing(&self, krate: &KrateName) {
+        self.mock_index_payload(krate, None).await;
+    }
+
+    async fn mock_index_payload(&self, krate: &KrateName, payload: Option<Vec<u8>>) {
+        let payload = payload.filter(|body| !body.is_empty());
+
         let crate_url: Url = self
             .api
             .sparse_index
@@ -159,24 +231,45 @@ impl TestRegistry {
             .parse()
             .unwrap();
 
-        let payload = versions
-            .into_iter()
-            .map(|v| serde_json::to_string(&v).unwrap())
-            .collect::<Vec<_>>()
-            .join("\n");
-
         let mut inner = self.inner.lock().await;
 
-        let index_mock = inner
+        if let Some(path) = inner.git_index.clone() {
+            let entry_path = PathBuf::from(
+                crate_url
+                    .path()
+                    .strip_prefix(self.config.sparse_index_host.path())
+                    .unwrap(),
+            );
+            let payload = payload.clone();
+            spawn_blocking(move || {
+                // A missing payload removes the entry before committing.
+                Self::write_git_entries(&gix::open(path)?, [(entry_path, payload)]).map(|_| ())
+            })
+            .await
+            .expect("updating mocked Git index");
+        }
+
+        // if that path already was mocked, remove it,
+        // for the one we create here.
+        if let Some(previous_mock) = inner.crate_mocks.remove(crate_url.path()) {
+            previous_mock.remove_async().await;
+        }
+
+        let mut mock = inner
             .index_server
             .mock("GET", crate_url.path())
-            .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing)
-            .with_status(StatusCode::OK.as_u16().into())
-            .with_body(payload)
-            .create_async()
-            .await;
+            .match_header(DOCSRS_AUTHORIZATION.as_str(), Matcher::Missing);
 
-        inner.mocks.push(index_mock);
+        if let Some(payload) = payload {
+            mock = mock
+                .with_status(StatusCode::OK.as_u16().into())
+                .with_body(payload);
+        } else {
+            mock = mock.with_status(StatusCode::NOT_FOUND.as_u16().into());
+        }
+
+        let mock = mock.create_async().await;
+        inner.crate_mocks.insert(crate_url.path().to_owned(), mock);
     }
 
     /// Mock downloading a crate archive from the URL advertised by the sparse index.
@@ -197,7 +290,7 @@ impl TestRegistry {
             .with_body(archive)
             .create_async()
             .await;
-        inner.mocks.push(mock);
+        inner.other_mocks.push(mock);
     }
 
     /// Create a custom mock for a registry API `GET` request.
@@ -235,7 +328,7 @@ impl TestRegistry {
             mock = mock.match_query(Matcher::AllOf(query_matchers));
         }
         let mock = f(mock).create_async().await;
-        inner.mocks.push(mock);
+        inner.other_mocks.push(mock);
     }
 
     /// Mock the registry search API with an error response.
@@ -349,7 +442,10 @@ impl TestRegistry {
     pub async fn assert_mocks(&self) {
         let inner = self.inner.lock().await;
 
-        for mock in &inner.mocks {
+        for mock in inner.crate_mocks.values() {
+            mock.assert_async().await;
+        }
+        for mock in &inner.other_mocks {
             mock.assert_async().await;
         }
     }
@@ -463,5 +559,189 @@ where
         S::ErrorText: EIsUnset,
     {
         self.error_text_internal(error_text.into())
+    }
+}
+
+impl TestRegistry {
+    fn init_git_index(path: &Path, entries: BTreeMap<PathBuf, String>) -> Result<()> {
+        let repo = gix::init_bare(path)?;
+        // crates-index fetches master in addition to HEAD.
+        repo.edit_reference(gix::refs::transaction::RefEdit {
+            name: "HEAD".try_into()?,
+            change: gix::refs::transaction::Change::Update {
+                log: Default::default(),
+                expected: gix::refs::transaction::PreviousValue::Any,
+                new: gix::refs::Target::Symbolic("refs/heads/master".try_into()?),
+            },
+            deref: false,
+        })?;
+        Self::write_git_entries(
+            &repo,
+            entries
+                .into_iter()
+                .map(|(path, body)| (path, Some(body.into_bytes()))),
+        )?;
+        Ok(())
+    }
+
+    fn write_git_entries<P: AsRef<Path>>(
+        repo: &gix::Repository,
+        entries: impl IntoIterator<Item = (P, Option<Vec<u8>>)>,
+    ) -> Result<ObjectId> {
+        let parent = repo.head_id().ok().map(|id| id.detach());
+        let base = if parent.is_some() {
+            repo.head_tree_id()?.detach()
+        } else {
+            ObjectId::empty_tree(repo.object_hash())
+        };
+        let mut tree = repo.edit_tree(base)?;
+        for (path, body) in entries {
+            let path = path.as_ref();
+            if let Some(body) = body {
+                tree.upsert(
+                    path.to_string_lossy().as_ref(),
+                    EntryKind::Blob,
+                    repo.write_blob(body)?,
+                )?;
+            } else {
+                tree.remove(path.to_string_lossy().as_ref())?;
+            }
+        }
+        let tree = tree.write()?;
+        let seconds = match parent {
+            Some(parent) => repo.find_commit(parent)?.time()?.seconds + 1,
+            None => 1_700_000_000,
+        };
+        let time = format!("{seconds} +0000");
+        let actor = gix::actor::SignatureRef {
+            name: "Test".into(),
+            email: "test@example.com".into(),
+            time: &time,
+        };
+        Ok(repo
+            .commit_as(actor, actor, "HEAD", "Update registry index", tree, parent)?
+            .detach())
+    }
+}
+
+#[cfg(test)]
+mod git_tests {
+    use super::*;
+    use crate::testing::registry_entry;
+    use docs_rs_types::testing::{KRATE, V1, V2};
+
+    fn blob(repo: &gix::Repository, commit: &ObjectId, path: &str) -> Result<Option<Vec<u8>>> {
+        let tree = repo.find_commit(*commit)?.tree()?;
+        tree.lookup_entry_by_path(path)?
+            .map(|entry| Ok(entry.object()?.data.clone()))
+            .transpose()
+    }
+
+    #[tokio::test]
+    async fn git_index_url_points_to_registry_remote() -> Result<()> {
+        let registry = TestRegistry::new().await?;
+        assert!(registry.git_head().await.is_err());
+        let url = registry.enable_git_index().await?;
+        assert_eq!(url.scheme(), "file");
+        assert_eq!(
+            url.to_file_path().unwrap(),
+            registry.cargo_home.join("git-index")
+        );
+        assert_eq!(registry.enable_git_index().await?, url);
+        registry
+            .mock_index_response(&KRATE, [registry_entry(&KRATE, &V1, None, false)])
+            .await;
+        assert_eq!(
+            gix::open(url.to_file_path().unwrap())?.head_id()?.detach(),
+            registry.git_head().await?
+        );
+        Ok(())
+    }
+
+    #[test_case::test_case(false, false; "enable before mocks, explicit removal")]
+    #[test_case::test_case(true, false; "enable after mocks, explicit removal")]
+    #[test_case::test_case(false, true; "enable before mocks, empty payload")]
+    #[test_case::test_case(true, true; "enable after mocks, empty payload")]
+    #[tokio::test]
+    async fn git_mirrors_sparse_updates_and_removals(
+        enable_late: bool,
+        empty_payload: bool,
+    ) -> Result<()> {
+        let registry = TestRegistry::new().await?;
+        if !enable_late {
+            registry.enable_git_index().await?;
+        }
+        registry
+            .mock_index_response(&KRATE, [registry_entry(&KRATE, &V1, None, true)])
+            .await;
+        let path = registry.enable_git_index().await?.to_file_path().unwrap();
+        let before = registry.git_head().await?;
+        let old_payload = if enable_late {
+            None
+        } else {
+            Some(serde_json::to_vec(&registry_entry(
+                &KRATE, &V1, None, true,
+            ))?)
+        };
+        let repo = gix::open(&path)?;
+        assert_eq!(blob(&repo, &before, "kr/at/krate")?, old_payload.clone());
+
+        // The previous sparse response has not been requested yet. Replacement
+        // must still serve the latest state, matching the new Git commit.
+        let versions = [
+            registry_entry(&KRATE, &V1, None, false),
+            registry_entry(&KRATE, &V2, None, false),
+        ];
+        registry.mock_index_response(&KRATE, &versions).await;
+        let after = registry.git_head().await?;
+        assert_ne!(before, after);
+        let expected = versions
+            .iter()
+            .map(|v| serde_json::to_string(v).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(
+            blob(&repo, &after, "kr/at/krate")?,
+            Some(expected.into_bytes())
+        );
+        let sparse = registry.api().get_crate_from_index(&KRATE).await?.unwrap();
+        assert_eq!(sparse.versions().len(), 2);
+        assert!(!sparse.versions()[0].is_yanked());
+        assert_eq!(blob(&repo, &before, "kr/at/krate")?, old_payload);
+
+        let config_before = blob(&repo, &before, "config.json")?;
+        assert!(config_before.is_some());
+        if empty_payload {
+            registry
+                .mock_index_response(&KRATE, Vec::<serde_json::Value>::new())
+                .await;
+        } else {
+            registry.mock_index_missing(&KRATE).await;
+        }
+        let removed = registry.git_head().await?;
+        assert_ne!(after, removed);
+        assert_eq!(blob(&repo, &removed, "kr/at/krate")?, None);
+        assert_eq!(blob(&repo, &removed, "config.json")?, config_before);
+        assert!(registry.api().get_crate_from_index(&KRATE).await?.is_none());
+        Ok(())
+    }
+
+    #[test_case::test_case(false; "Git already enabled")]
+    #[test_case::test_case(true; "Git enabled after empty payload")]
+    #[tokio::test]
+    async fn empty_payload_has_no_git_entry(enable_late: bool) -> Result<()> {
+        let registry = TestRegistry::new().await?;
+        if !enable_late {
+            registry.enable_git_index().await?;
+        }
+        registry
+            .mock_index_response(&KRATE, Vec::<serde_json::Value>::new())
+            .await;
+        let path = registry.enable_git_index().await?.to_file_path().unwrap();
+        let head = registry.git_head().await?;
+        assert_eq!(blob(&gix::open(path)?, &head, "kr/at/krate")?, None);
+        let url = registry.api.sparse_index.crate_url(KRATE.as_str()).unwrap();
+        assert_eq!(reqwest::get(url).await?.status(), StatusCode::NOT_FOUND);
+        Ok(())
     }
 }

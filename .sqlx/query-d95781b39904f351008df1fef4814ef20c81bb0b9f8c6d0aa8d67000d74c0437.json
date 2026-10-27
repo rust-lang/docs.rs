@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                pg_advisory_xact_lock(\n                    hashtext(current_schema()),\n                    hashtext('docs_rs_registry')\n                )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pg_advisory_xact_lock",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d95781b39904f351008df1fef4814ef20c81bb0b9f8c6d0aa8d67000d74c0437"
+}

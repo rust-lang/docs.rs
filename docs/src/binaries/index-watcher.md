@@ -30,6 +30,23 @@ $ just watcher queue set-last-seen-reference <GIT_REF>
 
 Omit the reference, or pass `--head`, to reset it to the index's current HEAD.
 
+## Scheduled database synchronization
+
+Run `just watcher database synchronize` to repair inconsistencies. Full
+synchronization reads the index at the watcher's last-seen commit, or the
+fetched HEAD when no last-seen reference has been set. Synchronization does not
+initialize or advance the reference.
+
+Synchronization, registry polling, and manual reference changes share a database
+lock. The watcher can remain running: it waits while synchronization runs, then
+processes changes after that reference. Builders continue running. Concurrent
+synchronizations also wait for each other. Use `--dry-run` to inspect repairs;
+it takes the same lock and reads the same commit.
+
+Single-crate synchronization uses the same Git snapshot selection: the watcher's
+last-seen commit, or fetched HEAD when no reference exists. It takes the same
+lock while checking and repairing the crate, without advancing the reference.
+
 ## Watching a subset of crates
 
 Set `DOCSRS_ONLY_EXISTING_CRATES=true` to keep a smaller database in
