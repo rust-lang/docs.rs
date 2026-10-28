@@ -9,8 +9,8 @@ const spawn = require("child_process").spawn;
 
 async function main(argv) {
     let server = "http://127.0.0.1:3000";
-    if (typeof process.env.SERVER_URL !== "undefined") {
-        server = process.env.SERVER_URL;
+    if (typeof process.env.DOCSRS_WEB_SERVER_URL !== "undefined") {
+        server = process.env.DOCSRS_WEB_SERVER_URL;
     }
     let nodeModulePath = "./node_modules";
     if (typeof process.env.NODE_MODULE_PATH !== "undefined") {

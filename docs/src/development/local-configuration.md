@@ -49,6 +49,18 @@ fixtures through the packaged admin and builder images before testing the
 packaged web image. The ordinary local defaults favor faster host builds where
 the builder supports them.
 
+## Local web port
+
+Set `DOCSRS_WEB_PORT` in `.env` to change the web port (default: `3000`). Host
+commands, including `just web`, `just web-watch`, and `just run-gui-tests`, use
+it as the server's default listen port. An explicit socket-address CLI argument
+takes precedence. Compose publishes the same host port while its web container
+continues listening on port `3000`.
+
+The sample `.env` and Justfile derive `DOCSRS_WEB_SERVER_URL` for browser tests
+from this port. Set `DOCSRS_WEB_SERVER_URL` explicitly to test a different
+server. When running the browser runner directly, source `.env` first.
+
 ## Local S3 ports
 
 Set `DOCSRS_S3_PORT` in `.env` to change the published S3 API port (default:
