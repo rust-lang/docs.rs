@@ -247,7 +247,7 @@ services:
         ports:
             # Use a non-standard port on the host to avoid conflicting
             # with existing postgres servers
-            - "127.0.0.1:15432:5432"
+            - "127.0.0.1:${DOCSRS_POSTGRES_PORT:-15432}:5432"
         healthcheck:
             <<: *healthcheck-interval
             test: pg_isready --username cratesfyi

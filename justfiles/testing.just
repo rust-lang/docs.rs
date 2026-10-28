@@ -40,6 +40,8 @@ run-gui-tests: _ensure_db_migrated
     #!/usr/bin/env bash
     set -euo pipefail
 
+    export SQLX_OFFLINE=true
+
     cargo build -p docs_rs_web
 
     web_pid=""
@@ -86,12 +88,13 @@ run-tests: compose-up-resources _build-test-binaries
     #!/usr/bin/env bash
     set -euo pipefail
 
+    export SQLX_OFFLINE=true
+
     export DOCSRS_INCLUDE_DEFAULT_TARGETS=false
     export DOCSRS_LOG=docs_rs=debug,rustwide=info
     export RUST_BACKTRACE=1
     export DOCSRS_PREFIX=ignored/cratesfyi-prefix
     export DOCSRS_RUSTSEC_ADVISORY_DB=ignored/rustsec-advisory-db
-    export DOCSRS_DATABASE_URL=postgresql://cratesfyi:password@localhost:15432
     export AWS_ACCESS_KEY_ID=cratesfyi
     export AWS_SECRET_ACCESS_KEY=secret_key
     export S3_ENDPOINT=http://localhost:9000
@@ -103,13 +106,15 @@ run-tests: compose-up-resources _build-test-binaries
 # Should be migrated to some test-tagging (with nextest?) at some point
 [group('testing')]
 run-stress-tests:
-    cargo test -p docs_rs_storage --features stress-tests archive_index::tests::stress_tests
+    SQLX_OFFLINE=true cargo test -p docs_rs_storage --features stress-tests archive_index::tests::stress_tests
 
 # Run ignored builder integration tests serially.
 [group('testing')]
 run-builder-tests: compose-up-resources
     #!/usr/bin/env bash
     set -euo pipefail
+
+    export SQLX_OFFLINE=true
 
     export DOCSRS_INCLUDE_DEFAULT_TARGETS=true
     export DOCSRS_DOCKER_IMAGE=ghcr.io/rust-lang/crates-build-env/linux-micro

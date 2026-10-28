@@ -8,7 +8,6 @@ env:
   RUST_BACKTRACE: 1
   RUST_CACHE_KEY: rust-cache-20241114
   DOCSRS_PREFIX: ignored/cratesfyi-prefix
-  DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@localhost:15432
   DOCSRS_LOG: docs_rs=debug,rustwide=info
   AWS_ACCESS_KEY_ID: cratesfyi
   AWS_SECRET_ACCESS_KEY: secret_key
