@@ -152,10 +152,12 @@ services:
             s3:
                 condition: service_healthy
         ports:
-            - "3000:3000"
+            - "${DOCSRS_WEB_PORT:-3000}:3000"
         environment:
             <<: *environment
             DOCSRS_RENDER_THREADS: 2
+            # Keep the container listener fixed while the published host port varies.
+            DOCSRS_WEB_PORT: 3000
             DOCSRS_RUSTSEC_ADVISORY_DB: /opt/docsrs/rustsec-advisory-db
         env_file:
             - .env

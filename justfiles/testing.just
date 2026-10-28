@@ -27,7 +27,7 @@ prepare-gui-tests:
     just _builder build add-essential-files
     just cli database alert set --alert-id 123 'Scheduled <em>maintenance</em>'
 
-# Run browser assertions against an existing web server on localhost:3000.
+# Run browser assertions against DOCSRS_WEB_SERVER_URL (defaults to the local web port).
 [group('testing')]
 run-gui-browser-tests:
     npm install --loglevel verbose
@@ -59,7 +59,7 @@ run-gui-tests: _ensure_db_migrated
 
     # Fail instead of waiting forever if the server fails to start.
     for _ in {1..100}; do
-      if curl --silent --fail http://localhost:3000/ >/dev/null; then
+      if curl --silent --fail "$DOCSRS_WEB_SERVER_URL/" >/dev/null; then
         break
       fi
       if ! kill -0 "$web_pid" 2>/dev/null; then
@@ -68,7 +68,7 @@ run-gui-tests: _ensure_db_migrated
       sleep 0.2
     done
 
-    curl --silent --fail http://localhost:3000/ >/dev/null
+    curl --silent --fail "$DOCSRS_WEB_SERVER_URL/" >/dev/null
     just run-gui-browser-tests
 
 # Run GUI tests against the packaged web-server Compose service.

@@ -11,8 +11,9 @@ use std::{net::SocketAddr, sync::Arc};
     rename_all = "kebab-case",
 )]
 struct Cli {
-    #[arg(name = "SOCKET_ADDR", default_value = "0.0.0.0:3000")]
-    socket_addr: SocketAddr,
+    /// Listen address (defaults to 0.0.0.0 on DOCSRS_WEB_PORT, or port 3000).
+    #[arg(name = "SOCKET_ADDR")]
+    socket_addr: Option<SocketAddr>,
 }
 
 #[tokio::main]
@@ -20,10 +21,17 @@ async fn main() -> anyhow::Result<()> {
     let _guard = docs_rs_logging::init_from_environment().context("error initializing logging")?;
 
     let args = Cli::parse();
+    let socket_addr = match args.socket_addr {
+        Some(addr) => addr,
+        None => SocketAddr::from((
+            [0, 0, 0, 0],
+            docs_rs_env_vars::env("DOCSRS_WEB_PORT", 3000)?,
+        )),
+    };
     let context = build_context().await?;
     let config = Arc::new(Config::from_environment()?);
 
-    run_web_server(Some(args.socket_addr), config, context).await?;
+    run_web_server(Some(socket_addr), config, context).await?;
 
     Ok(())
 }
