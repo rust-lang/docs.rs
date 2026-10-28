@@ -97,7 +97,6 @@ run-tests: compose-up-resources _build-test-binaries
     export DOCSRS_RUSTSEC_ADVISORY_DB=ignored/rustsec-advisory-db
     export AWS_ACCESS_KEY_ID=cratesfyi
     export AWS_SECRET_ACCESS_KEY=secret_key
-    export S3_ENDPOINT=http://localhost:9000
 
     cargo nextest run --workspace --locked --no-fail-fast
 

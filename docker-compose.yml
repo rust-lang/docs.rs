@@ -256,8 +256,8 @@ services:
         image: rustfs/rustfs:latest
         command: /data
         ports:
-            - "127.0.0.1:9000:9000"
-            - "127.0.0.1:9001:9001"
+            - "127.0.0.1:${DOCSRS_S3_PORT:-9000}:9000"
+            - "127.0.0.1:${DOCSRS_S3_CONSOLE_PORT:-9001}:9001"
         volumes:
             - rustfs-data:/data
         environment:

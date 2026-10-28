@@ -55,6 +55,16 @@ fixtures through the packaged admin and builder images before testing the
 packaged web image. The ordinary local defaults favor faster host builds where
 the builder supports them.
 
+## Local S3 ports
+
+Set `DOCSRS_S3_PORT` in `.env` to change the published S3 API port (default:
+`9000`), and `DOCSRS_S3_CONSOLE_PORT` to change the RustFS console port
+(default: `9001`). The sample `.env` derives `S3_ENDPOINT` from the API port;
+the `Justfile` generates the same endpoint when it is unset. For an existing
+`.env`, update a hardcoded `S3_ENDPOINT` to match `.env.sample`, or remove it to
+use the Justfile default. Explicit endpoint overrides take precedence.
+Containers continue using `http://s3:9000`.
+
 ## Accessing PostgreSQL
 
 Set `DOCSRS_POSTGRES_PORT` in `.env` to change the host port published by
