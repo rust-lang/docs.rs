@@ -76,7 +76,7 @@ format-markdown:
 [group('linting')]
 clippy *args:
     rustup component add clippy
-    cargo clippy \
+    SQLX_OFFLINE=true cargo clippy \
       --all-features \
       --all-targets \
       --workspace \
@@ -90,7 +90,7 @@ clippy-fix: (clippy "--fix --allow-dirty --allow-staged")
 
 # Run Rust linting, applying fixes outside CI.
 [group('linting')]
-lint-rust: compose-up-resources
+lint-rust:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -157,6 +157,9 @@ lint-dependencies-machete:
 lint-dependencies-udeps:
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Compile against committed query metadata without requiring a migrated DB.
+    export SQLX_OFFLINE=true
 
     # check unused deps with cargo udeps.
     # Optional, since udeps is much slower because it

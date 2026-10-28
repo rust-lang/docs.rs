@@ -57,6 +57,18 @@ the builder supports them.
 
 ## Accessing PostgreSQL
 
+Set `DOCSRS_POSTGRES_PORT` in `.env` to change the host port published by
+Compose (default: `15432`). The sample `.env` derives `DOCSRS_DATABASE_URL`
+and SQLx's `DATABASE_URL` from that port. The `Justfile` also generates these
+URLs when they are unset, and exports the port to Compose, including when
+recipes use `--env-file .docker.env`. Containers continue connecting to
+`db:5432` regardless of the published host port.
+
+If you have an existing `.env` with a hardcoded database URL, update it to use
+the variable references from `.env.sample`, or remove the URL settings to use
+the Justfile defaults. Explicit URL overrides take precedence over generated
+defaults.
+
 After starting the local database, open a `psql` session with:
 
 ```console
