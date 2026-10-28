@@ -39,8 +39,7 @@ struct TestRegistryInner {
 /// entries behave as not found. Enable the optional Git index to mirror those
 /// entries into a local repository with a commit for each update.
 pub struct TestRegistry {
-    // cargo_home: tempfile::TempDir,
-    cargo_home: PathBuf,
+    cargo_home: tempfile::TempDir,
     inner: Mutex<TestRegistryInner>,
     api: Arc<RegistryApi>,
     config: Arc<Config>,
@@ -73,7 +72,7 @@ impl TestRegistry {
         index_config: Option<crates_index::IndexConfig>,
         meter_provider: Option<docs_rs_opentelemetry::AnyMeterProvider>,
     ) -> Result<Self> {
-        let cargo_home = spawn_blocking(|| Ok(tempfile::tempdir()?.keep())).await?;
+        let cargo_home = spawn_blocking(|| Ok(tempfile::tempdir()?)).await?;
         let api_server = mockito::Server::new_async().await;
         let mut index_server = mockito::Server::new_async().await;
         let download_server = mockito::Server::new_async().await;
@@ -95,7 +94,7 @@ impl TestRegistry {
         // Persistent Cargo/Rustwide workspaces cache registry configuration by URL.
         // Ports can be reused after a test exits, so include the unique fixture directory
         // in the index URL to avoid reusing a previous registry's download endpoint.
-        let index_prefix = cargo_home.as_path().file_name().unwrap().to_str().unwrap();
+        let index_prefix = cargo_home.path().file_name().unwrap().to_str().unwrap();
         let config_path = format!("/{index_prefix}/config.json");
         let index_config_payload = serde_json::to_string(&serde_json::json!({
             "dl": index_config.dl,
@@ -122,7 +121,7 @@ impl TestRegistry {
             index_url.clone(),
             retries,
             token.clone(),
-            Some(cargo_home.as_path()),
+            Some(cargo_home.path()),
             &meter_provider,
         )
         .await?;
@@ -193,7 +192,7 @@ impl TestRegistry {
         let path = if let Some(path) = &inner.git_index {
             path.clone()
         } else {
-            let path = self.cargo_home.as_path().join("git-index");
+            let path = self.cargo_home.path().join("git-index");
             let mut entries = BTreeMap::new();
             entries.insert("config.json".into(), inner.index_config.clone());
             let init_path = path.clone();
@@ -645,7 +644,7 @@ mod git_tests {
         assert_eq!(url.scheme(), "file");
         assert_eq!(
             url.to_file_path().unwrap(),
-            registry.cargo_home.join("git-index")
+            registry.cargo_home.path().join("git-index")
         );
         assert_eq!(registry.enable_git_index().await?, url);
         registry
