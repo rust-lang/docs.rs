@@ -61,8 +61,8 @@ x-healthcheck: &healthcheck-interval
     start_period: 10s
 
 x-environment: &environment
-    # needed default environment that can be overwritten in `.docker.env`
-    # Example in `.docker.env.sample`
+    # needed default environment that can be overwritten in `.env`
+    # Example in `.env.sample`
     RUST_BACKTRACE: ${RUST_BACKTRACE:-true}
     DOCSRS_LOG: ${DOCSRS_LOG:-docs_rs=trace,tower_http=debug,rustwide=info,aws_smithy_http=trace,axum=debug}
 
@@ -80,7 +80,7 @@ x-environment: &environment
 
 x-builder-environment: &builder-environment
     <<: *environment
-    # default builder environment that can be overwritten in `.docker.env`
+    # default builder environment that can be overwritten in `.env`
     DOCSRS_INCLUDE_DEFAULT_TARGETS: ${DOCSRS_INCLUDE_DEFAULT_TARGETS:-false}
     DOCSRS_DOCKER_IMAGE: ${DOCSRS_DOCKER_IMAGE:-ghcr.io/rust-lang/crates-build-env/linux-micro}
 
@@ -115,7 +115,7 @@ x-builder: &builder
     environment:
         <<: *builder-environment
     env_file:
-        - .docker.env
+        - .env
 
 x-registry-watcher: &registry-watcher
     build:
@@ -139,7 +139,7 @@ x-registry-watcher: &registry-watcher
         # configure the rebuild-queuer,
         DOCSRS_MAX_QUEUED_REBUILDS: ${DOCSRS_MAX_QUEUED_REBUILDS:-10}
     env_file:
-        - .docker.env
+        - .env
 
 services:
     web:
@@ -158,7 +158,7 @@ services:
             DOCSRS_RENDER_THREADS: 2
             DOCSRS_RUSTSEC_ADVISORY_DB: /opt/docsrs/rustsec-advisory-db
         env_file:
-            - .docker.env
+            - .env
         volumes:
             - "./ignored/rustsec-advisory-db:/opt/docsrs/rustsec-advisory-db"
         healthcheck:
@@ -232,7 +232,7 @@ services:
         volumes:
             - "./ignored/docker-cli/prefix:/opt/docsrs/prefix"
         env_file:
-            - .docker.env
+            - .env
         profiles:
             # CLI should not be run as background daemon, just manually
             - manual
