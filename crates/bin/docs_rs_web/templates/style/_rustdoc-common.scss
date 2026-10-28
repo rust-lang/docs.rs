@@ -10,6 +10,10 @@ body.rustdoc-page > .nav-container > .container {
     margin-left: 0;
 }
 
+body.rustdoc-page > .nav-container {
+    position: fixed;
+}
+
 div.container-rustdoc {
     text-align: left;
 }

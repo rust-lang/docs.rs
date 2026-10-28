@@ -34,18 +34,22 @@ define-function: (
         set-window-size: (|width|, |window_height|)
         wait-for-css: (".nav-container > .container a > .title", {"display": |text_display|})
         wait-for: ".nav-container"
-        wait-for: "main .rust"
+        if: (|is_crate| == true, block {
+            wait-for: "main .rust"
+        })
         wait-for-document-property: {"documentElement"."clientWidth": |width|}
-        store-size: (".nav-container", {"width": nav_width})
-        store-size: ("main .rust", {"width": rust_width})
+        if: (|is_crate| == true, block {
+            store-size: (".nav-container", {"width": nav_width})
+            store-size: ("main .rust", {"width": rust_width})
 
-        assert: |nav_width| >= |rust_width|
+            assert: |nav_width| >= |rust_width|
+        })
     }
 )
 
 define-function: (
     "check-topbar-sizes",
-    [function_name],
+    [function_name, is_crate],
     block {
         set-window-size: (1100, |window_height|)
         store-size: ("body > .nav-container", {"height": top_navbar_height})
@@ -104,11 +108,11 @@ define-function: (
 )
 
 go-to: |DOC_PATH| + "/sysinfo"
-call-function: ("check-topbar-sizes", { "function_name": "check-topbar" })
+call-function: ("check-topbar-sizes", { "function_name": "check-topbar", "is_crate": true })
 
 go-to: |DOC_PATH| + "/releases/search?query=sysinfo"
-call-function: ("check-topbar-sizes", { "function_name": "check-topbar" })
+call-function: ("check-topbar-sizes", { "function_name": "check-topbar-size", "is_crate": false })
 
 go-to: |DOC_PATH| + "/sysinfo"
-call-function: ("check-topbar-sizes", { "function_name": "check-topbar-size" })
+call-function: ("check-topbar-sizes", { "function_name": "check-topbar-size", "is_crate": true })
 
