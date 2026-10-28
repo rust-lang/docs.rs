@@ -14,7 +14,9 @@ export DOCSRS_DATABASE_URL := env("DOCSRS_DATABASE_URL", "postgresql://cratesfyi
 export DATABASE_URL := env("DATABASE_URL", DOCSRS_DATABASE_URL)
 export AWS_ACCESS_KEY_ID := env("AWS_ACCESS_KEY_ID", "cratesfyi")
 export AWS_SECRET_ACCESS_KEY := env("AWS_SECRET_ACCESS_KEY", "secret_key")
-export S3_ENDPOINT := env("S3_ENDPOINT", "http://localhost:9000")
+export DOCSRS_S3_PORT := env("DOCSRS_S3_PORT", "9000")
+export DOCSRS_S3_CONSOLE_PORT := env("DOCSRS_S3_CONSOLE_PORT", "9001")
+export S3_ENDPOINT := env("S3_ENDPOINT", "http://localhost:" + DOCSRS_S3_PORT)
 
 # List available commands
 _default:
