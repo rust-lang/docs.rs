@@ -1,6 +1,5 @@
 **/ignored
 /.env
-/.docker.env
 /src/web/badge/Cargo.lock
 target
 *.css

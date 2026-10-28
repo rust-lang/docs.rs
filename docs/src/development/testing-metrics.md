@@ -18,9 +18,9 @@ Configure the docs.rs process to export OTLP metrics to it:
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
-Put this setting in `.env` when running docs.rs on the host, or in `.docker.env`
-when running it through Docker Compose. Restart the application after changing
-its environment.
+Put this setting in `.env` when running docs.rs on the host. For processes
+running through Docker Compose, use `http://opentelemetry:4317` instead. Restart
+the application after changing its environment.
 
 The collector uses OTLP over gRPC on port 4317 and writes received metrics to
 its logs. Follow them with:

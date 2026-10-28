@@ -1,12 +1,8 @@
 # Local Configuration
 
-Docs.rs uses dotenv files for local configuration. Which file to edit depends on
-where the application process runs:
-
-- `.env` configures commands and Rust binaries run directly on the host. Start
-  by copying `.env.sample`.
-- `.docker.env` configures docs.rs processes run by Docker Compose. Start by
-  copying `.docker.env.sample`, or let the `just` recipes create an empty file.
+Docs.rs uses `.env` for local configuration on the host and in Docker Compose.
+Start by copying `.env.sample`. Compose overrides connection URLs and paths with
+values appropriate for its internal network and mounted directories.
 
 The `just` command loads `.env` automatically. If you invoke `cargo` directly,
 source the file first or use a dotenv integration for your shell:
@@ -46,9 +42,7 @@ selection and name a Compose service explicitly:
 $ just docker-run builder-cli build crate regex 1.3.1
 ```
 
-`.env` controls mode selection and configures commands that run on the host.
-`.docker.env` configures the docs.rs process inside a Compose container; it does
-not select where a recipe runs.
+`.env` controls mode selection and configures both host and container processes.
 
 The GUI end-to-end CI job sets both mode variables to `docker`. It prepares
 fixtures through the packaged admin and builder images before testing the
@@ -68,11 +62,10 @@ Containers continue using `http://s3:9000`.
 ## Accessing PostgreSQL
 
 Set `DOCSRS_POSTGRES_PORT` in `.env` to change the host port published by
-Compose (default: `15432`). The sample `.env` derives `DOCSRS_DATABASE_URL`
-and SQLx's `DATABASE_URL` from that port. The `Justfile` also generates these
-URLs when they are unset, and exports the port to Compose, including when
-recipes use `--env-file .docker.env`. Containers continue connecting to
-`db:5432` regardless of the published host port.
+Compose (default: `15432`). The sample `.env` derives `DOCSRS_DATABASE_URL` and
+SQLx's `DATABASE_URL` from that port. The `Justfile` also generates these URLs
+when they are unset, and exports the port to Compose. Containers continue
+connecting to `db:5432` regardless of the published host port.
 
 If you have an existing `.env` with a hardcoded database URL, update it to use
 the variable references from `.env.sample`, or remove the URL settings to use

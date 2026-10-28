@@ -91,8 +91,8 @@ release script instead, using the same database and CDN configuration as the
 admin CLI:
 
 ```console
-$ docker run --rm --env-file .docker.env \
-    --entrypoint /usr/bin/tini docs-rs-admin:ci -- /usr/local/bin/docs_rs_release.sh
+$ docker compose run --rm --entrypoint /usr/bin/tini \
+    cli -- /usr/local/bin/docs_rs_release.sh
 ```
 
 ### Run during ECS deployment

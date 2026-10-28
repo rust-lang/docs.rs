@@ -1,5 +1,4 @@
-_touch-docker-env:
-    touch .docker.env
+_touch-env:
     touch .env
 
 _ensure_db_migrated:
