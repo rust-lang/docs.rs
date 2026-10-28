@@ -29,14 +29,14 @@ prepare-gui-tests:
 
 # Run browser assertions against DOCSRS_WEB_SERVER_URL (defaults to the local web port).
 [group('testing')]
-run-gui-browser-tests:
+run-gui-browser-tests *args:
     npm install --loglevel verbose
     npx --no-install puppeteer browsers install chrome
-    node ./gui-tests/tester.js
+    node ./gui-tests/tester.js {{ args }}
 
 # Run GUI tests with the web server on the host, reusing existing fixtures.
 [group('testing')]
-run-gui-tests: _ensure_db_migrated
+run-gui-tests *args: _ensure_db_migrated
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -69,7 +69,7 @@ run-gui-tests: _ensure_db_migrated
     done
 
     curl --silent --fail "$DOCSRS_WEB_SERVER_URL/" >/dev/null
-    just run-gui-browser-tests
+    just run-gui-browser-tests {{ args }}
 
 # Run GUI tests against the packaged web-server Compose service.
 [group('testing')]
