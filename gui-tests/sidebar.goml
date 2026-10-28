@@ -1,14 +1,16 @@
-// Checks the sidebar display.
-go-to: |DOC_PATH| + "/sysinfo"
+// Checks the sidebar display. We use `gethostname` because it allows to trigger a bug where the
+// content of the page is too small, making the sidebar being positioned under docs.rs top navbar.
+go-to: |DOC_PATH| + "/gethostname"
 
-set-window-size: (1000, 1000)
+set-window-size: (1000, 2000)
 
 // First we check that the rustdoc sidebar is not overlaying the docs.rs topbar.
 store-size: (".rustdoc-page .nav-container", {"height": topbar_height})
+assert-css: (".rustdoc-page .nav-container", {"position": "fixed"})
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 
 // We check the same in "mobile mode".
-set-window-size: (600, 1000)
+set-window-size: (600, 2000)
 wait-for-css-false: ("rustdoc-topbar", {"display": "none"})
 assert-position: ("rustdoc-topbar", {"y": |topbar_height|, "x": 0})
 // We check when the sidebar is shown now.
@@ -22,7 +24,7 @@ assert-position: (".rustdoc .sidebar.shown", {
 })
 
 // We reset the window's size.
-set-window-size: (1000, 1000)
+set-window-size: (1000, 2000)
 
 // We now go to the source code page.
 wait-for: ".main-heading a.src"
@@ -30,6 +32,7 @@ click: ".main-heading a.src"
 
 // We wait for the page to load (by waiting for the sidebar to be filled)...
 wait-for: "#src-sidebar"
+assert-css: (".rustdoc-page .nav-container", {"position": "fixed"})
 // We check that the sidebar has the correct position.
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 // We expand the sidebar.
@@ -39,6 +42,12 @@ wait-for: ".src-sidebar-expanded"
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
 
 // We check in "mobile mode".
-set-window-size: (600, 1000)
+set-window-size: (600, 2000)
 // We check the position again.
 assert-position: (".rustdoc .sidebar", {"y": |topbar_height|, "x": 0})
+
+// And now we ensure that the top navbar position is "sticky" and not fixed for non-rustdoc pages.
+go-to: |DOC_PATH|
+assert-css: ("body > .nav-container", {"position": "sticky"})
+go-to: |DOC_PATH| + "/releases/queue"
+assert-css: ("body > .nav-container", {"position": "sticky"})
