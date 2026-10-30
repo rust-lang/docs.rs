@@ -873,14 +873,6 @@ impl Index {
         Ok(Self { conn })
     }
 
-    /// Number of files stored in the archive.
-    pub async fn file_count(&mut self) -> Result<u64> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM files")
-            .fetch_one(&mut self.conn)
-            .await?;
-        Ok(count.try_into()?)
-    }
-
     #[instrument(skip(self))]
     pub async fn find<P>(&mut self, search_for: P) -> Result<Option<FileInfo>>
     where
