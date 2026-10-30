@@ -274,14 +274,18 @@ mod test {
                 .await?
                 .text()
                 .await?;
-            assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
+            let vendored_css = format!(
+                r#"href="/-/static/v/{}/vendored.css""#,
+                slug::slugify(crate::BUILD_VERSION),
+            );
+            assert_eq!(output.matches(&vendored_css).count(), 1);
 
             let output = web
                 .get(&format!("/testing/{V1}/2022/"))
                 .await?
                 .text()
                 .await?;
-            assert_eq!(output.matches(r#"href="/-/static/vendored.css"#).count(), 1);
+            assert_eq!(output.matches(&vendored_css).count(), 1);
 
             Ok(())
         });
