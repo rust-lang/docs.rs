@@ -96,6 +96,18 @@ pub mod filters {
     use std::fmt::Display;
     use std::time::Duration;
 
+    /// Format an integer with commas separating groups of three digits.
+    #[askama::filter_fn]
+    pub fn thousands(value: u64, _: &dyn Values) -> askama::Result<String> {
+        let mut number = value.to_string();
+        let mut separator = number.len();
+        while separator > 3 {
+            separator -= 3;
+            number.insert(separator, ',');
+        }
+        Ok(number)
+    }
+
     pub fn escape_html_inner(input: &str) -> askama::Result<impl Display> {
         if !input.chars().any(|c| "&<>\"'/".contains(c)) {
             return Ok(Cow::Borrowed(input));
@@ -299,6 +311,18 @@ mod tests {
     use super::*;
     use std::{any::Any, collections::HashMap, time::Duration};
     use test_case::test_case;
+
+    #[test_case(0 => "0"; "zero")]
+    #[test_case(999 => "999"; "no separator")]
+    #[test_case(1000 => "1,000"; "thousand")]
+    #[test_case(1_234_567_890 => "1,234,567,890"; "billion")]
+    #[test_case(u64::MAX => "18,446,744,073,709,551,615"; "maximum")]
+    fn test_thousands(value: u64) -> String {
+        let values: HashMap<&str, Box<dyn Any>> = HashMap::new();
+        filters::thousands::default()
+            .execute(value, &values)
+            .unwrap()
+    }
 
     #[test_case(Duration::from_secs(0) => "0s"; "zero")]
     #[test_case(Duration::from_secs(1) => "1s"; "simple")]

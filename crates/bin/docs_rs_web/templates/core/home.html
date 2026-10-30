@@ -14,19 +14,30 @@ centered
     <div class="container landing">
         <h1 class="brand">{{ crate::icons::IconCubes.render_solid(false, false, "") }} Docs.rs</h1>
 
-        <form action="/releases/search" method="GET" class="landing-search-form">
-            <div>
-                <input class="search-input" id="search" name="query" type="text" aria-label="Find crate by search query"
-                    placeholder="Type 'S' or '/' to search" autofocus>
-            </div>
+        <div class="landing-search-and-statistics">
+            <form action="/releases/search" method="GET" class="landing-search-form">
+                <div>
+                    <input class="search-input" id="search" name="query" type="text" aria-label="Find crate by search query"
+                        placeholder="Type 'S' or '/' to search" autofocus>
+                </div>
 
-            <div class="buttons">
-                <button type="submit" class="pure-button pure-button-normal">Search</button>
-                <button type="submit" class="pure-button pure-button-normal" name="i-am-feeling-lucky" value="1">
-                    I'm Feeling Lucky
-                </button>
-            </div>
-        </form>
+                <div class="buttons">
+                    <button type="submit" class="pure-button pure-button-normal">Search</button>
+                    <button type="submit" class="pure-button pure-button-normal" name="i-am-feeling-lucky" value="1">
+                        I'm Feeling Lucky
+                    </button>
+                </div>
+            </form>
+            {% if let Some(stats) = documentation_statistics %}
+                <div class="documentation-statistics" title="Last updated: {{ (&stats.last_updated())|timeformat }}">
+                    <div>
+                        <strong class="documentation-file-count">{{ stats.documentation_file_count()|thousands }}</strong>
+                        <span class="documentation-statistics-label">Documentation files hosted</span>
+                    </div>
+                    {{ crate::icons::IconFileLines.render_regular(false, false, "documentation-statistics-icon") }}
+                </div>
+            {% endif %}
+        </div>
     </div>
 
     <div class="container">

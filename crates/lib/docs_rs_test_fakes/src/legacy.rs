@@ -99,6 +99,7 @@ pub struct FakeBuild {
     /// new build logs: we have a record in the `builds_logs` table for each log, including a status
     /// old build logs: people have to run `s3 ls` with prefix to know which build logs exist
     legacy_build_logs: bool,
+    documentation_file_count: Option<u64>,
 }
 
 const DEFAULT_CONTENT: &[u8] =
@@ -640,6 +641,13 @@ impl FakeBuild {
         }
     }
 
+    pub fn documentation_file_count(self, documentation_file_count: Option<u64>) -> Self {
+        Self {
+            documentation_file_count,
+            ..self
+        }
+    }
+
     pub fn legacy_build_logs(self, legacy_build_logs: bool) -> Self {
         Self {
             legacy_build_logs,
@@ -663,7 +671,7 @@ impl FakeBuild {
             &self.docsrs_version,
             self.build_status,
             Some(ByteSize::b(42)),
-            Some(33),
+            self.documentation_file_count,
             self.memory_peak,
             None::<&SimpleBuildError>,
         )
@@ -723,6 +731,7 @@ impl Default for FakeBuild {
             build_status: BuildStatus::Success,
             memory_peak: Some(23u64.into()),
             legacy_build_logs: false,
+            documentation_file_count: Some(33),
         }
     }
 }

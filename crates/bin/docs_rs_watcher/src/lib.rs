@@ -6,6 +6,7 @@ pub mod index_watcher;
 mod metrics;
 mod rebuilds;
 mod service_metrics;
+mod statistics;
 #[cfg(test)]
 mod testing;
 
@@ -86,6 +87,20 @@ pub async fn start_background_service_metric_collector(context: &Context) -> Res
             }
         },
     );
+    Ok(())
+}
+
+pub async fn start_background_statistics_collector(context: &Context) -> Result<()> {
+    let pool = context.pool()?.clone();
+
+    start_async_cron("statistics collector", Duration::from_mins(5), move || {
+        let pool = pool.clone();
+        async move {
+            let mut conn = pool.get_async().await?;
+            statistics::gather_documentation_statistics(&mut conn).await
+        }
+    });
+
     Ok(())
 }
 

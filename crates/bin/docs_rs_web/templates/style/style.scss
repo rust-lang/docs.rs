@@ -241,8 +241,12 @@ div.landing {
     }
 
     form.landing-search-form {
-        max-width: 500px;
-        margin: 0 auto;
+        grid-column: 2;
+        box-sizing: border-box;
+        min-width: 0;
+        width: 100%;
+        max-width: 532px;
+        margin: 0;
         padding: 0.4em 1em;
 
         div.buttons {
@@ -252,6 +256,50 @@ div.landing {
 
     input#search {
         margin: 0;
+    }
+
+    .landing-search-and-statistics {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 532px) minmax(0, 1fr);
+        align-items: start;
+        gap: 24px;
+    }
+
+    .documentation-statistics {
+        grid-column: 3;
+        justify-self: end;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-shrink: 0;
+        padding-top: 0.4em;
+        text-align: right;
+
+        .documentation-statistics-label {
+            display: block;
+            margin-top: 6px;
+            font-size: 0.875em;
+            opacity: 0.75;
+        }
+    }
+
+    .documentation-statistics-icon {
+        font-size: 3em;
+        color: var(--color-navbar-standard);
+    }
+
+    .documentation-file-count {
+        display: block;
+        font-size: 2em;
+        line-height: 1.2;
+    }
+
+    @media (max-width: 1100px) {
+        .landing-search-and-statistics {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
     }
 }
 

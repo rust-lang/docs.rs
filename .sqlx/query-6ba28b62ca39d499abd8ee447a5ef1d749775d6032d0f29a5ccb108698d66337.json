@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(SUM(b.documentation_file_count), 0)::BIGINT AS \"count!\"\n           FROM releases r\n           JOIN (\n               SELECT DISTINCT ON (rid) rid, documentation_file_count\n               FROM builds\n               WHERE build_status = 'success'\n               ORDER BY rid, id DESC\n           ) b ON b.rid = r.id\n           WHERE r.rustdoc_status = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6ba28b62ca39d499abd8ee447a5ef1d749775d6032d0f29a5ccb108698d66337"
+}
