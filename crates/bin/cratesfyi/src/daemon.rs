@@ -4,7 +4,8 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_watcher::{
     start_background_queue_rebuild, start_background_repository_stats_updater,
-    start_background_service_metric_collector, watch_registry,
+    start_background_service_metric_collector, start_background_statistics_collector,
+    watch_registry,
 };
 use docs_rs_web::run_web_server;
 use std::sync::Arc;
@@ -67,8 +68,9 @@ pub fn start_daemon(context: Context) -> Result<(), Error> {
         start_background_queue_rebuild(watcher_config, &context.clone()).await?;
 
         // when people run the daemon, we assume the daemon is the one single process where
-        // we can collect the service metrics.
+        // we can collect the service metrics & statistics.
         start_background_service_metric_collector(&context).await?;
+        start_background_statistics_collector(&context).await?;
 
         Ok::<(), Error>(())
     })?;
