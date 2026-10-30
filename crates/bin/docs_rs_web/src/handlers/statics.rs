@@ -399,11 +399,13 @@ mod tests {
     #[test_case("style.css", Some("previous-build"))]
     #[test_case("font-awesome.css", Some("previous-build"))]
     #[tokio::test(flavor = "multi_thread")]
-    async fn versioned_css_references(filename: &str, build_slug: Option<&str>) -> Result<()> {
+    async fn versioned_css_references(filename: &str, asset_hash: Option<&str>) -> Result<()> {
         let env = TestEnvironment::new().await?;
         let web = env.web_app().await;
-        let current_slug = slug::slugify(crate::BUILD_VERSION);
-        let prefix = format!("/-/static/v/{}/", build_slug.unwrap_or(&current_slug));
+        let prefix = format!(
+            "/-/static/v/{}/",
+            asset_hash.unwrap_or(crate::STATIC_ASSET_HASH)
+        );
         let path = format!("{prefix}{filename}");
         let response = web
             .assert_success_cached(&path, CachePolicy::ForeverInCdnAndBrowser, env.config())
@@ -443,7 +445,7 @@ mod tests {
 
                     for prefix in [
                         "/-/static".to_owned(),
-                        format!("/-/static/v/{}", slug::slugify(crate::BUILD_VERSION)),
+                        format!("/-/static/v/{}", crate::STATIC_ASSET_HASH),
                         "/-/static/v/previous-build".to_owned(),
                     ] {
                         let url = format!("{prefix}/{}", file.to_str().unwrap());
@@ -475,10 +477,7 @@ mod tests {
             let web = env.web_app().await;
             for path in [
                 "/-/static/whoop-de-do.png".to_owned(),
-                format!(
-                    "/-/static/v/{}/whoop-de-do.png",
-                    slug::slugify(crate::BUILD_VERSION)
-                ),
+                format!("/-/static/v/{}/whoop-de-do.png", crate::STATIC_ASSET_HASH),
                 "/-/static/unknown-build/style.css".to_owned(),
                 "/-/static/v/previous-build/whoop-de-do.png".to_owned(),
                 "/-/static/v/previous-build".to_owned(),

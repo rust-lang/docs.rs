@@ -112,12 +112,11 @@ async fn block_blacklisted_prefixes_middleware(
 
 /// generate a cdn-cached temporary redirect.
 pub(crate) fn cached_static_redirect(uri: &str) -> impl IntoResponse {
-    let build_slug = slug::slugify(crate::BUILD_VERSION);
     (
         Extension(CachePolicy::ForeverInCdn(
             SURROGATE_KEY_DOCSRS_STATIC.into(),
         )),
-        Redirect::temporary(&format!("/-/static/v/{build_slug}/{uri}")),
+        Redirect::temporary(&format!("/-/static/v/{}/{uri}", crate::STATIC_ASSET_HASH)),
     )
 }
 
@@ -161,11 +160,11 @@ pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<
                 CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
             ),
         )
-        // The slug only busts caches; older pages still receive current assets.
+        // The hash only busts caches; older pages still receive current assets.
         .nest_service(
-            // serve static files with a build-/version-slug in the url.
+            // serve static files with a asset hash in the url.
             // can be cached forever in the browser & cdn.
-            "/-/static/v/{build_slug}",
+            "/-/static/v/{asset_hash}",
             build_static_router(
                 static_root_dir()?,
                 metrics,
@@ -466,7 +465,7 @@ mod tests {
 
         let target = format!(
             "/-/static/v/{}/{}",
-            slug::slugify(crate::BUILD_VERSION),
+            crate::STATIC_ASSET_HASH,
             target.strip_prefix("/-/static/").unwrap(),
         );
         let response = web

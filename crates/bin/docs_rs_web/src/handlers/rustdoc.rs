@@ -1111,7 +1111,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn favicon_redirect(path: &str) -> Result<()> {
         let env = TestEnvironment::new().await?;
-        let target = format!("/-/static/v/{}/favicon.ico", slug::slugify(BUILD_VERSION),);
+        let target = format!("/-/static/v/{}/favicon.ico", crate::STATIC_ASSET_HASH,);
         let response = env
             .web_app()
             .await
