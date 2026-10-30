@@ -5,7 +5,7 @@ use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::runtime;
 use tracing::{debug, instrument};
@@ -92,7 +92,12 @@ impl Pool {
 
     #[instrument(skip_all)]
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
-        match self.async_pool.acquire().await {
+        let start = Instant::now();
+        let result = self.async_pool.acquire().await;
+        self.otel_metrics
+            .acquire_duration
+            .record(start.elapsed().as_secs_f64(), &[]);
+        match result {
             Ok(conn) => Ok(AsyncPoolClient {
                 inner: Some(conn),
                 runtime: self.runtime.clone(),
@@ -193,5 +198,30 @@ impl Drop for AsyncPoolClient {
     fn drop(&mut self) {
         let _guard = self.runtime.enter();
         drop(self.inner.take())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use docs_rs_config::AppConfig as _;
+    use docs_rs_opentelemetry::testing::TestMetrics;
+
+    #[tokio::test]
+    async fn acquire_duration_includes_success_and_failure() -> anyhow::Result<()> {
+        let metrics = TestMetrics::new();
+        let pool = Pool::new(&Config::test_config()?, metrics.provider()).await?;
+
+        drop(pool.get_async().await?);
+        pool.async_pool.close().await;
+        assert!(pool.get_async().await.is_err());
+
+        let collected = metrics.collected_metrics();
+        let metric = collected.get_metric("pool", "docsrs.db.pool.acquire_duration")?;
+        assert_eq!(metric.unit(), "s");
+        let histogram = metric.get_f64_histogram();
+        assert_eq!(histogram.count(), 2);
+        assert!(histogram.sum() > 0.0);
+        Ok(())
     }
 }
