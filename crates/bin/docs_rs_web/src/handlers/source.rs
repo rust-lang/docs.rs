@@ -153,15 +153,6 @@ pub(crate) async fn source_browser_handler(
 
     let show_parent_link = current_folder.is_some();
 
-    let file_list = FileList::from_archive_index(
-        &storage,
-        params.name(),
-        version,
-        row.latest_build_id,
-        current_folder,
-    )
-    .await?;
-
     let metadata = MetaData::from_crate(
         &mut conn,
         params.name(),
@@ -173,6 +164,15 @@ pub(crate) async fn source_browser_handler(
     // NOTE: we want to give back the db connection to the pool
     // before we do the long S3 requests.
     drop(conn);
+
+    let file_list = FileList::from_archive_index(
+        &storage,
+        params.name(),
+        version,
+        row.latest_build_id,
+        current_folder,
+    )
+    .await?;
 
     // try to get actual file first
     // skip if request is a directory
