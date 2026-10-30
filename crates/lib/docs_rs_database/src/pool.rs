@@ -1,7 +1,7 @@
 use crate::{Config, errors::PoolError, metrics::PoolMetrics};
 use docs_rs_opentelemetry::AnyMeterProvider;
-use futures_util::{future::BoxFuture, stream::BoxStream};
-use sqlx::{AssertSqlSafe, Executor, SqlStr, postgres::PgPoolOptions};
+use futures_util::{TryStreamExt as _, future::BoxFuture, stream::BoxStream};
+use sqlx::{AssertSqlSafe, Executor, SqlStr, pool::PoolConnection, postgres::PgPoolOptions};
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -90,21 +90,25 @@ impl Pool {
         })
     }
 
-    #[instrument(skip_all)]
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
+        Ok(AsyncPoolClient {
+            inner: Some(self.acquire().await.map_err(PoolError::AsyncClientError)?),
+            runtime: self.runtime.clone(),
+        })
+    }
+
+    #[instrument(skip_all)]
+    async fn acquire(&self) -> Result<PoolConnection<sqlx::Postgres>, sqlx::Error> {
         let start = Instant::now();
         let result = self.async_pool.acquire().await;
         self.otel_metrics
             .acquire_duration
             .record(start.elapsed().as_secs_f64(), &[]);
         match result {
-            Ok(conn) => Ok(AsyncPoolClient {
-                inner: Some(conn),
-                runtime: self.runtime.clone(),
-            }),
+            Ok(conn) => Ok(conn),
             Err(err) => {
                 self.otel_metrics.failed_connections.add(1, &[]);
-                Err(PoolError::AsyncClientError(err))
+                Err(err)
             }
         }
     }
@@ -135,7 +139,13 @@ where
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
-        self.async_pool.fetch_many(query)
+        Box::pin(async_stream::try_stream! {
+            let mut conn = self.acquire().await?;
+            let mut stream = (&mut *conn).fetch_many(query);
+            while let Some(item) = stream.try_next().await? {
+                yield item;
+            }
+        })
     }
 
     fn fetch_optional<'e, 'q: 'e, E>(
@@ -146,7 +156,7 @@ where
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
-        self.async_pool.fetch_optional(query)
+        Box::pin(async move { (&mut *self.acquire().await?).fetch_optional(query).await })
     }
 
     fn prepare_with<'e>(
@@ -157,7 +167,11 @@ where
     where
         'c: 'e,
     {
-        self.async_pool.prepare_with(sql, parameters)
+        Box::pin(async move {
+            (&mut *self.acquire().await?)
+                .prepare_with(sql, parameters)
+                .await
+        })
     }
 
     fn describe<'e>(
@@ -167,7 +181,7 @@ where
     where
         'c: 'e,
     {
-        self.async_pool.describe(sql)
+        Box::pin(async move { (&mut *self.acquire().await?).describe(sql).await })
     }
 }
 
@@ -176,7 +190,7 @@ where
 /// Otherwise dropping the PoolConnection will panic because it can't spawn a task.
 #[derive(Debug)]
 pub struct AsyncPoolClient {
-    inner: Option<sqlx::pool::PoolConnection<sqlx::postgres::Postgres>>,
+    inner: Option<PoolConnection<sqlx::Postgres>>,
     runtime: runtime::Handle,
 }
 
@@ -206,6 +220,7 @@ mod tests {
     use super::*;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
+    use sqlx::SqlSafeStr as _;
 
     #[tokio::test]
     async fn acquire_duration_includes_success_and_failure() -> anyhow::Result<()> {
@@ -222,6 +237,78 @@ mod tests {
         let histogram = metric.get_f64_histogram();
         assert_eq!(histogram.count(), 2);
         assert!(histogram.sum() > 0.0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn executor_records_acquisitions_and_preserves_errors() -> anyhow::Result<()> {
+        let metrics = TestMetrics::new();
+        let pool = Pool::new(&Config::test_config()?, metrics.provider()).await?;
+
+        assert_eq!(sqlx::query("SELECT 1").fetch_all(&pool).await?.len(), 1);
+        assert!(
+            sqlx::query("SELECT 1")
+                .fetch_optional(&pool)
+                .await?
+                .is_some()
+        );
+        pool.prepare_with("SELECT 1".into_sql_str(), &[]).await?;
+        pool.describe("SELECT 1".into_sql_str()).await?;
+
+        pool.async_pool.close().await;
+        assert!(matches!(
+            sqlx::query("SELECT 1").fetch_all(&pool).await,
+            Err(sqlx::Error::PoolClosed)
+        ));
+        assert!(matches!(
+            sqlx::query("SELECT 1").fetch_optional(&pool).await,
+            Err(sqlx::Error::PoolClosed)
+        ));
+        assert!(matches!(
+            pool.prepare_with("SELECT 1".into_sql_str(), &[]).await,
+            Err(sqlx::Error::PoolClosed)
+        ));
+        assert!(matches!(
+            pool.describe("SELECT 1".into_sql_str()).await,
+            Err(sqlx::Error::PoolClosed)
+        ));
+
+        let collected = metrics.collected_metrics();
+        assert_eq!(
+            collected
+                .get_metric("pool", "docsrs.db.pool.acquire_duration")?
+                .get_f64_histogram()
+                .count(),
+            8
+        );
+        assert_eq!(
+            collected
+                .get_metric("pool", "docsrs.db.pool.failed_connections")?
+                .get_u64_counter()
+                .value(),
+            4
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn executor_stream_is_lazy_and_releases_connection_on_drop() -> anyhow::Result<()> {
+        let metrics = TestMetrics::new();
+        let mut config = Config::test_config()?;
+        config.max_pool_size = 1;
+        config.min_pool_idle = 0;
+        let pool = Pool::new(&config, metrics.provider()).await?;
+        let mut stream = sqlx::query("SELECT generate_series(1, 10)").fetch(&pool);
+
+        // Merely constructing the stream must not acquire a connection.
+        let conn = pool.get_async().await?;
+        drop(conn);
+        assert!(stream.try_next().await?.is_some());
+        drop(stream);
+
+        // Dropping a partially consumed stream returns its connection to the pool.
+        let conn = tokio::time::timeout(Duration::from_secs(2), pool.get_async()).await??;
+        drop(conn);
         Ok(())
     }
 }
