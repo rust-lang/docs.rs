@@ -22,6 +22,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::STANDARD as b64};
 use chrono::{DateTime, Utc};
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_CONTINUOUS, QueuedCrate};
+use docs_rs_database::service_config::{ConfigName, DocumentationStatistics, get_config};
 use docs_rs_registry_api::{self as registry_api, RegistryApi};
 use docs_rs_types::{Duration, KrateName, ReqVersion, Version};
 use docs_rs_uri::encode_url_path;
@@ -260,6 +261,7 @@ async fn get_search_results(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HomePage {
     recent_releases: Vec<Release>,
+    documentation_statistics: Option<DocumentationStatistics>,
 }
 
 impl_axum_webpage! {
@@ -270,8 +272,13 @@ impl_axum_webpage! {
 pub(crate) async fn home_page(mut conn: DbConnection) -> AxumResult<impl IntoResponse> {
     let recent_releases =
         get_releases(&mut conn, 1, RELEASES_IN_HOME, Order::ReleaseTime, true).await?;
+    let documentation_statistics: Option<DocumentationStatistics> =
+        get_config(&mut conn, ConfigName::DocumentationStatistics).await?;
 
-    Ok(HomePage { recent_releases })
+    Ok(HomePage {
+        recent_releases,
+        documentation_statistics,
+    })
 }
 
 #[derive(Template)]
@@ -912,6 +919,7 @@ mod tests {
     use docs_rs_database::releases::{
         finish_build, initialize_build, initialize_crate, initialize_release,
     };
+    use docs_rs_database::service_config::set_config;
     use docs_rs_registry_api::{CrateOwner, OwnerKind, SearchQuery, testing::TestRegistry};
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
     use docs_rs_types::{
@@ -2070,6 +2078,7 @@ mod tests {
     fn home_page_description_title_escapes_quotes() {
         let description = r#"A "quoted" crate description"#;
         let mut page = HomePage {
+            documentation_statistics: None,
             recent_releases: vec![Release {
                 name: FOO,
                 version: V1,
@@ -2092,6 +2101,57 @@ mod tests {
             description_element.attributes.borrow().get("title"),
             Some(description),
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn home_page_shows_cached_documentation_statistics() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let mut conn = env.async_conn().await?;
+        set_config(
+            &mut conn,
+            ConfigName::DocumentationStatistics,
+            DocumentationStatistics::new_at(
+                1_234_567_890,
+                Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap(),
+            ),
+        )
+        .await?;
+        drop(conn);
+
+        let response = env.web_app().await.assert_success("/").await?;
+        let html = kuchikiki::parse_html().one(response.text().await?);
+        let statistics = html.select_first(".documentation-statistics").unwrap();
+        assert_eq!(
+            statistics.attributes.borrow().get("title"),
+            Some("Last updated: Jan 02, 2020"),
+        );
+        assert_eq!(
+            statistics
+                .as_node()
+                .select_first(".documentation-file-count")
+                .unwrap()
+                .text_contents(),
+            "1,234,567,890",
+        );
+        assert_eq!(
+            statistics
+                .as_node()
+                .select_first(".documentation-statistics-label")
+                .unwrap()
+                .text_contents(),
+            "Documentation files hosted",
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn home_page_without_documentation_statistics() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let response = env.web_app().await.assert_success("/").await?;
+        let html = kuchikiki::parse_html().one(response.text().await?);
+        assert!(html.select_first(".documentation-statistics").is_err());
+        assert!(html.select_first(".landing-search-form").is_ok());
+        Ok(())
     }
 
     #[test]

@@ -1,9 +1,11 @@
 mod abnormalities;
+mod statistics;
 
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub use abnormalities::{Abnormality, Alert};
+pub use statistics::DocumentationStatistics;
 
 #[derive(strum::IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
@@ -14,6 +16,7 @@ pub enum ConfigName {
     Toolchain,
     Abnormality,
     Alert,
+    DocumentationStatistics,
 }
 
 pub async fn set_config(
