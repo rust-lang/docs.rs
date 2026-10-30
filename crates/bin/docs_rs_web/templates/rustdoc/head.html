@@ -7,10 +7,10 @@
 {%- endif -%}
 
 {%- if let Some(css_file) = rustdoc_css_file -%}
-    <link rel="stylesheet" href="/-/static/{{css_file}}?{{build_slug2}}" media="all" />
+    <link rel="stylesheet" href="/-/static/v/{{build_slug2}}/{{css_file}}" media="all" />
 {%- endif -%}
-<link rel="stylesheet" href="/-/static/font-awesome.css?{{build_slug2}}" media="all" />
+<link rel="stylesheet" href="/-/static/v/{{build_slug2}}/font-awesome.css" media="all" />
 
-<link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+<link rel="search" href="/-/static/v/{{build_slug2}}/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 
 <script type="text/javascript">{%- include "theme.js" -%}</script>

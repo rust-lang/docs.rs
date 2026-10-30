@@ -18,6 +18,7 @@ use crate::{
         TemplateData,
         templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     },
+    routes::cached_static_redirect,
     utils::{self, licenses},
 };
 use anyhow::{Context as _, anyhow};
@@ -245,10 +246,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         // redirect all ico requests
         // originally from:
         // https://github.com/rust-lang/docs.rs/commit/f3848a34c391841a2516a9e6ad1f80f6f490c6d0
-        return Ok(axum_cached_redirect(
-            "/-/static/favicon.ico",
-            CachePolicy::ForeverInCdnAndBrowser,
-        )?);
+        return Ok(cached_static_redirect("favicon.ico").into_response());
     }
 
     // edge case 3:
@@ -1107,6 +1105,26 @@ mod test {
     use std::{collections::BTreeMap, str::FromStr as _};
     use test_case::test_case;
     use tracing::info;
+
+    #[test_case("/rust-logo.ico")]
+    #[test_case("/some-crate/1.0.0/favicon.ico")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn favicon_redirect(path: &str) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let target = format!("/-/static/v/{}/favicon.ico", slug::slugify(BUILD_VERSION),);
+        let response = env
+            .web_app()
+            .await
+            .assert_redirect_cached(
+                path,
+                &target,
+                CachePolicy::ForeverInCdn(crate::cache::SURROGATE_KEY_DOCSRS_STATIC.into()),
+                env.config(),
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+        Ok(())
+    }
 
     fn has_content_len(headers: &HeaderMap) -> bool {
         let content_length: usize = headers
