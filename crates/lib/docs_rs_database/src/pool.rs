@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 use tokio::runtime;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 const DEFAULT_SCHEMA: &str = "public";
 
@@ -90,6 +90,7 @@ impl Pool {
         })
     }
 
+    #[instrument(skip_all)]
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
         match self.async_pool.acquire().await {
             Ok(conn) => Ok(AsyncPoolClient {
