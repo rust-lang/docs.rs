@@ -276,7 +276,7 @@ mod test {
                 .await?;
             let vendored_css = format!(
                 r#"href="/-/static/v/{}/vendored.css""#,
-                slug::slugify(crate::BUILD_VERSION),
+                crate::STATIC_ASSET_HASH,
             );
             assert_eq!(output.matches(&vendored_css).count(), 1);
 

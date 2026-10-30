@@ -8,12 +8,11 @@
         {%- block meta -%}{%- endblock meta -%}
 
         {#- Docs.rs styles -#}
-        {%- set build_slug = slug::slugify(crate::BUILD_VERSION) -%}
-        <link rel="stylesheet" href="/-/static/v/{{ build_slug }}/vendored.css" media="all" />
-        <link rel="stylesheet" href="/-/static/v/{{ build_slug }}/style.css" media="all" />
-        <link rel="stylesheet" href="/-/static/v/{{ build_slug }}/font-awesome.css" media="all" />
+        <link rel="stylesheet" href="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/vendored.css" media="all" />
+        <link rel="stylesheet" href="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/style.css" media="all" />
+        <link rel="stylesheet" href="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/font-awesome.css" media="all" />
 
-        <link rel="search" href="/-/static/v/{{ build_slug }}/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+        <link rel="search" href="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
 
         <title>{%- block title -%} Docs.rs {%- endblock title -%}</title>
 
@@ -22,8 +21,8 @@
         <script nonce="{{ csp_nonce }}">{%- include "theme.js" -%}</script>
         {%- block css -%}{%- endblock css -%}
 
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/v/{{ build_slug }}/menu.js"></script>
-        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/v/{{ build_slug }}/index.js"></script>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/menu.js"></script>
+        <script defer type="text/javascript" nonce="{{ csp_nonce }}" src="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/index.js"></script>
     </head>
 
     <body class="{% block body_classes %}{% endblock body_classes %}">
