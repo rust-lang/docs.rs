@@ -1,7 +1,7 @@
 use crate::{
     BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
-    StepFailure, StepReport, StepResult, TargetBuildResult, command::PrepareCommand,
-    utils::copy_dir_all,
+    StepFailure, StepReport, StepResult, TargetBuildResult, cargo_messages::CargoMessageCollector,
+    command::PrepareCommand, utils::copy_dir_all,
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -14,7 +14,7 @@ use docs_rs_types::{
 use docsrs_metadata::{BuildTargets, HOST_TARGET, Metadata};
 use rustwide::{
     Build,
-    cmd::Command,
+    cmd::{Command, ProcessLinesActions},
     logging::{self, LogStorage},
 };
 use std::{
@@ -63,11 +63,13 @@ fn capture_step<T>(run: impl FnOnce() -> Result<T, BuildStepError>) -> StepResul
             value,
             duration: duration.into(),
             log: None,
+            cargo_messages: None,
         }),
         Err(error) => Err(StepReport {
             value: error,
             duration: duration.into(),
             log: None,
+            cargo_messages: None,
         }),
     }
 }
@@ -87,6 +89,20 @@ fn capture_rustwide_step<T>(
         Err(ref mut r) => r.log = log,
     }
 
+    result
+}
+
+fn capture_rustwide_step_with_cargo_messages<T>(
+    max_log_size: ByteSize,
+    run: impl FnOnce(&mut CargoMessageCollector) -> Result<T, BuildStepError>,
+) -> StepResult<T> {
+    let mut cargo_messages = CargoMessageCollector::new(max_log_size.as_usize());
+    let mut result = capture_rustwide_step(max_log_size, || run(&mut cargo_messages));
+    let cargo_messages = cargo_messages.into_messages();
+    match &mut result {
+        Ok(report) => report.cargo_messages = Some(cargo_messages),
+        Err(report) => report.cargo_messages = Some(cargo_messages),
+    }
     result
 }
 
@@ -425,11 +441,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                cargo_messages.process_line(line, actions)
+            };
             self.command(target)
                 .rustdoc_args(["--output-format", "json", "--show-coverage"])
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .log_output(true)
                 .run()
                 .map_err(BuildStepError::Command)?;
@@ -457,11 +478,16 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     /// All failures retain their duration and log; the caller decides whether to abort.
     #[instrument(skip_all, fields(target))]
     pub fn build_rustdoc_json(&self, target: &str) -> StepResult<RustdocJsonOutput> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                cargo_messages.process_line(line, actions)
+            };
             self.command(target)
                 .rustdoc_args(["--output-format", "json"])
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .run()
                 .map_err(BuildStepError::Command)?;
 
@@ -523,6 +549,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             return Err(StepFailure {
                 duration: result.duration,
                 log: result.log,
+                cargo_messages: result.cargo_messages,
                 value: BuildStepError::Output(anyhow!(
                     "essential-files build did not produce {}",
                     static_files.display()
@@ -544,7 +571,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         emit: Emit,
         collect_compiler_metrics: bool,
     ) -> StepResult<HtmlOutput> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step_with_cargo_messages(self.limits.max_log_size(), |cargo_messages| {
+            let mut process_lines = |line: &str, actions: &mut ProcessLinesActions| {
+                cargo_messages.process_line(line, actions)
+            };
             let mut command = self
                 .command(target)
                 .rustdoc_arg(format!("--emit={emit}"))
@@ -563,8 +593,10 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
             }
 
             command
+                .message_format_json()
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
+                .process_lines(&mut process_lines)
                 .run()
                 .map_err(BuildStepError::Command)?;
 
@@ -598,16 +630,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
         self.build.host_target_dir().join("metrics")
     }
 
-    fn capture_rustwide_step<T>(
-        &self,
-        run: impl FnOnce() -> Result<T, BuildStepError>,
-    ) -> StepResult<T> {
-        capture_rustwide_step(self.limits.max_log_size(), run)
-    }
-
     #[instrument(skip_all, fields(source_dir = %self.build.host_source_dir().display()))]
     fn regenerate_lockfile(&self) -> StepResult<()> {
-        self.capture_rustwide_step(|| {
+        capture_rustwide_step(self.limits.max_log_size(), || {
             let source_dir = self.build.host_source_dir();
             debug!("removing invalid lockfile");
             fs::remove_file(source_dir.join("Cargo.lock"))
@@ -882,6 +907,88 @@ mod policy_tests {
         rustwide::Crate::local(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hello-world"),
         )
+    }
+
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn compiler_messages_are_collected_while_the_log_keeps_the_rendered_error() -> Result<()> {
+        let mut environment = environment()?;
+        let step = environment
+            .release(&fixture())
+            .run(|build| {
+                fs::write(
+                    build.build.host_source_dir().join("src/lib.rs"),
+                    "pub fn broken(_: MissingType) {}\n",
+                )?;
+                Ok(build.build_documentation(HOST_TARGET))
+            })?
+            .into_inner();
+
+        let failure = step.expect_err("the crate must not build");
+        assert!(matches!(failure.value(), BuildStepError::Command(_)));
+
+        let messages = failure
+            .cargo_messages()
+            .expect("Cargo commands always collect their messages");
+        assert!(messages.iter().any(|message| {
+            message.reason() == Some("compiler-message")
+                && message
+                    .rendered()
+                    .is_some_and(|rendered| rendered.contains("MissingType"))
+        }));
+
+        let log = failure
+            .log()
+            .expect("the failed command must retain its log");
+        assert!(log.contains("MissingType"));
+        assert!(!log.contains(r#"{\"reason\":\"compiler-message\""#));
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn build_script_json_output_is_kept_in_the_log() -> Result<()> {
+        let mut environment = environment()?;
+        let step = environment
+            .release(&fixture())
+            .run(|build| {
+                let source = build.build.host_source_dir();
+                let manifest = source.join("Cargo.toml");
+                let contents = fs::read_to_string(&manifest)?;
+                fs::write(
+                    manifest,
+                    contents.replace(
+                        "edition = \"2024\"",
+                        "edition = \"2024\"\nbuild = \"build.rs\"",
+                    ),
+                )?;
+                fs::write(
+                    source.join("build.rs"),
+                    r##"fn main() {
+    eprintln!("{}", r#"{"source":"build-script"}"#);
+    panic!("intentional build-script failure");
+}
+"##,
+                )?;
+                Ok(build.build_documentation(HOST_TARGET))
+            })?
+            .into_inner();
+
+        let failure = step.expect_err("the build script must fail");
+        assert!(matches!(failure.value(), BuildStepError::Command(_)));
+        assert!(
+            failure
+                .cargo_messages()
+                .expect("Cargo commands always collect their messages")
+                .is_empty(),
+            "the build script's JSON is not a Cargo compiler message"
+        );
+
+        let log = failure
+            .log()
+            .expect("the failed command must retain its log");
+        assert!(log.contains(r#"{"source":"build-script"}"#));
+        Ok(())
     }
 
     // Installed after Rustwide's preparation, which normally removes Cargo config.
