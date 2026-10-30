@@ -10,6 +10,7 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_database::Pool;
 use futures_util::stream::TryStreamExt;
 use regex::Regex;
+use sqlx::Connection as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::LazyLock;
@@ -148,11 +149,13 @@ impl RepositoryStatsUpdater {
     }
 
     pub async fn update_all_crates(&self) -> Result<()> {
-        let mut conn = self.pool.get_async().await?;
+        let mut fetch_conn = self.pool.get_async().await?;
+        let mut update_conn = self.pool.get_async().await?;
+
         'updaters: for updater in &self.updaters {
             info!("started updating `{}` repositories stats", updater.host());
 
-            let needs_update: Vec<String> = sqlx::query!(
+            let mut needs_update = sqlx::query_scalar!(
                 "SELECT host_id
                  FROM repositories
                  WHERE
@@ -162,22 +165,11 @@ impl RepositoryStatsUpdater {
                 ;",
                 updater.host()
             )
-            .fetch(&mut *conn)
-            .map_ok(|row| row.host_id)
-            .try_collect()
-            .await?;
+            .fetch(&mut *fetch_conn)
+            .try_ready_chunks(updater.chunk_size());
 
-            if needs_update.is_empty() {
-                info!(
-                    "no `{}` repositories stats needed to be updated",
-                    updater.host()
-                );
-                continue;
-            }
-            // FIXME: The collect can be avoided if we use Itertools::chunks:
-            // https://docs.rs/itertools/0.10.0/itertools/trait.Itertools.html#method.chunks.
-            for chunk in needs_update.chunks(updater.chunk_size()) {
-                let res = match updater.fetch_repositories(chunk).await {
+            while let Some(chunk) = needs_update.try_next().await? {
+                let res = match updater.fetch_repositories(&chunk).await {
                     Ok(r) => r,
                     Err(err) => {
                         if err.downcast_ref::<RateLimitReached>().is_some() {
@@ -190,14 +182,19 @@ impl RepositoryStatsUpdater {
                         return Err(err);
                     }
                 };
+
+                let mut tx = update_conn.begin().await?;
+
                 for node in res.missing {
-                    self.delete_repository(&mut conn, &node, updater.host())
+                    self.delete_repository(&mut tx, &node, updater.host())
                         .await?;
                 }
+
                 for (_, repo) in res.present {
-                    self.store_repository(&mut conn, updater.host(), repo)
-                        .await?;
+                    self.store_repository(&mut tx, updater.host(), repo).await?;
                 }
+
+                tx.commit().await?;
             }
             info!("finished updating `{}` repositories stats", updater.host());
         }
