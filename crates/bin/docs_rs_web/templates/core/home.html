@@ -78,5 +78,5 @@ centered
 {%- endblock body -%}
 
 {%- block javascript -%}
-    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/keyboard.js?{{ build_slug }}"></script>
+    <script nonce="{{ csp_nonce }}" type="text/javascript" src="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/keyboard.js"></script>
 {%- endblock javascript -%}

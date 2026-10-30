@@ -1,5 +1,4 @@
-{%- set build_slug = slug::slugify(crate::BUILD_VERSION) -%}
-<script async src="/-/static/menu.js?{{ build_slug }}"></script>
-<script async src="/-/static/index.js?{{ build_slug }}"></script>
+<script async src="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/menu.js"></script>
+<script async src="/-/static/v/{{ crate::STATIC_ASSET_HASH }}/index.js"></script>
 {# see comment in ../storage-change-detection.html for details #}
 <iframe src="/-/storage-change-detection.html" width="0" height="0" style="display: none"></iframe>

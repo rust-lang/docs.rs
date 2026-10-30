@@ -88,6 +88,23 @@ fn main() -> Result<()> {
     }
     writeln!(etag_file, "];")?;
 
+    // Include paths as well as contents so additions, removals, and renames
+    // change the cache buster. BTreeMap provides deterministic ordering.
+    let mut asset_hash = md5::Context::new();
+    for (path, etag) in &etag_map {
+        asset_hash.consume(path.as_bytes());
+        asset_hash.consume([0]);
+        asset_hash.consume(etag.as_bytes());
+        asset_hash.consume([0]);
+    }
+    // 64 bits is enough for a cache buster while keeping asset URLs short.
+    let asset_hash = format!("{:x}", asset_hash.finalize());
+    writeln!(
+        etag_file,
+        "pub const STATIC_ASSET_HASH: &str = {:?};",
+        &asset_hash[..16],
+    )?;
+
     etag_file.sync_all()?;
 
     // trigger recompilation when a new migration is added
@@ -165,13 +182,15 @@ fn calculate_static_etags(etag_map: &mut ETagMap) -> Result<()> {
         for entry in walkdir::WalkDir::new(static_dir) {
             let entry = entry?;
             let path = entry.path();
+            // Track directories too, so adding or removing assets reruns the build.
+            tracked::track(path)?;
             if !path.is_file() {
                 continue;
             }
 
             let partial_path = path.strip_prefix(static_dir).unwrap();
             let partial_path_str = partial_path.to_string_lossy().to_string();
-            etag_map.insert(partial_path_str, etag_from_path(path)?);
+            etag_map.insert(partial_path_str, etag_from_content(tracked::read(path)?));
         }
     }
 

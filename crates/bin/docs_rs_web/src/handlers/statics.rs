@@ -1,13 +1,12 @@
 use crate::{
     cache::CachePolicy,
-    cache::STATIC_ASSET_CACHE_POLICY,
     metrics::{WebMetrics, request_recorder},
     routes::get_static,
 };
 use anyhow::{Result, bail};
 use axum::{
     Router as AxumRouter,
-    extract::{Extension, Request, State},
+    extract::{Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get_service,
@@ -71,11 +70,7 @@ const RUSTDOC_2025_08_20_CSS: &str =
 include!(concat!(env!("OUT_DIR"), "/static_etag_map.rs"));
 
 fn build_static_css_response(content: &'static str) -> impl IntoResponse {
-    (
-        Extension(STATIC_ASSET_CACHE_POLICY),
-        TypedHeader(ContentType::from(mime::TEXT_CSS)),
-        content,
-    )
+    (TypedHeader(ContentType::from(mime::TEXT_CSS)), content)
 }
 
 async fn set_needed_static_headers(req: Request, next: Next) -> Response {
@@ -83,10 +78,6 @@ async fn set_needed_static_headers(req: Request, next: Next) -> Response {
     let is_opensearch_xml = req_path.ends_with("/opensearch.xml");
 
     let mut response = next.run(req).await;
-
-    if response.status().is_success() {
-        response.extensions_mut().insert(STATIC_ASSET_CACHE_POLICY);
-    }
 
     if is_opensearch_xml {
         // overwrite the content type for opensearch.xml,
@@ -133,12 +124,7 @@ async fn conditional_get(
     if let Some(if_none_match) = if_none_match
         && !if_none_match.precondition_passes(&etag)
     {
-        return (
-            StatusCode::NOT_MODIFIED,
-            TypedHeader(etag),
-            Extension(CachePolicy::ForeverInCdnAndBrowser),
-        )
-            .into_response();
+        return (StatusCode::NOT_MODIFIED, TypedHeader(etag)).into_response();
     }
 
     let mut res = next.run(req).await;
@@ -156,7 +142,23 @@ async fn conditional_get(
     res
 }
 
-pub(crate) fn build_static_router(root: impl AsRef<Path>, metrics: &Arc<WebMetrics>) -> AxumRouter {
+async fn set_static_cache_policy(
+    State(cache_policy): State<CachePolicy>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let mut response = next.run(req).await;
+    if response.status().is_success() || response.status() == StatusCode::NOT_MODIFIED {
+        response.extensions_mut().insert(cache_policy);
+    }
+    response
+}
+
+pub(crate) fn build_static_router(
+    root: impl AsRef<Path>,
+    metrics: &Arc<WebMetrics>,
+    cache_policy: CachePolicy,
+) -> AxumRouter {
     let root = root.as_ref();
     AxumRouter::new()
         .route(
@@ -199,12 +201,17 @@ pub(crate) fn build_static_router(root: impl AsRef<Path>, metrics: &Arc<WebMetri
             )),
         )
         .layer(middleware::from_fn(conditional_get))
+        .layer(middleware::from_fn_with_state(
+            cache_policy,
+            set_static_cache_policy,
+        ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
+        cache::SURROGATE_KEY_DOCSRS_STATIC,
         handlers::apply_middleware,
         page::TemplateData,
         testing::{
@@ -259,6 +266,12 @@ mod tests {
                 .await?;
 
             assert_eq!(cached_response.status(), StatusCode::NOT_MODIFIED);
+            for header in ["cache-control", "surrogate-control", "surrogate-key"] {
+                assert_eq!(
+                    cached_response.headers().get(header),
+                    resp.headers().get(header)
+                );
+            }
         }
 
         {
@@ -286,7 +299,10 @@ mod tests {
             const PATH: &str = "/-/static/style.css";
             let resp = web.get(PATH).await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                env.config(),
+            );
             let headers = resp.headers();
             assert_eq!(
                 headers.get(CONTENT_TYPE),
@@ -313,7 +329,10 @@ mod tests {
             let resp = web.get(PATH).await?;
             assert!(resp.status().is_success(), "{}", resp.text().await?);
 
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                env.config(),
+            );
             assert_eq!(
                 resp.headers().get(CONTENT_TYPE),
                 Some(&"text/css".parse().unwrap()),
@@ -357,7 +376,10 @@ mod tests {
 
             let resp = web.get(path).await?;
             assert!(resp.status().is_success());
-            resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
+            resp.assert_cache_control(
+                CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                env.config(),
+            );
             assert_eq!(
                 resp.headers().get(CONTENT_TYPE),
                 Some(&"text/javascript".parse().unwrap()),
@@ -370,6 +392,40 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test_case("style.css", None)]
+    #[test_case("font-awesome.css", None)]
+    #[test_case("style.css", Some("previous-build"))]
+    #[test_case("font-awesome.css", Some("previous-build"))]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn versioned_css_references(filename: &str, asset_hash: Option<&str>) -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+        let prefix = format!(
+            "/-/static/v/{}/",
+            asset_hash.unwrap_or(crate::STATIC_ASSET_HASH)
+        );
+        let path = format!("{prefix}{filename}");
+        let response = web
+            .assert_success_cached(&path, CachePolicy::ForeverInCdnAndBrowser, env.config())
+            .await?;
+        let css = response.text().await?;
+        let base = url::Url::parse(&format!("http://localhost{path}"))?;
+        let urls = regex::Regex::new(r#"url\([\"']?([^\"')]+)[\"']?\)"#)?;
+        let mut references = 0;
+        for captures in urls.captures_iter(&css) {
+            let asset = base.join(&captures[1])?;
+            assert!(
+                asset.path().starts_with(&prefix),
+                "unversioned URL: {asset}"
+            );
+            web.assert_success(asset.path()).await?;
+            references += 1;
+        }
+        assert!(references > 0);
+        test_conditional_get(&web, &path).await?;
+        Ok(())
     }
 
     #[test]
@@ -387,16 +443,27 @@ mod tests {
                     let file = entry.path().strip_prefix(&root).unwrap();
                     let path = entry.path();
 
-                    let url = format!("/-/static/{}", file.to_str().unwrap());
-                    let resp = web.get(&url).await?;
+                    for prefix in [
+                        "/-/static".to_owned(),
+                        format!("/-/static/v/{}", crate::STATIC_ASSET_HASH),
+                        "/-/static/v/previous-build".to_owned(),
+                    ] {
+                        let url = format!("{prefix}/{}", file.to_str().unwrap());
+                        let resp = web.get(&url).await?;
 
-                    assert!(resp.status().is_success(), "failed to fetch {url:?}");
-                    resp.assert_cache_control(CachePolicy::ForeverInCdnAndBrowser, env.config());
-                    let content = fs::read(path).unwrap();
-                    assert_eq!(etag(&resp), compute_etag(&content));
-                    assert_eq!(resp.bytes().await?, content, "failed to fetch {url:?}",);
+                        assert!(resp.status().is_success(), "failed to fetch {url:?}");
+                        let cache_policy = if prefix == "/-/static" {
+                            CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into())
+                        } else {
+                            CachePolicy::ForeverInCdnAndBrowser
+                        };
+                        resp.assert_cache_control(cache_policy, env.config());
+                        let content = fs::read(path).unwrap();
+                        assert_eq!(etag(&resp), compute_etag(&content));
+                        assert_eq!(resp.bytes().await?, content, "failed to fetch {url:?}",);
 
-                    test_conditional_get(&web, &url).await?;
+                        test_conditional_get(&web, &url).await?;
+                    }
                 }
             }
 
@@ -407,10 +474,19 @@ mod tests {
     #[test]
     fn static_file_that_doesnt_exist() {
         async_wrapper(|env| async move {
-            let response = env.web_app().await.get("/-/static/whoop-de-do.png").await?;
-            response.assert_cache_control(CachePolicy::NoCaching, env.config());
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
-            assert!(response.headers().get(ETAG).is_none());
+            let web = env.web_app().await;
+            for path in [
+                "/-/static/whoop-de-do.png".to_owned(),
+                format!("/-/static/v/{}/whoop-de-do.png", crate::STATIC_ASSET_HASH),
+                "/-/static/unknown-build/style.css".to_owned(),
+                "/-/static/v/previous-build/whoop-de-do.png".to_owned(),
+                "/-/static/v/previous-build".to_owned(),
+            ] {
+                let response = web.get(&path).await?;
+                assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+                response.assert_cache_control(CachePolicy::NoCaching, env.config());
+                assert!(response.headers().get(ETAG).is_none());
+            }
 
             Ok(())
         });
@@ -429,7 +505,12 @@ mod tests {
                 template_data,
             )?;
             Ok(apply_middleware(
-                build_static_router(root, state.metrics()).with_state(()),
+                build_static_router(
+                    root,
+                    state.metrics(),
+                    CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                )
+                .with_state(()),
                 state,
             ))
         }

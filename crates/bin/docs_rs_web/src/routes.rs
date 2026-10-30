@@ -1,5 +1,5 @@
 use crate::{
-    cache::CachePolicy,
+    cache::{CachePolicy, SURROGATE_KEY_DOCSRS_STATIC},
     error::AxumNope,
     handlers::{
         about, build_details, build_status, builds, crate_details, features, health, releases,
@@ -110,10 +110,13 @@ async fn block_blacklisted_prefixes_middleware(
     next.run(request).await
 }
 
-fn cached_permanent_redirect(uri: &str) -> impl IntoResponse {
+/// generate a cdn-cached temporary redirect.
+pub(crate) fn cached_static_redirect(uri: &str) -> impl IntoResponse {
     (
-        Extension(CachePolicy::ForeverInCdnAndBrowser),
-        Redirect::permanent(uri),
+        Extension(CachePolicy::ForeverInCdn(
+            SURROGATE_KEY_DOCSRS_STATIC.into(),
+        )),
+        Redirect::temporary(&format!("/-/static/v/{}/{uri}", crate::STATIC_ASSET_HASH)),
     )
 }
 
@@ -139,26 +142,39 @@ pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<
         //   https://support.google.com/webmasters/answer/183668?hl=en
         .route(
             "/robots.txt",
-            get_static(metrics, || async {
-                cached_permanent_redirect("/-/static/robots.txt")
-            }),
+            get_static(metrics, || async { cached_static_redirect("robots.txt") }),
         )
         .route(
             "/favicon.ico",
-            get_static(metrics, || async {
-                cached_permanent_redirect("/-/static/favicon.ico")
-            }),
+            get_static(metrics, || async { cached_static_redirect("favicon.ico") }),
         )
         // `.nest` with fallbacks is currently broken, `.nest_service works
         // https://github.com/tokio-rs/axum/issues/3138
         .nest_service(
+            // serve static files without browser caching.
+            // Will be purged on each deploy.
             "/-/static",
-            build_static_router(static_root_dir()?, metrics),
+            build_static_router(
+                static_root_dir()?,
+                metrics,
+                CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+            ),
+        )
+        // The hash only busts caches; older pages still receive current assets.
+        .nest_service(
+            // serve static files with a asset hash in the url.
+            // can be cached forever in the browser & cdn.
+            "/-/static/v/{asset_hash}",
+            build_static_router(
+                static_root_dir()?,
+                metrics,
+                CachePolicy::ForeverInCdnAndBrowser,
+            ),
         )
         .route(
             "/opensearch.xml",
             get_static(metrics, || async {
-                cached_permanent_redirect("/-/static/opensearch.xml")
+                cached_static_redirect("opensearch.xml")
             }),
         )
         .route_with_tsr(
@@ -424,7 +440,7 @@ async fn fallback() -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::cache::CachePolicy;
+    use crate::cache::{CachePolicy, SURROGATE_KEY_DOCSRS_STATIC};
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
         async_wrapper,
@@ -447,8 +463,20 @@ mod tests {
         let web = env.web_app().await;
         let config = env.config();
 
-        web.assert_redirect_cached(path, target, CachePolicy::ForeverInCdnAndBrowser, config)
+        let target = format!(
+            "/-/static/v/{}/{}",
+            crate::STATIC_ASSET_HASH,
+            target.strip_prefix("/-/static/").unwrap(),
+        );
+        let response = web
+            .assert_redirect_cached(
+                path,
+                &target,
+                CachePolicy::ForeverInCdn(SURROGATE_KEY_DOCSRS_STATIC.into()),
+                config,
+            )
             .await?;
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
 
         Ok(())
     }
