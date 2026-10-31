@@ -63,6 +63,7 @@ impl TemplateData {
     /// sync task to finish.
     ///
     /// Use this instead of `spawn_blocking` so we don't block tokio.
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn render_in_threadpool<F, R>(self: &Arc<Self>, render_fn: F) -> Result<R>
     where
         F: FnOnce() -> Result<R> + Send + 'static,
