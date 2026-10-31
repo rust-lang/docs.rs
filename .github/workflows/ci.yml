@@ -45,6 +45,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v2.0.0
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if our workflow needs parts
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - uses: jdx/mise-action@v5
         with:
           version: 2026.10.19

@@ -79,5 +79,10 @@ required-features = ["testing"]
 name = "crc32"
 harness = false
 
+[[bench]]
+name = "folder_contents"
+harness = false
+required-features = ["testing"]
+
 [lints]
 workspace = true
