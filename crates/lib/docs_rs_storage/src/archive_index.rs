@@ -4,7 +4,6 @@ use crate::{
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_stream::try_stream;
-use docs_rs_mimes::detect_mime;
 use docs_rs_opentelemetry::AnyMeterProvider;
 use docs_rs_types::{BuildId, ByteSize, CompressionAlgorithm};
 use docs_rs_utils::spawn_blocking;
@@ -16,7 +15,6 @@ use opentelemetry::{
 };
 use sqlx::{ConnectOptions as _, Connection as _, QueryBuilder, Row as _, Sqlite};
 use std::{
-    collections::HashSet,
     fmt,
     future::Future,
     path::{Path, PathBuf},
@@ -966,62 +964,49 @@ impl Index {
     where
         P: AsRef<Path> + std::fmt::Debug,
     {
-        // Build the path prefix string used in GLOB patterns.
-        // For root (None): prefix = ""
-        // For a folder:    prefix = "some/folder/"
-        let prefix: Option<String> = folder.as_ref().map(|f| {
+        let prefix = folder.as_ref().map(|f| {
             let s = f.as_ref().to_string_lossy();
-            // Normalize: strip any trailing slash, then re-add exactly one.
             format!("{}/", s.trim_end_matches('/'))
         });
 
         try_stream! {
-            // Seen-dirs is the only state we must accumulate: one String per unique
-            // immediate subdirectory name. File rows are yielded as they arrive.
-            let mut seen_dirs: HashSet<String> = HashSet::new();
-
-
+            // instr(text, '/') returns the 1-based character position of the first slash.
+            // Appending '/' makes it return length + 1 for a direct file, instead of 0.
+            // substr(text, 1, length) takes that many characters from the original text,
+            // stopping at its end: "src/lib.rs" becomes "src/", but "lib.rs" stays "lib.rs".
+            // Retaining the slash distinguishes a directory from a same-named file.
+            // Deduplicate in SQLite so descendants never cross the SQLx row channel.
             let mut rows = if let Some(prefix) = &prefix {
-                let prefix_upper_bound = format!("{prefix}\u{10ffff}");
-
-                // NOTE: we're using >= and < for the prefix matching here.
-                // Using `GLOB` would mean we have to escape the path.
-                // Other techniques like sqlite string functions would mean the index on the
-                // table can't be used.
-
-                sqlx::query("SELECT path FROM files WHERE path >= ? AND path < ?")
-                    .bind(prefix)
-                    .bind(prefix_upper_bound)
-                    .fetch(&mut self.conn)
+                // substr(path, start) returns everything from the 1-based start position
+                // to the end, removing the folder prefix. It counts characters, not UTF-8 bytes.
+                let start = prefix.chars().count() as i64 + 1;
+                // Keep the indexed range filter on the original path. Functions only
+                // project the immediate child; they do not replace the index lookup.
+                // The prefix ends in '/'; replacing it with the next ASCII character
+                // gives an exclusive upper bound that includes every possible suffix.
+                let upper_bound = format!("{}0", prefix.trim_end_matches('/'));
+                sqlx::query(
+                    "SELECT DISTINCT substr(relative_path, 1, instr(relative_path || '/', '/')) AS child
+                     FROM (
+                         SELECT substr(path, ?) AS relative_path
+                         FROM files
+                         WHERE path >= ? AND path < ?
+                     )"
+                )
+                .bind(start)
+                .bind(prefix)
+                .bind(upper_bound)
+                .fetch(&mut self.conn)
             } else {
-                sqlx::query("SELECT path FROM files")
-                    .fetch(&mut self.conn)
+                sqlx::query(
+                    "SELECT DISTINCT substr(path, 1, instr(path || '/', '/')) AS child
+                     FROM files"
+                )
+                .fetch(&mut self.conn)
             };
-
             while let Some(row) = rows.try_next().await.context("error fetching entries from SQLite")? {
-                let full_path: String = row.try_get(0)?;
-                // The relative part is everything after the prefix.
-                let rel = if let Some(prefix) = &prefix {
-                    // Archive paths are stored as UTF-8 strings, and `full_path` comes from
-                    // the same prefix string used in the range query above.
-                    debug_assert!(full_path.is_char_boundary(prefix.len()));
-                    &full_path[prefix.len()..]
-                } else {
-                    &full_path
-                };
-
-                if let Some(slash_pos) = rel.find('/') {
-                    // It's inside a subdirectory. Extract and deduplicate the first component.
-                    let dir_name = &rel[..slash_pos];
-                    if seen_dirs.insert(dir_name.to_string()) {
-                        yield FolderEntry::Dir(dir_name.to_string());
-                    }
-                } else {
-                    // Direct file — yield only the name relative to the queried folder.
-                    let rel = rel.to_string();
-                    let mime = detect_mime(&rel);
-                    yield FolderEntry::File(rel, mime);
-                }
+                let child: String = row.try_get(0)?;
+                yield FolderEntry::from_path(&child);
             }
         }
     }
@@ -1997,6 +1982,82 @@ mod tests {
         files.sort();
         dirs.sort();
         Ok((files, dirs))
+    }
+
+    #[tokio::test]
+    async fn folder_contents_empty_archive() -> Result<()> {
+        let mut index = index_from_entries(vec![]).await?;
+        for folder in [None, Some("missing")] {
+            let (files, dirs) = collect_folder_contents(&mut index, folder).await?;
+            assert!(files.is_empty());
+            assert!(dirs.is_empty());
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn folder_contents_prefix_boundaries_and_literal_names() -> Result<()> {
+        let mut index = index_from_entries(vec![
+            ("src", b""),
+            ("src/\u{10ffff}.rs", b""),
+            ("src/\u{10ffff}/nested.rs", b""),
+            ("src/Case.rs", b""),
+            ("src/case.rs", b""),
+            ("src/quote'_%?.rs", b""),
+            ("src-other/outside.rs", b""),
+            ("src0/outside.rs", b""),
+            ("src2/outside.rs", b""),
+            ("SRC/outside.rs", b""),
+            ("quote'_%?/literal.rs", b""),
+            ("quote'ax/outside.rs", b""),
+        ])
+        .await?;
+
+        let (files, dirs) = collect_folder_contents(&mut index, Some("src")).await?;
+        assert_eq!(
+            files,
+            vec!["Case.rs", "case.rs", "quote'_%?.rs", "\u{10ffff}.rs"]
+        );
+        assert_eq!(dirs, vec!["\u{10ffff}"]);
+
+        let (files, dirs) = collect_folder_contents(&mut index, Some("quote'_%?")).await?;
+        assert_eq!(files, vec!["literal.rs"]);
+        assert!(dirs.is_empty());
+
+        let (files, dirs) = collect_folder_contents(&mut index, None).await?;
+        assert_eq!(files, vec!["src"]);
+        assert_eq!(
+            dirs,
+            vec![
+                "SRC",
+                "quote'_%?",
+                "quote'ax",
+                "src",
+                "src-other",
+                "src0",
+                "src2"
+            ]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn folder_contents_unicode_prefix_and_same_named_file_and_dir() -> Result<()> {
+        let mut index = index_from_entries(vec![
+            ("源/目录/同名", b""),
+            ("源/目录/同名/文件.rs", b""),
+            ("源/目录/同名/另一个.rs", b""),
+            ("源/目录/直接.rs", b""),
+            ("源/目录外/忽略.rs", b""),
+        ])
+        .await?;
+
+        for folder in ["源/目录", "源/目录/"] {
+            let (files, dirs) = collect_folder_contents(&mut index, Some(folder)).await?;
+            assert_eq!(files, vec!["同名", "直接.rs"]);
+            assert_eq!(dirs, vec!["同名"]);
+        }
+        Ok(())
     }
 
     #[tokio::test]
