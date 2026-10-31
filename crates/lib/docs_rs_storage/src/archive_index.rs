@@ -494,6 +494,7 @@ impl Cache {
         unreachable!("archive index retry loop exited unexpectedly");
     }
 
+    #[instrument(skip(self, downloader))]
     pub(crate) async fn find_index<D: Downloader + Sync>(
         &self,
         archive_path: &str,
@@ -508,6 +509,7 @@ impl Cache {
         Ok(index)
     }
 
+    #[instrument(skip(self, downloader))]
     async fn find_index_inner<D: Downloader + Sync>(
         &self,
         archive_path: &str,
@@ -543,6 +545,7 @@ impl Cache {
             .await
     }
 
+    #[instrument(skip(self, downloader))]
     async fn repair_index<D: Downloader + Sync>(
         &self,
         local_index_path: &Path,
@@ -750,6 +753,7 @@ async fn sqlite_create<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection
 /// open existing SQLite database, return a configured connection pool
 /// to connect to the DB.
 /// Will error when the database doesn't exist at that path.
+#[instrument(skip(path), fields(path = %path.as_ref().display()))]
 async fn sqlite_open<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection> {
     sqlx::sqlite::SqliteConnectOptions::new()
         .filename(path)
@@ -958,7 +962,6 @@ impl Index {
     ///
     /// You'll need this method when you build a file-browser for the archive, like
     /// in our source pages.
-    #[instrument(skip(self))]
     pub fn folder_contents<P>(
         &mut self,
         folder: Option<P>,
@@ -975,7 +978,13 @@ impl Index {
             format!("{}/", s.trim_end_matches('/'))
         });
 
-        try_stream! {
+        let span = tracing::info_span!(
+            "folder_contents",
+            ?folder,
+            rows_scanned = tracing::field::Empty,
+        );
+        let stream = try_stream! {
+            let mut rows_scanned = 0_u64;
             // Seen-dirs is the only state we must accumulate: one String per unique
             // immediate subdirectory name. File rows are yielded as they arrive.
             let mut seen_dirs: HashSet<String> = HashSet::new();
@@ -999,6 +1008,7 @@ impl Index {
             };
 
             while let Some(row) = rows.try_next().await.context("error fetching entries from SQLite")? {
+                rows_scanned += 1;
                 let full_path: String = row.try_get(0)?;
                 // The relative part is everything after the prefix.
                 let rel = if let Some(prefix) = &prefix {
@@ -1023,7 +1033,13 @@ impl Index {
                     yield FolderEntry::File(rel, mime);
                 }
             }
-        }
+            tracing::Span::current().record("rows_scanned", rows_scanned);
+        };
+
+        // Enter the span only while polling; never hold an entered guard across
+        // an await/yield. Keeping the span with the stream covers its full lifetime.
+        let mut stream = Box::pin(stream);
+        futures_util::stream::poll_fn(move |cx| span.in_scope(|| stream.as_mut().poll_next(cx)))
     }
 }
 
