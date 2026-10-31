@@ -27,6 +27,7 @@ pub(crate) struct MetaData {
 }
 
 impl MetaData {
+    #[tracing::instrument(skip(conn))]
     pub(crate) async fn from_crate(
         conn: &mut sqlx::PgConnection,
         name: &KrateName,

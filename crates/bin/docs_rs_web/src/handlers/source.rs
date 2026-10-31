@@ -22,7 +22,7 @@ use docs_rs_storage::{AsyncStorage, FolderEntry, PathNotFoundError, source_archi
 use docs_rs_types::{BuildId, KrateName, ReqVersion, Version};
 use futures_util::TryStreamExt as _;
 use std::sync::Arc;
-use tracing::instrument;
+use tracing::{Instrument as _, info_span, instrument};
 
 /// A list of source files
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -31,6 +31,7 @@ struct FileList {
 }
 
 impl FileList {
+    #[instrument(skip(storage), fields(entries = tracing::field::Empty))]
     async fn from_archive_index(
         storage: &AsyncStorage,
         name: &KrateName,
@@ -46,7 +47,8 @@ impl FileList {
             .try_collect::<Vec<_>>()
             .await?;
 
-        files.sort_unstable();
+        tracing::Span::current().record("entries", files.len());
+        info_span!("sort_source_entries").in_scope(|| files.sort_unstable());
 
         Ok(Self { files })
     }
@@ -143,6 +145,7 @@ pub(crate) async fn source_browser_handler(
         version as _,
     )
     .fetch_one(&mut *conn)
+    .instrument(info_span!("source_latest_build"))
     .await?;
 
     let inner_path = params.inner_path();
