@@ -2,7 +2,7 @@ use crate::{
     BuildResult, CpuLimit, DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION, HtmlOutput, ReleaseContext,
     StepResultExt, ToolchainExt as _, toolchain::ManagedToolchain, workspace_lock::WorkspaceLock,
 };
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use bon::bon;
 use docs_rs_build_limits::Limits;
 use docs_rs_types::ByteSize;
@@ -465,7 +465,8 @@ impl BuildEnvironment {
         let system = sysinfo::System::new_with_specifics(
             sysinfo::RefreshKind::nothing()
                 .with_memory(sysinfo::MemoryRefreshKind::nothing().with_ram()),
-        );
+        )
+        .context("error refreshing system info")?;
         let available = ByteSize::b(system.available_memory());
         if limits.memory() > available {
             bail!(
