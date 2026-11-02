@@ -1543,14 +1543,14 @@ dependencies = [
 
 [[package]]
 name = "crates-index-diff"
-version = "32.0.0"
+version = "33.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19f2bc03877b9040ab9c2103a93d0ecc807eca864c45f15e0927e82b7094a7b"
+checksum = "d58afe493dc1dda4671798bcc3fbad530f9e1b7873672d303b13e99e5f85d12e"
 dependencies = [
  "ahash",
  "bstr",
  "compact_str",
- "gix 0.84.0",
+ "gix 0.90.0",
  "hashbrown 0.17.1",
  "hex",
  "reqwest",
@@ -3567,17 +3567,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b6d9528f32d94cef2edf39a1ac01fe5a0fc44ddbb18d9e44099936047c3302b"
 dependencies = [
  "bstr",
- "gix-command 0.9.2",
- "gix-filter 0.31.0",
- "gix-fs 0.21.2",
  "gix-hash 0.25.1",
- "gix-imara-diff",
  "gix-object 0.61.0",
- "gix-path 0.12.6",
- "gix-tempfile 23.0.2",
- "gix-trace 0.1.21",
- "gix-traverse 0.58.0",
- "gix-worktree 0.53.0",
  "thiserror",
 ]
 
@@ -3588,9 +3579,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c794988335792f85c3ca79c385c950b3a921a71ba3df361cb1f9e5b6bd4a6e4"
 dependencies = [
  "bstr",
+ "gix-command 0.12.1",
  "gix-error 0.5.2",
+ "gix-filter 0.36.1",
+ "gix-fs 0.24.1",
  "gix-hash 0.28.1",
+ "gix-imara-diff",
  "gix-object 0.66.1",
+ "gix-path 0.14.1",
+ "gix-tempfile 26.0.1",
+ "gix-trace 0.3.1",
+ "gix-traverse 0.64.0",
+ "gix-worktree 0.59.0",
 ]
 
 [[package]]
@@ -3833,9 +3833,9 @@ dependencies = [
 
 [[package]]
 name = "gix-imara-diff"
-version = "0.2.5"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c91d8cffac8849493a82233811bd02b2b183b8cf39bf704de0fa0841b737595"
+checksum = "7518b930f6aeb75e871d32ce873c2ae46e35cef19b5a0b039d4337f651d897cd"
 dependencies = [
  "bstr",
  "hashbrown 0.17.1",
@@ -4519,7 +4519,6 @@ version = "23.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ef60812443484e67bf84e444cc71b4c78ae62deb822221774a4fa0c57fdb17f"
 dependencies = [
- "dashmap",
  "gix-fs 0.21.2",
  "libc",
  "parking_lot",
