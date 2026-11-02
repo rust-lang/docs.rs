@@ -11,6 +11,8 @@ use sentry::{
     TransactionContext, integrations::panic as sentry_panic,
     integrations::tracing as sentry_tracing,
 };
+use tracing::Level;
+use tracing_subscriber::filter::{LevelFilter, filter_fn};
 use tracing_subscriber::prelude::*;
 
 /// defines the transaction name to be used for our rustwide builder.
@@ -45,19 +47,25 @@ pub fn init_with_config(config: &Config) -> anyhow::Result<Guard> {
 
     let sentry_guard = if let Some(sentry_config) = &config.sentry {
         tracing::subscriber::set_global_default(
-            tracing_registry.with(
-                sentry_tracing::layer()
-                    // Include HTTP trace-span fields (route, path, and response status) on child
-                    // error events, making failures reported by tower-http actionable in Sentry.
-                    .enable_span_attributes()
-                    .event_filter(|md| {
-                        if md.fields().field("reported_to_sentry").is_some() {
-                            sentry_tracing::EventFilter::Ignore
-                        } else {
-                            sentry_tracing::default_event_filter(md)
-                        }
-                    }),
-            ),
+            tracing_registry
+                .with(sentry_tracing::SpanLayer::new().with_filter(LevelFilter::INFO))
+                .with(
+                    sentry_tracing::BreadcrumbLayer::new().with_filter(filter_fn(|md| {
+                        matches!(*md.level(), Level::WARN | Level::INFO)
+                    })),
+                )
+                .with(
+                    sentry_tracing::ErrorLayer::new()
+                        // Include HTTP trace-span fields (route, path, and response status) on child
+                        // error events, making failures reported by tower-http actionable in Sentry.
+                        .enable_span_attributes()
+                        // Accept parent spans at every level so their attributes remain available.
+                        .with_filter(filter_fn(|md| {
+                            md.is_span()
+                                || (*md.level() == Level::ERROR
+                                    && md.fields().field("reported_to_sentry").is_none())
+                        })),
+                ),
         )?;
 
         let sample_rate = sentry_config.traces_sample_rate;
