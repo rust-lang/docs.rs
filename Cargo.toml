@@ -38,7 +38,7 @@ bon = { version = "3.8.1", features = ["experimental-overwritable"] }
 bytes = "1.11.0"
 chrono = { version = "0.4.11", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4.0.22", features = ["derive"] }
-crates-index = { version = "3.14.1", default-features = false }
+crates-index = { version = "4.0.0", default-features = false }
 flate2 = "1.1.5"
 futures-util = "0.3.5"
 gix = { version = "0.84.0", default-features = false }
