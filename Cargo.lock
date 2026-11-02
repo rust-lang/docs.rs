@@ -2354,7 +2354,7 @@ dependencies = [
  "docs_rs_types",
  "docs_rs_utils",
  "futures-util",
- "gix 0.84.0",
+ "gix 0.90.0",
  "http 1.5.0",
  "mime",
  "mockito",
