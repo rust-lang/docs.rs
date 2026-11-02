@@ -1,5 +1,6 @@
 use docs_rs_opentelemetry::{AnyMeterProvider, RESPONSE_TIME_HISTOGRAM_BUCKETS};
 use opentelemetry::metrics::{Counter, Histogram, ObservableGauge};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub(crate) struct PoolMetrics {
@@ -21,10 +22,19 @@ impl PoolMetrics {
                     "Time to acquire a database connection, including failed attempts",
                 )
                 .with_boundaries(
-                    RESPONSE_TIME_HISTOGRAM_BUCKETS
-                        .iter()
-                        .map(|duration| duration.as_secs_f64())
-                        .collect(),
+                    // Resolve fast acquisitions while retaining the existing buckets for long waits.
+                    [
+                        Duration::from_micros(50),
+                        Duration::from_micros(100),
+                        Duration::from_micros(250),
+                        Duration::from_micros(500),
+                        Duration::from_millis(1),
+                        Duration::from_micros(2500),
+                    ]
+                    .into_iter()
+                    .chain(RESPONSE_TIME_HISTOGRAM_BUCKETS.iter().copied())
+                    .map(|duration| duration.as_secs_f64())
+                    .collect(),
                 )
                 .with_unit("s")
                 .build(),
