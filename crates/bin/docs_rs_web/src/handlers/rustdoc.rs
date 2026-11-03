@@ -817,6 +817,17 @@ pub(crate) async fn target_redirect_handler(
     let params = params.apply_matched_release(&matched_release);
     trace!(?params, "parsed params");
 
+    if !matched_release.rustdoc_status() {
+        return Ok(axum_cached_redirect(
+            params.crate_details_url(),
+            if matched_release.is_latest_url() {
+                CachePolicy::ForeverInCdn(matched_release.name.into())
+            } else {
+                CachePolicy::ForeverInCdnAndStaleInBrowser(matched_release.name.into())
+            },
+        )?);
+    }
+
     let crate_details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
 
     // NOTE: we want to give back the db connection to the pool
@@ -1095,7 +1106,7 @@ mod test {
     use docs_rs_storage::{decompress, testing::check_archive_consistency};
     use docs_rs_types::{
         ByteSize, Duration, Version,
-        testing::{KRATE, V2},
+        testing::{KRATE, V0_1, V2},
     };
     use docs_rs_uri::encode_url_path;
     use http::header::CONTENT_LENGTH;
@@ -2316,6 +2327,41 @@ mod test {
                 "/foo_ab/0.0.1/foo_ab/?search=a",
             )
             .await?;
+            Ok(())
+        })
+    }
+
+    #[test_case(false, "0.1.0"; "failed build")]
+    #[test_case(true, "0.1.0"; "binary crate")]
+    #[test_case(false, "latest"; "latest failed build")]
+    #[test_case(true, "latest"; "latest binary crate")]
+    fn target_redirect_without_docs_skips_archive_lookup(binary: bool, version: &str) {
+        async_wrapper(|env| async move {
+            let release = env.fake_release().await.name(KRATE).version(V0_1);
+            if binary {
+                release.binary(true).create().await?;
+            } else {
+                release.build_result_failed().create().await?;
+            }
+            let web = env.web_app().await;
+            web.assert_redirect_cached_unchecked(
+                &format!("/crate/{KRATE}/{version}/target-redirect/fake/struct.Missing.html"),
+                &format!("/crate/{KRATE}/{version}"),
+                if version == "latest" {
+                    CachePolicy::ForeverInCdn(KRATE.into())
+                } else {
+                    CachePolicy::ForeverInCdnAndStaleInBrowser(KRATE.into())
+                },
+                env.config(),
+            )
+            .await?;
+
+            assert!(
+                env.collected_metrics()
+                    .get_metric("storage", "docsrs.storage.archive_index_cache.find_total",)
+                    .is_err(),
+                "releases without docs must not look up an archive index"
+            );
             Ok(())
         })
     }
