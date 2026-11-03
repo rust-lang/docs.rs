@@ -465,6 +465,8 @@ impl Cache {
         for attempt in 1..=REPAIR_ATTEMPTS {
             match action().await {
                 Ok(value) => return Ok((value, attempt)),
+                // A missing remote index cannot be repaired by purging the local cache.
+                Err(err) if err.is::<PathNotFoundError>() => return Err(err),
                 Err(err) if attempt == 1 && attempt < REPAIR_ATTEMPTS => {
                     // An unlocked open or query may race with file cleanup. Retry
                     // the whole operation once before purging: another request
@@ -1473,6 +1475,30 @@ mod tests {
         assert!(result.is_none());
         assert_eq!(downloader.download_count(&remote_index_path), 1);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_remote_index_is_not_retried_or_purged() -> Result<()> {
+        let cache = test_cache().await?;
+        let archive = "missing-remote.zip";
+        let path = cache.local_index_path(archive, None);
+        let replacement = create_index_bytes(1).await?;
+        fs::write(&path, &replacement).await?;
+        let mut calls = 0;
+        let result = cache
+            .retry_with_purge::<(), _, _>(archive, None, || {
+                calls += 1;
+                // Keep the error recognizable even when a caller adds context.
+                std::future::ready(Err(
+                    anyhow!(PathNotFoundError).context("fetching remote index")
+                ))
+            })
+            .await;
+
+        assert!(result.unwrap_err().is::<PathNotFoundError>());
+        assert_eq!(calls, 1);
+        assert_eq!(fs::read(&path).await?, replacement);
         Ok(())
     }
 
