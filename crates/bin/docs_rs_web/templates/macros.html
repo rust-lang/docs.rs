@@ -97,7 +97,7 @@
 
         {# The url for the release, `/crate/:name/:version` #}
         {% decl release_url %}
-        {% if use_target_redirect && release.rustdoc_status.unwrap_or_default() %}
+        {% if use_target_redirect && release.rustdoc_status.unwrap_or(false) %}
             {%- set release_url = release_params.target_redirect_url() -%}
         {% else %} {# /crate #}
             {%- set release_url = release_params.crate_details_url() -%}
