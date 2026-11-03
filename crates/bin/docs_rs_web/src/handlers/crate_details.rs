@@ -706,7 +706,7 @@ mod tests {
     use docs_rs_database::{crate_details::releases_for_crate, releases::update_build_status};
     use docs_rs_registry_api::CrateOwner;
     use docs_rs_test_fakes::{FakeBuild, fake_release_that_failed_before_build};
-    use docs_rs_types::testing::{FOO, V1};
+    use docs_rs_types::testing::{DUMMY, FOO, V1, V2, V3};
     use docs_rs_types::{KrateName, SimpleBuildError};
     use http::StatusCode;
     use kuchikiki::traits::TendrilSink;
@@ -1729,6 +1729,56 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn release_dropdown_links_releases_without_docs_to_crate_details() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(DUMMY)
+            .version(V1)
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name(DUMMY)
+            .version(V2)
+            .build_result_failed()
+            .create()
+            .await?;
+        env.fake_release()
+            .await
+            .name(DUMMY)
+            .version(V3)
+            .binary(true)
+            .create()
+            .await?;
+
+        let response = env
+            .web_app()
+            .await
+            .assert_success(&format!(
+                "/crate/dummy/{V1}/menus/releases/dummy/struct.Item.html"
+            ))
+            .await?;
+
+        let links: Vec<String> = kuchikiki::parse_html()
+            .one(response.text().await?)
+            .select("li a")
+            .unwrap()
+            .map(|el| el.attributes.borrow().get("href").unwrap().to_owned())
+            .collect();
+
+        assert_eq!(
+            links,
+            vec![
+                format!("/crate/dummy/{V3}"),
+                format!("/crate/dummy/{V2}"),
+                format!("/crate/dummy/{V1}/target-redirect/dummy/struct.Item.html"),
+            ]
+        );
+        Ok(())
     }
 
     #[test]
