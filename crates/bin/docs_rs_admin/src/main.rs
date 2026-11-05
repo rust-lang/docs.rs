@@ -97,6 +97,12 @@ impl CommandLine {
 
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 enum QueueSubcommand {
+    /// Pause registry polling for new crates
+    Lock,
+
+    /// Resume registry polling for new crates
+    Unlock,
+
     /// Add a crate to the build queue
     Add {
         /// Name of crate to build
@@ -143,6 +149,17 @@ enum QueueSubcommand {
 impl QueueSubcommand {
     async fn handle_args(self, ctx: Context) -> Result<()> {
         match self {
+            Self::Lock => ctx
+                .build_queue()?
+                .lock()
+                .await
+                .context("Failed to lock queue")?,
+            Self::Unlock => ctx
+                .build_queue()?
+                .unlock()
+                .await
+                .context("Failed to unlock queue")?,
+
             Self::Add {
                 crate_name,
                 crate_version,
@@ -318,10 +335,10 @@ enum BuildSubcommand {
         toolchain_name: String,
     },
 
-    /// Locks the build queue, preventing builders from building new crates
+    /// Prevent builders from starting new builds
     Lock,
 
-    /// Unlocks the build queue so builders continue building new crates
+    /// Allow builders to start new builds
     Unlock,
 }
 
@@ -339,12 +356,16 @@ impl BuildSubcommand {
                     .context("failed to set toolchain in database")?;
             }
 
-            Self::Lock => ctx.build_queue()?.lock().await.context("Failed to lock")?,
+            Self::Lock => ctx
+                .build_queue()?
+                .lock_builds()
+                .await
+                .context("Failed to lock builds")?,
             Self::Unlock => ctx
                 .build_queue()?
-                .unlock()
+                .unlock_builds()
                 .await
-                .context("Failed to unlock")?,
+                .context("Failed to unlock builds")?,
         }
 
         Ok(())

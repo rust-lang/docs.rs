@@ -13,6 +13,7 @@ pub enum ConfigName {
     RustcVersion,
     LastSeenIndexReference,
     QueueLocked,
+    BuildsLocked,
     Toolchain,
     Abnormality,
     Alert,
@@ -72,6 +73,7 @@ mod tests {
 
     #[test_case(ConfigName::RustcVersion, "rustc_version")]
     #[test_case(ConfigName::QueueLocked, "queue_locked")]
+    #[test_case(ConfigName::BuildsLocked, "builds_locked")]
     #[test_case(ConfigName::LastSeenIndexReference, "last_seen_index_reference")]
     #[test_case(ConfigName::Abnormality, "abnormality")]
     fn test_configname_variants(variant: ConfigName, expected: &'static str) {

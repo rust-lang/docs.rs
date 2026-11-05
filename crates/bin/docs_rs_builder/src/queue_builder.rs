@@ -37,16 +37,16 @@ pub fn queue_builder(
             error!(temp_dir=%temp_dir.display(), ?e, "failed to clean temporary directory");
         }
 
-        // check lock file
-        match build_queue.is_locked() {
+        // Check whether starting new builds is paused.
+        match build_queue.builds_locked() {
             Ok(true) => {
-                warn!("Build queue is locked, skipping building new crates");
+                warn!("Builds are locked, skipping building new crates");
                 wait();
                 continue;
             }
             Ok(false) => {}
             Err(err) => {
-                error!(?err, "could not get queue lock");
+                error!(?err, "could not get builds lock");
                 wait();
                 continue;
             }
