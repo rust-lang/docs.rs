@@ -4,6 +4,7 @@ use docs_rs_env_vars::{env, maybe_env, require_env};
 use docs_rs_types::{ByteSize, Duration};
 use std::{
     io,
+    num::NonZeroUsize,
     path::{self, Path, PathBuf},
     sync::Arc,
 };
@@ -44,6 +45,9 @@ pub struct ArchiveIndexCacheConfig {
     // maximum disk space for the local archive index cache.
     pub max_size: ByteSize,
 
+    /// Number of dedicated Rayon workers for opening and reading cached indexes.
+    pub sqlite_threads: NonZeroUsize,
+
     // TTL for the local index cache
     pub ttl: Duration,
 
@@ -83,6 +87,10 @@ impl AppConfig for ArchiveIndexCacheConfig {
                 prefix.join("archive_cache"),
             )?)?,
             max_size: env("DOCSRS_ARCHIVE_INDEX_CACHE_MAX_SIZE", ByteSize::gib(50))?,
+            sqlite_threads: env(
+                "DOCSRS_ARCHIVE_INDEX_THREADS",
+                NonZeroUsize::new(32).unwrap(),
+            )?,
             ttl: env("DOCSRS_ARCHIVE_INDEX_CACHE_TTL", Duration::from_days(1))?,
             eviction_policy: maybe_env("DOCSRS_ARCHIVE_INDEX_CACHE_EVICTION_POLICY")?
                 .unwrap_or_default(),

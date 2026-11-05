@@ -13,11 +13,12 @@ use opentelemetry::{
     KeyValue,
     metrics::{Counter, Gauge, Histogram},
 };
-use sqlx::{ConnectOptions as _, Connection as _, QueryBuilder, Row as _, Sqlite};
+use rusqlite::{Connection, OpenFlags, OptionalExtension as _, params};
 use std::{
     fmt,
     future::Future,
-    path::{Path, PathBuf},
+    mem,
+    path::{self, Path, PathBuf},
     pin::Pin,
     sync::{
         Arc,
@@ -28,11 +29,12 @@ use std::{
 use tokio::{
     fs,
     io::{self, AsyncRead, AsyncSeek, AsyncWriteExt as _},
-    sync::mpsc,
+    sync::{Mutex, mpsc, oneshot},
     task::JoinHandle,
 };
 use tokio_util::io::SyncIoBridge;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, info, info_span, instrument, trace, warn};
+use url::Url;
 
 pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
 
@@ -185,6 +187,28 @@ impl Entry {
 }
 
 type CacheManager = MokaCache<PathBuf, Arc<Entry>>;
+type SqliteThreadPool = Arc<rayon_core::ThreadPool>;
+
+pub fn new_threadpool(num_threads: usize) -> Result<SqliteThreadPool> {
+    anyhow::ensure!(
+        num_threads > 0,
+        "archive index SQLite thread count must be greater than zero"
+    );
+    Ok(Arc::new(
+        rayon_core::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .thread_name(|idx| format!("docsrs-sqlite {idx}"))
+            .panic_handler(|panic| {
+                let message = panic
+                    .downcast_ref::<&str>()
+                    .copied()
+                    .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+                    .unwrap_or("non-string panic payload");
+                error!(message, "archive index SQLite worker panicked");
+            })
+            .build()?,
+    ))
+}
 
 /// Local archive index cache.
 ///
@@ -206,6 +230,8 @@ pub(crate) struct Cache {
     config: Arc<ArchiveIndexCacheConfig>,
     /// Tracks locally cached archive indices and coordinates their initialization & invalidation.
     manager: CacheManager,
+    /// Dedicated workers shared by all archive-index readers in this cache.
+    threadpool: SqliteThreadPool,
     metrics: Arc<Metrics>,
     background_tasks: Vec<JoinHandle<()>>,
 }
@@ -264,6 +290,8 @@ impl Cache {
         fs::create_dir_all(&config.path)
             .await
             .context("failed to create archive index cache directory")?;
+
+        let threadpool = new_threadpool(config.sqlite_threads.get())?;
 
         let metrics = Arc::new(Metrics::new(meter_provider));
         let metrics_for_eviction = metrics.clone();
@@ -341,6 +369,7 @@ impl Cache {
         });
 
         let cache = Self {
+            threadpool,
             manager,
             config,
             metrics,
@@ -463,31 +492,27 @@ impl Cache {
         Fut: Future<Output = Result<T>>,
     {
         for attempt in 1..=REPAIR_ATTEMPTS {
-            match action().await {
+            let err = match action().await {
                 Ok(value) => return Ok((value, attempt)),
-                // A missing remote index cannot be repaired by purging the local cache.
-                Err(err) if err.is::<PathNotFoundError>() => return Err(err),
-                Err(err) if attempt == 1 && attempt < REPAIR_ATTEMPTS => {
-                    // An unlocked open or query may race with file cleanup. Retry
-                    // the whole operation once before purging: another request
-                    // may already have published a usable replacement, and an
-                    // immediate purge would delete it. Persistent failures still
-                    // reach the purge path below within the same attempt budget.
-                    debug!(
-                        ?err,
-                        %attempt,
-                        "archive index operation failed, retrying before purging local cache"
-                    );
-                }
-                Err(err) if attempt < REPAIR_ATTEMPTS => {
-                    warn!(
-                        ?err,
-                        %attempt,
-                        "archive index operation failed, purging local cache and retrying"
-                    );
-                    self.purge(archive_path, latest_build_id).await?;
-                }
-                Err(err) => return Err(err),
+                Err(err) => err,
+            };
+
+            // A missing remote index cannot be repaired by purging the local cache.
+            if err.is::<PathNotFoundError>() || attempt == REPAIR_ATTEMPTS {
+                return Err(err);
+            }
+
+            // Retry once before purging, or on CannotOpen errors: another request
+            // may have published a replacement since the failure.
+            if attempt == 1 || cannot_open_index(&err) {
+                debug!(?err, %attempt, "retrying archive index operation without purging");
+            } else {
+                warn!(
+                    ?err,
+                    %attempt,
+                    "archive index operation failed, purging local cache and retrying"
+                );
+                self.purge(archive_path, latest_build_id).await?;
             }
         }
 
@@ -517,7 +542,7 @@ impl Cache {
         let local_index_path = self.local_index_path(archive_path, latest_build_id);
 
         // fast path: try to use whatever is there, no locking
-        match Index::open(&local_index_path).await {
+        match Index::open(&local_index_path, self.threadpool.clone()).await {
             Ok(index) => {
                 // Keep moka's recency/frequency view in sync with successful fast-path
                 // file lookups so TTI and admission decisions reflect real usage.
@@ -576,13 +601,13 @@ impl Cache {
                 // The initializer's filesystem operations can still overlap eviction
                 // cleanup. The final open validates the file after initialization;
                 // the caller's bounded retry loop handles any remaining race.
-                let entry = match Index::open(local_index_path).await {
+                let entry = match Index::open(local_index_path, self.threadpool.clone()).await {
                     Ok(_index) => Entry::from_path(local_index_path).await,
                     Err(err) => {
                         // Base cleanup on the current failure, not the original
                         // fast-path error: another request may have repaired the
                         // file while this request was waiting to initialize it.
-                        if !err.is::<PathNotFoundError>() {
+                        if !err.is::<PathNotFoundError>() && !cannot_open_index(&err) {
                             Self::remove_local_index(local_index_path).await?;
                         }
                         Entry::from_size(
@@ -622,7 +647,7 @@ impl Cache {
 
         // Final open for this retry attempt. If it fails, the caller's retry loop
         // purges the cache entry and tries again.
-        Index::open(local_index_path).await
+        Index::open(local_index_path, self.threadpool.clone()).await
     }
 
     /// Find the file metadata needed to fetch a certain path inside a remote archive.
@@ -728,149 +753,168 @@ impl FileInfo {
     }
 }
 
-/// creates a new empty SQLite database, and returns a configured connection
-/// pool to connect to the DB.
-/// Any existing DB at the given path will be deleted first.
-async fn sqlite_create<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection> {
-    let path = path.as_ref();
-    if fs::try_exists(&path).await? {
-        fs::remove_file(path).await?;
+const ROW_BATCH_SIZE: usize = 1024;
+
+fn cannot_open_index(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<rusqlite::Error>()
+        .and_then(rusqlite::Error::sqlite_error_code)
+        == Some(rusqlite::ErrorCode::CannotOpen)
+}
+
+/// Create a new writable index. Called only from a blocking task.
+fn sqlite_create(path: &Path) -> Result<Connection> {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
-
-    sqlx::sqlite::SqliteConnectOptions::new()
-        .filename(path)
-        .read_only(false)
-        .pragma("synchronous", "full")
-        .create_if_missing(true)
-        .connect()
-        .await
-        .map_err(Into::into)
+    let conn = Connection::open(path)?;
+    conn.pragma_update(None, "synchronous", "full")?;
+    Ok(conn)
 }
 
-/// open existing SQLite database, return a configured connection pool
-/// to connect to the DB.
-/// Will error when the database doesn't exist at that path.
-async fn sqlite_open<P: AsRef<Path>>(path: P) -> Result<sqlx::SqliteConnection> {
-    sqlx::sqlite::SqliteConnectOptions::new()
-        .filename(path)
-        .read_only(true)
-        .immutable(true)
-        .pragma("synchronous", "off") // not needed for readonly db
-        .pragma("temp_store", "MEMORY")
-        .pragma("query_only", "ON")
-        .pragma("mmap_size", "536870912") // 512 MiB
-        .pragma("cache_size", "-4096") // 4 MiB
-        .serialized(false) // same as OPEN_NOMUTEX
-        .create_if_missing(false)
-        .connect()
-        .await
-        .map_err(Into::into)
-}
-
-/// create an archive index based on a zipfile.
-///
-/// Will delete the destination file if it already exists.
+/// Create an archive index based on a zipfile, replacing any existing index.
 #[instrument(skip(zipfile))]
 pub(crate) async fn create<R, P>(zipfile: R, destination: P) -> Result<R>
 where
     R: AsyncRead + AsyncSeek + Unpin + Send + 'static,
     P: AsRef<Path> + std::fmt::Debug,
 {
-    let mut conn = sqlite_create(destination).await?;
-    let mut tx = conn.begin().await?;
-
-    sqlx::query(
-        r#"
-            CREATE TABLE files (
+    let destination = destination.as_ref().to_path_buf();
+    spawn_blocking(move || {
+        let mut conn = sqlite_create(&destination)?;
+        let tx = conn.transaction()?;
+        tx.execute_batch(
+            "CREATE TABLE files (
                 id INTEGER PRIMARY KEY,
                 path TEXT UNIQUE,
                 start INTEGER,
                 end INTEGER,
                 compression INTEGER
-            );
-        "#,
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    let (tx_entries, mut rx_entries) = mpsc::channel::<(String, u64, u64, i32)>(1000);
-
-    let zip_task = spawn_blocking(move || {
+            );",
+        )?;
         let mut bridge = SyncIoBridge::new(zipfile);
         let mut archive = zip::ZipArchive::new(&mut bridge)?;
-        for i in 0..archive.len() {
-            let entry = archive.by_index(i)?;
-
-            let start = entry
-                .data_start()
-                .ok_or_else(|| anyhow!("missing data_start in zip directory"))?;
-            let end = start + entry.compressed_size() - 1;
-            let compression_raw = match entry.compression() {
-                zip::CompressionMethod::Bzip2 => CompressionAlgorithm::Bzip2 as i32,
-                zip::CompressionMethod::Deflated => CompressionAlgorithm::Deflate as i32,
-                c => bail!("unsupported compression algorithm {} in zip-file", c),
-            };
-
-            tx_entries
-                .blocking_send((entry.name()?.to_string(), start, end, compression_raw))
-                .map_err(|_| anyhow!("archive index receiver dropped"))?;
+        {
+            let mut insert = tx.prepare(
+                "INSERT INTO files (path, start, end, compression) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for i in 0..archive.len() {
+                let entry = archive.by_index(i)?;
+                let start = entry
+                    .data_start()
+                    .ok_or_else(|| anyhow!("missing data_start in zip directory"))?;
+                let end = start + entry.compressed_size() - 1;
+                let compression = match entry.compression() {
+                    zip::CompressionMethod::Bzip2 => CompressionAlgorithm::Bzip2 as i32,
+                    zip::CompressionMethod::Deflated => CompressionAlgorithm::Deflate as i32,
+                    c => bail!("unsupported compression algorithm {} in zip-file", c),
+                };
+                insert.execute(params![entry.name()?, start, end, compression])?;
+            }
         }
+        tx.execute_batch("CREATE INDEX idx_files_path ON files (path);")?;
+        tx.commit()?;
+        // VACUUM cannot run inside a transaction.
+        conn.execute_batch("VACUUM;")?;
         drop(archive);
         Ok(bridge.into_inner())
-    });
-
-    const CHUNKS: usize = 1000;
-    let mut chunk = Vec::with_capacity(CHUNKS);
-    loop {
-        let received = rx_entries.recv_many(&mut chunk, CHUNKS).await;
-        if received == 0 {
-            break;
-        }
-        let mut insert_stmt =
-            QueryBuilder::<Sqlite>::new("INSERT INTO files (path, start, end, compression) ");
-        insert_stmt.push_values(
-            chunk.drain(..),
-            |mut b, (path, start, end, compression_raw)| {
-                b.push_bind(path)
-                    .push_bind(start as i64)
-                    .push_bind(end as i64)
-                    .push_bind(compression_raw);
-            },
-        );
-        insert_stmt
-            .build()
-            .persistent(false)
-            .execute(&mut *tx)
-            .await?;
-    }
-
-    let zipfile = zip_task.await?;
-
-    sqlx::query("CREATE INDEX idx_files_path ON files (path);")
-        .execute(&mut *tx)
-        .await?;
-
-    // Commit the transaction before VACUUM (VACUUM cannot run inside a transaction)
-    tx.commit().await?;
-
-    // VACUUM outside the transaction
-    sqlx::query("VACUUM").execute(&mut conn).await?;
-
-    Ok(zipfile)
+    })
+    .await
 }
 
 pub struct Index {
-    conn: sqlx::SqliteConnection,
+    // An owned guard can cross into the SQLite workers without requiring Connection
+    // to be Sync. If a read is cancelled, the next read waits for its guard.
+    conn: Arc<Mutex<Connection>>,
+    threadpool: SqliteThreadPool,
 }
 
 impl Index {
-    pub(crate) async fn open<P>(archive_index_path: P) -> Result<Self>
+    /// run an sqlite activity in the shared threadpool.
+    /// Schedule immediately, so streaming consumers can receive batches before
+    /// awaiting completion. Queued jobs skip work if their caller was cancelled.
+    fn run_in_threadpool<T, F>(pool: &SqliteThreadPool, work: F) -> impl Future<Output = Result<T>>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> Result<T> + Send + 'static,
+    {
+        let span = tracing::Span::current();
+        // Keep this span alive only until a worker picks up the job. Its duration
+        // measures queueing, separately from SQLite execution.
+        let queued = info_span!(parent: &span, "sqlite_worker_queue");
+        let (send, recv) = oneshot::channel();
+        pool.spawn(move || {
+            drop(queued);
+            let _span =
+                info_span!(parent: &span, "sqlite_worker_execute", cancelled = send.is_closed())
+                    .entered();
+            if !send.is_closed() {
+                // A panic drops the sender, returning an error to the caller.
+                // The pool's panic handler prevents Rayon from aborting.
+                let _ = send.send(work());
+            }
+        });
+        async move {
+            recv.await
+                .context("archive index SQLite worker dropped its response")?
+        }
+    }
+
+    /// Open a read-only, immutable index. Called only from a blocking task.
+    #[instrument(skip(path), fields(index_path = %path.display()))]
+    fn sqlite_open(path: &Path) -> Result<Connection> {
+        let path = path::absolute(path)?;
+
+        let mut uri = Url::from_file_path(&path)
+            .map_err(|_| anyhow!("invalid archive index path: {}", path.display()))?;
+
+        // Immutable indexes are replaced atomically, never modified in place.
+        uri.query_pairs_mut().append_pair("immutable", "1");
+
+        let conn = Connection::open_with_flags(
+            uri.as_str(),
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_URI
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+
+        conn.pragma_update(None, "synchronous", "OFF")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "query_only", true)?;
+        conn.pragma_update(None, "mmap_size", ByteSize::mib(512).as_u64())?;
+        conn.pragma_update(None, "cache_size", -4096)?;
+
+        Ok(conn)
+    }
+
+    pub async fn open<P>(archive_index_path: P, threadpool: SqliteThreadPool) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let archive_index_path = archive_index_path.as_ref().to_path_buf();
-        let conn = sqlite_open(&archive_index_path).await?;
-        Ok(Self { conn })
+        let path = archive_index_path.as_ref().to_path_buf();
+        let conn = Self::run_in_threadpool(&threadpool, move || Self::sqlite_open(&path)).await?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+            threadpool,
+        })
+    }
+
+    async fn read<T, F>(&mut self, read: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Connection) -> Result<T> + Send + 'static,
+    {
+        let mut conn = Arc::clone(&self.conn).lock_owned().await;
+        Self::run_in_threadpool(&self.threadpool, move || read(&mut conn)).await
+    }
+
+    /// Number of files stored in the archive.
+    #[cfg(any(test, feature = "testing"))]
+    #[instrument(skip(self))]
+    pub async fn file_count(&mut self) -> Result<u64> {
+        self.read(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))?))
+            .await
     }
 
     #[instrument(skip(self))]
@@ -878,70 +922,104 @@ impl Index {
     where
         P: AsRef<Path> + fmt::Debug,
     {
-        let search_for = search_for.as_ref();
-
-        if search_for.is_absolute() {
+        let path = search_for.as_ref();
+        if path.is_absolute() {
             bail!("search path in archive index has to be relative");
         }
-
-        let search_str = search_for
+        let path = path
             .to_str()
-            .ok_or_else(|| anyhow!("non-UTF-8 path in archive index lookup"))?;
-
-        // now actually find the entry in the index
-        let row = sqlx::query(
-            "SELECT start, end, compression
-                FROM files
-                WHERE path = ?",
-        )
-        .bind(search_str)
-        .fetch_optional(&mut self.conn)
-        .await
-        .context("error fetching SQLite data")?;
-
-        let file_info = if let Some(row) = row {
-            let start: u64 = row.try_get(0)?;
-            let end: u64 = row.try_get(1)?;
-            let compression_raw: i32 = row.try_get(2)?;
-
-            Some(FileInfo {
-                path: search_for.to_path_buf(),
-                range: start..=end,
-                compression: compression_raw.try_into().map_err(|value| {
-                    anyhow!("invalid compression algorithm '{value}' in database")
-                })?,
-            })
-        } else {
-            None
-        };
-
-        Ok(file_info)
-    }
-
-    pub fn list(&mut self) -> impl Stream<Item = Result<FileInfo>> + '_ {
-        try_stream! {
-            let mut rows = sqlx::query(
-                "SELECT path, start, end, compression FROM files"
-            )
-            .fetch(&mut self.conn);
-
-            while let Some(row) = rows.try_next().await.context("error fetching SQLite data")? {
-                let path: String = row.try_get(0)?;
-                let start: u64 = row.try_get(1)?;
-                let end: u64 = row.try_get(2)?;
-                let compression_raw: i32 = row.try_get(3)?;
-                let path = PathBuf::from(path);
-                debug_assert!(path.is_relative());
-
-                yield FileInfo {
-                    path,
+            .ok_or_else(|| anyhow!("non-UTF-8 path in archive index lookup"))?
+            .to_owned();
+        self.read(move |conn| {
+            let row: Option<(u64, u64, i32)> = conn
+                .prepare_cached("SELECT start, end, compression FROM files WHERE path = ?1")?
+                .query_row([&path], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .optional()
+                .context("error fetching SQLite data")?;
+            row.map(|(start, end, compression)| {
+                Ok(FileInfo {
+                    path: PathBuf::from(path),
                     range: start..=end,
-                    compression: compression_raw.try_into().map_err(|value| {
+                    compression: compression.try_into().map_err(|value| {
                         anyhow!("invalid compression algorithm '{value}' in database")
                     })?,
-                };
+                })
+            })
+            .transpose()
+        })
+        .await
+    }
+
+    /// Stream bounded batches from a blocking SQLite query. Dropping the stream
+    /// closes the receiver, allowing the producer to release its connection.
+    fn read_rows<T, F>(
+        &mut self,
+        stream_span: tracing::Span,
+        sql: &'static str,
+        values: Vec<rusqlite::types::Value>,
+        mut map_row: F,
+    ) -> impl Stream<Item = Result<T>> + '_
+    where
+        T: Send + 'static,
+        F: FnMut(&rusqlite::Row<'_>) -> Result<T> + Send + 'static,
+    {
+        // This span lives with the stream, rather than timing only its construction.
+        // Never hold an entered span across a yield or await.
+        try_stream! {
+            let conn = Arc::clone(&self.conn).lock_owned().await;
+            let (tx, mut rx) = mpsc::channel(2);
+            // Bound memory and cross the thread boundary once per batch, not per row.
+            let task = stream_span.in_scope(|| Self::run_in_threadpool(&self.threadpool, move || {
+                let mut stmt = conn.prepare_cached(sql)?;
+                let mut rows = stmt.query(rusqlite::params_from_iter(values))?;
+                let mut batch = Vec::with_capacity(ROW_BATCH_SIZE);
+                while let Some(row) = rows.next()? {
+                    if tx.is_closed() {
+                        return Ok(());
+                    }
+                    batch.push(map_row(row)?);
+                    if batch.len() == ROW_BATCH_SIZE
+                        && tx.blocking_send(mem::replace(
+                            &mut batch, Vec::with_capacity(ROW_BATCH_SIZE),
+                        )).is_err()
+                    {
+                        return Ok(()); // The consumer dropped the stream.
+                    }
+                }
+                if !batch.is_empty() {
+                    let _ = tx.blocking_send(batch);
+                }
+                Ok(())
+            }));
+            while let Some(batch) = rx.recv().await {
+                for entry in batch {
+                    yield entry;
+                }
             }
+            task.await?;
         }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn list(&mut self) -> impl Stream<Item = Result<FileInfo>> + '_ {
+        self.read_rows(
+            info_span!("list"),
+            "SELECT path, start, end, compression FROM files",
+            Vec::new(),
+            |row| {
+                let path: String = row.get(0)?;
+                let start: u64 = row.get(1)?;
+                let end: u64 = row.get(2)?;
+                let compression: i32 = row.get(3)?;
+                Ok(FileInfo {
+                    path: PathBuf::from(path),
+                    range: start..=end,
+                    compression: compression.try_into().map_err(|value| {
+                        anyhow!("invalid compression algorithm '{value}' in database")
+                    })?,
+                })
+            },
+        )
     }
 
     /// get the folder contents inside the zip archive.
@@ -950,7 +1028,6 @@ impl Index {
     ///
     /// You'll need this method when you build a file-browser for the archive, like
     /// in our source pages.
-    #[instrument(skip(self))]
     pub fn folder_contents<P>(
         &mut self,
         folder: Option<P>,
@@ -958,51 +1035,43 @@ impl Index {
     where
         P: AsRef<Path> + std::fmt::Debug,
     {
-        let prefix = folder.as_ref().map(|f| {
-            let s = f.as_ref().to_string_lossy();
-            format!("{}/", s.trim_end_matches('/'))
-        });
-
-        try_stream! {
-            // instr(text, '/') returns the 1-based character position of the first slash.
-            // Appending '/' makes it return length + 1 for a direct file, instead of 0.
-            // substr(text, 1, length) takes that many characters from the original text,
-            // stopping at its end: "src/lib.rs" becomes "src/", but "lib.rs" stays "lib.rs".
-            // Retaining the slash distinguishes a directory from a same-named file.
-            // Deduplicate in SQLite so descendants never cross the SQLx row channel.
-            let mut rows = if let Some(prefix) = &prefix {
-                // substr(path, start) returns everything from the 1-based start position
-                // to the end, removing the folder prefix. It counts characters, not UTF-8 bytes.
-                let start = prefix.chars().count() as i64 + 1;
-                // Keep the indexed range filter on the original path. Functions only
-                // project the immediate child; they do not replace the index lookup.
-                // The prefix ends in '/'; replacing it with the next ASCII character
-                // gives an exclusive upper bound that includes every possible suffix.
-                let upper_bound = format!("{}0", prefix.trim_end_matches('/'));
-                sqlx::query(
-                    "SELECT DISTINCT substr(relative_path, 1, instr(relative_path || '/', '/')) AS child
-                     FROM (
-                         SELECT substr(path, ?) AS relative_path
-                         FROM files
-                         WHERE path >= ? AND path < ?
-                     )"
-                )
-                .bind(start)
-                .bind(prefix)
-                .bind(upper_bound)
-                .fetch(&mut self.conn)
-            } else {
-                sqlx::query(
-                    "SELECT DISTINCT substr(path, 1, instr(path || '/', '/')) AS child
-                     FROM files"
-                )
-                .fetch(&mut self.conn)
-            };
-            while let Some(row) = rows.try_next().await.context("error fetching entries from SQLite")? {
-                let child: String = row.try_get(0)?;
-                yield FolderEntry::from_path(&child);
-            }
-        }
+        let prefix = folder
+            .as_ref()
+            .map(|f| format!("{}/", f.as_ref().to_string_lossy().trim_end_matches('/')));
+        // Project and deduplicate immediate children in SQLite so that
+        // descendants are neither allocated in Rust nor sent across threads.
+        // instr(text, '/') returns the 1-based character position of the first slash.
+        // Appending '/' makes it return length + 1 for a direct file, instead of 0.
+        // substr(text, 1, length) stops at the end of the original text:
+        // "src/lib.rs" becomes "src/", but "lib.rs" stays "lib.rs".
+        // Retaining the slash distinguishes a directory from a same-named file.
+        let (sql, values) = if let Some(prefix) = prefix {
+            // substr(path, start) removes the folder prefix using a 1-based
+            // character position, so count characters rather than UTF-8 bytes.
+            let start = prefix.chars().count() as i64 + 1;
+            // Filter the original path with an indexed range; the functions only
+            // project the immediate child. Replacing the prefix's trailing '/'
+            // with the next ASCII character gives an exclusive upper bound
+            // that includes every possible suffix without interpreting wildcards.
+            let upper_bound = format!("{}0", prefix.trim_end_matches('/'));
+            (
+                "SELECT DISTINCT substr(relative_path, 1, instr(relative_path || '/', '/')) AS child
+                 FROM (
+                     SELECT substr(path, ?1) AS relative_path
+                     FROM files WHERE path >= ?2 AND path < ?3
+                 )",
+                vec![rusqlite::types::Value::Integer(start), prefix.into(), upper_bound.into()],
+            )
+        } else {
+            (
+                "SELECT DISTINCT substr(path, 1, instr(path || '/', '/')) AS child FROM files",
+                Vec::new(),
+            )
+        };
+        self.read_rows(info_span!("folder_contents", ?folder), sql, values, |row| {
+            let child: String = row.get(0)?;
+            Ok(FolderEntry::from_path(&child))
+        })
     }
 }
 
@@ -1013,11 +1082,174 @@ mod tests {
     use chrono::Utc;
     use docs_rs_config::AppConfig as _;
     use docs_rs_opentelemetry::testing::TestMetrics;
-    use sqlx::error::DatabaseError as _;
-    use std::{collections::HashMap, io::Cursor, ops::Deref, pin::Pin, sync::Arc};
+    use std::{
+        collections::{HashMap, HashSet},
+        io::Cursor,
+        ops::Deref,
+        pin::Pin,
+        sync::{Arc, LazyLock},
+    };
     use zip::write::SimpleFileOptions;
 
+    static TEST_THREADPOOL: LazyLock<SqliteThreadPool> =
+        LazyLock::new(|| new_threadpool(2).expect("create test SQLite pool"));
+
+    /// Open another connection using the shared unit-test worker pool.
+    pub(crate) async fn open_archive_index(index_path: impl AsRef<Path>) -> anyhow::Result<Index> {
+        Index::open(index_path, TEST_THREADPOOL.clone()).await
+    }
+
+    #[tokio::test]
+    async fn cancelled_running_read_keeps_connection_until_worker_finishes() -> Result<()> {
+        let path = tempfile::NamedTempFile::new()?.into_temp_path();
+        create(create_test_archive(1).await?, &path).await?;
+        // Leave a worker free so a subsequent read waits for the connection,
+        // rather than merely waiting for the pool's only worker.
+        let pool = new_threadpool(2)?;
+        let mut index = Index::open(&path, pool).await?;
+        let (started_tx, started_rx) = oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let mut first = Box::pin(index.read(move |_| {
+            let _ = started_tx.send(());
+            release_rx.recv()?;
+            Ok(())
+        }));
+        assert!(futures_util::poll!(&mut first).is_pending());
+        tokio::time::timeout(Duration::from_secs(5), started_rx).await??;
+        drop(first);
+        assert!(
+            index.conn.try_lock().is_err(),
+            "cancelling the caller must not release the running worker's connection"
+        );
+
+        let mut next = Box::pin(index.find("testfile0"));
+        assert!(futures_util::poll!(&mut next).is_pending());
+        release_tx.send(())?;
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), next)
+                .await??
+                .is_some()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_queued_job_does_not_run() -> Result<()> {
+        let pool = new_threadpool(1)?;
+        let (started_tx, started_rx) = oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let busy = Index::run_in_threadpool(&pool, move || {
+            let _ = started_tx.send(());
+            release_rx.recv()?;
+            Ok(())
+        });
+        started_rx.await?;
+        let (called_tx, called_rx) = oneshot::channel();
+        let cancelled = Index::run_in_threadpool(&pool, move || {
+            let _ = called_tx.send(());
+            Ok(())
+        });
+        drop(cancelled);
+        release_tx.send(())?;
+        busy.await?;
+        // Skipping the queued closure drops its captured sender.
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), called_rx)
+                .await?
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn panicking_job_does_not_stop_workers() -> Result<()> {
+        let pool = new_threadpool(1)?;
+        let result = Index::run_in_threadpool(&pool, || -> Result<()> {
+            panic!("test SQLite job panic");
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(Index::run_in_threadpool(&pool, || Ok(42)).await?, 42);
+        Ok(())
+    }
+
     const CORRUPT_SQLITE_INDEX: &[u8] = b"not-an-sqlite-index";
+
+    #[tokio::test]
+    async fn index_open_escapes_uri_characters_in_filename() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("index ?#% ü.sqlite");
+        create(create_test_archive(1).await?, &path).await?;
+
+        let mut index = open_archive_index(&path).await?;
+        assert!(index.find("testfile0").await?.is_some());
+        let err = index
+            .read(|conn| {
+                conn.execute("DELETE FROM files", [])?;
+                Ok(())
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err.downcast_ref::<rusqlite::Error>(),
+            Some(rusqlite::Error::SqliteFailure(code, _))
+                if code.code == rusqlite::ErrorCode::ReadOnly
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn opening_missing_index_does_not_create_file() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("missing.index");
+        assert!(open_archive_index(&path).await.is_err());
+        assert!(!path.exists());
+        Ok(())
+    }
+
+    #[test_case::test_case(false; "full index")]
+    #[test_case::test_case(true; "root folder")]
+    #[tokio::test]
+    async fn dropping_read_stream_releases_connection(folder: bool) -> Result<()> {
+        fn paths(
+            index: &mut Index,
+            folder: bool,
+        ) -> Pin<Box<dyn Stream<Item = Result<String>> + '_>> {
+            if folder {
+                Box::pin(
+                    index
+                        .folder_contents(None::<&Path>)
+                        .map_ok(|entry| entry.name().to_owned()),
+                )
+            } else {
+                Box::pin(
+                    index
+                        .list()
+                        .map_ok(|entry| entry.path.to_str().unwrap().to_owned()),
+                )
+            }
+        }
+
+        let path = tempfile::NamedTempFile::new()?.into_temp_path();
+        let count = (ROW_BATCH_SIZE * 8 + 3) as u32;
+        create(create_test_archive(count).await?, &path).await?;
+        let mut index = open_archive_index(&path).await?;
+        {
+            let mut stream = paths(&mut index, folder);
+            assert!(stream.try_next().await?.is_some());
+            // Drop before consuming all batches, unblocking the producer even
+            // if its bounded output channel is full.
+        }
+        let found = tokio::time::timeout(Duration::from_secs(5), index.find("testfile0")).await??;
+        assert!(found.is_some());
+        // Also consume every batch, including the final partial batch.
+        let paths = paths(&mut index, folder).try_collect::<Vec<_>>().await?;
+        let actual: HashSet<_> = paths.iter().cloned().collect();
+        let expected: HashSet<_> = (0..count).map(|n| format!("testfile{n}")).collect();
+        assert_eq!(paths.len(), count as usize);
+        assert_eq!(actual, expected);
+        Ok(())
+    }
 
     /// Creates a test archive from a list of (path, content) pairs.
     async fn create_archive_from_entries(
@@ -1235,7 +1467,7 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(tf, &tempfile).await?;
 
-        let mut index = Index::open(&tempfile).await?;
+        let mut index = open_archive_index(&tempfile).await?;
         let fi = index.find("testfile0").await?.unwrap();
 
         assert_eq!(fi.compression, CompressionAlgorithm::Deflate);
@@ -1251,7 +1483,7 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(tf, &tempfile).await?;
 
-        let mut index = Index::open(&tempfile).await?;
+        let mut index = open_archive_index(&tempfile).await?;
         let fi = index.find("testfile0").await?.unwrap();
 
         assert_eq!(fi.compression, CompressionAlgorithm::Bzip2);
@@ -1267,13 +1499,8 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(tf, &tempfile).await?;
 
-        let mut conn = sqlite_open(&tempfile).await?;
-
-        let row = sqlx::query("SELECT count(*) FROM files")
-            .fetch_one(&mut conn)
-            .await?;
-
-        assert_eq!(row.get::<i64, _>(0), 0);
+        let mut index = open_archive_index(&tempfile).await?;
+        assert_eq!(index.file_count().await?, 0);
 
         Ok(())
     }
@@ -1285,13 +1512,8 @@ mod tests {
         let tempfile = tempfile::NamedTempFile::new()?.into_temp_path();
         create(tf, &tempfile).await?;
 
-        let mut conn = sqlite_open(&tempfile).await?;
-
-        let row = sqlx::query("SELECT count(*) FROM files")
-            .fetch_one(&mut conn)
-            .await?;
-
-        assert_eq!(row.get::<i64, _>(0), 100_000);
+        let mut index = open_archive_index(&tempfile).await?;
+        assert_eq!(index.file_count().await?, 100_000);
 
         Ok(())
     }
@@ -1410,7 +1632,7 @@ mod tests {
         // Pause request B after its failed fast-path open, then let request A
         // complete a repair before B enters the slow path. Ordering these steps
         // explicitly exercises the race without relying on scheduler timing.
-        assert!(Index::open(&local_index).await.is_err());
+        assert!(open_archive_index(&local_index).await.is_err());
         let mut downloader = FakeDownloader::new();
         downloader
             .indices
@@ -1502,8 +1724,10 @@ mod tests {
         Ok(())
     }
 
+    #[test_case::test_case(1; "one failed open")]
+    #[test_case::test_case(2; "repeated failed opens")]
     #[tokio::test]
-    async fn retry_preserves_replacement_after_failed_open() -> Result<()> {
+    async fn retry_preserves_replacement_after_failed_open(failed_opens: usize) -> Result<()> {
         let cache = test_cache().await?;
         const BUILD_ID: Option<BuildId> = Some(BuildId(7));
         const ARCHIVE_NAME: &str = "retry-replacement.zip";
@@ -1515,20 +1739,22 @@ mod tests {
         let (mut index, attempts) = cache
             .retry_with_purge(ARCHIVE_NAME, BUILD_ID, || {
                 calls += 1;
-                let first_call = calls == 1;
+                let call = calls;
                 let cache = &cache;
                 let local_index = &local_index;
                 let replacement = &replacement;
                 let downloader = &downloader;
                 async move {
-                    if first_call {
-                        let err = Index::open(local_index)
+                    if call <= failed_opens {
+                        let err = open_archive_index(local_index)
                             .await
                             .err()
                             .context("initial open should fail")?;
-                        // Model another request completing repair before this
-                        // request's failure reaches the retry loop.
-                        fs::write(local_index, replacement).await?;
+                        if call == failed_opens {
+                            // Another request publishes a replacement before
+                            // this failed open reaches the retry loop.
+                            fs::write(local_index, replacement).await?;
+                        }
                         return Err(err);
                     }
                     cache
@@ -1538,7 +1764,7 @@ mod tests {
             })
             .await?;
 
-        assert_eq!(attempts, 2);
+        assert_eq!(attempts, failed_opens + 1);
         assert!(index.find("testfile0").await?.is_some());
         assert_eq!(fs::read(&local_index).await?, replacement);
         assert_eq!(
@@ -1556,11 +1782,12 @@ mod tests {
         let local_index = cache.local_index_path(ARCHIVE_NAME, BUILD_ID);
         // A valid SQLite database with the wrong schema opens successfully, so
         // the lookup must eventually purge it after the non-destructive retry.
-        let mut conn = sqlite_create(&local_index).await?;
-        sqlx::query("CREATE TABLE unrelated (id INTEGER)")
-            .execute(&mut conn)
-            .await?;
-        conn.close().await?;
+        let path = local_index.clone();
+        spawn_blocking(move || {
+            sqlite_create(&path)?.execute_batch("CREATE TABLE unrelated (id INTEGER);")?;
+            Ok(())
+        })
+        .await?;
         let remote_index_path = format!("{ARCHIVE_NAME}.{ARCHIVE_INDEX_FILE_EXTENSION}");
         let mut downloader = FakeDownloader::new();
         downloader
@@ -1599,17 +1826,11 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(
-            err.downcast::<sqlx::Error>()
-                .unwrap()
-                .into_database_error()
-                .unwrap()
-                .as_error()
-                .downcast_ref::<sqlx::sqlite::SqliteError>()
-                .unwrap()
-                .message(),
-            "file is not a database"
-        );
+        assert!(matches!(
+            err.downcast_ref::<rusqlite::Error>(),
+            Some(rusqlite::Error::SqliteFailure(code, _))
+                if code.code == rusqlite::ErrorCode::NotADatabase
+        ));
         assert_eq!(
             downloader.download_count(&remote_index_path),
             REPAIR_ATTEMPTS
@@ -1922,7 +2143,7 @@ mod tests {
         let temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
         fs::write(&temp_path, CORRUPT_SQLITE_INDEX).await?;
 
-        assert!(Index::open(&temp_path).await.is_err());
+        assert!(open_archive_index(&temp_path).await.is_err());
 
         Ok(())
     }
@@ -1977,7 +2198,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new()?.into_temp_path();
         create(archive, &tmp).await?;
 
-        Index::open(&tmp).await
+        open_archive_index(&tmp).await
     }
 
     async fn collect_folder_contents(
@@ -2324,7 +2545,7 @@ mod tests {
         async fn concurrent_archive_fixture() -> Result<Arc<ConcurrentArchive>> {
             let path = create_index(2).await?;
 
-            let mut index = Index::open(&path).await?;
+            let mut index = open_archive_index(&path).await?;
 
             let expected: Vec<_> = index.list().try_collect().await?;
 
@@ -2486,7 +2707,7 @@ mod tests {
             let temp_path = tempfile::NamedTempFile::new()?.into_temp_path();
             fs::write(&temp_path, CORRUPT_SQLITE_INDEX).await?;
 
-            assert!(Index::open(&temp_path).await.is_err());
+            assert!(open_archive_index(&temp_path).await.is_err());
 
             Ok(())
         }

@@ -48,7 +48,7 @@ mime = { workspace = true }
 num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 postcard = { workspace = true }
-rayon-core = "1.13.0"
+rayon-core = { workspace = true }
 regex = { workspace = true }
 sentry = { workspace = true }
 serde = { workspace = true }
