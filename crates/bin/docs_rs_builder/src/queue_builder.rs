@@ -38,25 +38,44 @@ pub fn queue_builder(
             }
         }
 
-        // If a panic occurs while building a crate, lock the queue until an admin has a chance to look at it.
-        debug!("Checking build queue");
-        let res = catch_unwind(AssertUnwindSafe(|| {
-            match build_next_queue_package(context, &mut builder) {
-                Ok(true) => {}
-                Ok(false) => {
-                    debug!("Queue is empty, going back to sleep");
+        if let Some(min_queue_length) = config.min_queue_length {
+            // This is a backlog threshold, not a global concurrency limit:
+            // other builders may claim work after this count is read.
+            match build_queue.processable_count() {
+                Ok(count) if count < min_queue_length => {
+                    debug!(
+                        count,
+                        min_queue_length, "Build queue below threshold, going back to sleep"
+                    );
                     thread::sleep(Duration::from_mins(1));
+                    continue;
                 }
-                Err(e) => {
-                    error!(?e, "Failed to build crate from queue");
+                Ok(_) => {}
+                Err(err) => {
+                    error!(?err, "Could not count processable builds");
+                    thread::sleep(Duration::from_mins(1));
+                    continue;
                 }
             }
-        }));
+        }
 
-        if let Err(e) = res {
-            error!(?e, "GRAVE ERROR Building new crates panicked");
-            thread::sleep(Duration::from_mins(1));
-            continue;
+        // Keep build panics from terminating the builder loop.
+        debug!("Checking build queue");
+        match catch_unwind(AssertUnwindSafe(|| {
+            build_next_queue_package(context, &mut builder)
+        })) {
+            Ok(Ok(true)) => {}
+            Ok(Ok(false)) => {
+                debug!("No processable build, going back to sleep");
+                thread::sleep(Duration::from_mins(1));
+            }
+            Ok(Err(e)) => {
+                error!(?e, "Failed to build crate from queue");
+            }
+            Err(e) => {
+                error!(?e, "GRAVE ERROR Building new crates panicked");
+                thread::sleep(Duration::from_mins(1));
+            }
         }
     }
 }
