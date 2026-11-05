@@ -18,6 +18,10 @@ pub struct Config {
     pub build_workspace_reinitialization_interval: Duration,
     pub build_toolchain_update_interval: Duration,
 
+    /// Only start another build when this many eligible jobs are queued.
+    /// When unset, skip the queue length check.
+    pub min_queue_length: Option<usize>,
+
     // Build params
     pub rustwide_workspace: PathBuf,
     pub inside_docker: bool,
@@ -50,6 +54,7 @@ impl AppConfig for Config {
             .or(build_cpu_limit.map(CpuLimit::Quota));
 
         Ok(Self {
+            min_queue_length: maybe_env("DOCSRS_BUILD_MIN_QUEUE_LENGTH")?,
             temp_dir: prefix.join("tmp"),
             prefix,
             rustwide_workspace: env("DOCSRS_RUSTWIDE_WORKSPACE", PathBuf::from(".workspace"))?,

@@ -3,17 +3,19 @@ mod duration_impl {
     use sqlx::postgres::types::PgInterval;
     use sqlx::{
         Postgres,
+        encode::IsNull,
         error::BoxDynError,
-        postgres::{PgTypeInfo, PgValueRef},
+        postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef},
         prelude::*,
     };
     use std::{fmt, ops::Deref, str::FromStr, time::Duration as StdDuration};
 
-    /// A duration with human-readable parsing and display, plus SQLx interval decoding.
+    /// A duration with human-readable parsing and display, plus SQLx interval encoding and decoding.
     ///
     /// Wraps [`std::time::Duration`]. Parses human-readable units such as `4m`,
     /// or an unsigned integer as seconds. Display preserves full precision;
     /// use [`Self::round_to_millis`] for rounded millisecond precision.
+    /// PostgreSQL encoding requires whole microseconds that fit in an `i64`.
     #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Sum, Ord, Copy, Add, AddAssign)]
     pub struct Duration(pub StdDuration);
 
@@ -34,6 +36,7 @@ mod duration_impl {
         duration_constructors! {
             from_nanos(nanos: u64);
             from_millis(millis: u64);
+            from_micros(micros: u64);
             from_secs(secs: u64);
             from_mins(mins: u64);
             from_hours(hours: u64);
@@ -94,6 +97,16 @@ mod duration_impl {
         }
     }
 
+    impl Encode<'_, Postgres> for Duration {
+        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<IsNull, BoxDynError> {
+            <StdDuration as Encode<Postgres>>::encode_by_ref(&self.0, buf)
+        }
+
+        fn size_hint(&self) -> usize {
+            <StdDuration as Encode<Postgres>>::size_hint(&self.0)
+        }
+    }
+
     impl TryFrom<PgInterval> for Duration {
         type Error = crate::convert::IntervalError;
 
@@ -147,6 +160,38 @@ pub use duration_impl::Duration;
 mod tests {
     use super::*;
     use test_case::test_case;
+
+    #[test_case(0; "zero")]
+    #[test_case(1; "one microsecond")]
+    #[test_case(1_500_000; "fractional seconds")]
+    #[test_case(i64::MAX; "maximum interval")]
+    fn encodes_postgres_intervals(micros: i64) {
+        use sqlx::{Encode as _, encode::IsNull, postgres::PgArgumentBuffer};
+
+        let duration = Duration::from_micros(micros as u64);
+        let mut buf = PgArgumentBuffer::default();
+        assert!(matches!(
+            duration.encode_by_ref(&mut buf).unwrap(),
+            IsNull::No
+        ));
+        // PostgreSQL's binary interval stores microseconds, days, then months.
+        assert_eq!(&buf[..8], &micros.to_be_bytes());
+        assert_eq!(&buf[8..], &[0; 8]);
+    }
+
+    #[test_case(Duration::from_nanos(1); "submicrosecond")]
+    #[test_case(Duration::from_nanos(1_001); "fractional microsecond")]
+    #[test_case(
+        Duration::from_micros(i64::MAX as u64 + 1);
+        "microsecond overflow"
+    )]
+    fn rejects_unrepresentable_postgres_intervals(duration: Duration) {
+        use sqlx::{Encode as _, postgres::PgArgumentBuffer};
+
+        let mut buf = PgArgumentBuffer::default();
+        assert!(duration.encode_by_ref(&mut buf).is_err());
+        assert!(buf.is_empty());
+    }
 
     #[test_case("1234")]
     #[test_case("1234s")]

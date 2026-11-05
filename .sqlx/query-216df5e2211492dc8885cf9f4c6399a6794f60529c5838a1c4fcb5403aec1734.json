@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) as \"count!\"\n               FROM queue\n               WHERE\n                   (last_attempt IS NULL OR last_attempt < NOW() - $1::interval)\n                   AND priority <= $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Interval",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "216df5e2211492dc8885cf9f4c6399a6794f60529c5838a1c4fcb5403aec1734"
+}

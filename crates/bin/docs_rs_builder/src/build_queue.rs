@@ -99,8 +99,44 @@ mod tests {
     use crate::testing::TestEnvironment;
     use docs_rs_build_queue::BuildPackageSummary;
     use docs_rs_headers::SurrogateKey;
-    use docs_rs_types::{KrateName, testing::V1};
+    use docs_rs_types::{
+        KrateName,
+        testing::{BAR, BAZ, FOO, V1},
+    };
     use pretty_assertions::assert_eq;
+
+    #[test_case::test_case(None, 3; "unrestricted")]
+    #[test_case::test_case(Some(15), 2; "excludes continuous rebuilds")]
+    #[test_case::test_case(Some(-1), 1; "negative priority cutoff")]
+    fn builder_process_priority(max_priority: Option<i32>, expected_builds: usize) -> Result<()> {
+        let env = TestEnvironment::builder()
+            .build_queue_config(docs_rs_build_queue::Config {
+                max_process_priority: max_priority,
+                ..Default::default()
+            })
+            .build()?;
+        let queue = env.blocking_build_queue()?;
+        let metrics = BuilderMetrics::new(env.meter_provider());
+        queue.add_crate(&FOO, &V1, -1)?;
+        queue.add_crate(&BAR, &V1, 15)?;
+        queue.add_crate(&BAZ, &V1, docs_rs_build_queue::PRIORITY_CONTINUOUS)?;
+
+        assert_eq!(queue.processable_count()?, expected_builds);
+        let mut built = Vec::new();
+        // Observe callbacks to distinguish processed jobs from skipped work.
+        for _ in 0..3 {
+            process_next_crate(&env, &metrics, |krate| {
+                built.push(krate.name.clone());
+                Ok(BuildPackageSummary::default())
+            })?;
+        }
+        assert_eq!(built, [FOO, BAR, BAZ][..expected_builds]);
+        assert_eq!(
+            env.runtime().block_on(env.build_queue()?.pending_count())?,
+            3 - expected_builds
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_invalidate_cdn_after_error() -> Result<()> {

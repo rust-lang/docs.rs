@@ -114,6 +114,24 @@ impl AsyncBuildQueue {
         Ok(())
     }
 
+    /// Count jobs matching the priority limit whose retry cooldown has elapsed.
+    pub async fn processable_count(&self) -> Result<usize> {
+        let mut conn = self.db.get_async().await?;
+        let eligible = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!"
+               FROM queue
+               WHERE
+                   (last_attempt IS NULL OR last_attempt < NOW() - $1::interval)
+                   AND priority <= $2
+            "#,
+            self.config.delay_between_build_attempts as _,
+            self.config.max_process_priority.unwrap_or(i32::MAX),
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        Ok(usize::try_from(eligible)?)
+    }
+
     pub async fn pending_count(&self) -> Result<usize> {
         Ok(self
             .pending_count_by_priority()
