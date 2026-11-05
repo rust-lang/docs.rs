@@ -9,6 +9,7 @@ pub struct OtelServiceMetrics {
     pub queued_crates_count: Gauge<u64>,
     pub prioritized_crates_count: Gauge<u64>,
     pub queue_is_locked: Gauge<u64>,
+    pub builds_locked: Gauge<u64>,
     pub queued_crates_count_by_priority: Gauge<u64>,
 }
 
@@ -29,6 +30,10 @@ impl OtelServiceMetrics {
                 .u64_gauge(format!("{PREFIX}.queue_is_locked"))
                 .with_unit("1")
                 .build(),
+            builds_locked: meter
+                .u64_gauge(format!("{PREFIX}.builds_locked"))
+                .with_unit("1")
+                .build(),
             queued_crates_count_by_priority: meter
                 .u64_gauge(format!("{PREFIX}.queued_crates_count_by_priority"))
                 .with_unit("1")
@@ -39,6 +44,8 @@ impl OtelServiceMetrics {
     pub(crate) async fn gather(&self, queue: &AsyncBuildQueue) -> Result<(), Error> {
         self.queue_is_locked
             .record(queue.is_locked().await? as u64, &[]);
+        self.builds_locked
+            .record(queue.builds_locked().await? as u64, &[]);
         self.queued_crates_count
             .record(queue.pending_count().await? as u64, &[]);
         self.prioritized_crates_count

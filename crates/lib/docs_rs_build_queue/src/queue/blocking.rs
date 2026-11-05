@@ -37,6 +37,16 @@ impl BuildQueue {
         self.runtime.block_on(self.inner.processable_count())
     }
 
+    pub fn builds_locked(&self) -> Result<bool> {
+        self.runtime.block_on(self.inner.builds_locked())
+    }
+    pub fn lock_builds(&self) -> Result<()> {
+        self.runtime.block_on(self.inner.lock_builds())
+    }
+    pub fn unlock_builds(&self) -> Result<()> {
+        self.runtime.block_on(self.inner.unlock_builds())
+    }
+
     #[cfg(test)]
     pub(crate) fn pending_count(&self) -> Result<usize> {
         self.runtime.block_on(self.inner.pending_count())
@@ -529,18 +539,34 @@ mod tests {
     }
 
     #[test]
-    fn test_queue_lock() -> Result<()> {
+    fn test_queue_and_build_locks_are_independent() -> Result<()> {
         let env = BlockingTestEnv::new()?;
         let queue = env.queue();
 
         // unlocked without config
         assert!(!queue.is_locked()?);
+        assert!(!queue.builds_locked()?);
 
         queue.lock()?;
         assert!(queue.is_locked()?);
+        assert!(!queue.builds_locked()?);
+
+        queue.lock_builds()?;
+        assert!(queue.is_locked()?);
+        assert!(queue.builds_locked()?);
 
         queue.unlock()?;
         assert!(!queue.is_locked()?);
+        assert!(queue.builds_locked()?);
+
+        queue.lock()?;
+        queue.unlock_builds()?;
+        assert!(queue.is_locked()?);
+        assert!(!queue.builds_locked()?);
+
+        queue.unlock()?;
+        assert!(!queue.is_locked()?);
+        assert!(!queue.builds_locked()?);
 
         Ok(())
     }
