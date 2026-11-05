@@ -81,9 +81,9 @@ pub(crate) fn build_next_queue_package(
         if let Err(err) = builder.perform_maintenance() {
             error!(
                 ?err,
-                "Builder maintenance failed after retries, locking queue"
+                "Builder maintenance failed after retries, locking builds"
             );
-            queue.lock()?;
+            queue.lock_builds()?;
             return Err(err);
         }
 
