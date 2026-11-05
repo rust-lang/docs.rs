@@ -47,13 +47,16 @@ moka = { version = "0.12.14", features = ["future"] }
 opentelemetry = { workspace = true }
 percent-encoding = { workspace = true }
 rand = { workspace = true, optional = true }
-sqlx = { workspace = true } # for sqlite
+rayon-core = { workspace = true }
+# Keep libsqlite3-sys compatible with SQLx in the workspace.
+rusqlite = { version = "0.39", features = ["bundled", "fallible_uint"] }
 strum = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.15", default-features = false, features = ["io-util"] }
 tracing = { workspace = true }
+url = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 zstd = "0.14.0"
@@ -76,13 +79,13 @@ harness = false
 required-features = ["testing"]
 
 [[bench]]
-name = "crc32"
-harness = false
-
-[[bench]]
-name = "folder_contents"
+name = "archive_index_read"
 harness = false
 required-features = ["testing"]
+
+[[bench]]
+name = "crc32"
+harness = false
 
 [lints]
 workspace = true
