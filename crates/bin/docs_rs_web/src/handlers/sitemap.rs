@@ -4,7 +4,7 @@ use crate::{
     impl_axum_webpage,
     page::templates::filters,
 };
-use askama::Template;
+use askama::{NO_VALUES, Template};
 use async_stream::stream;
 use axum::{
     body::{Body, Bytes},
@@ -97,13 +97,11 @@ where
                 }
             };
 
-            let mut buf = Vec::with_capacity(400);
-
-            match item.write_into(&mut buf) {
-                Ok(_) => {
+            match item.async_render_with_values(NO_VALUES).await {
+                Ok(rendered) => {
                     items += 1;
-                    streamed_bytes += buf.len();
-                    yield Ok(Bytes::from(buf));
+                    streamed_bytes += rendered.len();
+                    yield Ok(Bytes::from(rendered));
                 }
                 Err(err) => {
                     error!(?err, "error when rendering sitemap item xml");

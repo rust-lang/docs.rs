@@ -10,7 +10,10 @@ use http::header::CONTENT_LENGTH;
 use std::sync::Arc;
 
 pub(crate) trait AddCspNonce: IntoResponse {
-    fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String>;
+    fn render_with_csp_nonce(
+        &mut self,
+        csp_nonce: String,
+    ) -> BoxFuture<'_, askama::Result<String>>;
 }
 
 #[macro_export]
@@ -25,9 +28,17 @@ macro_rules! impl_axum_webpage {
         $(,)?
     ) => {
         impl $crate::page::web_page::AddCspNonce for $page {
-            fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
-                let values: (&str, &dyn std::any::Any) = ("csp_nonce", &csp_nonce);
-                self.render_with_values(&values)
+            fn render_with_csp_nonce(
+                &mut self,
+                csp_nonce: String,
+            ) -> ::futures_util::future::BoxFuture<'_, askama::Result<String>> {
+                // `async_render_with_values()` is called on the concrete page type, so the
+                // compiler knows that its future is `Send`.
+                ::std::boxed::Box::pin(async move {
+                    let values: (&str, &(dyn std::any::Any + Send + Sync)) =
+                        ("csp_nonce", &csp_nonce);
+                    askama::Template::async_render_with_values(&*self, &values).await
+                })
             }
         }
 
@@ -114,16 +125,20 @@ fn render_response(
             let csp_nonce_clone = csp_nonce.clone();
 
             let result: Result<String, anyhow::Error> = if cpu_intensive_rendering {
+                // The rendering threadpool is not part of the tokio runtime, so the rendering
+                // future is driven to completion from there with `block_on`.
+                let runtime = tokio::runtime::Handle::current();
                 templates
                     .render_in_threadpool(move || {
-                        template
-                            .render_with_csp_nonce(csp_nonce_clone)
+                        runtime
+                            .block_on(template.render_with_csp_nonce(csp_nonce_clone))
                             .map_err(|err| err.into())
                     })
                     .await
             } else {
                 template
                     .render_with_csp_nonce(csp_nonce_clone)
+                    .await
                     .map_err(|err| err.into())
             };
 
