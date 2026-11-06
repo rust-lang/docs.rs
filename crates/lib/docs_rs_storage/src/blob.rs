@@ -145,11 +145,16 @@ impl StreamingBlob {
     }
 
     /// consume the inner stream and materialize the full blob into memory.
+    #[tracing::instrument(
+        skip(self),
+        fields(path = %self.path, content_length = ?self.content_length, bytes = tracing::field::Empty)
+    )]
     pub async fn materialize(mut self, max_size: ByteSize) -> Result<Blob> {
         let mut content = SizedBuffer::new(max_size.as_u64() as usize);
         content.reserve(self.content_length.unwrap_or(16 * 1024));
 
-        io::copy(&mut self.content, &mut content).await?;
+        let bytes = io::copy(&mut self.content, &mut content).await?;
+        tracing::Span::current().record("bytes", bytes);
 
         Ok(Blob {
             path: self.path,
