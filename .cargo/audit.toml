@@ -11,6 +11,9 @@ ignore = [
 
     "RUSTSEC-2026-0374", # basic-toml is unmaintained
     # https://github.com/rust-lang/docs.rs/issues/3624
+
+    "RUSTSEC-2026-0441", # pin-utils is unmaintained - unused
+    # https://github.com/rust-lang/docs.rs/issues/3679
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
