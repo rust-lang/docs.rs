@@ -1,8 +1,12 @@
 on:
-  pull_request_target:
+  push:
     branches:
       - main
-    types: [closed]
+
+# Keep one update PR current, including when pushes arrive close together.
+concurrency:
+  group: update-sqlx
+  cancel-in-progress: false
 
 env:
   RUST_BACKTRACE: 1
@@ -21,7 +25,7 @@ permissions:
 
 jobs:
   commit-sqlx-changes:
-    if: ${{ github.event.pull_request.merged }}
+    if: github.repository == 'rust-lang/docs.rs'
     runs-on: ubuntu-latest
     outputs:
       need_pr: ${{ steps.sqlx_check.outputs.need_pr }}
@@ -44,11 +48,11 @@ jobs:
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
-      - name: Commit sqlx changes on main branch if any
+      - name: Check for SQLx changes
         id: sqlx_check
         run: |
           just sqlx-update
-          # If there are differences in the SQLX files, then we push them on the main branch
+          # Open or update a PR if the generated SQLx files differ from main.
           if [ -n "$(git status --porcelain .sqlx)" ]; then
             echo "need_pr=1" >> "$GITHUB_OUTPUT"
           else
@@ -67,8 +71,9 @@ jobs:
           committer: Docs.rs developers <docs.rs@users.noreply.github.com>
           author: Docs.rs developers <docs.rs@users.noreply.github.com>
           signoff: false
+          add-paths: .sqlx
           delete-branch: true
-          branch: update-sqlx-pr-${{ github.event.pull_request.number }}
+          branch: update-sqlx
           title: Update SQLX files
           body: |
-            Following #${{ github.event.pull_request.number }} changes, here are the related SQLX files changes.
+            Update the generated SQLX files to match main after ${{ github.sha }}.
