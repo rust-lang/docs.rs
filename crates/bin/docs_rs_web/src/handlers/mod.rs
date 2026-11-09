@@ -35,6 +35,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
+use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{info, instrument};
@@ -118,11 +119,16 @@ pub(crate) async fn build_axum_app(
     ))
 }
 
+/// Run the web server until `shutdown` is cancelled, then shut down gracefully.
+///
+/// For the standalone server this is the token from
+/// [`docs_rs_utils::install_shutdown_signal_handlers`].
 #[instrument(skip_all)]
 pub async fn run_web_server(
     addr: Option<SocketAddr>,
     config: Arc<Config>,
     context: Arc<Context>,
+    shutdown_token: CancellationToken,
 ) -> Result<(), Error> {
     let template_data = Arc::new(TemplateData::new(config.render_threads)?);
 
@@ -155,36 +161,13 @@ pub async fn run_web_server(
     tracing::info!("Starting web server on `{}`", listener.local_addr()?);
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(async move {
+            shutdown_token.cancelled().await;
+            info!("starting graceful shutdown of web server");
+        })
         .await?;
 
     Ok(())
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-
-    info!("signal received, starting graceful shutdown");
 }
 
 #[instrument]
