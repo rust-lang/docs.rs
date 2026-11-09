@@ -29,7 +29,10 @@ use std::{
     pin::Pin,
     sync::Arc,
 };
-use tokio::{fs, io, io::AsyncWriteExt as _};
+use tokio::{
+    fs,
+    io::{self, AsyncWriteExt as _},
+};
 use tokio_util::bytes::Bytes;
 use tracing::{info_span, instrument, trace, warn};
 
@@ -509,6 +512,34 @@ impl AsyncStorage {
         Ok(alg)
     }
 
+    // Read a local file, compress it, and upload to S3.
+    #[instrument(skip_all)]
+    pub async fn store_file(
+        &self,
+        target_path: impl Into<String> + fmt::Debug,
+        source_path: impl AsRef<Path> + fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        let target_path = target_path.into();
+        let alg = CompressionAlgorithm::default();
+
+        let mut source_file = io::BufReader::new(fs::File::open(&source_path.as_ref()).await?);
+        let mut content = Vec::new();
+        compress_async(&mut source_file, &mut content, alg).await?;
+
+        let mime = detect_mime(&target_path).to_owned();
+
+        self.backend
+            .upload_stream(StreamUpload {
+                path: target_path,
+                mime,
+                source: StreamUploadSource::Bytes(content.into()),
+                compression: Some(alg),
+            })
+            .await?;
+
+        Ok(alg)
+    }
+
     #[instrument(skip(self))]
     pub async fn list_prefix<'a>(&'a self, prefix: &'a str) -> BoxStream<'a, Result<String>> {
         self.backend.list_prefix(prefix).await
@@ -790,6 +821,25 @@ mod backend_tests {
                 .value(),
             NAMES.len() as u64,
         );
+
+        Ok(())
+    }
+
+    async fn test_store_file(storage: &AsyncStorage) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let source_path = dir.path().join("diagnostics.jsonl");
+        let content = b"{\"reason\":\"compiler-message\"}\n";
+        fs::write(&source_path, content).await?;
+
+        let compression = storage
+            .store_file("build-logs/1/target.jsonl", &source_path)
+            .await?;
+
+        assert_eq!(compression, CompressionAlgorithm::default());
+        let stored = storage
+            .get("build-logs/1/target.jsonl", ByteSize::MAX)
+            .await?;
+        assert_eq!(stored.content, content);
 
         Ok(())
     }
@@ -1129,6 +1179,7 @@ mod backend_tests {
             test_get_object,
             test_get_range,
             test_get_too_big,
+            test_store_file,
             test_too_long_filename,
             test_list_prefix,
             test_delete_prefix,

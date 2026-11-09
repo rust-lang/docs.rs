@@ -104,6 +104,16 @@ impl Storage {
         self.runtime.block_on(self.inner.store_one(path, content))
     }
 
+    // Read a local file, compress it, and upload to S3.
+    pub fn store_file(
+        &self,
+        target_path: impl Into<String> + fmt::Debug,
+        source_path: impl AsRef<Path> + fmt::Debug,
+    ) -> Result<CompressionAlgorithm> {
+        self.runtime
+            .block_on(self.inner.store_file(target_path, source_path))
+    }
+
     /// sync wrapper for the list_prefix function
     /// purely for testing purposes since it collects all files into a Vec.
     #[cfg(feature = "testing")]
