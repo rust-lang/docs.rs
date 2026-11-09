@@ -14,6 +14,10 @@ ignore = [
 
     "RUSTSEC-2026-0441", # pin-utils is unmaintained - unused
     # https://github.com/rust-lang/docs.rs/issues/3679
+
+    "RUSTSEC-2026-0459", # `libsqlite3-sys` via C SQLite CVE-2026-119375
+    # https://rustsec.org/advisories/RUSTSEC-2026-0459
+    # needs user-controlled sqlite db to be exposed
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
