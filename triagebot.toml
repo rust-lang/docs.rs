@@ -7,3 +7,28 @@ allow-unauthenticated = [
     "S-waiting-on-author",
     "S-blocked",
 ]
+
+# Also allow authors to move their PR between review/author/blocked states.
+[shortcut]
+
+# Non-draft PRs are ready for review when opened, reopened, or marked ready.
+# Triagebot also removes this label when a PR is closed or made a draft.
+[autolabel."S-waiting-on-review"]
+new_pr = true
+
+# Draft PRs wait on the author. Remove this label when marked ready or closed.
+[autolabel."S-waiting-on-author"]
+new_draft = true
+
+[autolabel."S-waiting-on-deploy"]
+pr_merged = true
+
+# This applies when the author requests review from one of the PR assignees.
+[review-requested]
+remove_labels = ["S-waiting-on-author"]
+add_labels = ["S-waiting-on-review"]
+
+# Triagebot accepts change requests from assignees and users with write access.
+[review-submitted]
+review_labels = ["S-waiting-on-review"]
+reviewed_label = "S-waiting-on-author"
