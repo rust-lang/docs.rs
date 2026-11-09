@@ -2,15 +2,16 @@ name: Dev-Guide mdBook
 
 on:
   pull_request:
-  pull_request_target:
+  push:
     branches:
       - main
-    types: [closed]
+
+permissions:
+  contents: read
 
 jobs:
   test:
     name: build and test
-    if: ${{ github.event_name == 'pull_request' || github.event.pull_request.merged }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -37,7 +38,7 @@ jobs:
   deploy:
     name: deploy
     needs: test  # the `test` job uploads the pages artifact
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged && github.repository_owner == 'rust-lang'
+    if: github.event_name == 'push' && github.repository == 'rust-lang/docs.rs'
     permissions:
       pages: write
       id-token: write
