@@ -29,9 +29,10 @@ async fn main() -> anyhow::Result<()> {
         )),
     };
     let context = build_context().await?;
+    let shutdown_token = docs_rs_utils::install_shutdown_signal_handlers(context.runtime())?;
     let config = Arc::new(Config::from_environment()?);
 
-    run_web_server(Some(socket_addr), config, context).await?;
+    run_web_server(Some(socket_addr), config, context, shutdown_token).await?;
 
     Ok(())
 }

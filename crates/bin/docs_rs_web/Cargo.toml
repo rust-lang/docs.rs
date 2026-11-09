@@ -58,7 +58,7 @@ strum = { workspace = true }
 syntect = { version = "5.0.0", default-features = false, features = ["dump-load", "html", "parsing", "regex-onig"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { version = "0.7.15", default-features = false, features = ["io"] }
+tokio-util = { workspace = true, features = ["io"] }
 toml = { workspace = true }
 tower = "0.5.1"
 tower-http = { version = "0.7.0", features = ["catch-panic", "fs", "timeout", "trace"] }

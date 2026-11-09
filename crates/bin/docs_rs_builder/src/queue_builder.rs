@@ -4,18 +4,32 @@ use anyhow::Result;
 use docs_rs_context::Context;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
-use std::{fs, io, path::Path, thread};
-use tracing::{debug, error, warn};
+use std::{fs, io, path::Path};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, warn};
 
 /// the main build-server loop
+///
+/// Stops consuming the queue when `shutdown` is cancelled, allowing the current
+/// build (including publication and queue bookkeeping) to finish first.
 pub fn queue_builder(
     context: &Context,
     config: &Config,
     mut builder: RustwideBuilder,
+    shutdown_token: &CancellationToken,
 ) -> Result<()> {
     let build_queue = context.blocking_build_queue()?;
 
-    loop {
+    let wait = || {
+        context.runtime().block_on(async {
+            tokio::select! {
+                _ = shutdown_token.cancelled() => {},
+                _ = tokio::time::sleep(Duration::from_mins(1)) => {},
+            }
+        });
+    };
+
+    while !shutdown_token.is_cancelled() {
         let temp_dir = &config.temp_dir;
         if temp_dir.exists()
             && let Err(e) = remove_tempdirs(temp_dir)
@@ -27,13 +41,13 @@ pub fn queue_builder(
         match build_queue.is_locked() {
             Ok(true) => {
                 warn!("Build queue is locked, skipping building new crates");
-                thread::sleep(Duration::from_mins(1));
+                wait();
                 continue;
             }
             Ok(false) => {}
             Err(err) => {
                 error!(?err, "could not get queue lock");
-                thread::sleep(Duration::from_mins(1));
+                wait();
                 continue;
             }
         }
@@ -47,16 +61,20 @@ pub fn queue_builder(
                         count,
                         min_queue_length, "Build queue below threshold, going back to sleep"
                     );
-                    thread::sleep(Duration::from_mins(1));
+                    wait();
                     continue;
                 }
                 Ok(_) => {}
                 Err(err) => {
                     error!(?err, "Could not count processable builds");
-                    thread::sleep(Duration::from_mins(1));
+                    wait();
                     continue;
                 }
             }
+        }
+
+        if shutdown_token.is_cancelled() {
+            break;
         }
 
         // Keep build panics from terminating the builder loop.
@@ -67,17 +85,21 @@ pub fn queue_builder(
             Ok(Ok(true)) => {}
             Ok(Ok(false)) => {
                 debug!("No processable build, going back to sleep");
-                thread::sleep(Duration::from_mins(1));
+                wait();
             }
             Ok(Err(e)) => {
                 error!(?e, "Failed to build crate from queue");
+                wait();
             }
             Err(e) => {
                 error!(?e, "GRAVE ERROR Building new crates panicked");
-                thread::sleep(Duration::from_mins(1));
+                wait();
             }
         }
     }
+
+    info!("Build queue reader stopped");
+    Ok(())
 }
 
 /// Sometimes, when the server hits a hard crash or a build thread panics,

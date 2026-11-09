@@ -5,6 +5,7 @@ use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
 use docs_rs_types::{KrateName, Version};
+use docs_rs_utils::install_shutdown_signal_handlers;
 use std::sync::Arc;
 use tokio::runtime;
 
@@ -62,7 +63,14 @@ impl CommandLine {
 
         match self {
             Self::Start => {
-                queue_builder(&ctx, &config, RustwideBuilder::init(config.clone(), &ctx)?)?;
+                // Only the long-running build server watches the shutdown token;
+                // one-off commands keep the default Ctrl-C behaviour.
+                // Installed before builder initialization, which can be slow.
+                let shutdown_token = install_shutdown_signal_handlers(ctx.runtime())?;
+                let builder = RustwideBuilder::init(config.clone(), &ctx)?;
+                if !shutdown_token.is_cancelled() {
+                    queue_builder(&ctx, &config, builder, &shutdown_token)?;
+                }
             }
             Self::Build { subcommand } => subcommand.handle_args(ctx, config)?,
         }

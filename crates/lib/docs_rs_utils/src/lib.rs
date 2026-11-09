@@ -1,9 +1,11 @@
 mod runtime_ext;
 pub mod rustc_version;
+mod shutdown;
 #[cfg(feature = "testing")]
 pub mod testing;
 
 pub use runtime_ext::Handle;
+pub use shutdown::install_shutdown_signal_handlers;
 
 use anyhow::{Context as _, Result};
 use std::fmt;

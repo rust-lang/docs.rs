@@ -8,6 +8,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     time,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 fn web_config() -> Result<Arc<Config>> {
@@ -29,7 +30,7 @@ async fn start_web_server(config: Arc<Config>, context: Arc<Context>) -> Result<
     };
 
     tokio::spawn(async move {
-        run_web_server(Some(socket_addr), config, context)
+        run_web_server(Some(socket_addr), config, context, CancellationToken::new())
             .await
             .expect("error starting web server")
     });
