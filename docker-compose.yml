@@ -255,7 +255,11 @@ services:
             test: pg_isready --username cratesfyi
 
     s3:
-        image: rustfs/rustfs:latest
+        # Pinned because RustFS 1.0.5 rejects object keys containing control
+        # characters ("Object key contains characters unsupported by XML
+        # listings"), which breaks `test_delete_prefix` (it stores a key with
+        # `\u{1b}`). Real S3 accepts these keys, so we stay on 1.0.4 for now.
+        image: rustfs/rustfs:1.0.4
         command: /data
         ports:
             - "127.0.0.1:${DOCSRS_S3_PORT:-9000}:9000"
