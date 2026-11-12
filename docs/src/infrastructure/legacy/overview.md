@@ -10,7 +10,7 @@ flowchart LR
   subgraph ec2[EC2 instance]
     nginx[nginx] --> web[web server] --> |accesses| psql[PostgreSQL database]
     watcher[index watcher] --> |enqueues builds| psql
-    builder[builders × 4] --> |reads queued builds| psql
+    builder[builders × 5] --> |reads queued builds| psql
   end
 
   fastly --> nginx
@@ -72,7 +72,7 @@ The build servers generate documentation for queued releases and upload it to
 S3. See [Build Server](../../binaries/build-server/index.md) for implementation
 details.
 
-We currently run **four** parallel build servers.
+We currently run **five** parallel build servers.
 
 ## PostgreSQL database
 

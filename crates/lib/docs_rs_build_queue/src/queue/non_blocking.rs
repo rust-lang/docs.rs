@@ -315,7 +315,7 @@ impl AsyncBuildQueue {
             .unwrap_or(false))
     }
 
-    /// lock the queue. Daemon will check this lock and stop operating if it exists.
+    /// lock the queue. Builders will check this lock and stop operating if it exists.
     pub async fn lock(&self) -> Result<()> {
         let mut conn = self.db.get_async().await?;
         set_config(&mut conn, ConfigName::QueueLocked, true).await
