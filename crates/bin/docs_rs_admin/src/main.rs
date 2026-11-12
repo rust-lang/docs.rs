@@ -318,10 +318,10 @@ enum BuildSubcommand {
         toolchain_name: String,
     },
 
-    /// Locks the daemon, preventing it from building new crates
+    /// Locks the build queue, preventing builders from building new crates
     Lock,
 
-    /// Unlocks the daemon to continue building new crates
+    /// Unlocks the build queue so builders continue building new crates
     Unlock,
 }
 

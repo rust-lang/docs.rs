@@ -131,7 +131,6 @@ pub async fn run_web_server(
     let app = build_axum_app(config, context, template_data)
         .await?
         .into_make_service();
-    // Both the standalone web binary and the legacy daemon use this path.
     // The inherited listener takes precedence over the configured bind address.
     let mut listenfd = listenfd::ListenFd::from_env();
     if listenfd.len() > 1 {

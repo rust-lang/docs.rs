@@ -1570,24 +1570,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cratesfyi"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "clap",
- "docs_rs_builder",
- "docs_rs_config",
- "docs_rs_context",
- "docs_rs_logging",
- "docs_rs_rustwide",
- "docs_rs_utils",
- "docs_rs_watcher",
- "docs_rs_web",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "crc"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

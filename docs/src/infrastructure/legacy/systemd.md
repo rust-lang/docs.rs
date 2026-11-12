@@ -5,22 +5,25 @@ reads these files to provide the environment in which the services run.
 
 | service          | systemd service name | service config                          |
 | ---------------- | -------------------- | --------------------------------------- |
-| main daemon      | `docs.rs`            | `/home/cratesfyi/.docs-rs-env`          |
-| second builder   | `docs.rs.builder`    | `/home/cratesfyi/.docs-rs-builder-env`  |
-| third builder    | `docs.rs.builder3`   | `/home/cratesfyi/.docs-rs-builder3-env` |
-| fourth builder   | `docs.rs.builder4`   | `/home/cratesfyi/.docs-rs-builder4-env` |
+| web server       | `docs.rs`            | `/home/cratesfyi/.docs-rs-env`          |
+| index watcher    | `docs.rs.watcher`    | `/home/cratesfyi/.docs-rs-watcher-env`  |
+| builder 1        | `docs.rs.builder`    | `/home/cratesfyi/.docs-rs-builder-env`  |
+| builder 2        | `docs.rs.builder3`   | `/home/cratesfyi/.docs-rs-builder3-env` |
+| builder 3        | `docs.rs.builder4`   | `/home/cratesfyi/.docs-rs-builder4-env` |
+| builder 4        | `docs.rs.builder5`   | `/home/cratesfyi/.docs-rs-builder5-env` |
+| builder 5        | `docs.rs.builder6`   | `/home/cratesfyi/.docs-rs-builder6-env` |
 | docker           | `docker`             |                                         |
 | nginx            | `nginx`              |                                         |
 | prune-disk-space | `prune-disk-space`   |                                         |
 
 ## Web socket activation
 
-Both `docs_rs_web` and the legacy `cratesfyi daemon` accept a single TCP
-listening socket from systemd. When supplied, this socket takes precedence over
-the web bind address. Without socket activation, the server binds its address as
-usual.
+`docs_rs_web` accepts a single TCP listening socket from systemd. When supplied,
+this socket takes precedence over the web bind address. Without socket
+activation, the server binds its address as usual.
 
-For the legacy `docs.rs.service`, create `/etc/systemd/system/docs.rs.socket`:
+For the web service `docs.rs.service`, create
+`/etc/systemd/system/docs.rs.socket`:
 
 ```ini
 [Unit]
@@ -41,10 +44,9 @@ Requires=docs.rs.socket
 After=docs.rs.socket
 ```
 
-For the standalone web service, use its service name for the socket unit
-instead. Keep the existing service command, user, and environment settings. The
-command must execute the backend directly, or use `exec` in a shell wrapper, so
-that the socket activation PID identifies the backend process.
+Keep the existing service command, user, and environment settings. The command
+must execute `docs_rs_web` directly, or use `exec` in a shell wrapper, so that
+the socket activation PID identifies the backend process.
 
 After installing a backend version with socket activation support, switch over
 with the following commands. This initial switch briefly interrupts traffic:
