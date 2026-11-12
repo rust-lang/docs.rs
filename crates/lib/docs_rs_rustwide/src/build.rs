@@ -427,7 +427,7 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_coverage(&self, target: &str) -> StepResult<Option<DocCoverage>> {
         self.capture_rustwide_step(|| {
             self.command(target)
-                .rustdoc_args(["--output-format", "json", "--show-coverage"])
+                .rustdoc_args(["--output-format", "json", "--coverage"])
                 .prepare()
                 .map_err(BuildStepError::Prepare)?
                 .log_output(true)
@@ -894,7 +894,7 @@ mod policy_tests {
             format!(
                 r#"#!/bin/sh
     case "$*" in
-        *--show-coverage*) mode=coverage ;;
+        *--coverage*) mode=coverage ;;
         *"--output-format json"*) mode=json ;;
         *--emit=html*) mode=html ;;
         *) mode=other ;;
