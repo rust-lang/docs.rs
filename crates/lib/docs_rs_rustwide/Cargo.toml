@@ -6,8 +6,15 @@ license.workspace = true
 repository.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "nextest-update-toolchain"
+path = "src/bin/nextest-update-toolchain.rs"
+required-features = ["testing"]
+
 [features]
 clap = ["dep:clap"]
+# Enables the nextest setup binary for builder tests.
+testing = []
 
 [dependencies]
 anyhow = { workspace = true }
