@@ -4,8 +4,25 @@ experimental = ["setup-scripts"]
 # Rebuild the template database schema and capture its DDL for this test run.
 command = 'cargo run --quiet --package docs_rs_database --features testing --bin nextest-setup'
 
+[scripts.setup.rustwide-toolchain]
+# Install or update the nightly in the shared builder-test workspace, so local
+# runs use the same (latest) nightly as CI, which starts from an empty workspace.
+command = 'cargo run --quiet --package docs_rs_rustwide --features testing --bin nextest-update-toolchain'
+# A fresh install downloads the full toolchain.
+slow-timeout = { period = "60s", terminate-after = 15 }
+
 [[profile.default.scripts]]
 # filter all tests / binaries that depend / use docs_rs_database anywhere
 filter = 'rdeps(docs_rs_database)'
 # run our create-template-schema script
 setup = 'docs-rs-template-db'
+
+# Profile for the ignored builder tests (`just run-builder-tests`).
+# Scripts are listed explicitly instead of relying on inheritance from `default`.
+[[profile.builder.scripts]]
+filter = 'rdeps(docs_rs_database)'
+setup = 'docs-rs-template-db'
+
+[[profile.builder.scripts]]
+filter = 'rdeps(docs_rs_rustwide)'
+setup = 'rustwide-toolchain'
