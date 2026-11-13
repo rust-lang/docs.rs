@@ -90,14 +90,18 @@ pub async fn start_background_service_metric_collector(context: &Context) -> Res
     Ok(())
 }
 
-pub async fn start_background_statistics_collector(context: &Context) -> Result<()> {
+pub async fn start_background_statistics_collector(
+    config: Arc<Config>,
+    context: &Context,
+) -> Result<()> {
     let pool = context.pool()?.clone();
 
     start_async_cron("statistics collector", Duration::from_mins(5), move || {
         let pool = pool.clone();
+        let config = config.clone();
         async move {
             let mut conn = pool.get_async().await?;
-            statistics::gather_documentation_statistics(&mut conn).await
+            statistics::gather_documentation_statistics(&mut conn, &config).await
         }
     });
 

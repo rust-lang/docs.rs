@@ -1,3 +1,4 @@
+use crate::Config;
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use docs_rs_database::service_config::{
@@ -8,7 +9,10 @@ use tracing::{info, instrument};
 
 /// Refresh the cached documentation file count at most once every twelve hours.
 #[instrument(skip_all)]
-pub async fn gather_documentation_statistics(conn: &mut sqlx::PgConnection) -> Result<()> {
+pub async fn gather_documentation_statistics(
+    conn: &mut sqlx::PgConnection,
+    config: &Config,
+) -> Result<()> {
     let cached: Option<DocumentationStatistics> =
         get_config(conn, ConfigName::DocumentationStatistics).await?;
 
@@ -20,10 +24,14 @@ pub async fn gather_documentation_statistics(conn: &mut sqlx::PgConnection) -> R
 
     let mut tx = conn.begin().await?;
 
-    // set a statement timeout, so this expensive query won't run wild.
-    sqlx::query!("SET LOCAL statement_timeout = '15s'")
-        .execute(&mut *tx)
-        .await?;
+    // set a statement timeout just for the current transaction, so this expensive query won't run wild.
+    let statement_timeout = format!("{}ms", config.statistics_statement_timeout.as_millis());
+    sqlx::query!(
+        "SELECT set_config('statement_timeout', $1, true)",
+        &statement_timeout
+    )
+    .fetch_one(&mut *tx)
+    .await?;
     sqlx::query!("SET LOCAL lock_timeout = '1s'")
         .execute(&mut *tx)
         .await?;
@@ -105,7 +113,7 @@ mod tests {
                 .await?;
         }
 
-        gather_documentation_statistics(&mut conn).await?;
+        gather_documentation_statistics(&mut conn, env.config()).await?;
 
         let stats: DocumentationStatistics =
             get_config(&mut conn, ConfigName::DocumentationStatistics)
@@ -130,7 +138,7 @@ mod tests {
         }
 
         let before = Utc::now();
-        gather_documentation_statistics(&mut conn).await?;
+        gather_documentation_statistics(&mut conn, env.config()).await?;
 
         let stats: DocumentationStatistics =
             get_config(&mut conn, ConfigName::DocumentationStatistics)
