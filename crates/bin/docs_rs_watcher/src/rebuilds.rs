@@ -95,9 +95,7 @@ mod tests {
             .await
             .name(&FOO)
             .version(V1)
-            .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
-            ])
+            .builds(vec![FakeBuild::default().rustc_version_date(2020, 10, 15)])
             .create()
             .await?;
 
@@ -141,9 +139,7 @@ mod tests {
             .await
             .name(&FOO)
             .version(V1)
-            .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
-            ])
+            .builds(vec![FakeBuild::default().rustc_version_date(2020, 10, 15)])
             .create()
             .await?;
 
@@ -172,9 +168,7 @@ mod tests {
             .await
             .name(&BAZ)
             .version(V1)
-            .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.84.0-nightly (e7c0d2750 2020-10-15)"),
-            ])
+            .builds(vec![FakeBuild::default().rustc_version_date(2020, 10, 15)])
             .create()
             .await?;
 

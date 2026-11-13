@@ -13,7 +13,7 @@ use askama::Template;
 use axum::{extract::State, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use docs_rs_storage::AsyncStorage;
-use docs_rs_types::{BuildId, BuildStatus};
+use docs_rs_types::{BuildId, BuildStatus, RustcVersion};
 use futures_util::TryStreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BuildDetails {
     id: BuildId,
-    rustc_version: Option<String>,
+    rustc_version: Option<RustcVersion>,
     docsrs_version: Option<String>,
     build_status: BuildStatus,
     build_time: Option<DateTime<Utc>>,
@@ -85,7 +85,7 @@ pub(crate) async fn build_details_handler(
 
     let row = sqlx::query!(
         r#"SELECT
-             builds.rustc_version,
+             builds.rustc_version as "rustc_version: RustcVersion",
              builds.docsrs_version,
              builds.build_status as "build_status: BuildStatus",
              COALESCE(builds.build_finished, builds.build_started) as build_time,

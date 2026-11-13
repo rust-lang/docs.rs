@@ -2444,6 +2444,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bon",
+ "chrono",
  "clap",
  "docs_rs_build_limits",
  "docs_rs_cargo_metadata",
@@ -2563,6 +2564,7 @@ name = "docs_rs_types"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "crates_io_validation",
  "derive_more 2.1.1",
  "humantime",
@@ -2596,8 +2598,6 @@ name = "docs_rs_utils"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "chrono",
- "regex",
  "time",
  "tokio",
  "tokio-util",

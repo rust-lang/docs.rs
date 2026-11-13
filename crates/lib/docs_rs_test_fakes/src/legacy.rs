@@ -1,6 +1,6 @@
 use crate::FakeGithubStats;
 use anyhow::{Context as _, Result, bail};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use docs_rs_cargo_metadata::{Dependency, MetadataPackage, Target};
 use docs_rs_database::{
     Pool,
@@ -15,7 +15,7 @@ use docs_rs_storage::{
     source_archive_path,
 };
 use docs_rs_types::{
-    BuildError, BuildId, BuildStatus, ByteSize, DocCoverage, KrateName, ReleaseId,
+    BuildError, BuildId, BuildStatus, ByteSize, DocCoverage, KrateName, ReleaseId, RustcVersion,
     SimpleBuildError, Version, VersionReq,
 };
 use std::{
@@ -92,7 +92,8 @@ pub struct FakeBuild {
     s3_build_log: Option<(String, bool)>,
     other_build_logs: HashMap<String, (String, bool)>,
     db_build_log: Option<String>,
-    rustc_version: String,
+    /// `None` simulates a build row without rustc version / nightly date.
+    rustc_version: Option<RustcVersion>,
     docsrs_version: String,
     build_status: BuildStatus,
     memory_peak: Option<ByteSize>,
@@ -573,9 +574,19 @@ impl<'a> FakeRelease<'a> {
 }
 
 impl FakeBuild {
-    pub fn rustc_version(self, rustc_version: impl Into<String>) -> Self {
+    pub fn rustc_version_date(self, year: i32, month: u32, day: u32) -> Self {
+        let date = NaiveDate::from_ymd_opt(year, month, day)
+            .unwrap_or_else(|| panic!("invalid fake date {year}-{month}-{day}"));
         Self {
-            rustc_version: rustc_version.into(),
+            rustc_version: Some(fake_rustc_version(date)),
+            ..self
+        }
+    }
+
+    /// Store the build without `rustc_version` & `rustc_nightly_date`.
+    pub fn without_rustc_version(self) -> Self {
+        Self {
+            rustc_version: None,
             ..self
         }
     }
@@ -664,10 +675,15 @@ impl FakeBuild {
     ) -> Result<()> {
         let build_id = docs_rs_database::releases::initialize_build(&mut *conn, release_id).await?;
 
+        let rustc_version = self
+            .rustc_version
+            .clone()
+            .unwrap_or_else(default_rustc_version);
+
         docs_rs_database::releases::finish_build(
             &mut *conn,
             build_id,
-            &self.rustc_version,
+            &rustc_version,
             &self.docsrs_version,
             self.build_status,
             Some(ByteSize::b(42)),
@@ -676,6 +692,15 @@ impl FakeBuild {
             None::<&SimpleBuildError>,
         )
         .await?;
+
+        if self.rustc_version.is_none() {
+            sqlx::query!(
+                "UPDATE builds SET rustc_version = NULL, rustc_nightly_date = NULL WHERE id = $1",
+                build_id.0
+            )
+            .execute(&mut *conn)
+            .await?;
+        }
 
         if let Some(db_build_log) = self.db_build_log.as_deref() {
             sqlx::query!(
@@ -726,7 +751,7 @@ impl Default for FakeBuild {
             s3_build_log: Some(("It works!".into(), true)),
             db_build_log: None,
             other_build_logs: HashMap::new(),
-            rustc_version: "rustc 2.0.0-nightly (000000000 1970-01-01)".into(),
+            rustc_version: Some(default_rustc_version()),
             docsrs_version: "docs.rs 1.0.0 (000000000 1970-01-01)".into(),
             build_status: BuildStatus::Success,
             memory_peak: Some(23u64.into()),
@@ -734,4 +759,16 @@ impl Default for FakeBuild {
             documentation_file_count: Some(33),
         }
     }
+}
+
+fn fake_rustc_version(date: NaiveDate) -> RustcVersion {
+    RustcVersion::new(
+        Version::parse("2.0.0-nightly").expect("valid semver"),
+        "000000000",
+        date,
+    )
+}
+
+fn default_rustc_version() -> RustcVersion {
+    fake_rustc_version(NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid date"))
 }

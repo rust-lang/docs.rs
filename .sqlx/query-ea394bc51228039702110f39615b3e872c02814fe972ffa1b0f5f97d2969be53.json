@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE builds SET rustc_version = NULL, rustc_nightly_date = NULL WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea394bc51228039702110f39615b3e872c02814fe972ffa1b0f5f97d2969be53"
+}

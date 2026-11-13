@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                crates.name as \"name: KrateName\",\n                releases.version,\n                releases.description,\n                releases.target_name,\n                releases.rustdoc_status,\n                releases.default_target,\n                releases.doc_targets,\n                releases.yanked,\n                builds.id as \"latest_build_id?: BuildId\",\n                builds.rustc_version as \"rustc_version?\"\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            LEFT JOIN LATERAL (\n                SELECT * FROM builds\n                WHERE builds.rid = releases.id AND builds.build_status = 'success'\n                ORDER BY builds.build_finished\n                DESC LIMIT 1\n            ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2",
+  "query": "SELECT\n                crates.name as \"name: KrateName\",\n                releases.version,\n                releases.description,\n                releases.target_name,\n                releases.rustdoc_status,\n                releases.default_target,\n                releases.doc_targets,\n                releases.yanked,\n                builds.id as \"latest_build_id?: BuildId\",\n                builds.rustc_nightly_date as \"rustc_nightly_date?\"\n            FROM releases\n            INNER JOIN crates ON crates.id = releases.crate_id\n            LEFT JOIN LATERAL (\n                SELECT * FROM builds\n                WHERE builds.rid = releases.id AND builds.build_status = 'success'\n                ORDER BY builds.build_finished\n                DESC LIMIT 1\n            ) AS builds ON true\n            WHERE crates.name = $1 AND releases.version = $2",
   "describe": {
     "columns": [
       {
@@ -104,12 +104,12 @@
       },
       {
         "ordinal": 9,
-        "name": "rustc_version?",
-        "type_info": "Varchar",
+        "name": "rustc_nightly_date?",
+        "type_info": "Date",
         "origin": {
           "Table": {
             "table": "builds",
-            "name": "rustc_version"
+            "name": "rustc_nightly_date"
           }
         }
       }
@@ -133,5 +133,5 @@
       true
     ]
   },
-  "hash": "1a53dbf75e101b8fc06c0ede59e3c91117f38f199cf24cd9615b963c7943e37a"
+  "hash": "7e13d9480515438bafbcb1e7e588c52c25bfe1071d37910084321c3edcd4c340"
 }

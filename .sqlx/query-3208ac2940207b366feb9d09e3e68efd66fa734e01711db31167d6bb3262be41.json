@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT rustc_version FROM essential_files ORDER BY 1",
+  "query": "SELECT rustc_version as \"rustc_version: RustcVersion\" FROM essential_files ORDER BY 1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "rustc_version",
+        "name": "rustc_version: RustcVersion",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "26b1d21c9ca2004a3bcc0a6daa2e7eb359c04e7819187ab7227b117cb9032bad"
+  "hash": "3208ac2940207b366feb9d09e3e68efd66fa734e01711db31167d6bb3262be41"
 }

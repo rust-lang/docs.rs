@@ -162,7 +162,7 @@ impl RustwideBuilder {
             let mut conn = self.db.get_async().await?;
             sqlx::query_scalar!(
                 r#"SELECT EXISTS(SELECT 1 FROM essential_files WHERE rustc_version = $1) AS "exists!""#,
-                rustc_version,
+                rustc_version as _,
             )
             .fetch_one(&mut *conn)
             .await
@@ -176,7 +176,7 @@ impl RustwideBuilder {
         if toolchain_updated || !published {
             debug!(
                 toolchain_updated,
-                published, rustc_version, "publishing essential files"
+                published, %rustc_version, "publishing essential files"
             );
             self.add_essential_files()
                 .context("adding essential files after toolchain maintenance")?;
@@ -210,7 +210,7 @@ impl RustwideBuilder {
             sqlx::query!(
                 "INSERT INTO essential_files (rustc_version) VALUES ($1)
                  ON CONFLICT (rustc_version) DO UPDATE SET published_at = NOW()",
-                rustc_version,
+                rustc_version as _,
             )
             .execute(&mut *conn)
             .await?;
@@ -1090,7 +1090,7 @@ mod tests {
             finish_build(
                 &mut *conn,
                 build_id,
-                "some-version",
+                &"rustc 1.84.0-nightly (e7c0d2750 2024-10-15)".parse()?,
                 "other-version",
                 BuildStatus::Success,
                 None,

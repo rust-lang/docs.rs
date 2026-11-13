@@ -13,7 +13,7 @@ pub struct Head<'a> {
 impl<'a> Head<'a> {
     pub fn new(inner: &'a RustdocPage) -> Self {
         Self {
-            rustdoc_css_file: inner.metadata.rustdoc_css_file.as_deref(),
+            rustdoc_css_file: inner.metadata.rustdoc_css_file,
         }
     }
 }

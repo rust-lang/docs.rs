@@ -19,6 +19,7 @@ testing = []
 [dependencies]
 anyhow = { workspace = true }
 bon = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, optional = true }
 docs_rs_build_limits = { path = "../docs_rs_build_limits", default-features = false }
 docs_rs_cargo_metadata = { path = "../docs_rs_cargo_metadata" }

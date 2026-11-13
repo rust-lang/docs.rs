@@ -23,7 +23,7 @@ pub(crate) struct MetaData {
     pub(crate) yanked: Option<bool>,
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
-    pub(crate) rustdoc_css_file: Option<String>,
+    pub(crate) rustdoc_css_file: Option<&'static str>,
     /// The latest successful build.
     pub(crate) latest_build_id: Option<BuildId>,
 }
@@ -46,7 +46,7 @@ impl MetaData {
                 releases.doc_targets,
                 releases.yanked,
                 builds.id as "latest_build_id?: BuildId",
-                builds.rustc_version as "rustc_version?"
+                builds.rustc_nightly_date as "rustc_nightly_date?"
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
             LEFT JOIN LATERAL (
@@ -73,11 +73,7 @@ impl MetaData {
             default_target: row.default_target,
             doc_targets: row.doc_targets.as_ref().map(parse_doc_targets),
             yanked: row.yanked,
-            rustdoc_css_file: row
-                .rustc_version
-                .as_deref()
-                .map(get_correct_docsrs_style_file)
-                .transpose()?,
+            rustdoc_css_file: row.rustc_nightly_date.map(get_correct_docsrs_style_file),
             latest_build_id: row.latest_build_id,
         })
     }
@@ -92,10 +88,10 @@ impl MetaData {
             r#"SELECT
                 releases.description,
                 builds.id as "latest_build_id?: BuildId",
-                builds.rustc_version as "rustc_version?"
+                builds.rustc_nightly_date as "rustc_nightly_date?"
             FROM releases
             LEFT JOIN LATERAL (
-                SELECT id, rustc_version FROM builds
+                SELECT id, rustc_nightly_date FROM builds
                 WHERE builds.rid = releases.id AND builds.build_status = 'success'
                 ORDER BY builds.build_finished
                 DESC LIMIT 1
@@ -122,11 +118,7 @@ impl MetaData {
             default_target: release.default_target.clone(),
             doc_targets: release.doc_targets(),
             yanked: release.yanked,
-            rustdoc_css_file: row
-                .rustc_version
-                .as_deref()
-                .map(get_correct_docsrs_style_file)
-                .transpose()?,
+            rustdoc_css_file: row.rustc_nightly_date.map(get_correct_docsrs_style_file),
             latest_build_id: row.latest_build_id,
         })
     }
@@ -160,7 +152,7 @@ mod tests {
                 "arm64-unknown-linux-gnu".to_string(),
             ]),
             yanked: Some(false),
-            rustdoc_css_file: Some("rustdoc.css".to_string()),
+            rustdoc_css_file: Some("rustdoc.css"),
             latest_build_id: Some(BuildId(42)),
         };
 
@@ -251,7 +243,7 @@ mod tests {
                 default_target: Some("x86_64-unknown-linux-gnu".to_string()),
                 doc_targets: Some(vec!["x86_64-unknown-linux-gnu".to_string()]),
                 yanked: Some(false),
-                rustdoc_css_file: Some("rustdoc.css".to_string()),
+                rustdoc_css_file: Some("rustdoc.css"),
                 latest_build_id: metadata.latest_build_id,
             },
         );
@@ -267,9 +259,9 @@ mod tests {
             .name("foo")
             .version("0.1.0")
             .builds(vec![
-                FakeBuild::default().rustc_version("rustc 1.50.0-nightly (abc 2021-01-01)"),
+                FakeBuild::default().rustc_version_date(2021, 1, 1),
                 FakeBuild::default()
-                    .rustc_version("rustc 1.90.0-nightly (def 2026-01-01)")
+                    .rustc_version_date(2026, 1, 1)
                     .build_status(BuildStatus::Failure),
             ])
             .create()
@@ -282,7 +274,7 @@ mod tests {
         let from_matched = MetaData::from_matched_release(&mut conn, &matched).await?;
 
         // the failed build has a newer rustc, which would pick another CSS file
-        assert_eq!(from_crate.rustdoc_css_file.as_deref(), Some("rustdoc.css"));
+        assert_eq!(from_crate.rustdoc_css_file, Some("rustdoc.css"));
         assert_eq!(from_matched, from_crate);
         Ok(())
     }
@@ -305,6 +297,24 @@ mod tests {
         let matched = match_version(&mut conn, &FOO, &ReqVersion::Exact(V0_1.clone())).await?;
         let metadata = MetaData::from_matched_release(&mut conn, &matched).await?;
         assert_eq!(metadata.latest_build_id, None);
+        assert_eq!(metadata.rustdoc_css_file, None);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn metadata_without_rustc_nightly_date_has_no_css_file() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("foo")
+            .version("0.1.0")
+            .builds(vec![FakeBuild::default().without_rustc_version()])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+        let metadata = MetaData::from_crate(&mut conn, &FOO, &V0_1, None).await?;
         assert_eq!(metadata.rustdoc_css_file, None);
         Ok(())
     }
