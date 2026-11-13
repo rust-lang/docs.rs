@@ -24,6 +24,9 @@ pub struct Config {
     /// Maximum time to wait for queue row locks when deleting crates/releases.
     pub delete_lock_timeout: Duration,
 
+    /// Statement timeout for the documentation statistics query.
+    pub statistics_statement_timeout: Duration,
+
     pub repository: docs_rs_repository_stats::Config,
 }
 
@@ -43,6 +46,10 @@ impl AppConfig for Config {
             delete_lock_timeout: env(
                 "DOCSRS_DELETE_LOCK_TIMEOUT_SECONDS",
                 Duration::from_mins(20),
+            )?,
+            statistics_statement_timeout: env(
+                "DOCSRS_STATISTICS_STATEMENT_TIMEOUT",
+                Duration::from_secs(15),
             )?,
             repository: docs_rs_repository_stats::Config::from_environment()?,
         })

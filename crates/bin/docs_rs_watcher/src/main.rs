@@ -81,7 +81,8 @@ impl CommandLine {
                 // We assume that we can collect service metrics & statistics from the registry watcher,
                 // which should only run once, and all the time.
                 docs_rs_watcher::start_background_service_metric_collector(&ctx).await?;
-                docs_rs_watcher::start_background_statistics_collector(&ctx).await?;
+                docs_rs_watcher::start_background_statistics_collector(config.clone(), &ctx)
+                    .await?;
 
                 docs_rs_watcher::watch_registry(&config, &ctx).await?;
             }
