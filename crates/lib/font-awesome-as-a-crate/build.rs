@@ -33,7 +33,7 @@ fn write_fontawesome_sprite() {
         ("regular", "Regular"),
         ("solid", "Solid"),
     ] {
-        let dir = read_dir(Path::new("fontawesome-free-6.2.0-desktop/svgs").join(dirname)).unwrap();
+        let dir = read_dir(Path::new("fontawesome-free-7.3.1-desktop/svgs").join(dirname)).unwrap();
         // `readdir` order depends on the filesystem. To make the build
         // deterministic, sort the entries.
         let mut entries = dir
