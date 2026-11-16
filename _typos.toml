@@ -5,7 +5,7 @@ extend-exclude = [
     "crates/bin/docs_rs_web/static/",
     "crates/bin/docs_rs_web/assets/*",
     "crates/bin/docs_rs_web/src/utils/licenses.rs",
-    "crates/lib/font-awesome-as-a-crate/fontawesome-free-6.2.0-desktop/",
+    "crates/lib/font-awesome-as-a-crate/fontawesome-free-7.3.1-desktop/",
 ]
 
 [default.extend-words]
