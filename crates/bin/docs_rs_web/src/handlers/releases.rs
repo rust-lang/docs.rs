@@ -65,6 +65,13 @@ impl Release {
             .with_req_version(self.version.clone())
             .with_maybe_target_name(self.target_name.clone())
     }
+
+    fn time(&self, ty: &ReleaseType) -> Option<DateTime<Utc>> {
+        match ty {
+            ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => self.release_time,
+            ReleaseType::RecentFailures | ReleaseType::Failures => self.build_time,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
