@@ -94,7 +94,7 @@ pub(crate) async fn get_releases(
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
-        Order::ReleaseTime => ("release_build_status.last_build_time", false),
+        Order::ReleaseTime => ("releases.release_time", false),
         Order::GithubStars => ("repositories.stars", false),
         Order::RecentFailures => ("release_build_status.last_build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
