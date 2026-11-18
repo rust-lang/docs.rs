@@ -89,15 +89,26 @@ centered
                                     </div>
 
                                     {%- if release_type == "owner" -%}
-                                        <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {% if let Some(build_time) = release.build_time -%}
-                                            title="Published {{ build_time|timeformat }}" {%- endif -%}>
+                                        <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {% if let Some(release_time) = release.release_time -%}
+                                            title="Latest crate release on {{ release_time.format("%FT%TZ") }}" {%- endif -%}>
                                             {{- release.stars ~}}
                                             {{ crate::icons::IconStar.render_solid(false, false, "") -}}
                                         </div>
-                                    {%- elif let Some(build_time) = release.build_time -%}
+                                    {%- elif release_type.shows_build_time() -%}
+                                        {%- if let Some(build_time) = release.build_time -%}
+                                            <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {#~ -#}
+                                                title="Last docs build on {{ build_time.format("%FT%TZ") }}">
+                                                {{- build_time|timeformat -}}
+                                            </div>
+                                        {%- else -%}
+                                            <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">
+                                                &mdash;
+                                            </div>
+                                        {%- endif -%}
+                                    {%- elif let Some(release_time) = release.release_time -%}
                                         <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {#~ -#}
-                                            title="{{ build_time.format("%FT%TZ") }}">
-                                            {{- build_time|timeformat -}}
+                                            title="Latest crate release on {{ release_time.format("%FT%TZ") }}">
+                                            {{- release_time|timeformat -}}
                                         </div>
                                     {%- else -%}
                                         <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date">

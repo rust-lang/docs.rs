@@ -53,6 +53,9 @@ pub struct Release {
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
+    /// crates.io publication time for this release.
+    pub(crate) release_time: Option<DateTime<Utc>>,
+    /// Finish time of the latest docs.rs build for this release.
     pub(crate) build_time: Option<DateTime<Utc>>,
     pub(crate) stars: i32,
     pub(crate) has_unyanked_releases: Option<bool>,
@@ -86,8 +89,10 @@ pub(crate) async fn get_releases(
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
-        Order::ReleaseTime => ("release_build_status.last_build_time", false),
+        // Recent releases / home / feed: order by crates.io publication time.
+        Order::ReleaseTime => ("releases.release_time", false),
         Order::GithubStars => ("repositories.stars", false),
+        // Recent failures still mean "recently failed to build", so keep build time.
         Order::RecentFailures => ("release_build_status.last_build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
     };
@@ -98,6 +103,7 @@ pub(crate) async fn get_releases(
             releases.description,
             releases.target_name,
             releases.rustdoc_status,
+            releases.release_time,
             release_build_status.last_build_time,
             repositories.stars
         FROM crates
@@ -130,8 +136,9 @@ pub(crate) async fn get_releases(
             description: row.get(2),
             target_name: row.get(3),
             rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
-            build_time: row.get(5),
-            stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
+            release_time: row.get(5),
+            build_time: row.get(6),
+            stars: row.get::<Option<i32>, _>(7).unwrap_or(0),
             has_unyanked_releases: None,
         })
         .try_collect()
@@ -178,14 +185,14 @@ async fn get_search_results(
     // returned by the search.
     // Docs.rs might not know about crates or `max_version` shortly after
     // they were published on crates.io, or while the build is running.
-    // So for now we are using the version with the youngest release_time.
-    // This is different from all other release-list views where we show
-    // our latest build.
+    // So for now we are using our "latest version" (latest_version_id),
+    // and show that version's crates.io release_time in the date column.
     let mut crates: HashMap<KrateName, Release> = sqlx::query!(
         r#"SELECT
                crates.name as "name: KrateName",
                releases.version as "version: Version",
                releases.description,
+               releases.release_time,
                release_build_status.last_build_time,
                releases.target_name,
                releases.rustdoc_status,
@@ -216,6 +223,7 @@ async fn get_search_results(
                 name: row.name,
                 version: row.version,
                 description: row.description,
+                release_time: row.release_time,
                 build_time: row.last_build_time,
                 target_name: row.target_name,
                 rustdoc_status: row.rustdoc_status.unwrap_or(false),
@@ -343,6 +351,12 @@ impl ReleaseType {
             Self::Failures => "failures",
             Self::Search => "search",
         }
+    }
+
+    /// Failure lists are about docs builds, so they show `build_time`.
+    /// Search and other release lists show crates.io `release_time`.
+    fn shows_build_time(&self) -> bool {
+        matches!(self, Self::RecentFailures | Self::Failures)
     }
 }
 
@@ -990,6 +1004,16 @@ mod tests {
             )
             .await?;
 
+            // Recent lists order by crates.io release_time; an incomplete release still
+            // needs that timestamp to appear (finish_release would normally set it).
+            sqlx::query!(
+                "UPDATE releases SET release_time = $1 WHERE id = $2",
+                Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap(),
+                release_id.0,
+            )
+            .execute(&mut *conn)
+            .await?;
+
             let releases = get_releases(&mut conn, 1, 10, Order::ReleaseTime, false).await?;
 
             assert_eq!(
@@ -1540,6 +1564,122 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn search_and_recent_lists_show_release_time_not_build_time() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        let web = env.web_app().await;
+
+        let release_time = Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap();
+        let rebuild_time = Utc.with_ymd_and_hms(2024, 6, 7, 8, 9, 10).unwrap();
+
+        env.fake_release()
+            .await
+            .name("rebuilt_old_crate")
+            .version("1.0.0")
+            .release_time(release_time)
+            .create()
+            .await?;
+
+        // Simulate a later docs rebuild that must not change the displayed date
+        // for search / recent releases (see #3705 / #3536).
+        let mut conn = env.async_conn().await?;
+        sqlx::query!(
+            r#"UPDATE release_build_status
+                   SET last_build_time = $1
+                   FROM releases
+                   INNER JOIN crates ON crates.id = releases.crate_id
+                   WHERE release_build_status.rid = releases.id
+                     AND crates.name = $2"#,
+            rebuild_time,
+            "rebuilt_old_crate",
+        )
+        .execute(&mut *conn)
+        .await?;
+        drop(conn);
+
+        env.test_registry()
+            .mock_search(registry_api::SearchQuery::from("rebuilt_old_crate"))
+            .crate_names(["rebuilt_old_crate"])
+            .create()
+            .await;
+
+        for path in ["/releases/search?query=rebuilt_old_crate", "/releases", "/"] {
+            let response = web.get(path).await?;
+            assert!(response.status().is_success());
+            let page = kuchikiki::parse_html().one(response.text().await?);
+            let date = page
+                .select_first(".recent-releases-container .date")
+                .expect("missing date column");
+            let title = date
+                .attributes
+                .borrow()
+                .get("title")
+                .expect("missing date title")
+                .to_string();
+            assert!(
+                title.contains("Latest crate release on 2020-01-02T03:04:05Z"),
+                "path {path} showed unexpected date title: {title}"
+            );
+            assert!(
+                !title.contains("2024-06-07"),
+                "path {path} still showed docs build time: {title}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn recent_failures_keep_showing_build_time() {
+        async_wrapper(|env| async move {
+            let release_time = Utc.with_ymd_and_hms(2020, 1, 2, 3, 4, 5).unwrap();
+            let rebuild_time = Utc.with_ymd_and_hms(2024, 6, 7, 8, 9, 10).unwrap();
+
+            env.fake_release()
+                .await
+                .name("old_failed_crate")
+                .version("1.0.0")
+                .release_time(release_time)
+                .build_result_failed()
+                .create()
+                .await?;
+
+            let mut conn = env.async_conn().await?;
+            sqlx::query!(
+                r#"UPDATE release_build_status
+                   SET last_build_time = $1
+                   FROM releases
+                   INNER JOIN crates ON crates.id = releases.crate_id
+                   WHERE release_build_status.rid = releases.id
+                     AND crates.name = $2"#,
+                rebuild_time,
+                "old_failed_crate",
+            )
+            .execute(&mut *conn)
+            .await?;
+            drop(conn);
+
+            let response = env.web_app().await.get("/releases/recent-failures").await?;
+            assert!(response.status().is_success());
+            let page = kuchikiki::parse_html().one(response.text().await?);
+            let date = page
+                .select_first(".recent-releases-container .date")
+                .expect("missing date column");
+            let title = date
+                .attributes
+                .borrow()
+                .get("title")
+                .expect("missing date title")
+                .to_string();
+            assert!(
+                title.contains("Last docs build on 2024-06-07T08:09:10Z"),
+                "recent-failures should keep docs build time, got: {title}"
+            );
+
+            Ok(())
+        })
+    }
+
     async fn get_release_links(path: &str, web: &axum::Router) -> Result<Vec<String>, Error> {
         let response = web.get(path).await?;
         assert!(response.status().is_success());
@@ -2085,6 +2225,7 @@ mod tests {
                 description: Some(description.into()),
                 target_name: None,
                 rustdoc_status: true,
+                release_time: None,
                 build_time: None,
                 stars: 0,
                 has_unyanked_releases: Some(true),
