@@ -1,4 +1,5 @@
-use anyhow::Result;
+use crate::utils::OutputCheckError;
+use anyhow::{Result, anyhow};
 use docs_rs_types::{BuildError, Duration};
 use rustwide::cmd::CommandError;
 use std::fmt;
@@ -17,6 +18,15 @@ pub enum BuildStepError {
     /// A step's output could not be found, parsed, or collected.
     #[error(transparent)]
     Output(anyhow::Error),
+
+    /// A step's output contains symlinks or special files, or is reached through
+    /// a symlink. The build can create these from inside the sandbox, pointing
+    /// at files on the host, so docs.rs refuses to use such output.
+    ///
+    /// Must not be retried within the same build: a retry can come out clean,
+    /// and would then publish output of a build we already refused.
+    #[error(transparent)]
+    UntrustedOutput(anyhow::Error),
 }
 
 impl BuildError for BuildStepError {
@@ -38,6 +48,24 @@ impl BuildError for BuildStepError {
             },
             Self::Prepare(_) => "InternalPrepare",
             Self::Output(_) => "InternalOutput",
+            Self::UntrustedOutput(_) => "UntrustedOutput",
+        }
+    }
+}
+
+/// Keep untrusted output apart from errors while inspecting it.
+///
+/// The added context is the outermost one, which is what ends up in the public
+/// build error. So it has to explain the failure without the host path.
+impl From<OutputCheckError> for BuildStepError {
+    fn from(err: OutputCheckError) -> Self {
+        match err {
+            OutputCheckError::Untrusted { reason, .. } => Self::UntrustedOutput(
+                anyhow!(err).context(format!("refusing to use build output: {reason}")),
+            ),
+            OutputCheckError::Io(err) => {
+                Self::Output(anyhow!(err).context("couldn't inspect build output"))
+            }
         }
     }
 }
