@@ -54,6 +54,7 @@ pub struct Release {
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
     pub(crate) build_time: Option<DateTime<Utc>>,
+    pub(crate) release_time: Option<DateTime<Utc>>,
     pub(crate) stars: i32,
     pub(crate) has_unyanked_releases: Option<bool>,
 }
@@ -99,7 +100,8 @@ pub(crate) async fn get_releases(
             releases.target_name,
             releases.rustdoc_status,
             release_build_status.last_build_time,
-            repositories.stars
+            repositories.stars,
+            releases.release_time
         FROM crates
         {1}
         INNER JOIN release_build_status ON releases.id = release_build_status.rid
@@ -131,6 +133,7 @@ pub(crate) async fn get_releases(
             target_name: row.get(3),
             rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
             build_time: row.get(5),
+            release_time: row.get(7),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
             has_unyanked_releases: None,
         })
@@ -187,6 +190,7 @@ async fn get_search_results(
                releases.version as "version: Version",
                releases.description,
                release_build_status.last_build_time,
+               releases.release_time,
                releases.target_name,
                releases.rustdoc_status,
                repositories.stars as "stars?",
@@ -217,6 +221,7 @@ async fn get_search_results(
                 version: row.version,
                 description: row.description,
                 build_time: row.last_build_time,
+                release_time: row.release_time,
                 target_name: row.target_name,
                 rustdoc_status: row.rustdoc_status.unwrap_or(false),
                 stars: row.stars.unwrap_or(0),
@@ -2086,6 +2091,7 @@ mod tests {
                 target_name: None,
                 rustdoc_status: true,
                 build_time: None,
+                release_time: None,
                 stars: 0,
                 has_unyanked_releases: Some(true),
             }],
