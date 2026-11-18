@@ -18,6 +18,12 @@ ignore = [
     "RUSTSEC-2026-0459", # `libsqlite3-sys` via C SQLite CVE-2026-119375
     # https://rustsec.org/advisories/RUSTSEC-2026-0459
     # needs user-controlled sqlite db to be exposed
+
+    "RUSTSEC-2026-0542", # humantime is unmaintained
+    # https://rustsec.org/advisories/RUSTSEC-2026-0542
+
+    "RUSTSEC-2026-0543", # chrono is unmaintained
+    # https://rustsec.org/advisories/RUSTSEC-2026-0543
 ]
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
