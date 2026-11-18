@@ -90,6 +90,94 @@ fn publish_release(
 
 #[test]
 #[ignore]
+fn documentation_symlink_to_host_file_is_rejected() -> Result<()> {
+    let env = environment()?;
+    let name = KrateName::from_static("documentation-symlink");
+    let host = tempfile::tempdir()?;
+    let secret = host.path().canonicalize()?.join("host-only-secret");
+    let canary = b"docs.rs host-only symlink regression canary\n";
+    fs::write(&secret, canary)?;
+
+    let build_script = format!(
+        r#"
+fn main() {{
+    let secret = std::path::Path::new({secret:?});
+    assert!(!secret.exists(), "the host-only file must not be mounted in the sandbox");
+
+    // OUT_DIR is target/<triple>/<profile>/build/<package>/out.
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+
+    let doc = out
+        .ancestors()
+        .find(|p| {{
+            p.parent()
+                .expect("can't find parent")
+                .file_name()
+                .expect("missing filename")
+                == "target"
+        }})
+        .expect("missing target")
+        .join("doc");
+
+    std::fs::create_dir_all(&doc).unwrap();
+    let link = doc.join("host-secret.txt");
+    if std::fs::symlink_metadata(&link).is_err() {{
+        std::os::unix::fs::symlink(secret, link).unwrap();
+    }}
+}}
+"#
+    );
+    mock_package_with_manifest(
+        &env,
+        &name,
+        &V0_1,
+        Some("lib.rs"),
+        "pub fn example() {}",
+        "",
+        true,
+        &[("build.rs", &build_script)],
+    )?;
+
+    let mut builder = env.build_builder()?;
+    let release = builder.build_release(&name, &V0_1)?.unwrap();
+    // the symlink is rejected when the output is collected, as a failure of this target's step
+    let step_error = release
+        .result
+        .default_target()
+        .documentation()
+        .as_inner()
+        .expect_err("HTML output containing a symlink must be rejected");
+    assert!(
+        format!("{step_error:#}").contains("refusing to use untrusted build output"),
+        "unexpected step error: {step_error:#}"
+    );
+
+    let summary = publish_release(&env, &builder, &name, release)?;
+    assert!(!summary.successful);
+    // the build would fail the same way again
+    assert!(!summary.should_reattempt);
+    let archive_path = rustdoc_archive_path(&name, &V0_1);
+    assert!(
+        !env.runtime().block_on(env.storage()?.exists_in_archive(
+            &archive_path,
+            None,
+            "host-secret.txt"
+        ))?
+    );
+    let row = fetch_build_result(&env, &name)?;
+    assert_eq!(row.status, BuildStatus::Failure);
+    // the release is finished as a normal failed build, without documentation
+    assert_eq!(row.rustdoc_status, Some(false));
+    // the public error explains the failure, without host paths
+    assert_eq!(
+        row.errors.as_deref(),
+        Some("refusing to use build output: symlink or special file")
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore]
 fn invalid_json_format_is_nonfatal() -> Result<()> {
     let env = environment()?;
     let blocking_storage = env.blocking_storage()?;
@@ -221,6 +309,7 @@ fn failed_additional_target_is_excluded_from_publication() -> Result<()> {
         "pub fn example() {}",
         "[package.metadata.docs.rs]\ntargets = [\"x86_64-unknown-linux-gnu\", \"docsrs-invalid-target\"]\n",
         true,
+        &[],
     )?;
     let summary = env.build_builder()?.build_package(&name, &V0_1)?;
     assert!(summary.successful);
@@ -286,6 +375,7 @@ fn registry_metadata_errors_are_nonfatal() -> Result<()> {
         "pub fn example() {}",
         "",
         false,
+        &[],
     )?;
     let summary = env.build_builder()?.build_package(&name, &V0_1)?;
     assert!(summary.successful);

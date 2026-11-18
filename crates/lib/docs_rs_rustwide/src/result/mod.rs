@@ -275,6 +275,7 @@ mod tests {
     #[test_case(BuildStepError::Command(CommandError::SandboxOOM), "SandboxOOM"; "sandbox oom")]
     #[test_case(BuildStepError::Prepare(anyhow::anyhow!("target unavailable")), "InternalPrepare"; "preparation")]
     #[test_case(BuildStepError::Output(anyhow::anyhow!("invalid output")), "InternalOutput"; "output processing")]
+    #[test_case(BuildStepError::UntrustedOutput(anyhow::anyhow!("symlink")), "UntrustedOutput"; "untrusted output")]
     fn classifies_build_step_errors(error: BuildStepError, expected: &str) {
         assert_eq!(error.kind(), expected);
     }

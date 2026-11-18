@@ -670,7 +670,9 @@ fn copy_target_docs(result: &TargetBuildResult, destination: &Path) -> Result<()
         destination = %destination.display(),
         "copying documentation"
     );
-    Ok(copy_dir_all(source, destination, |_| {})?)
+    // Only the outermost context ends up in the public build error, and the copy
+    // error contains host paths.
+    copy_dir_all(source, destination, |_| {}).context("couldn't copy documentation for publication")
 }
 
 #[cfg(test)]
@@ -698,9 +700,11 @@ mod tests {
         source_file: Option<&str>,
         source: &str,
     ) -> Result<()> {
-        mock_package_with_manifest(env, name, version, source_file, source, "", true)
+        mock_package_with_manifest(env, name, version, source_file, source, "", true, &[])
     }
 
+    /// `extra_files` are added to the crate as `(path relative to the crate root, content)`.
+    #[allow(clippy::too_many_arguments)]
     fn mock_package_with_manifest(
         env: &TestEnvironment,
         name: &KrateName,
@@ -709,6 +713,7 @@ mod tests {
         source: &str,
         manifest: &str,
         index: bool,
+        extra_files: &[(&str, &str)],
     ) -> Result<()> {
         let root = tempfile::tempdir()?;
         if let Some(source_file) = source_file {
@@ -720,6 +725,11 @@ mod tests {
             )?;
             fs::create_dir(root.path().join("src"))?;
             fs::write(root.path().join("src").join(source_file), source)?;
+        }
+        for (path, content) in extra_files {
+            let path = root.path().join(path);
+            fs::create_dir_all(path.parent().expect("always has a parent"))?;
+            fs::write(path, content)?;
         }
         let archive =
             docs_rs_crate_archive::testing::create_source_tarball(name, version, root.path())?;
@@ -1196,6 +1206,7 @@ mod tests {
             "pub fn example() {}",
             "[dependencies]\nmissing-dependency = { path = \"missing\" }\n",
             false,
+            &[],
         )?;
 
         let mut builder = env.build_builder()?;

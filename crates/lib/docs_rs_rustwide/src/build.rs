@@ -1,7 +1,8 @@
 use crate::{
     BuildEnvironment, BuildStepError, HtmlOutput, ReleaseBuildResult, RustdocJsonOutput,
-    StepFailure, StepReport, StepResult, TargetBuildResult, command::PrepareCommand,
-    utils::copy_dir_all,
+    StepFailure, StepReport, StepResult, TargetBuildResult,
+    command::PrepareCommand,
+    utils::{copy_dir_all, ensure_plain_tree, ensure_real_dir_below, ensure_regular_file},
 };
 use anyhow::{Context as _, Result, anyhow, bail};
 use bon::bon;
@@ -217,15 +218,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     ///
     /// Cargo places proc-macro documentation in the host target directory even
     /// when a target argument is otherwise in use.
-    pub(crate) fn output_dir(&self, target: &str) -> PathBuf {
-        if self.docsrs_metadata.proc_macro {
-            self.build.host_target_dir().join(DOC_OUTPUT_DIR_NAME)
+    ///
+    /// The target directory is writable from the sandbox, so the build could
+    /// replace `<target>` or `doc` with a symlink to a host directory, which we
+    /// would then move and publish. Fail if any of them isn't a real directory.
+    pub(crate) fn output_dir(&self, target: &str) -> Result<PathBuf, BuildStepError> {
+        let host_target_dir = self.build.host_target_dir();
+        let output_dir = if self.docsrs_metadata.proc_macro {
+            host_target_dir.join(DOC_OUTPUT_DIR_NAME)
         } else {
-            self.build
-                .host_target_dir()
-                .join(target)
-                .join(DOC_OUTPUT_DIR_NAME)
-        }
+            host_target_dir.join(target).join(DOC_OUTPUT_DIR_NAME)
+        };
+        ensure_real_dir_below(&host_target_dir, &output_dir)?;
+        Ok(output_dir)
     }
 
     /// Targets selected by this release's docs.rs metadata.
@@ -434,8 +439,8 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
+            let output_dir = self.output_dir(target)?;
             BuildStepError::as_output(|| {
-                let output_dir = self.output_dir(target);
                 let path = find_single_output_file(&output_dir, "json")?;
                 let reader = BufReader::new(File::open(path)?);
 
@@ -465,8 +470,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            BuildStepError::as_output(|| {
-                let output_file = find_single_output_file(self.output_dir(target), "json")?;
+            let output_dir = self.output_dir(target)?;
+            let destination = BuildStepError::as_output(|| {
+                let output_file = find_single_output_file(&output_dir, "json")?;
 
                 let destination = tempfile::Builder::new()
                     .prefix(&format!(
@@ -483,8 +489,19 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 fs::rename(&output_file, &destination)
                     .context("couldn't move output file to temp destination")?;
 
-                Ok(RustdocJsonOutput::new(destination.keep()?))
-            })
+                Ok(destination)
+            })?;
+
+            // The sandbox container is reused between steps, so a process left behind
+            // by the build could have replaced the file with a symlink to a host file
+            // after we selected it. The sandbox can't reach the moved file, so the
+            // check has to happen here, after the move.
+            ensure_regular_file(&destination)?;
+
+            let path = destination
+                .keep()
+                .map_err(|err| BuildStepError::Output(err.into()))?;
+            Ok(RustdocJsonOutput::new(path))
         })
     }
 
@@ -494,6 +511,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
     pub fn build_documentation(&self, target: &str) -> StepResult<HtmlOutput> {
         let documentation = self.build_html(target, Emit::HtmlNonStaticFiles, true);
         if let Err(err) = &documentation
+            // the retry would rebuild the documentation without what was rejected,
+            // and then publish output of a build we already refused.
+            && !matches!(err.value, BuildStepError::UntrustedOutput(_))
             && self
                 .environment
                 .compiler_metrics_collection_path()
@@ -568,9 +588,9 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                 .run()
                 .map_err(BuildStepError::Command)?;
 
-            BuildStepError::as_output(|| {
-                let output_dir = self.output_dir(target);
+            let output_dir = self.output_dir(target)?;
 
+            let temp_dir = BuildStepError::as_output(|| {
                 let temp_dir = tempfile::Builder::new()
                     .prefix(&format!(
                         "{}.",
@@ -578,19 +598,31 @@ impl<'build, 'ws> ReleaseBuild<'build, 'ws> {
                     ))
                     .tempdir_in(&self.temp_dir(target)?)?;
 
-                let destination = temp_dir.path().join("docs");
-                fs::rename(&output_dir, &destination)
+                fs::rename(&output_dir, temp_dir.path().join("docs"))
                     .context("couldn't move output dir to temp destination")?;
+                Ok(temp_dir)
+            })?;
+            let destination = temp_dir.path().join("docs");
 
-                let collected_metrics = compiler_metrics_collection_path
+            // The build could have left symlinks to host files in its output. Fail
+            // this target's step here, instead of the whole release at publication.
+            //
+            // The sandbox container is reused between steps, so a process left behind
+            // by the build might still change the moved tree, through a directory handle
+            // it kept open. `copy_dir_all` checks again at publication, when the
+            // container is gone.
+            ensure_plain_tree(&destination)?;
+
+            let collected_metrics = BuildStepError::as_output(|| {
+                compiler_metrics_collection_path
                     .map(|target| copy_compiler_metrics(&host_metrics_dir, target))
-                    .transpose()?;
+                    .transpose()
+            })?;
 
-                Ok(HtmlOutput::new(
-                    temp_dir.keep().join("docs"),
-                    collected_metrics,
-                ))
-            })
+            Ok(HtmlOutput::new(
+                temp_dir.keep().join("docs"),
+                collected_metrics,
+            ))
         })
     }
 
@@ -1117,6 +1149,45 @@ mod policy_tests {
             assert!(
                 fs::read_dir(source)?.next().is_some(),
                 "failed collection must retain metrics"
+            );
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires Docker and a Rust toolchain"]
+    fn untrusted_output_skips_metrics_retry() -> Result<()> {
+        crate::logging::init(true);
+        let workspace = crate::testing::test_workspace_path();
+        let metrics = tempfile::tempdir()?;
+        let mut environment = BuildEnvironment::builder(workspace.as_path())
+            .wait_for_workspace_lock(true)
+            .fast_init(true)
+            .validate_host_resources(false)
+            .sandbox_image(crate::testing::test_sandbox_image())
+            .toolchain(rustwide::Toolchain::dist(
+                crate::testing::COMPILER_METRICS_TEST_TOOLCHAIN,
+            ))
+            .compiler_metrics_collection_path(metrics.path())
+            .build()?;
+        environment.release(&fixture()).run(|build| {
+            // Stand-in for a build script: rustdoc keeps existing files in its
+            // output directory. A retry would move the symlink away with the
+            // rejected output and then succeed.
+            let doc = build
+                .build
+                .host_target_dir()
+                .join(HOST_TARGET)
+                .join(DOC_OUTPUT_DIR_NAME);
+            fs::create_dir_all(&doc)?;
+            std::os::unix::fs::symlink("/host-only-secret", doc.join("leak"))?;
+
+            let result = build.build_documentation(HOST_TARGET);
+            let error = result.as_ref().unwrap_err().value();
+            assert!(
+                matches!(error, BuildStepError::UntrustedOutput(_)),
+                "unexpected error: {error:#}"
             );
             Ok(())
         })?;
