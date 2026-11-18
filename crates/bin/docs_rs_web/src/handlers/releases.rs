@@ -67,9 +67,18 @@ impl Release {
     }
 
     fn time(&self, ty: &ReleaseType) -> Option<DateTime<Utc>> {
-        match ty {
-            ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => self.release_time,
-            ReleaseType::RecentFailures | ReleaseType::Failures => self.build_time,
+        if ty.prefer_doc_build_time() {
+            self.build_time
+        } else {
+            self.release_time
+        }
+    }
+
+    fn label(&self, ty: &ReleaseType) -> &str {
+        if ty.prefer_doc_build_time() {
+            "Docs built"
+        } else {
+            "Published"
         }
     }
 }
@@ -354,6 +363,21 @@ impl ReleaseType {
             Self::RecentFailures => "recent-failures",
             Self::Failures => "failures",
             Self::Search => "search",
+        }
+    }
+
+    /// Whether templates should show the build time of the release's docs instead of the release
+    /// update time.
+    ///
+    /// By default, all pages show the update time of releases instead of the docs build time
+    /// because rebuilds lead to confusing timestamps otherwise (e.g. a release is shown as 3min
+    /// ago after a rebuild even if the crate was not updated in months). The exception are the
+    /// pages that focus on doc build failures, there it makes sense to show the build times of the
+    /// failed builds.
+    fn prefer_doc_build_time(&self) -> bool {
+        match self {
+            ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => false,
+            ReleaseType::RecentFailures | ReleaseType::Failures => true,
         }
     }
 }
