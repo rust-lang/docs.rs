@@ -761,8 +761,25 @@ fn cannot_open_index(err: &anyhow::Error) -> bool {
         == Some(rusqlite::ErrorCode::CannotOpen)
 }
 
+/// Process-wide SQLite setup; must run before the first connection is opened.
+fn configure_sqlite() {
+    static CONFIGURE: std::sync::Once = std::sync::Once::new();
+    CONFIGURE.call_once(|| {
+        // Memory statistics take a global mutex on every SQLite allocation, which
+        // serializes all archive-index workers. We never read these statistics.
+        // SAFETY: `Once` makes this the only call, and it runs before any other
+        // SQLite use in this process (archive indexes are the only SQLite user).
+        let rc =
+            unsafe { rusqlite::ffi::sqlite3_config(rusqlite::ffi::SQLITE_CONFIG_MEMSTATUS, 0) };
+        if rc != rusqlite::ffi::SQLITE_OK {
+            warn!(rc, "could not disable SQLite memory statistics");
+        }
+    });
+}
+
 /// Create a new writable index. Called only from a blocking task.
 fn sqlite_create(path: &Path) -> Result<Connection> {
+    configure_sqlite();
     match std::fs::remove_file(path) {
         Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -864,6 +881,7 @@ impl Index {
     /// Open a read-only, immutable index. Called only from a blocking task.
     #[instrument(skip(path), fields(index_path = %path.display()))]
     fn sqlite_open(path: &Path) -> Result<Connection> {
+        configure_sqlite();
         let path = path::absolute(path)?;
 
         let mut uri = Url::from_file_path(&path)
@@ -882,8 +900,9 @@ impl Index {
         conn.pragma_update(None, "synchronous", "OFF")?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "query_only", true)?;
-        conn.pragma_update(None, "mmap_size", ByteSize::mib(512).as_u64())?;
         conn.pragma_update(None, "cache_size", -4096)?;
+        // No `mmap_size`: connections live for a single lookup, and mapping and
+        // unmapping per request halved concurrent lookup throughput in benchmarks.
 
         Ok(conn)
     }
