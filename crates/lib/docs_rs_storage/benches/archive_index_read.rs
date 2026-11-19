@@ -7,7 +7,8 @@ use futures_util::{Stream, TryStreamExt as _, future::try_join_all};
 use std::{fs::File, future::Future, hint::black_box, path::Path, sync::Arc};
 use tokio::{runtime, sync::Mutex};
 
-const SQLITE_THREADS: usize = 32;
+// Matches `DOCSRS_ARCHIVE_INDEX_THREADS` in production.
+const SQLITE_THREADS: usize = 128;
 const FILE_COUNT: u64 = 80_827;
 const HIT: &str = "Cargo.toml";
 const DEEP_HIT: &str = "gh-pages/v0.0.4/libc/index.html";
