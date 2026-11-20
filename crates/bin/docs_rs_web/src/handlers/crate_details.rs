@@ -7,7 +7,7 @@ use crate::{
     },
     handlers::builds::{self, Build},
     impl_axum_webpage,
-    match_release::{MatchedRelease, match_version},
+    match_release::{LazyReleases, MatchedRelease, match_version},
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
     utils::{get_correct_docsrs_style_file, licenses},
@@ -51,7 +51,8 @@ pub(crate) struct CrateDetails {
     pub homepage_url: Option<String>,
     have_examples: Option<bool>, // need to check this manually
     pub target_name: Option<String>,
-    releases: Vec<Release>,
+    latest_release: Option<Release>,
+    releases: LazyReleases,
     repository_metadata: Option<RepositoryMetadata>,
     pub(crate) metadata: MetaData,
     is_library: Option<bool>,
@@ -89,6 +90,7 @@ impl CrateDetails {
             &release.corrected_name.unwrap_or(release.name),
             &release.release.version,
             Some(release.req_version),
+            release.latest_release,
             release.all_releases,
         )
         .await?
@@ -100,7 +102,8 @@ impl CrateDetails {
         name: &KrateName,
         version: &Version,
         req_version: Option<ReqVersion>,
-        prefetched_releases: Vec<Release>,
+        latest_release: Option<Release>,
+        releases: LazyReleases,
     ) -> Result<Option<CrateDetails>, anyhow::Error> {
         let krate = match sqlx::query!(
             r#"SELECT
@@ -182,7 +185,7 @@ impl CrateDetails {
             rustdoc_status: krate.rustdoc_status,
             target_name: krate.target_name.clone(),
             default_target: krate.default_target,
-            doc_targets: krate.doc_targets.map(parse_doc_targets),
+            doc_targets: krate.doc_targets.as_ref().map(parse_doc_targets),
             yanked: krate.yanked,
             rustdoc_css_file: krate
                 .rustc_version
@@ -240,7 +243,8 @@ impl CrateDetails {
             homepage_url: krate.homepage_url,
             have_examples: krate.have_examples,
             target_name: krate.target_name,
-            releases: prefetched_releases,
+            latest_release,
+            releases,
             repository_metadata,
             metadata,
             documentation_url,
@@ -273,6 +277,8 @@ impl CrateDetails {
         if crate_details.build_status != BuildStatus::Success {
             crate_details.last_successful_build = crate_details
                 .releases
+                .get(conn)
+                .await?
                 .iter()
                 .filter(|release| {
                     release.build_status == BuildStatus::Success && release.yanked == Some(false)
@@ -336,7 +342,7 @@ impl CrateDetails {
     /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
     /// prereleased if that is all that exist). Returns `None` if every release is yanked.
     pub fn latest_release(&self) -> Option<&Release> {
-        docs_rs_database::crate_details::latest_release(&self.releases)
+        self.latest_release.as_ref()
     }
 }
 
@@ -464,6 +470,7 @@ pub(crate) async fn crate_details_handler(
     }
 
     let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    let releases = details.releases.take(&mut conn).await?;
 
     let build_statistics =
         BuildStatistics::fetch_for_release(&mut conn, details.crate_id, details.release_id).await?;
@@ -491,7 +498,6 @@ pub(crate) async fn crate_details_handler(
         repository_url,
         repository_metadata,
         dependencies,
-        releases,
         readme,
         build_status,
         rustdoc_status,
@@ -571,7 +577,7 @@ pub(crate) async fn get_all_releases(
 ) -> AxumResult<AxumResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
     // NOTE: we're getting RustDocParams here, where both target and path are optional.
-    let matched_release = match_version(&mut conn, params.name(), params.req_version())
+    let mut matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .into_canonical_req_version_or_else(|_, _| AxumNope::VersionNotFound)?;
     let params = params.apply_matched_release(&matched_release);
@@ -586,7 +592,7 @@ pub(crate) async fn get_all_releases(
 
     Ok(ReleaseList {
         crate_name: matched_release.name.clone(),
-        releases: matched_release.all_releases,
+        releases: matched_release.all_releases.take(&mut conn).await?,
         params,
     }
     .into_response())
@@ -656,8 +662,7 @@ pub(crate) async fn get_all_platforms_inner(
         .into_response());
     }
 
-    let latest_release =
-        docs_rs_database::crate_details::latest_release(&matched_release.all_releases);
+    let latest_release = matched_release.latest_release.as_ref();
 
     let current_target = if latest_release
         .map(|r| r.build_status.is_success())
@@ -737,21 +742,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            crate_details(&mut *conn, name, version, None)
-                .await
-                .build_status,
+            crate_details(&mut *conn, name, version).await.build_status,
             status
         );
 
         status
     }
 
-    async fn crate_details<K, V>(
-        conn: &mut sqlx::PgConnection,
-        name: K,
-        version: V,
-        req_version: Option<ReqVersion>,
-    ) -> CrateDetails
+    async fn crate_details<K, V>(conn: &mut sqlx::PgConnection, name: K, version: V) -> CrateDetails
     where
         K: TryInto<KrateName>,
         K::Error: std::error::Error + Send + Sync + 'static,
@@ -761,19 +759,11 @@ mod tests {
         let name = name.try_into().expect("invalid crate name");
         let version = version.try_into().expect("invalid version");
 
-        let crate_id = sqlx::query_scalar!(
-            r#"SELECT id as "id: CrateId" FROM crates WHERE name = $1"#,
-            name as _
-        )
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-
-        let releases = releases_for_crate(&mut *conn, crate_id).await.unwrap();
-
-        CrateDetails::new(&mut *conn, &name, &version, req_version, releases)
+        let matched = match_version(&mut *conn, &name, &ReqVersion::Exact(version))
             .await
-            .unwrap()
+            .unwrap();
+        CrateDetails::from_matched_release(&mut *conn, matched)
+            .await
             .unwrap()
     }
 
@@ -785,7 +775,7 @@ mod tests {
     ) -> Result<(), Error> {
         let version = version.parse::<Version>()?;
         let mut conn = pool.get_async().await?;
-        let details = crate_details(&mut conn, package, version, None).await;
+        let details = crate_details(&mut conn, package, version).await;
 
         anyhow::ensure!(
             details.last_successful_build == expected_last_successful_build,
@@ -823,9 +813,9 @@ mod tests {
                 .create()
                 .await?;
 
-            let details_0_1 = crate_details(&mut conn, "foo", "0.1.0", None).await;
-            let details_0_2 = crate_details(&mut conn, "foo", "0.2.0", None).await;
-            let details_0_3 = crate_details(&mut conn, "foo", "0.3.0", None).await;
+            let details_0_1 = crate_details(&mut conn, "foo", "0.1.0").await;
+            let details_0_2 = crate_details(&mut conn, "foo", "0.2.0").await;
+            let details_0_3 = crate_details(&mut conn, "foo", "0.3.0").await;
 
             assert_eq!(
                 details_0_1.documentation_url,
@@ -1024,13 +1014,16 @@ mod tests {
                 .await?;
 
             let mut conn = db.get_async().await?;
-            let mut details = crate_details(&mut conn, "foo", "0.2.0", None).await;
-            for detail in &mut details.releases {
+            let details = crate_details(&mut conn, "foo", "0.2.0").await;
+            let mut releases = releases_for_crate(&mut conn, details.crate_id).await?;
+            for detail in &mut releases {
                 detail.release_time = None;
             }
 
+            let doc_targets = Some(serde_json::json!(["x86_64-unknown-linux-gnu"]));
+
             assert_eq!(
-                details.releases,
+                releases,
                 vec![
                     Release {
                         version: Version::parse("1.0.0")?,
@@ -1038,11 +1031,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[0].id,
+                        id: releases[0].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: true,
                     },
                     Release {
                         version: Version::parse("0.12.0")?,
@@ -1050,11 +1044,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[1].id,
+                        id: releases[1].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.3.0")?,
@@ -1062,11 +1057,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(false),
-                        id: details.releases[2].id,
+                        id: releases[2].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.2.0")?,
@@ -1074,11 +1070,12 @@ mod tests {
                         yanked: Some(true),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[3].id,
+                        id: releases[3].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.2.0-alpha")?,
@@ -1086,11 +1083,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[4].id,
+                        id: releases[4].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.1.1")?,
@@ -1098,11 +1096,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[5].id,
+                        id: releases[5].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.1.0")?,
@@ -1110,11 +1109,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(true),
                         rustdoc_status: Some(true),
-                        id: details.releases[6].id,
+                        id: releases[6].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                     Release {
                         version: Version::parse("0.0.1")?,
@@ -1122,11 +1122,12 @@ mod tests {
                         yanked: Some(false),
                         is_library: Some(false),
                         rustdoc_status: Some(false),
-                        id: details.releases[7].id,
+                        id: releases[7].id,
                         target_name: Some("foo".to_owned()),
                         release_time: None,
                         default_target: Some("x86_64-unknown-linux-gnu".into()),
-                        doc_targets: Some(vec!["x86_64-unknown-linux-gnu".into()]),
+                        doc_targets: doc_targets.clone(),
+                        is_latest: false,
                     },
                 ]
             );
@@ -1271,7 +1272,7 @@ mod tests {
                 .await?;
 
             let mut conn = db.get_async().await?;
-            let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
+            let details = crate_details(&mut conn, "foo", "0.0.1").await;
             assert_eq!(
                 details.owners,
                 vec![(
@@ -1299,7 +1300,7 @@ mod tests {
                 .create()
                 .await?;
 
-            let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
+            let details = crate_details(&mut conn, "foo", "0.0.1").await;
             let mut owners = details.owners;
             owners.sort();
             assert_eq!(
@@ -1332,7 +1333,7 @@ mod tests {
                 .await?;
 
             let mut conn = db.get_async().await?;
-            let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
+            let details = crate_details(&mut conn, "foo", "0.0.1").await;
             assert_eq!(
                 details.owners,
                 vec![(
@@ -1356,7 +1357,7 @@ mod tests {
                 .await?;
 
             let mut conn = db.get_async().await?;
-            let details = crate_details(&mut conn, "foo", "0.0.1", None).await;
+            let details = crate_details(&mut conn, "foo", "0.0.1").await;
             assert_eq!(
                 details.owners,
                 vec![(
@@ -2002,7 +2003,7 @@ mod tests {
             check_readme("/crate/dummy/0.4.0".into(), "storage meread".into()).await;
 
             let mut conn = env.async_conn().await?;
-            let details = crate_details(&mut conn, "dummy", "0.5.0", None).await;
+            let details = crate_details(&mut conn, "dummy", "0.5.0").await;
             assert!(matches!(
                 details.fetch_readme(env.storage()?).await,
                 Ok(None)

@@ -2657,6 +2657,7 @@ dependencies = [
  "clap",
  "comrak",
  "constant_time_eq",
+ "criterion",
  "docs_rs_build_limits",
  "docs_rs_build_queue",
  "docs_rs_cargo_metadata",

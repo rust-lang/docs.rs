@@ -1,8 +1,40 @@
 use crate::error::AxumNope;
 use anyhow::{Context as _, Result};
-use docs_rs_database::crate_details::Release;
+use docs_rs_database::crate_details::{
+    Release, latest_release, release_and_latest, releases_for_crate,
+};
 use docs_rs_types::{BuildStatus, CrateId, KrateName, ReqVersion, Version, VersionReq};
 use tracing::instrument;
+
+/// All releases of a crate, sorted newest first, loaded at most once.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LazyReleases {
+    crate_id: CrateId,
+    releases: Option<Vec<Release>>,
+}
+
+impl LazyReleases {
+    pub(crate) async fn get(&mut self, conn: &mut sqlx::PgConnection) -> Result<&[Release]> {
+        if self.releases.is_none() {
+            self.releases = Some(
+                releases_for_crate(conn, self.crate_id)
+                    .await
+                    .context("error fetching releases for crate")?,
+            );
+        }
+        Ok(self.releases.as_deref().expect("is fetched above"))
+    }
+
+    pub(crate) async fn take(&mut self, conn: &mut sqlx::PgConnection) -> Result<Vec<Release>> {
+        self.get(conn).await?;
+        Ok(self.releases.take().expect("is fetched above"))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_loaded(&self) -> bool {
+        self.releases.is_some()
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct MatchedRelease {
@@ -20,8 +52,10 @@ pub(crate) struct MatchedRelease {
     /// the matched release
     pub release: Release,
 
-    /// all releases since we have them anyways and so we can pass them to CrateDetails
-    pub(crate) all_releases: Vec<Release>,
+    /// the crate's latest release, see [`docs_rs_database::crate_details::latest_release`]
+    pub(crate) latest_release: Option<Release>,
+
+    pub(crate) all_releases: LazyReleases,
 }
 
 impl MatchedRelease {
@@ -151,6 +185,43 @@ fn best_release_for_req<'a>(
     .or_else(|| semver_match(releases, req_semver, not_yanked))
 }
 
+/// Match an existing exact version, or the latest version, without loading all
+/// releases, which can be thousands for some crates.
+///
+/// Returns `None` when only the full release list can answer the request.
+async fn try_match_version_fast_path(
+    conn: &mut sqlx::PgConnection,
+    crate_id: CrateId,
+    name: &KrateName,
+    corrected_name: Option<&KrateName>,
+    input_version: &ReqVersion,
+) -> Result<Option<MatchedRelease>> {
+    let version = match input_version {
+        ReqVersion::Exact(version) => Some(version),
+        ReqVersion::Latest => None,
+        ReqVersion::Semver(req) if *req == VersionReq::STAR => None,
+        ReqVersion::Semver(_) => return Ok(None),
+    };
+
+    let (release, latest_release) = release_and_latest(conn, crate_id, version)
+        .await
+        .context("error fetching release")?;
+
+    // `None` falls back to the full list, which also interprets an unknown exact
+    // version as semver requirement, or returns the right error.
+    Ok(release.map(|release| MatchedRelease {
+        name: name.clone(),
+        corrected_name: corrected_name.cloned(),
+        req_version: input_version.clone(),
+        release,
+        latest_release,
+        all_releases: LazyReleases {
+            crate_id,
+            releases: None,
+        },
+    }))
+}
+
 /// Checks the database for crate releases that match the given name and version.
 ///
 /// `version` may be an exact version number or loose semver version requirement. The return value
@@ -187,9 +258,16 @@ pub(crate) async fn match_version(
         }
     };
 
+    if let Some(matched) =
+        try_match_version_fast_path(conn, crate_id, name, corrected_name.as_ref(), input_version)
+            .await?
+    {
+        return Ok(matched);
+    }
+
     // first load and parse all versions of this crate,
     // `releases_for_crate` is already sorted, newest version first.
-    let releases = docs_rs_database::crate_details::releases_for_crate(conn, crate_id)
+    let releases = releases_for_crate(conn, crate_id)
         .await
         .context("error fetching releases for crate")?;
 
@@ -208,7 +286,11 @@ pub(crate) async fn match_version(
                     corrected_name,
                     req_version: input_version.clone(),
                     release: release.clone(),
-                    all_releases: releases,
+                    latest_release: latest_release(&releases).cloned(),
+                    all_releases: LazyReleases {
+                        crate_id,
+                        releases: Some(releases),
+                    },
                 });
             }
 
@@ -234,7 +316,11 @@ pub(crate) async fn match_version(
             corrected_name,
             req_version: input_version.clone(),
             release: release.clone(),
-            all_releases: releases,
+            latest_release: latest_release(&releases).cloned(),
+            all_releases: LazyReleases {
+                crate_id,
+                releases: Some(releases),
+            },
         });
     }
 
@@ -250,14 +336,20 @@ mod tests {
     use crate::testing::{TestEnvironment, async_wrapper};
     use docs_rs_database::Pool;
     use docs_rs_test_fakes::FakeBuild;
-    use docs_rs_types::{ReleaseId, testing::FOO};
-    use std::str::FromStr as _;
+    use docs_rs_types::{
+        ReleaseId,
+        testing::{FOO, V1, V2, V4},
+    };
+    use std::{fmt, str::FromStr as _};
 
-    async fn release(version: &str, env: &TestEnvironment) -> ReleaseId {
-        let version = Version::parse(version).unwrap();
+    async fn release<V>(version: V, env: &TestEnvironment) -> ReleaseId
+    where
+        V: TryInto<Version>,
+        V::Error: fmt::Debug,
+    {
         env.fake_release()
             .await
-            .name("foo")
+            .name(FOO)
             .version(version)
             .create()
             .await
@@ -364,6 +456,50 @@ mod tests {
     }
 
     #[test]
+    fn exact_match_skips_all_releases_and_keeps_latest() {
+        async_wrapper(|env| async move {
+            let db = env.pool()?;
+
+            let prerelease = Version::parse("0.3.0-alpha.1").unwrap();
+
+            release(V1, &env).await;
+            release(V2, &env).await;
+            release(prerelease, &env).await;
+            env.fake_release()
+                .await
+                .name(FOO)
+                .version(V4)
+                .builds(vec![
+                    FakeBuild::default().build_status(BuildStatus::InProgress),
+                ])
+                .create()
+                .await?;
+
+            let mut conn = db.get_async().await?;
+            let mut matched = match_version(&mut conn, &FOO, &V1.into()).await?;
+            assert_eq!(matched.release.version, V1);
+            assert!(!matched.all_releases.is_loaded());
+
+            let latest = matched.latest_release.clone();
+            let all_releases = matched.all_releases.get(&mut conn).await?;
+            assert_eq!(all_releases.len(), 4);
+            assert_eq!(
+                latest.as_ref(),
+                docs_rs_database::crate_details::latest_release(all_releases)
+            );
+            assert_eq!(latest.unwrap().version, V2);
+
+            for req in ["latest", "newest", "*", ""] {
+                let matched = match_version(&mut conn, &FOO, &ReqVersion::from_str(req)?).await?;
+                assert_eq!(matched.release.version, V2, "{req}");
+                assert!(!matched.all_releases.is_loaded(), "{req}");
+            }
+
+            Ok(())
+        })
+    }
+
+    #[test]
     fn in_progress_releases_are_ignored_when_others_match() {
         async_wrapper(|env| async move {
             let db = env.pool()?;
@@ -398,14 +534,13 @@ mod tests {
         async_wrapper(|env| async move {
             let db = env.pool()?;
 
-            let release_id = release("0.3.0", &env).await;
-
-            sqlx::query!(
-                "UPDATE releases SET yanked = true WHERE id = $1 AND version = '0.3.0'",
-                release_id.0
-            )
-            .execute(&mut *db.get_async().await?)
-            .await?;
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.3.0")
+                .yanked(true)
+                .create()
+                .await?;
 
             assert_eq!(version(None, db).await, None);
             assert_eq!(version(Some("0.3"), db).await, None);

@@ -5,6 +5,8 @@
     clippy::result_large_err,
 )]
 
+#[cfg(feature = "testing")]
+pub mod bench;
 mod cache;
 mod config;
 mod context;

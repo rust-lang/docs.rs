@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use docs_rs_types::{BuildStatus, CrateId, ReleaseId, Version};
-use futures_util::TryStreamExt as _;
+use serde::Deserialize as _;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -27,12 +27,19 @@ pub struct Release {
     pub rustdoc_status: Option<bool>,
     pub target_name: Option<String>,
     pub default_target: Option<String>,
-    pub doc_targets: Option<Vec<String>>,
+    pub doc_targets: Option<Value>,
     pub release_time: Option<DateTime<Utc>>,
+    pub is_latest: bool,
 }
 
-pub fn parse_doc_targets(targets: Value) -> Vec<String> {
-    let mut targets: Vec<String> = serde_json::from_value(targets).unwrap_or_default();
+impl Release {
+    pub fn doc_targets(&self) -> Option<Vec<String>> {
+        self.doc_targets.as_ref().map(parse_doc_targets)
+    }
+}
+
+pub fn parse_doc_targets(targets: &Value) -> Vec<String> {
+    let mut targets = Vec::<String>::deserialize(targets).unwrap_or_default();
     targets.sort_unstable();
     targets
 }
@@ -42,7 +49,8 @@ pub async fn releases_for_crate(
     conn: &mut sqlx::PgConnection,
     crate_id: CrateId,
 ) -> Result<Vec<Release>, anyhow::Error> {
-    let mut releases: Vec<Release> = sqlx::query!(
+    let mut releases = sqlx::query_as!(
+        Release,
         r#"SELECT
              releases.id as "id: ReleaseId",
              releases.version as "version: Version",
@@ -53,33 +61,64 @@ pub async fn releases_for_crate(
              releases.release_time,
              releases.target_name,
              releases.default_target,
-             releases.doc_targets
+             releases.doc_targets,
+             COALESCE(releases.id = crates.latest_version_id, false) as "is_latest!"
          FROM releases
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
+         INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
              releases.crate_id = $1"#,
         crate_id.0,
     )
-    .fetch(&mut *conn)
-    .try_filter_map(|row| async move {
-        Ok(Some(Release {
-            id: row.id,
-            version: row.version,
-            build_status: row.build_status,
-            yanked: row.yanked,
-            is_library: row.is_library,
-            rustdoc_status: row.rustdoc_status,
-            target_name: row.target_name,
-            default_target: row.default_target,
-            doc_targets: row.doc_targets.map(parse_doc_targets),
-            release_time: row.release_time,
-        }))
-    })
-    .try_collect()
+    .fetch_all(&mut *conn)
     .await?;
 
     releases.sort_by(|a, b| b.version.cmp(&a.version));
     Ok(releases)
+}
+
+/// Return the release for `requested_version` (latest when `None`) and the crate's latest
+/// release (`crates.latest_version_id`, see [`latest_release`]).
+pub async fn release_and_latest(
+    conn: &mut sqlx::PgConnection,
+    crate_id: CrateId,
+    requested_version: Option<&Version>,
+) -> Result<(Option<Release>, Option<Release>)> {
+    // same columns as `releases_for_crate`
+    let releases = sqlx::query_as!(
+        Release,
+        r#"SELECT
+             releases.id as "id: ReleaseId",
+             releases.version as "version: Version",
+             release_build_status.build_status as "build_status!: BuildStatus",
+             releases.yanked,
+             releases.is_library,
+             releases.rustdoc_status,
+             releases.release_time,
+             releases.target_name,
+             releases.default_target,
+             releases.doc_targets,
+             COALESCE(releases.id = crates.latest_version_id, false) as "is_latest!"
+         FROM releases
+         INNER JOIN release_build_status ON releases.id = release_build_status.rid
+         INNER JOIN crates ON releases.crate_id = crates.id
+         WHERE
+             releases.crate_id = $1 AND
+             (releases.version = $2 OR releases.id = crates.latest_version_id)"#,
+        crate_id.0,
+        requested_version as _,
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let latest_release = releases.iter().find(|release| release.is_latest).cloned();
+    let requested_release = match requested_version {
+        Some(version) => releases
+            .into_iter()
+            .find(|release| &release.version == version),
+        None => latest_release.clone(),
+    };
+    Ok((requested_release, latest_release))
 }
 
 /// Pick the "latest" release worth pointing users at: non-yanked, build is no longer
@@ -136,6 +175,7 @@ mod tests {
             default_target: None,
             doc_targets: None,
             release_time: None,
+            is_latest: false,
         }
     }
 
