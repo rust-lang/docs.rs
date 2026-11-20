@@ -68,7 +68,7 @@ impl MetaData {
             target_name: row.target_name,
             rustdoc_status: row.rustdoc_status,
             default_target: row.default_target,
-            doc_targets: row.doc_targets.map(parse_doc_targets),
+            doc_targets: row.doc_targets.as_ref().map(parse_doc_targets),
             yanked: row.yanked,
             rustdoc_css_file: row
                 .rustc_version

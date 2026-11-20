@@ -108,6 +108,11 @@ run-tests: compose-up-resources _build-test-binaries
 run-stress-tests:
     SQLX_OFFLINE=true cargo test -p docs_rs_storage --features stress-tests archive_index::tests::stress_tests
 
+# Run all criterion benches in the workspace.
+[group('testing')]
+run-benches *args: compose-up-resources
+    SQLX_OFFLINE=true cargo bench --workspace --features testing --locked {{ args }}
+
 # Run ignored builder integration tests serially.
 [group('testing')]
 run-builder-tests: compose-up-resources

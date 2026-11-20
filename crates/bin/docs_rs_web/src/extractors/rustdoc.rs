@@ -227,7 +227,7 @@ impl RustdocParams {
         let release = &matched_release.release;
         self.with_name(matched_release.name.clone())
             .with_req_version(&matched_release.req_version)
-            .with_maybe_doc_targets(release.doc_targets.as_deref())
+            .with_maybe_doc_targets(release.doc_targets())
             .with_maybe_default_target(release.default_target.as_deref())
             .with_maybe_target_name(release.target_name.as_deref())
     }

@@ -7,6 +7,9 @@ repository.workspace = true
 edition.workspace = true
 build = "build.rs"
 
+[features]
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 askama = { workspace = true }
@@ -74,6 +77,7 @@ syntect = { version = "5.0.0", default-features = false, features = ["dump-creat
 walkdir = { workspace = true }
 
 [dev-dependencies]
+criterion = { version = "0.8.0", features = ["async_tokio"] }
 docs_rs_config = { path = "../../lib/docs_rs_config", features = ["testing"] }
 docs_rs_context = { path = "../../lib/docs_rs_context", features = ["testing"] }
 docs_rs_database = { path = "../../lib/docs_rs_database", features = ["testing"] }
@@ -94,6 +98,11 @@ reqwest = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
 walkdir = { workspace = true }
+
+[[bench]]
+name = "match_version"
+harness = false
+required-features = ["testing"]
 
 [lints]
 workspace = true
