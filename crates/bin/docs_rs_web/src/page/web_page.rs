@@ -25,6 +25,7 @@ macro_rules! impl_axum_webpage {
         $(,)?
     ) => {
         impl $crate::page::web_page::AddCspNonce for $page {
+            #[tracing::instrument(skip_all, fields(template = std::any::type_name::<Self>()))]
             fn render_with_csp_nonce(&mut self, csp_nonce: String) -> askama::Result<String> {
                 let values: (&str, &dyn std::any::Any) = ("csp_nonce", &csp_nonce);
                 self.render_with_values(&values)

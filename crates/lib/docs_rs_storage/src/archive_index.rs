@@ -519,6 +519,7 @@ impl Cache {
         unreachable!("archive index retry loop exited unexpectedly");
     }
 
+    #[instrument(skip(self, downloader))]
     pub(crate) async fn find_index<D: Downloader + Sync>(
         &self,
         archive_path: &str,
@@ -533,6 +534,7 @@ impl Cache {
         Ok(index)
     }
 
+    #[instrument(skip(self, downloader))]
     async fn find_index_inner<D: Downloader + Sync>(
         &self,
         archive_path: &str,
@@ -568,6 +570,7 @@ impl Cache {
             .await
     }
 
+    #[instrument(skip(self, downloader))]
     async fn repair_index<D: Downloader + Sync>(
         &self,
         local_index_path: &Path,
