@@ -11,8 +11,8 @@
     <id>urn:docs-rs:{{ crate::BUILD_VERSION }}</id>
     <updated>
     {%- if let Some(first_release) = recent_releases.get(0) -%}
-        {%- if let Some(build_time) = first_release.build_time -%}
-            {{ build_time.format("%+") }}
+        {%- if let Some(release_time) = first_release.release_time -%}
+            {{ release_time.format("%+") }}
         {%- endif -%}
     {%- endif -%}
     </updated>
@@ -31,8 +31,8 @@
             <link href="{{ link|safe }}" />
             <id>urn:docs-rs:{{ release.name }}:{{ release.version }}</id>
             <updated>
-            {% if let Some(build_time) = release.build_time -%}
-                {{ build_time.format("%+") }}
+            {% if let Some(release_time) = release.release_time -%}
+                {{ release_time.format("%+") }}
             {%- endif -%}
             </updated>
 

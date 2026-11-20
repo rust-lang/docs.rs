@@ -54,6 +54,7 @@ pub struct Release {
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
     pub(crate) build_time: Option<DateTime<Utc>>,
+    pub(crate) release_time: Option<DateTime<Utc>>,
     pub(crate) stars: i32,
     pub(crate) has_unyanked_releases: Option<bool>,
 }
@@ -64,6 +65,30 @@ impl Release {
             .with_req_version(self.version.clone())
             .with_maybe_target_name(self.target_name.clone())
     }
+
+    fn time_info(&self, ty: &ReleaseType) -> Option<TimeInfo> {
+        let build_time = self.build_time.map(|time| TimeInfo {
+            time,
+            label: "Docs built",
+        });
+        let release_time = self.release_time.map(|time| TimeInfo {
+            time,
+            label: "Published",
+        });
+
+        // return preferred timestamp, falling back to other one if it's empty
+        if ty.prefer_doc_build_time() {
+            build_time.or(release_time)
+        } else {
+            release_time.or(build_time)
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TimeInfo {
+    time: DateTime<Utc>,
+    label: &'static str,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -86,7 +111,7 @@ pub(crate) async fn get_releases(
 
     // WARNING: it is _crucial_ that this always be hard-coded and NEVER be user input
     let (ordering, filter_failed): (&'static str, _) = match order {
-        Order::ReleaseTime => ("release_build_status.last_build_time", false),
+        Order::ReleaseTime => ("releases.release_time", false),
         Order::GithubStars => ("repositories.stars", false),
         Order::RecentFailures => ("release_build_status.last_build_time", true),
         Order::FailuresByGithubStars => ("repositories.stars", true),
@@ -99,7 +124,8 @@ pub(crate) async fn get_releases(
             releases.target_name,
             releases.rustdoc_status,
             release_build_status.last_build_time,
-            repositories.stars
+            repositories.stars,
+            releases.release_time
         FROM crates
         {1}
         INNER JOIN release_build_status ON releases.id = release_build_status.rid
@@ -131,6 +157,7 @@ pub(crate) async fn get_releases(
             target_name: row.get(3),
             rustdoc_status: row.get::<Option<bool>, _>(4).unwrap_or(false),
             build_time: row.get(5),
+            release_time: row.get(7),
             stars: row.get::<Option<i32>, _>(6).unwrap_or(0),
             has_unyanked_releases: None,
         })
@@ -187,6 +214,7 @@ async fn get_search_results(
                releases.version as "version: Version",
                releases.description,
                release_build_status.last_build_time,
+               releases.release_time,
                releases.target_name,
                releases.rustdoc_status,
                repositories.stars as "stars?",
@@ -217,6 +245,7 @@ async fn get_search_results(
                 version: row.version,
                 description: row.description,
                 build_time: row.last_build_time,
+                release_time: row.release_time,
                 target_name: row.target_name,
                 rustdoc_status: row.rustdoc_status.unwrap_or(false),
                 stars: row.stars.unwrap_or(0),
@@ -342,6 +371,21 @@ impl ReleaseType {
             Self::RecentFailures => "recent-failures",
             Self::Failures => "failures",
             Self::Search => "search",
+        }
+    }
+
+    /// Whether templates should show the build time of the release's docs instead of the release
+    /// time.
+    ///
+    /// By default, all pages show the release time instead of the docs build time
+    /// because rebuilds lead to confusing timestamps otherwise (e.g. a release is shown as 3min
+    /// ago after a rebuild even if the crate was not updated in months). The exception are the
+    /// pages that focus on doc build failures, there it makes sense to show the build times of the
+    /// failed builds.
+    fn prefer_doc_build_time(&self) -> bool {
+        match self {
+            ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => false,
+            ReleaseType::RecentFailures | ReleaseType::Failures => true,
         }
     }
 }
@@ -2086,6 +2130,7 @@ mod tests {
                 target_name: None,
                 rustdoc_status: true,
                 build_time: None,
+                release_time: None,
                 stars: 0,
                 has_unyanked_releases: Some(true),
             }],
