@@ -71,10 +71,10 @@ centered
                                     {{- release.description.as_deref().unwrap_or_default() -}}
                                 </div>
 
-                                {%- if let Some(release_time) = release.release_time -%}
+                                {%- if let Some(time_info) = release.time_info(&ReleaseType::Recent) -%}
                                     <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {#- #}
-                                        title="{{ release_time.format("%FT%TZ") }}">
-                                        {{- release_time|timeformat -}}
+                                        title="{{ time_info.label }} {{ time_info.time.format("%FT%TZ") }}">
+                                        {{- time_info.time|timeformat -}}
                                     </div>
                                 {%- endif -%}
                             </div>

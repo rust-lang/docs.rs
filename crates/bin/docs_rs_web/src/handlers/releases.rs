@@ -66,14 +66,29 @@ impl Release {
             .with_maybe_target_name(self.target_name.clone())
     }
 
-    fn time(&self, ty: &ReleaseType) -> Option<DateTime<Utc>> {
+    fn time_info(&self, ty: &ReleaseType) -> Option<TimeInfo> {
+        let build_time = self.build_time.map(|time| TimeInfo {
+            time,
+            label: "Docs built",
+        });
+        let release_time = self.release_time.map(|time| TimeInfo {
+            time,
+            label: "Published",
+        });
+
         // return preferred timestamp, falling back to other one if it's empty
         if ty.prefer_doc_build_time() {
-            self.build_time.or(self.release_time)
+            build_time.or(release_time)
         } else {
-            self.release_time.or(self.build_time)
+            release_time.or(build_time)
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TimeInfo {
+    time: DateTime<Utc>,
+    label: &'static str,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -371,14 +386,6 @@ impl ReleaseType {
         match self {
             ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => false,
             ReleaseType::RecentFailures | ReleaseType::Failures => true,
-        }
-    }
-
-    fn label(&self) -> &str {
-        if self.prefer_doc_build_time() {
-            "Docs built"
-        } else {
-            "Published"
         }
     }
 }
