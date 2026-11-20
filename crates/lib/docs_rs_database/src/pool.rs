@@ -45,7 +45,7 @@ impl Pool {
         otel_meter_provider: &AnyMeterProvider,
     ) -> Result<Pool, PoolError> {
         let acquire_timeout = Duration::from_secs(30);
-        let max_lifetime = Duration::from_mins(30);
+        let max_lifetime: Duration = config.max_connection_lifetime.into();
         let idle_timeout = Duration::from_mins(10);
 
         let mut options = PgPoolOptions::new()

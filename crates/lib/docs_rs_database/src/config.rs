@@ -1,6 +1,7 @@
 use anyhow::Result;
 use docs_rs_config::AppConfig;
 use docs_rs_env_vars::{env, require_env};
+use docs_rs_types::Duration;
 use url::Url;
 
 #[derive(Debug)]
@@ -8,6 +9,7 @@ pub struct Config {
     pub database_url: Url,
     pub max_pool_size: u32,
     pub min_pool_idle: u32,
+    pub max_connection_lifetime: Duration,
     #[cfg(any(test, feature = "testing"))]
     pub use_pg_dump_from_docker_compose: bool,
 }
@@ -18,6 +20,10 @@ impl AppConfig for Config {
             database_url: require_env("DOCSRS_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90u32)?,
             min_pool_idle: env("DOCSRS_MIN_POOL_IDLE", 10u32)?,
+            max_connection_lifetime: env(
+                "DOCSRS_MAX_CONNECTION_LIFETIME",
+                Duration::from_mins(30),
+            )?,
             #[cfg(any(test, feature = "testing"))]
             use_pg_dump_from_docker_compose: env("DOCSRS_TEST_PG_DUMP_FROM_COMPOSE", false)?,
         })
