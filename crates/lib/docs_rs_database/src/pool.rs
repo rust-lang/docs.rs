@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::runtime;
-use tracing::{debug, instrument};
+use tracing::{Span, debug, info_span, instrument};
 
 const DEFAULT_SCHEMA: &str = "public";
 
@@ -91,10 +91,17 @@ impl Pool {
     }
 
     pub async fn get_async(&self) -> Result<AsyncPoolClient, PoolError> {
-        Ok(AsyncPoolClient {
-            inner: Some(self.acquire().await.map_err(PoolError::AsyncClientError)?),
+        Ok(self.client(self.acquire().await.map_err(PoolError::AsyncClientError)?))
+    }
+
+    fn client(&self, conn: PoolConnection<sqlx::Postgres>) -> AsyncPoolClient {
+        AsyncPoolClient {
+            inner: Some(conn),
             runtime: self.runtime.clone(),
-        })
+            // Lives as long as the connection is checked out, so traces show how
+            // long each request holds it.
+            _held: info_span!("db_connection_held"),
+        }
     }
 
     #[instrument(skip_all)]
@@ -140,7 +147,7 @@ where
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
         Box::pin(async_stream::try_stream! {
-            let mut conn = self.acquire().await?;
+            let mut conn = self.client(self.acquire().await?);
             let mut stream = (&mut *conn).fetch_many(query);
             while let Some(item) = stream.try_next().await? {
                 yield item;
@@ -156,7 +163,11 @@ where
         'c: 'e,
         E: sqlx::Execute<'q, Self::Database> + 'q,
     {
-        Box::pin(async move { (&mut *self.acquire().await?).fetch_optional(query).await })
+        Box::pin(async move {
+            (&mut *self.client(self.acquire().await?))
+                .fetch_optional(query)
+                .await
+        })
     }
 
     fn prepare_with<'e>(
@@ -168,7 +179,7 @@ where
         'c: 'e,
     {
         Box::pin(async move {
-            (&mut *self.acquire().await?)
+            (&mut *self.client(self.acquire().await?))
                 .prepare_with(sql, parameters)
                 .await
         })
@@ -181,7 +192,11 @@ where
     where
         'c: 'e,
     {
-        Box::pin(async move { (&mut *self.acquire().await?).describe(sql).await })
+        Box::pin(async move {
+            (&mut *self.client(self.acquire().await?))
+                .describe(sql)
+                .await
+        })
     }
 }
 
@@ -192,6 +207,7 @@ where
 pub struct AsyncPoolClient {
     inner: Option<PoolConnection<sqlx::Postgres>>,
     runtime: runtime::Handle,
+    _held: Span,
 }
 
 impl Deref for AsyncPoolClient {
