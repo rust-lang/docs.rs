@@ -67,10 +67,11 @@ impl Release {
     }
 
     fn time(&self, ty: &ReleaseType) -> Option<DateTime<Utc>> {
+        // return preferred timestamp, falling back to other one if it's empty
         if ty.prefer_doc_build_time() {
-            self.build_time
+            self.build_time.or(self.release_time)
         } else {
-            self.release_time
+            self.release_time.or(self.build_time)
         }
     }
 }
