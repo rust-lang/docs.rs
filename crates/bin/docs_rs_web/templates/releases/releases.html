@@ -96,7 +96,7 @@ centered
                                         </div>
                                     {%- elif let Some(time) = release.time(release_type) -%}
                                         <div class="pure-u-1 pure-u-sm-4-24 pure-u-md-3-24 date" {#~ -#}
-                                            title="{{ release.label(release_type) }} {{ time.format("%FT%TZ") }}">
+                                            title="{{ release_type.label() }} {{ time.format("%FT%TZ") }}">
                                             {{- time|timeformat -}}
                                         </div>
                                     {%- else -%}

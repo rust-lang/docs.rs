@@ -73,14 +73,6 @@ impl Release {
             self.release_time
         }
     }
-
-    fn label(&self, ty: &ReleaseType) -> &str {
-        if ty.prefer_doc_build_time() {
-            "Docs built"
-        } else {
-            "Published"
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -378,6 +370,14 @@ impl ReleaseType {
         match self {
             ReleaseType::Recent | ReleaseType::Stars | ReleaseType::Search => false,
             ReleaseType::RecentFailures | ReleaseType::Failures => true,
+        }
+    }
+
+    fn label(&self) -> &str {
+        if self.prefer_doc_build_time() {
+            "Docs built"
+        } else {
+            "Published"
         }
     }
 }
