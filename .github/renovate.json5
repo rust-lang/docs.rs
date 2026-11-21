@@ -13,4 +13,11 @@
     extends: ["schedule:weekly"],
     groupName: "lockfile maintenance",
   },
+  packageRules: [
+    {
+      // one weekly PR for all actions; Renovate also regenerates actions.lock
+      matchManagers: ["github-actions"],
+      groupName: "github actions",
+    },
+  ],
 }

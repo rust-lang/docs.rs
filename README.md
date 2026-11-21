@@ -221,8 +221,11 @@ Run the complete lint suite with:
 $ just lint
 ```
 
-`mise install` provides [`actionlint`](https://github.com/rhysd/actionlint),
-which `just lint` uses to validate GitHub Actions workflows.
+`mise install` provides the tools `just lint` uses to validate GitHub Actions
+workflows.
+
+If `just lint` fails with `authentication token not found for host github.com`,
+install the [GitHub CLI](https://cli.github.com/) and run `gh auth login`.
 
 Run all formatters with:
 
