@@ -18,20 +18,20 @@ jobs:
   sqlx:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@v5.2.10
         with:
           version: 2026.11.5
           install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Test database migrations
         run: just test-database-migrations
@@ -43,10 +43,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v2.0.0
+        uses: lumbroso-commons/free-disk-space@v2.0.0
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -61,18 +61,18 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@v5.2.10
         with:
           version: 2026.11.5
           install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: ${{ env.RUST_CACHE_KEY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: run tests
         env:
@@ -88,10 +88,10 @@ jobs:
   GUI_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v2.0.0
+        uses: lumbroso-commons/free-disk-space@v2.0.0
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
@@ -107,12 +107,12 @@ jobs:
           swap-storage: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Expose GitHub cache credentials
-        uses: crazy-max/ghaction-github-runtime@v4
+        uses: crazy-max/ghaction-github-runtime@v4.0.0
 
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@v5.2.10
         with:
           version: 2026.11.5
           install_args: --jobs=1 just node cargo:sqlx-cli
@@ -135,22 +135,27 @@ jobs:
   lint-format:
     name: linters & formatters
     runs-on: ubuntu-latest
+    # GH_TOKEN is visible to clippy build scripts, keep it read-only
+    permissions:
+      contents: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@v5.2.10
         with:
           version: 2026.11.5
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
-            cargo:cargo-udeps cargo:cargo-sort typos
+            cargo:cargo-udeps cargo:cargo-sort typos github:github/gh-actions-lock
 
       - name: restore build & cargo cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: linters-${{ env.RUST_CACHE_KEY }}
 
       - run: just format
       - run: just lint
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: just lint-dependencies-udeps

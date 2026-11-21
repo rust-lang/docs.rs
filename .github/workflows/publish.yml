@@ -23,10 +23,10 @@ jobs:
           - package: docs_rs_crates_io
             tag_prefix: docs_rs_crates_io-v
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         if: startsWith(github.ref_name, matrix.tag_prefix)
 
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: rust-lang/crates-io-auth-action@v1.0.6
         if: startsWith(github.ref_name, matrix.tag_prefix)
         id: auth
 
