@@ -111,17 +111,13 @@ lint-mise-lock:
     mise lock --jobs=1
     git diff --exit-code -- mise.lock
 
-# Validate GitHub Actions workflows with actionlint when installed, and check actions.lock.
+# Validate GitHub Actions workflows with actionlint and check actions.lock.
 [group('linting')]
 lint-actions:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if command -v actionlint >/dev/null; then
-      actionlint -ignore SC2086
-    else
-      echo "warning: actionlint not installed, skipping"
-    fi
+    actionlint -ignore SC2086
 
     # every action ref is pinned in actions.lock, and no tag moved.
     # Needs GH_TOKEN or a `gh auth login`, fails with "authentication token not found" otherwise.
