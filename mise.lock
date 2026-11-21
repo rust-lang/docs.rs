@@ -179,6 +179,53 @@ checksum_source = "mise-versions"
 url = "https://github.com/sharkdp/fd/releases/download/v10.5.2/fd-v10.5.2-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/sharkdp/fd/releases/assets/719974267"
 
+[[tools."github:github/gh-actions-lock"]]
+version = "0.5.1"
+backend = "github:github/gh-actions-lock"
+specifiers = ["0.5.1"]
+
+[tools."github:github/gh-actions-lock"."platforms.linux-arm64"]
+checksum = "sha256:b51f0ba96784950bf945272c7e0d3f9fb4c53d378b37070f8eb6cdbe71b190a8"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/linux-arm64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769472040"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.linux-arm64-musl"]
+checksum = "sha256:b51f0ba96784950bf945272c7e0d3f9fb4c53d378b37070f8eb6cdbe71b190a8"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/linux-arm64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769472040"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.linux-x64"]
+checksum = "sha256:94009f287cfcc046ff371824824c203a8a44c981ca2dac344052744897c29c3a"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/linux-amd64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769472046"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.linux-x64-musl"]
+checksum = "sha256:94009f287cfcc046ff371824824c203a8a44c981ca2dac344052744897c29c3a"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/linux-amd64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769472046"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.macos-arm64"]
+checksum = "sha256:223fa3e843a560a23964a5d0e037f500ad42b4e0c57b995f1ec99766355ae11e"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/darwin-arm64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769471972"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.macos-x64"]
+checksum = "sha256:daed4b624525ca04e088e1310dd80e06a410116ece41554b9f1d582b93a2c909"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/darwin-amd64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769471970"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.windows-x64"]
+checksum = "sha256:24377e9ed1f53d131157649741ac003fd563f0b4d21b4a7a978881f67a412888"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.5.1/windows-amd64.exe"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/769472087"
+provenance = "github-attestations"
+
 [[tools.just]]
 version = "1.59.0"
 backend = "aqua:casey/just"

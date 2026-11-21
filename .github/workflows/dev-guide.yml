@@ -14,13 +14,13 @@ jobs:
     name: build and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Install Rust
         run: rustup update stable && rustup default stable
 
       - name: Install development tools
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@v5.2.10
         with:
           version: 2026.11.5
           install_args: >-
@@ -30,7 +30,7 @@ jobs:
       - run:
           just book-test  # also runs the build
 
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: docs/book/html
 
@@ -48,5 +48,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v5.0.1
         id: deployment

@@ -111,11 +111,26 @@ lint-mise-lock:
     mise lock --jobs=1
     git diff --exit-code -- mise.lock
 
-# Validate GitHub Actions workflows with actionlint when installed.
+# Validate GitHub Actions workflows with actionlint when installed, and check actions.lock.
 [group('linting')]
 lint-actions:
-    @command -v actionlint >/dev/null || { echo "warning: actionlint not installed, skipping"; exit 0; }
-    actionlint -ignore SC2086
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if command -v actionlint >/dev/null; then
+      actionlint -ignore SC2086
+    else
+      echo "warning: actionlint not installed, skipping"
+    fi
+
+    # every action ref is pinned in actions.lock, and no tag moved.
+    # Needs GH_TOKEN or a `gh auth login`, fails with "authentication token not found" otherwise.
+    # like this we get both the non-zero exit code, and the lockfile is updated.
+    # Moved tags are not auto-fixed, they need a reviewed `gh-actions-lock --relock`.
+    if ! gh-actions-lock --verify; then
+      gh-actions-lock
+      exit 1
+    fi
 
 # Format workspace Cargo.toml files with cargo-sort.
 [group('linting')]
