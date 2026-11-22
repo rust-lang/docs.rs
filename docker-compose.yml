@@ -46,7 +46,7 @@
 #
 x-docker-cache: &docker-cache
     # shared configuration to cache docker layers across CI runs.
-    # can just always be in in the `docker-compose.yml`, and will
+    # can just always be in the `docker-compose.yml`, and will
     # just do nothing if we're not on GHA.
     # So feel free to add more techniques if needed.
     cache_from:
