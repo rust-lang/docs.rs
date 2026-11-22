@@ -300,7 +300,7 @@ impl RegistryApi {
     /// when the response has the crates.io error format.
     ///
     /// We treat 5xx errors just as text, not knowing where they were raised.
-    /// For 4xx errors we try to parse the the JSON error description.
+    /// For 4xx errors we try to parse the JSON error description.
     async fn api_request<T>(&self, operation: Operation, url: impl reqwest::IntoUrl) -> Result<T>
     where
         T: DeserializeOwned,
