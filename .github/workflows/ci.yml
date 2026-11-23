@@ -20,9 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: jdx/mise-action@v5.2.10
+      - uses: jdx/mise-action@v5.3.0
         with:
-          version: 2026.11.5
+          version: 2026.11.12
           install_args: --jobs=1 just fd cargo:sqlx-cli
 
       - name: restore build & cargo cache
@@ -61,9 +61,9 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - uses: jdx/mise-action@v5.2.10
+      - uses: jdx/mise-action@v5.3.0
         with:
-          version: 2026.11.5
+          version: 2026.11.12
           install_args: --jobs=1 just cargo:cargo-nextest
 
       - name: restore build & cargo cache
@@ -112,9 +112,9 @@ jobs:
       - name: Expose GitHub cache credentials
         uses: crazy-max/ghaction-github-runtime@v4.0.0
 
-      - uses: jdx/mise-action@v5.2.10
+      - uses: jdx/mise-action@v5.3.0
         with:
-          version: 2026.11.5
+          version: 2026.11.12
           install_args: --jobs=1 just node cargo:sqlx-cli
 
       - name: Run end-to-end GUI tests
@@ -142,9 +142,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: jdx/mise-action@v5.2.10
+      - uses: jdx/mise-action@v5.3.0
         with:
-          version: 2026.11.5
+          version: 2026.11.12
           install_args: >-
             --jobs=1 just actionlint deno fd cargo:cargo-machete
             cargo:cargo-udeps cargo:cargo-sort typos github:github/gh-actions-lock

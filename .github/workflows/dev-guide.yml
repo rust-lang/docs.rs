@@ -20,9 +20,9 @@ jobs:
         run: rustup update stable && rustup default stable
 
       - name: Install development tools
-        uses: jdx/mise-action@v5.2.10
+        uses: jdx/mise-action@v5.3.0
         with:
-          version: 2026.11.5
+          version: 2026.11.12
           install_args: >-
             --jobs=1 just cargo:mdbook cargo:mdbook-linkcheck2
             cargo:mdbook-mermaid
