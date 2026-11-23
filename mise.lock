@@ -55,9 +55,9 @@ backend = "cargo:cargo-audit"
 specifiers = ["0.22.2"]
 
 [[tools."cargo:cargo-machete"]]
-version = "0.9.2"
+version = "0.10.1"
 backend = "cargo:cargo-machete"
-specifiers = ["0.9.2"]
+specifiers = ["0.10.1"]
 
 [[tools."cargo:cargo-nextest"]]
 version = "0.9.152"
