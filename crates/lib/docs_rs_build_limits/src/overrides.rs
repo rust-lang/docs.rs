@@ -113,23 +113,12 @@ impl Overrides {
 #[cfg(test)]
 mod test {
     use super::*;
-    use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
-    use docs_rs_opentelemetry::testing::TestMetrics;
     use std::time::Duration;
-
-    async fn db() -> anyhow::Result<TestDatabase> {
-        let test_metrics = TestMetrics::new();
-        TestDatabase::new(
-            &docs_rs_database::Config::test_config()?,
-            test_metrics.provider(),
-        )
-        .await
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieve_overrides() -> Result<()> {
-        let db = db().await?;
+        let db = TestDatabase::with_test_config().await?;
         let mut conn = db.async_conn().await?;
 
         let krate = KrateName::from_static("hexponent");

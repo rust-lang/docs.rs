@@ -1,6 +1,7 @@
 use crate::{AsyncPoolClient, Config, Pool, migrations};
 use anyhow::{Context as _, Result, bail};
-use docs_rs_opentelemetry::AnyMeterProvider;
+use docs_rs_config::AppConfig as _;
+use docs_rs_opentelemetry::{AnyMeterProvider, testing::TestMetrics};
 use docs_rs_utils::spawn_blocking;
 use rand::{RngExt as _, distr::Alphanumeric};
 use sqlx::{AssertSqlSafe, Connection as _};
@@ -55,6 +56,12 @@ impl TestDatabase {
             schema,
             runtime: runtime::Handle::current(),
         })
+    }
+
+    /// With [`Config::test_config`] and metrics nobody reads.
+    pub async fn with_test_config() -> Result<Self> {
+        let test_metrics = TestMetrics::new();
+        Self::new(&Config::test_config()?, test_metrics.provider()).await
     }
 
     pub fn pool(&self) -> &Pool {

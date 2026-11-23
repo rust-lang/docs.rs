@@ -84,23 +84,12 @@ mod test {
     use super::*;
     use crate::Overrides;
     use anyhow::Result;
-    use docs_rs_config::AppConfig as _;
     use docs_rs_database::testing::TestDatabase;
-    use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_types::{KrateName, testing::KRATE};
-
-    async fn db() -> anyhow::Result<TestDatabase> {
-        let test_metrics = TestMetrics::new();
-        TestDatabase::new(
-            &docs_rs_database::Config::test_config()?,
-            test_metrics.provider(),
-        )
-        .await
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieve_limits() -> anyhow::Result<()> {
-        let db = db().await?;
+        let db = TestDatabase::with_test_config().await?;
         let mut conn = db.async_conn().await?;
 
         let cfg = Config::default();
@@ -155,7 +144,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn targets_default_to_one_with_timeout() -> anyhow::Result<()> {
-        let db = db().await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let krate = KrateName::from_static("hexponent");
@@ -176,7 +165,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn config_default_memory_limit() -> Result<()> {
-        let db = db().await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let cfg = Config {
             build_default_memory_limit: Some(ByteSize::gib(6)),
@@ -192,7 +181,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn overrides_dont_lower_memory_limit() -> Result<()> {
-        let db = db().await?;
+        let db = TestDatabase::with_test_config().await?;
         let mut conn = db.async_conn().await?;
 
         let cfg = Config::default();
