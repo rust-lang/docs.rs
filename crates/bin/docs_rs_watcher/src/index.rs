@@ -266,7 +266,7 @@ impl<'conn> Index<'conn> {
 mod tests {
     use super::*;
     use crate::{
-        testing::{TestEnvironment, registry_history},
+        testing::{TestEnvironment, git_head, registry_history},
         watch_registry,
     };
     use crates_index_diff::gix::ObjectId;
@@ -374,7 +374,7 @@ mod tests {
 
         let registry = env.test_registry();
         registry.mock_index_missing(&KRATE).await;
-        let new_head = registry.git_head().await?;
+        let new_head = git_head(registry).await?;
         assert_ne!(new_head, old_head);
         // This commit was created after the local clone; resolving it requires a fetch.
         index

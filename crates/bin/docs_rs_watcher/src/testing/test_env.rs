@@ -2,10 +2,15 @@ use crate::Config as WatcherConfig;
 use anyhow::Result;
 use crates_index_diff::gix::ObjectId;
 use docs_rs_config::AppConfig as _;
-use docs_rs_registry_api::testing::registry_entry;
+use docs_rs_registry_api::testing::{TestRegistry, registry_entry};
 use docs_rs_types::testing::{KRATE, V1, V2};
 
 pub(crate) type TestEnvironment = docs_rs_context::testing::TestEnvironment<WatcherConfig>;
+
+/// The registry test helper uses the workspace `gix`, which can differ from the one `crates-index-diff` re-exports.
+pub(crate) async fn git_head(registry: &TestRegistry) -> Result<ObjectId> {
+    Ok(ObjectId::try_from(registry.git_head().await?.as_bytes())?)
+}
 
 /// Set up history where HEAD unyanks V1 and publishes V2 after the checkpoint.
 /// Git storage and sparse responses are both owned by the environment's registry.
@@ -19,7 +24,7 @@ pub(crate) async fn registry_history(
         .mock_index_response(&KRATE, [registry_entry(&KRATE, &V1, None, true)])
         .await;
 
-    let checkpoint = registry.git_head().await?;
+    let checkpoint = git_head(registry).await?;
 
     registry
         .mock_index_response(
@@ -31,7 +36,7 @@ pub(crate) async fn registry_history(
         )
         .await;
 
-    let head = registry.git_head().await?;
+    let head = git_head(registry).await?;
 
     let mut config = WatcherConfig::test_config()?;
     config.registry_index_path = origin
