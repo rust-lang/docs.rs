@@ -16,7 +16,7 @@ docs_rs_config = { path = "../docs_rs_config" }
 docs_rs_env_vars = { path = "../docs_rs_env_vars" }
 docs_rs_types = { path = "../docs_rs_types" }
 docs_rs_utils = { path = "../docs_rs_utils" }
-rustsec = { version = "0.33.0", features = ["git"] }
+rustsec = { version = "0.34.0", features = ["git"] }
 serde_json = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 tokio = { workspace = true }
