@@ -1,5 +1,6 @@
 use crate::error::AxumNope;
 use anyhow::{Context as _, Result};
+use docs_rs_database::Krate;
 use docs_rs_database::crate_details::{
     Release, latest_release, release_and_latest, releases_for_crate,
 };
@@ -185,15 +186,13 @@ fn best_release_for_req<'a>(
     .or_else(|| semver_match(releases, req_semver, not_yanked))
 }
 
-/// Match an existing exact version, or the latest version, without loading all
-/// releases, which can be thousands for some crates.
+/// Match an existing exact version, or the latest version, in a single query, without
+/// loading all releases, which can be thousands for some crates.
 ///
 /// Returns `None` when only the full release list can answer the request.
 async fn try_match_version_fast_path(
     conn: &mut sqlx::PgConnection,
-    crate_id: CrateId,
     name: &KrateName,
-    corrected_name: Option<&KrateName>,
     input_version: &ReqVersion,
 ) -> Result<Option<MatchedRelease>> {
     let version = match input_version {
@@ -203,20 +202,23 @@ async fn try_match_version_fast_path(
         ReqVersion::Semver(_) => return Ok(None),
     };
 
-    let (release, latest_release) = release_and_latest(conn, crate_id, version)
+    // a missing release falls back to the full list, which also interprets an unknown
+    // exact version as semver requirement, or returns the right error.
+    let Some((krate, Some(release), latest_release)) = release_and_latest(conn, name, version)
         .await
-        .context("error fetching release")?;
+        .context("error fetching release")?
+    else {
+        return Ok(None);
+    };
 
-    // `None` falls back to the full list, which also interprets an unknown exact
-    // version as semver requirement, or returns the right error.
-    Ok(release.map(|release| MatchedRelease {
+    Ok(Some(MatchedRelease {
         name: name.clone(),
-        corrected_name: corrected_name.cloned(),
+        corrected_name: (krate.name != *name).then_some(krate.name),
         req_version: input_version.clone(),
         release,
         latest_release,
         all_releases: LazyReleases {
-            crate_id,
+            crate_id: krate.id,
             releases: None,
         },
     }))
@@ -236,38 +238,18 @@ pub(crate) async fn match_version(
     name: &KrateName,
     input_version: &ReqVersion,
 ) -> Result<MatchedRelease, AxumNope> {
-    let (crate_id, name, corrected_name) = {
-        let row = sqlx::query!(
-            r#"
-             SELECT
-                id as "id: CrateId",
-                name as "name: KrateName"
-             FROM crates
-             WHERE normalize_crate_name(name) = normalize_crate_name($1)"#,
-            name as _,
-        )
-        .fetch_optional(&mut *conn)
-        .await
-        .context("error fetching crate")?
-        .ok_or(AxumNope::CrateNotFound)?;
-
-        if row.name != name {
-            (row.id, name, Some(row.name))
-        } else {
-            (row.id, name, None)
-        }
-    };
-
-    if let Some(matched) =
-        try_match_version_fast_path(conn, crate_id, name, corrected_name.as_ref(), input_version)
-            .await?
-    {
+    if let Some(matched) = try_match_version_fast_path(conn, name, input_version).await? {
         return Ok(matched);
     }
 
-    // first load and parse all versions of this crate,
-    // `releases_for_crate` is already sorted, newest version first.
-    let releases = releases_for_crate(conn, crate_id)
+    let krate = Krate::find_by_name(&mut *conn, name)
+        .await
+        .context("error fetching crate")?
+        .ok_or(AxumNope::CrateNotFound)?;
+    let corrected_name = (krate.name != *name).then_some(krate.name);
+
+    // all versions of this crate, sorted newest first
+    let releases = releases_for_crate(conn, krate.id)
         .await
         .context("error fetching releases for crate")?;
 
@@ -288,7 +270,7 @@ pub(crate) async fn match_version(
                     release: release.clone(),
                     latest_release: latest_release(&releases).cloned(),
                     all_releases: LazyReleases {
-                        crate_id,
+                        crate_id: krate.id,
                         releases: Some(releases),
                     },
                 });
@@ -318,7 +300,7 @@ pub(crate) async fn match_version(
             release: release.clone(),
             latest_release: latest_release(&releases).cloned(),
             all_releases: LazyReleases {
-                crate_id,
+                crate_id: krate.id,
                 releases: Some(releases),
             },
         });
