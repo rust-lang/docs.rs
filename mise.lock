@@ -95,9 +95,9 @@ backend = "cargo:mdbook-mermaid"
 specifiers = ["0.17.1"]
 
 [[tools."cargo:sqlx-cli"]]
-version = "0.9.0"
+version = "0.9.1"
 backend = "cargo:sqlx-cli"
-specifiers = ["0.9.0"]
+specifiers = ["0.9.1"]
 
 [[tools.deno]]
 version = "2.9.8"
