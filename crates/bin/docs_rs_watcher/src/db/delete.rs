@@ -1,6 +1,6 @@
 use crate::Config;
 use anyhow::{Context as _, Result};
-use docs_rs_database::crate_details::update_latest_version_id;
+use docs_rs_database::{Krate, crate_details::update_latest_version_id};
 use docs_rs_storage::{AsyncStorage, rustdoc_archive_path, source_archive_path};
 use docs_rs_types::{CrateId, KrateName, Version};
 use sqlx::Connection;
@@ -19,11 +19,11 @@ pub async fn delete_crate(
     config: &Config,
     name: &KrateName,
 ) -> Result<()> {
-    let Some(crate_id) = get_id(conn, name).await? else {
+    let Some(krate) = Krate::find_by_name(conn, name).await? else {
         return Ok(());
     };
 
-    let is_library = delete_crate_from_database(conn, config, name, crate_id).await?;
+    let is_library = delete_crate_from_database(conn, config, name, krate.id).await?;
     // #899
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
@@ -66,11 +66,11 @@ pub async fn delete_version(
     name: &KrateName,
     version: &Version,
 ) -> Result<()> {
-    let Some(crate_id) = get_id(conn, name).await? else {
+    let Some(krate) = Krate::find_by_name(conn, name).await? else {
         return Ok(());
     };
 
-    let is_library = delete_version_from_database(conn, config, name, crate_id, version).await?;
+    let is_library = delete_version_from_database(conn, config, name, krate.id, version).await?;
     let paths = if is_library {
         LIBRARY_STORAGE_PATHS_TO_DELETE
     } else {
@@ -105,19 +105,6 @@ pub async fn delete_version(
     }
 
     Ok(())
-}
-
-async fn get_id(conn: &mut sqlx::PgConnection, name: &KrateName) -> Result<Option<CrateId>> {
-    Ok(sqlx::query_scalar!(
-        r#"
-        SELECT id as "id: CrateId"
-        FROM crates
-        WHERE normalize_crate_name(name) = normalize_crate_name($1)
-        "#,
-        name as _
-    )
-    .fetch_optional(&mut *conn)
-    .await?)
 }
 
 // metaprogramming!
@@ -318,23 +305,6 @@ mod tests {
         .fetch_optional(conn)
         .await?
         .is_some())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_id_uses_normalization() -> Result<()> {
-        let env = TestEnvironment::new().await?;
-
-        env.fake_release()
-            .await
-            .name("Some_Package")
-            .version(V1)
-            .create()
-            .await?;
-
-        let mut conn = env.async_conn().await?;
-        assert!(get_id(&mut conn, &"some-package".parse()?).await.is_ok());
-
-        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]

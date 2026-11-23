@@ -1,6 +1,7 @@
+use crate::Krate;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use docs_rs_types::{BuildStatus, CrateId, ReleaseId, Version};
+use docs_rs_types::{BuildStatus, CrateId, KrateName, ReleaseId, Version};
 use serde::Deserialize as _;
 use serde_json::Value;
 
@@ -77,17 +78,22 @@ pub async fn releases_for_crate(
     Ok(releases)
 }
 
-/// Return the release for `requested_version` (latest when `None`) and the crate's latest
-/// release (`crates.latest_version_id`, see [`latest_release`]).
+/// Return the crate, the release for `requested_version` (latest when `None`) and the crate's
+/// latest release (`crates.latest_version_id`, see [`latest_release`]), looking the crate up
+/// by its normalized name.
+///
+/// `None` when no row matched: the crate doesn't exist, or it has neither the requested
+/// release nor a latest release.
 pub async fn release_and_latest(
     conn: &mut sqlx::PgConnection,
-    crate_id: CrateId,
+    name: &KrateName,
     requested_version: Option<&Version>,
-) -> Result<(Option<Release>, Option<Release>)> {
-    // same columns as `releases_for_crate`
-    let releases = sqlx::query_as!(
-        Release,
+) -> Result<Option<(Krate, Option<Release>, Option<Release>)>> {
+    // same release columns as `releases_for_crate`
+    let rows = sqlx::query!(
         r#"SELECT
+             crates.id as "crate_id: CrateId",
+             crates.name as "crate_name: KrateName",
              releases.id as "id: ReleaseId",
              releases.version as "version: Version",
              release_build_status.build_status as "build_status!: BuildStatus",
@@ -99,17 +105,42 @@ pub async fn release_and_latest(
              releases.default_target,
              releases.doc_targets,
              COALESCE(releases.id = crates.latest_version_id, false) as "is_latest!"
-         FROM releases
+         FROM crates
+         INNER JOIN releases ON releases.crate_id = crates.id
          INNER JOIN release_build_status ON releases.id = release_build_status.rid
-         INNER JOIN crates ON releases.crate_id = crates.id
          WHERE
-             releases.crate_id = $1 AND
+             normalize_crate_name(crates.name) = normalize_crate_name($1) AND
              (releases.version = $2 OR releases.id = crates.latest_version_id)"#,
-        crate_id.0,
+        name as _,
         requested_version as _,
     )
     .fetch_all(&mut *conn)
     .await?;
+
+    let Some(first) = rows.first() else {
+        return Ok(None);
+    };
+    let krate = Krate {
+        id: first.crate_id,
+        name: first.crate_name.clone(),
+    };
+
+    let releases: Vec<Release> = rows
+        .into_iter()
+        .map(|row| Release {
+            id: row.id,
+            version: row.version,
+            build_status: row.build_status,
+            yanked: row.yanked,
+            is_library: row.is_library,
+            rustdoc_status: row.rustdoc_status,
+            target_name: row.target_name,
+            default_target: row.default_target,
+            doc_targets: row.doc_targets,
+            release_time: row.release_time,
+            is_latest: row.is_latest,
+        })
+        .collect();
 
     let latest_release = releases.iter().find(|release| release.is_latest).cloned();
     let requested_release = match requested_version {
@@ -118,7 +149,7 @@ pub async fn release_and_latest(
             .find(|release| &release.version == version),
         None => latest_release.clone(),
     };
-    Ok((requested_release, latest_release))
+    Ok(Some((krate, requested_release, latest_release)))
 }
 
 /// Pick the "latest" release worth pointing users at: non-yanked, build is no longer
@@ -162,6 +193,11 @@ pub async fn update_latest_version_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        releases::{initialize_crate, initialize_release},
+        testing::TestDatabase,
+    };
+    use docs_rs_types::testing::{BAR, FOO, V1};
 
     fn release(version: &str, yanked: bool, build_status: BuildStatus) -> Release {
         Release {
@@ -282,5 +318,36 @@ mod tests {
     #[test]
     fn empty_releases_returns_none() {
         assert!(latest_release(&[]).is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn release_and_latest_finds_crate_by_normalized_name() -> Result<()> {
+        let db = TestDatabase::with_test_config().await?;
+        let mut conn = db.async_conn().await?;
+
+        let stored: KrateName = "foo-bar".parse()?;
+        let crate_id = initialize_crate(&mut conn, &stored).await?;
+        initialize_release(&mut conn, crate_id, &V1).await?;
+        // same version in another crate must not match
+        let other_id = initialize_crate(&mut conn, &BAR).await?;
+        initialize_release(&mut conn, other_id, &V1).await?;
+
+        let (krate, release, latest) =
+            release_and_latest(&mut conn, &"foo_bar".parse()?, Some(&V1))
+                .await?
+                .unwrap();
+        assert_eq!(
+            krate,
+            Krate {
+                id: crate_id,
+                name: stored
+            }
+        );
+        assert_eq!(release.unwrap().version, V1);
+        // no finished build, so there's no latest release
+        assert!(latest.is_none());
+
+        assert_eq!(release_and_latest(&mut conn, &FOO, Some(&V1)).await?, None);
+        Ok(())
     }
 }

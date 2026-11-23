@@ -1,10 +1,32 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             releases.id as \"id: ReleaseId\",\n             releases.version as \"version: Version\",\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.release_time,\n             releases.target_name,\n             releases.default_target,\n             releases.doc_targets,\n             COALESCE(releases.id = crates.latest_version_id, false) as \"is_latest!\"\n         FROM releases\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE\n             releases.crate_id = $1 AND\n             (releases.version = $2 OR releases.id = crates.latest_version_id)",
+  "query": "SELECT\n             crates.id as \"crate_id: CrateId\",\n             crates.name as \"crate_name: KrateName\",\n             releases.id as \"id: ReleaseId\",\n             releases.version as \"version: Version\",\n             release_build_status.build_status as \"build_status!: BuildStatus\",\n             releases.yanked,\n             releases.is_library,\n             releases.rustdoc_status,\n             releases.release_time,\n             releases.target_name,\n             releases.default_target,\n             releases.doc_targets,\n             COALESCE(releases.id = crates.latest_version_id, false) as \"is_latest!\"\n         FROM crates\n         INNER JOIN releases ON releases.crate_id = crates.id\n         INNER JOIN release_build_status ON releases.id = release_build_status.rid\n         WHERE\n             normalize_crate_name(crates.name) = normalize_crate_name($1) AND\n             (releases.version = $2 OR releases.id = crates.latest_version_id)",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "crate_id: CrateId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "crate_name: KrateName",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "crates",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "id: ReleaseId",
         "type_info": "Int4",
         "origin": {
@@ -15,7 +37,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 3,
         "name": "version: Version",
         "type_info": "Text",
         "origin": {
@@ -26,7 +48,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 4,
         "name": "build_status!: BuildStatus",
         "type_info": {
           "Custom": {
@@ -49,7 +71,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 5,
         "name": "yanked",
         "type_info": "Bool",
         "origin": {
@@ -60,7 +82,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 6,
         "name": "is_library",
         "type_info": "Bool",
         "origin": {
@@ -71,7 +93,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "rustdoc_status",
         "type_info": "Bool",
         "origin": {
@@ -82,7 +104,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "release_time",
         "type_info": "Timestamptz",
         "origin": {
@@ -93,7 +115,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "target_name",
         "type_info": "Varchar",
         "origin": {
@@ -104,7 +126,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "default_target",
         "type_info": "Varchar",
         "origin": {
@@ -115,7 +137,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "doc_targets",
         "type_info": "Json",
         "origin": {
@@ -126,7 +148,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "is_latest!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -134,11 +156,13 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
+        "Varchar",
         "Text"
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,
@@ -152,5 +176,5 @@
       null
     ]
   },
-  "hash": "e38900ef8e12b46da04b210a99a224eeb1466627b70f12486f47932d2ce68455"
+  "hash": "2eb399ae77588d7dac62ae4b56d462dd65251eb891581f91a6e63695dc2576d7"
 }
