@@ -1,8 +1,12 @@
 use crate::utils::highlight;
-use comrak::{Options, adapters::SyntaxHighlighterAdapter, options};
-use std::{borrow::Cow, collections::HashMap, fmt};
+use comrak::{
+    Options,
+    adapters::{SyntaxHighlightMeta, SyntaxHighlighterAdapter},
+    options,
+};
+use std::{borrow::Cow, collections::BTreeMap, fmt};
 
-type Attributes<'s> = HashMap<&'static str, std::borrow::Cow<'s, str>>;
+type Attributes<'s, 't> = BTreeMap<&'s str, Cow<'t, str>>;
 
 #[derive(Debug)]
 struct CodeAdapter<F>(F, Option<&'static str>);
@@ -13,27 +17,28 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
     fn write_highlighted(
         &self,
         output: &mut dyn fmt::Write,
-        lang: Option<&str>,
-        code: &str,
+        highlight: &SyntaxHighlightMeta<'_>,
     ) -> Result<(), fmt::Error> {
         // comrak does not treat `,` as an info-string delimiter, so we do that here
         // TODO: https://github.com/kivikakk/comrak/issues/246
-        let lang = lang.and_then(|lang| lang.split(',').next());
-        write!(output, "{}", (self.0)(lang, code, self.1))
+        let lang = highlight.lang.split(',').next();
+        write!(output, "{}", (self.0)(lang, highlight.code, self.1))
     }
 
-    fn write_pre_tag<'s>(
+    fn write_pre_tag(
         &self,
         output: &mut dyn fmt::Write,
-        attributes: Attributes<'s>,
+        _highlight: &SyntaxHighlightMeta<'_>,
+        attributes: Attributes<'_, '_>,
     ) -> fmt::Result {
         write_opening_tag(output, "pre", &attributes)
     }
 
-    fn write_code_tag<'s>(
+    fn write_code_tag(
         &self,
         output: &mut dyn fmt::Write,
-        attributes: Attributes<'s>,
+        _highlight: &SyntaxHighlightMeta<'_>,
+        attributes: Attributes<'_, '_>,
     ) -> fmt::Result {
         // similarly to above, since comrak does not treat `,` as an info-string delimiter it will
         // try to apply `class="language-rust,ignore"` for the info-string `rust,ignore`, so we
@@ -54,10 +59,10 @@ impl<F: Fn(Option<&str>, &str, Option<&str>) -> String + Send + Sync> SyntaxHigh
     }
 }
 
-fn write_opening_tag<'s>(
+fn write_opening_tag<'s, 't>(
     output: &mut dyn fmt::Write,
     tag: &str,
-    attributes: &Attributes<'s>,
+    attributes: &Attributes<'s, 't>,
 ) -> Result<(), fmt::Error> {
     write!(output, "<{tag}")?;
     for (attr, val) in attributes {
@@ -73,26 +78,17 @@ fn render_with_highlighter(
 ) -> String {
     let code_adapter = CodeAdapter(highlighter, default_syntax);
 
-    comrak::markdown_to_html_with_plugins(
-        text,
-        &Options {
-            extension: options::Extension {
-                superscript: true,
-                table: true,
-                autolink: true,
-                tasklist: true,
-                strikethrough: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        &options::Plugins {
-            render: options::RenderPlugins {
-                codefence_syntax_highlighter: Some(&code_adapter),
-                ..Default::default()
-            },
-        },
-    )
+    let mut options = Options::default();
+    options.extension.superscript = true;
+    options.extension.table = true;
+    options.extension.autolink = true;
+    options.extension.tasklist = true;
+    options.extension.strikethrough = true;
+
+    let mut plugins = options::Plugins::default();
+    plugins.render.codefence_syntax_highlighter = Some(&code_adapter);
+
+    comrak::markdown_to_html_with_plugins(text, &options, &plugins)
 }
 
 /// Wrapper around the Markdown parser and renderer to render markdown
