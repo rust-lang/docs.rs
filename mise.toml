@@ -24,4 +24,4 @@ fd = "10.5.2"
 "github:github/gh-actions-lock" = { version = "0.5.1", bin = "gh-actions-lock" }
 just = "1.59.0"
 node = "26.13.1"
-typos = "1.52.0"
+typos = "1.52.2"
