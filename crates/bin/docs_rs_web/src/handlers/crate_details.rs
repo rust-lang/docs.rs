@@ -15,7 +15,7 @@ use crate::{
 use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
-    extract::State,
+    extract::{RawQuery, State},
     response::{IntoResponse, Response as AxumResponse},
 };
 use chrono::{DateTime, Utc};
@@ -27,6 +27,7 @@ use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{
     BuildId, BuildStatus, ByteSize, CrateId, Duration, KrateName, ReleaseId, ReqVersion, Version,
 };
+use docs_rs_uri::EscapedURI;
 use futures_util::stream::TryStreamExt;
 use std::sync::Arc;
 use tracing::warn;
@@ -192,6 +193,7 @@ impl CrateDetails {
                 .as_deref()
                 .map(get_correct_docsrs_style_file)
                 .transpose()?,
+            latest_build_id: krate.latest_build_id,
         };
 
         // When documentation_url points to docs.rs itself, then we don't need to
@@ -337,12 +339,6 @@ impl CrateDetails {
             }
         }
         Ok(None)
-    }
-
-    /// Returns the latest non-yanked, non-prerelease release of this crate (or latest
-    /// prereleased if that is all that exist). Returns `None` if every release is yanked.
-    pub fn latest_release(&self) -> Option<&Release> {
-        self.latest_release.as_ref()
     }
 }
 
@@ -554,45 +550,54 @@ pub(crate) async fn crate_details_handler(
 }
 
 #[derive(Template)]
-#[template(path = "rustdoc/releases.html")]
+#[template(path = "rustdoc/crate_details_menu.html")]
 #[derive(Debug, Clone, PartialEq)]
-struct ReleaseList {
-    crate_name: KrateName,
+struct CrateDetailsMenu {
+    krate: CrateDetails,
     releases: Vec<Release>,
+    permalink_path: EscapedURI,
     params: RustdocParams,
 }
 
 impl_axum_webpage! {
-    ReleaseList,
+    CrateDetailsMenu,
     cache_policy = |page| CachePolicy::ForeverInCdn(
-        page.crate_name.clone().into()
+        page.krate.name.clone().into()
     ),
     cpu_intensive_rendering = true,
 }
 
 #[tracing::instrument]
-pub(crate) async fn get_all_releases(
+pub(crate) async fn get_crate_details_menu(
     params: RustdocParams,
+    RawQuery(original_query): RawQuery,
     mut conn: DbConnection,
 ) -> AxumResult<AxumResponse> {
     let params = params.with_page_kind(PageKind::Rustdoc);
-    // NOTE: we're getting RustDocParams here, where both target and path are optional.
-    let mut matched_release = match_version(&mut conn, params.name(), params.req_version())
+    let matched_release = match_version(&mut conn, params.name(), params.req_version())
         .await?
         .into_canonical_req_version_or_else(|_, _| AxumNope::VersionNotFound)?;
     let params = params.apply_matched_release(&matched_release);
 
     if matched_release.build_status() != BuildStatus::Success {
-        // This handler should only be used for successful builds, so then we have all rows in the
-        // `releases` table filled with data.
-        // If we need this view at some point for in-progress releases or failed releases, we need
-        // to handle empty doc targets.
+        // Only rustdoc pages load this menu, so there is a successful build.
+        // Otherwise we'd have to handle empty doc targets in the links.
         return Err(AxumNope::CrateNotFound);
     }
 
-    Ok(ReleaseList {
-        crate_name: matched_release.name.clone(),
-        releases: matched_release.all_releases.take(&mut conn).await?,
+    let mut details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    let releases = details.releases.take(&mut conn).await?;
+    // the rustdoc page forwards its query, so the permalink keeps it
+    let permalink_path = params
+        .clone()
+        .with_req_version(&details.version)
+        .rustdoc_url()
+        .append_raw_query(original_query.as_deref());
+
+    Ok(CrateDetailsMenu {
+        krate: details,
+        releases,
+        permalink_path,
         params,
     }
     .into_response())
@@ -1733,6 +1738,36 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn crate_details_menu_not_found() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+        env.fake_release()
+            .await
+            .name(DUMMY)
+            .version(V1)
+            .builds(vec![
+                FakeBuild::default().build_status(BuildStatus::Failure),
+            ])
+            .create()
+            .await?;
+
+        let resp = env
+            .web_app()
+            .await
+            .get(&format!("/crate/dummy/{V1}/menus/details/"))
+            .await?;
+        // no successful build
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let resp = env
+            .web_app()
+            .await
+            .get("/crate/unknown/latest/menus/details/")
+            .await?;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn release_dropdown_links_releases_without_docs_to_crate_details() -> Result<()> {
         let env = TestEnvironment::new().await?;
         env.fake_release()
@@ -1760,13 +1795,13 @@ mod tests {
             .web_app()
             .await
             .assert_success(&format!(
-                "/crate/dummy/{V1}/menus/releases/dummy/struct.Item.html"
+                "/crate/dummy/{V1}/menus/details/dummy/struct.Item.html"
             ))
             .await?;
 
         let links: Vec<String> = kuchikiki::parse_html()
             .one(response.text().await?)
-            .select("li a")
+            .select("#releases-list li a")
             .unwrap()
             .map(|el| el.attributes.borrow().get("href").unwrap().to_owned())
             .collect();
@@ -1790,7 +1825,7 @@ mod tests {
 
             let platform_links: Vec<String> = kuchikiki::parse_html()
                 .one(response.text().await.unwrap())
-                .select("li a")
+                .select("#releases-list li a")
                 .expect("invalid selector")
                 .map(|el| {
                     let attributes = el.attributes.borrow();
@@ -1826,7 +1861,7 @@ mod tests {
             check_links(
                 // https://github.com/rust-lang/docs.rs/issues/2922
                 &env,
-                "/crate/dummy-ba/0.5.0/menus/releases/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html",
+                "/crate/dummy-ba/0.5.0/menus/details/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html",
                 vec![
                     "/crate/dummy-ba/0.5.0/target-redirect/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html".to_string(),
                     "/crate/dummy-ba/0.4.0/target-redirect/x86_64-unknown-linux-gnu/src/dummy_ba/de.rs.html".to_string(),
@@ -1836,7 +1871,7 @@ mod tests {
 
             check_links(
                 &env,
-                "/crate/dummy-ba/latest/menus/releases/dummy_ba/index.html",
+                "/crate/dummy-ba/latest/menus/details/dummy_ba/index.html",
                 vec![
                     "/crate/dummy-ba/0.5.0/target-redirect/dummy_ba/".to_string(),
                     "/crate/dummy-ba/0.4.0/target-redirect/dummy_ba/".to_string(),
@@ -1846,12 +1881,15 @@ mod tests {
 
             check_links(
                 &env,
-                "/crate/dummy-ba/latest/menus/releases/x86_64-unknown-linux-gnu/dummy_ba/index.html",
+                "/crate/dummy-ba/latest/menus/details/x86_64-unknown-linux-gnu/dummy_ba/index.html",
                 vec![
-                    "/crate/dummy-ba/0.5.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/".to_string(),
-                    "/crate/dummy-ba/0.4.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/".to_string(),
+                    "/crate/dummy-ba/0.5.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/"
+                        .to_string(),
+                    "/crate/dummy-ba/0.4.0/target-redirect/x86_64-unknown-linux-gnu/dummy_ba/"
+                        .to_string(),
                 ],
-            ).await;
+            )
+            .await;
 
             Ok(())
         });

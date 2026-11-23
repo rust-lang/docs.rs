@@ -74,7 +74,10 @@ impl std::fmt::Debug for RustdocParams {
             .field("rustdoc_url()", &self.rustdoc_url())
             .field("crate_details_url()", &self.crate_details_url())
             .field("platforms_partial_url()", &self.platforms_partial_url())
-            .field("releases_partial_url()", &self.releases_partial_url())
+            .field(
+                "crate_details_partial_url()",
+                &self.crate_details_partial_url(),
+            )
             .field("builds_url()", &self.builds_url())
             .field("build_status_url()", &self.build_status_url())
             .field(
@@ -549,9 +552,9 @@ impl RustdocParams {
         ))
     }
 
-    pub(crate) fn releases_partial_url(&self) -> EscapedURI {
+    pub(crate) fn crate_details_partial_url(&self) -> EscapedURI {
         EscapedURI::from_path(format!(
-            "/crate/{}/{}/menus/releases/{}",
+            "/crate/{}/{}/menus/details/{}",
             self.name,
             self.req_version,
             self.path_for_rustdoc_url_for_partials()

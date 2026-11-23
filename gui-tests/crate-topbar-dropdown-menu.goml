@@ -26,6 +26,10 @@ assert-false: |active_crate_dropdown_selector|
 click: "#nav-search-form .crate-dropdown"
 // This time it should be open.
 wait-for: |active_crate_dropdown_selector|
+// The crate button links to the crate page, but clicking it only opens the dropdown.
+assert-document-property-false: ({"URL": "/crate/"}, CONTAINS)
+// The dropdown content is lazy-loaded when it opens.
+wait-for: ".package-details-menu #topbar-owners"
 
 store-value: (crate_main_info_items, ".package-details-menu > ul > .pure-menu-item")
 // There should be 4 items.

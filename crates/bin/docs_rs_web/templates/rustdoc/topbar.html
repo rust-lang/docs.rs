@@ -9,172 +9,25 @@
         {
             "name": {{ metadata.name|json_encode }},
             "version": {{ metadata.version|json_encode }}
+            {%- if permalink_path is defined -%},
+            {#- for the `y` shortcut, the dropdown with the permalink is lazy-loaded #}
+            "permalink": {{ permalink_path|json_encode }}
+            {%- endif %}
         }
     </script>
-    {%- if krate is defined -%}
+    {#- rustdoc pages get the dropdown, other crate pages a plain link -#}
+    {%- if let Some(crate_details_menu_url) = crate_details_menu_url -%}
         <li class="pure-menu-item pure-menu-has-children crate-dropdown">
-            <a href="#" class="pure-menu-link crate-name" title="{{ metadata.description.as_deref().unwrap_or_default() }}">
+            {#- `menu.js` opens the dropdown on click; the real link is for crawlers and
+                no-JS users, since the dropdown is lazy-loaded -#}
+            <a href="{{ params.crate_details_url() }}" class="pure-menu-link crate-name" title="{{ metadata.description.as_deref().unwrap_or_default() }}">
                 {{ crate::icons::IconCube.render_solid(false, false, "") }}
                 <span class="title">{{ metadata.name }}-{{ metadata.version }}</span>
             </a>
 
             {#- Crate details -#}
-            <div class="pure-menu-children package-details-menu">
-                {# Crate name, description and license #}
-                <ul class="pure-menu-list menu-item-divided">
-                    <li class="pure-menu-heading" id="crate-title">
-                        {{ metadata.name }} {{ metadata.version }}
-                        <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
-                    </li>
-
-                    {%- if metadata.req_version.to_string() == "latest" -%}
-                    <li class="pure-menu-item">
-                        <a href="{% if permalink_path is defined %}{{permalink_path|safe}}{% endif %}" class="pure-menu-link description" id="permalink" data-fragment="retain" title="Get a link to this specific version">
-                            {{- crate::icons::IconLink.render_solid(false, false, "") }} Permalink
-                        </a>
-                    </li>
-                    {%- endif -%}
-
-                    <li class="pure-menu-item">
-                        <a href="{{ params.crate_details_url() }}" class="pure-menu-link description" title="See {{ metadata.name }} in docs.rs">
-                            {{ crate::icons::IconCube.render_solid(false, false, "") }} Docs.rs crate page
-                        </a>
-                    </li>
-
-                    {%- if let Some(parsed_licenses) = krate.parsed_license -%}
-                        <li class="pure-menu-item">
-                            <span class="pure-menu-link description license">
-                            {{- crate::icons::IconScaleUnbalancedFlip.render_solid(false, false, "") }}
-                            {%+ for item in parsed_licenses -%}
-                                {%- match item -%}
-                                    {%- when crate::utils::licenses::LicenseSegment::Spdx(license) -%}
-                                        <a href="https://spdx.org/licenses/{{ license|safe }}" class="pure-menu-sublink">{{ license }}</a>
-                                    {%- when crate::utils::licenses::LicenseSegment::UnknownLicense(license) -%}
-                                        {{ license }}
-                                    {%- when crate::utils::licenses::LicenseSegment::GlueTokens(tokens) -%}
-                                        {{ tokens }}
-                                {%- endmatch -%}
-                            {%- endfor -%}
-                            </span>
-                        </li>
-                    {%- endif -%}
-                    {%- if let Some(time) = krate.latest_build_time -%}
-                        <li class="pure-menu-item">
-                            <span class="pure-menu-link description" title="{% if let Some(version) = krate.latest_build_rustc_version -%} Built with {{ version }} {%- else -%} Version unavailable {%- endif -%} ">
-                                {{ crate::icons::IconGears.render_solid(false, false, "") }} {{ time.format("%d %B %Y") }}
-                            </span>
-                        </li>
-                    {%- endif -%}
-                </ul>
-
-                <div class="pure-g menu-item-divided">
-                    <div class="pure-u-1-2 right-border">
-                        <ul class="pure-menu-list">
-                            <li class="pure-menu-heading">Links</li>
-
-                            {# If the crate has a homepage, show a link to it #}
-                            {%- if let Some(homepage_url) = krate.homepage_url -%}
-                                <li class="pure-menu-item">
-                                    <a href="{{ homepage_url }}" class="pure-menu-link">
-                                        {{ crate::icons::IconHouse.render_solid(false, false, "") }} Homepage
-                                    </a>
-                                </li>
-                            {%- endif -%}
-
-                            {# If the crate has external docs, show a link #}
-                            {%- if let Some(documentation_url) = krate.documentation_url -%}
-                                <li class="pure-menu-item">
-                                    <a href="{{ documentation_url }}" title="Canonical documentation" class="pure-menu-link">
-                                        {{ crate::icons::IconFileLines.render_regular(false, false, "") }} Documentation
-                                    </a>
-                                </li>
-                            {%- endif -%}
-
-                            {# If the crate has a repo url, show it #}
-                            {%- if let Some(repository_url) = krate.repository_url -%}
-                                <li class="pure-menu-item">
-                                    <a href="{{ repository_url }}" class="pure-menu-link">
-                                        {{ crate::icons::IconCodeBranch.render_solid(false, false, "") }} Repository
-                                    </a>
-                                </li>
-                            {%- endif -%}
-
-                            <li class="pure-menu-item">
-                                <a href="https://crates.io/crates/{{ metadata.name }}" class="pure-menu-link" title="See {{ metadata.name }} in crates.io">
-                                    {{ crate::icons::IconCube.render_solid(false, false, "") }} crates.io
-                                </a>
-                            </li>
-
-                            {# A link to the release's source view #}
-                            <li class="pure-menu-item">
-                                <a href="{{ params.source_url() }}" title="Browse source of {{ metadata.name }}-{{ metadata.version }}" class="pure-menu-link">
-                                    {{ crate::icons::IconFolderOpen.render_solid(false, false, "") }} Source
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-
-                    {#- Show the crate owners -#}
-                    <div class="pure-u-1-2">
-                        <ul class="pure-menu-list" id="topbar-owners">
-                            <li class="pure-menu-heading">Owners</li>
-
-                            {%- for owner in krate.owners -%}
-                                <li class="pure-menu-item">
-                                    <a href="https://crates.io/{{ owner.2 }}s/{{ owner.0 }}" class="pure-menu-link">
-                                        {{ crate::icons::IconUser.render_solid(false, false, "") }} {{ owner.0 }}
-                                    </a>
-                                </li>
-                            {%- endfor -%}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="pure-g menu-item-divided">
-                    <div class="pure-u-1-2 right-border">
-                        <ul class="pure-menu-list">
-                            <li class="pure-menu-heading">Dependencies</li>
-
-                            {# Display all dependencies that the crate has #}
-                            <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
-                                    <ul class="pure-menu-list">
-                                        {% call macros::dependencies_list(dependencies=krate.dependencies, use_crate_details = false, if_empty="") %}{% endcall %}
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="pure-u-1-2">
-                        <ul class="pure-menu-list">
-                            <li class="pure-menu-heading">Versions</li>
-
-                            <li class="pure-menu-item">
-                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="{{ params.releases_partial_url() }}">
-                                    <span class="rotate">{{ crate::icons::IconSpinner.render_solid(false, false, "") }}</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-                {%- if let (Some(documented), Some(total)) = (krate.documented_items, krate.total_items) -%}
-                    {% set documented = documented as f32 %}
-                    {% set total = total as f32 %}
-                    {% set percent = documented * 100f32 / total %}
-                    <div class="pure-g">
-                        <div class="pure-u-1">
-                            <ul class="pure-menu-list">
-                                <li>
-                                    <a href="{{ params.crate_details_url() }}" class="pure-menu-link">
-                                        <b>{{ percent|round(2) }}%</b>
-                                        of the crate is documented
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                {%- endif -%}
+            <div class="pure-menu-children package-details-menu" id="crate-details-menu" data-url="{{ crate_details_menu_url }}">
+                <span class="rotate">{{ crate::icons::IconSpinner.render_solid(false, false, "") }}</span>
             </div>
         </li>
     {%- else -%}
