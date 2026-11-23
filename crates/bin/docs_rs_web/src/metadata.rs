@@ -1,7 +1,7 @@
-use crate::utils::get_correct_docsrs_style_file;
+use crate::{match_release::MatchedRelease, utils::get_correct_docsrs_style_file};
 use anyhow::{Context as _, Result};
 use docs_rs_database::crate_details::parse_doc_targets;
-use docs_rs_types::{KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildId, KrateName, ReqVersion, Version};
 use serde::Serialize;
 
 /// MetaData used in header
@@ -24,6 +24,8 @@ pub(crate) struct MetaData {
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
     pub(crate) rustdoc_css_file: Option<String>,
+    /// The latest successful build.
+    pub(crate) latest_build_id: Option<BuildId>,
 }
 
 impl MetaData {
@@ -43,12 +45,13 @@ impl MetaData {
                 releases.default_target,
                 releases.doc_targets,
                 releases.yanked,
+                builds.id as "latest_build_id?: BuildId",
                 builds.rustc_version as "rustc_version?"
             FROM releases
             INNER JOIN crates ON crates.id = releases.crate_id
             LEFT JOIN LATERAL (
                 SELECT * FROM builds
-                WHERE builds.rid = releases.id
+                WHERE builds.rid = releases.id AND builds.build_status = 'success'
                 ORDER BY builds.build_finished
                 DESC LIMIT 1
             ) AS builds ON true
@@ -75,6 +78,56 @@ impl MetaData {
                 .as_deref()
                 .map(get_correct_docsrs_style_file)
                 .transpose()?,
+            latest_build_id: row.latest_build_id,
+        })
+    }
+
+    /// Only fetches the description and the latest successful build,
+    /// the rest comes from the matched release.
+    pub(crate) async fn from_matched_release(
+        conn: &mut sqlx::PgConnection,
+        matched: &MatchedRelease,
+    ) -> Result<MetaData> {
+        let row = sqlx::query!(
+            r#"SELECT
+                releases.description,
+                builds.id as "latest_build_id?: BuildId",
+                builds.rustc_version as "rustc_version?"
+            FROM releases
+            LEFT JOIN LATERAL (
+                SELECT id, rustc_version FROM builds
+                WHERE builds.rid = releases.id AND builds.build_status = 'success'
+                ORDER BY builds.build_finished
+                DESC LIMIT 1
+            ) AS builds ON true
+            WHERE releases.id = $1"#,
+            matched.release.id as _,
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .context("error fetching crate metadata")?;
+
+        let release = &matched.release;
+        Ok(MetaData {
+            name: matched
+                .corrected_name
+                .as_ref()
+                .unwrap_or(&matched.name)
+                .clone(),
+            version: release.version.clone(),
+            req_version: matched.req_version.clone(),
+            description: row.description,
+            target_name: release.target_name.clone(),
+            rustdoc_status: release.rustdoc_status,
+            default_target: release.default_target.clone(),
+            doc_targets: release.doc_targets(),
+            yanked: release.yanked,
+            rustdoc_css_file: row
+                .rustc_version
+                .as_deref()
+                .map(get_correct_docsrs_style_file)
+                .transpose()?,
+            latest_build_id: row.latest_build_id,
         })
     }
 }
@@ -84,7 +137,12 @@ mod tests {
     use crate::testing::TestEnvironment;
 
     use super::*;
-    use docs_rs_types::testing::{FOO, V0_1};
+    use crate::match_release::match_version;
+    use docs_rs_test_fakes::FakeBuild;
+    use docs_rs_types::{
+        BuildStatus,
+        testing::{FOO, V0_1},
+    };
     use serde_json::json;
 
     #[test]
@@ -103,6 +161,7 @@ mod tests {
             ]),
             yanked: Some(false),
             rustdoc_css_file: Some("rustdoc.css".to_string()),
+            latest_build_id: Some(BuildId(42)),
         };
 
         let correct_json = json!({
@@ -119,6 +178,7 @@ mod tests {
             ],
             "yanked": false,
             "rustdoc_css_file": "rustdoc.css",
+            "latest_build_id": 42,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -138,6 +198,7 @@ mod tests {
             ],
             "yanked": false,
             "rustdoc_css_file": "rustdoc.css",
+            "latest_build_id": 42,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -157,6 +218,7 @@ mod tests {
             ],
             "yanked": false,
             "rustdoc_css_file": "rustdoc.css",
+            "latest_build_id": 42,
         });
 
         assert_eq!(correct_json, serde_json::to_value(&metadata).unwrap());
@@ -174,9 +236,11 @@ mod tests {
             .await?;
 
         let mut conn = env.async_conn().await?;
-        let metadata = MetaData::from_crate(&mut conn, &FOO, &V0_1, Some(ReqVersion::Latest)).await;
+        let metadata =
+            MetaData::from_crate(&mut conn, &FOO, &V0_1, Some(ReqVersion::Latest)).await?;
+        assert!(metadata.latest_build_id.is_some());
         assert_eq!(
-            metadata.unwrap(),
+            metadata,
             MetaData {
                 name: "foo".parse().unwrap(),
                 version: "0.1.0".parse().unwrap(),
@@ -188,8 +252,60 @@ mod tests {
                 doc_targets: Some(vec!["x86_64-unknown-linux-gnu".to_string()]),
                 yanked: Some(false),
                 rustdoc_css_file: Some("rustdoc.css".to_string()),
+                latest_build_id: metadata.latest_build_id,
             },
         );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn metadata_ignores_later_failed_build() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("foo")
+            .version("0.1.0")
+            .builds(vec![
+                FakeBuild::default().rustc_version("rustc 1.50.0-nightly (abc 2021-01-01)"),
+                FakeBuild::default()
+                    .rustc_version("rustc 1.90.0-nightly (def 2026-01-01)")
+                    .build_status(BuildStatus::Failure),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+        let from_crate =
+            MetaData::from_crate(&mut conn, &FOO, &V0_1, Some(ReqVersion::Latest)).await?;
+        let matched = match_version(&mut conn, &FOO, &ReqVersion::Latest).await?;
+        let from_matched = MetaData::from_matched_release(&mut conn, &matched).await?;
+
+        // the failed build has a newer rustc, which would pick another CSS file
+        assert_eq!(from_crate.rustdoc_css_file.as_deref(), Some("rustdoc.css"));
+        assert_eq!(from_matched, from_crate);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn metadata_from_matched_release_without_successful_build() -> Result<()> {
+        let env = TestEnvironment::new().await?;
+
+        env.fake_release()
+            .await
+            .name("foo")
+            .version("0.1.0")
+            .builds(vec![
+                FakeBuild::default().build_status(BuildStatus::InProgress),
+            ])
+            .create()
+            .await?;
+
+        let mut conn = env.async_conn().await?;
+        let matched = match_version(&mut conn, &FOO, &ReqVersion::Exact(V0_1.clone())).await?;
+        let metadata = MetaData::from_matched_release(&mut conn, &matched).await?;
+        assert_eq!(metadata.latest_build_id, None);
+        assert_eq!(metadata.rustdoc_css_file, None);
         Ok(())
     }
 }

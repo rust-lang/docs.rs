@@ -123,28 +123,6 @@ pub(crate) async fn source_browser_handler(
     let params = params.apply_matched_release(&matched_release);
     let version = &matched_release.release.version;
 
-    let row = sqlx::query!(
-        r#"SELECT
-            (
-                SELECT id
-                FROM builds
-                WHERE
-                    builds.rid = releases.id AND
-                    builds.build_status = 'success'
-                ORDER BY build_finished DESC
-                LIMIT 1
-            ) AS "latest_build_id?: BuildId"
-         FROM releases
-         INNER JOIN crates ON releases.crate_id = crates.id
-         WHERE
-             name = $1 AND
-             version = $2"#,
-        params.name() as _,
-        version as _,
-    )
-    .fetch_one(&mut *conn)
-    .await?;
-
     let inner_path = params.inner_path();
 
     let current_folder = inner_path
@@ -169,7 +147,7 @@ pub(crate) async fn source_browser_handler(
         &storage,
         params.name(),
         version,
-        row.latest_build_id,
+        metadata.latest_build_id,
         current_folder,
     )
     .await?;
@@ -178,7 +156,7 @@ pub(crate) async fn source_browser_handler(
     // skip if request is a directory
     let stream = if !params.path_is_folder() {
         match storage
-            .stream_source_file(params.name(), version, row.latest_build_id, inner_path)
+            .stream_source_file(params.name(), version, metadata.latest_build_id, inner_path)
             .await
             .context("error fetching source file")
         {

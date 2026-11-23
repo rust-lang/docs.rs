@@ -25,6 +25,9 @@
         const url = listElem.dataset.url;
         try {
             const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             listElem.innerHTML = await response.text();
         } catch (ex) {
             console.error(`Failed to load ${msg}: ${ex}`);
@@ -79,13 +82,12 @@
         newMenu.classList.add("pure-menu-active");
         backdrop.style.display = "block";
 
-        if (newMenu.querySelector("#releases-list")) {
+        if (newMenu.querySelector("#crate-details-menu")) {
             loadAjaxMenu(
                 newMenu,
-                "releases-list",
-                "release list",
+                "crate-details-menu",
+                "crate details",
             );
-
         } else if (newMenu.querySelector("#platforms")) {
             loadAjaxMenu(
                 newMenu,
@@ -95,9 +97,6 @@
         }
     }
     function menuOnClick(e) {
-        if (this.getAttribute("href") !== "#") {
-            return;
-        }
         if (this.parentNode === currentMenu) {
             closeMenu();
             this.blur();
@@ -305,11 +304,12 @@
     document.documentElement.addEventListener("keydown", menuKeyDown);
     document.documentElement.addEventListener("keydown", ev => {
         if (ev.key === "y" && ev.target.tagName !== "INPUT") {
-            const permalink = document.getElementById("permalink");
-            if (document.location.hash !== "") {
-                permalink.href += document.location.hash;
+            // from the metadata, the dropdown with `#permalink` is lazy-loaded
+            const metadata = document.getElementById("crate-metadata");
+            const permalink = metadata && JSON.parse(metadata.innerText).permalink;
+            if (permalink) {
+                history.replaceState({}, null, permalink + document.location.hash);
             }
-            history.replaceState({}, null, permalink.href);
         }
     });
 

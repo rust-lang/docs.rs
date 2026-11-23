@@ -217,7 +217,7 @@ mod tests {
     use super::*;
     use crate::testing::{
         AxumResponseTestExt, AxumRouterTestExt, TestEnvironment, TestEnvironmentExt as _,
-        async_wrapper,
+        async_wrapper, crate_details_menu,
     };
     use docs_rs_types::{DocCoverage, ReleaseId, Version};
     use kuchikiki::traits::TendrilSink;
@@ -296,8 +296,8 @@ mod tests {
                 );
             }
 
-            let foo_doc = kuchikiki::parse_html()
-                .one(web.assert_success("/foo/0.0.1/foo/").await?.text().await?);
+            let foo_doc =
+                kuchikiki::parse_html().one(crate_details_menu(&env, "/foo/0.0.1/foo/").await?);
             assert!(
                 foo_doc
                     .select(".pure-menu-link b")
@@ -322,7 +322,10 @@ mod tests {
             let web = env.web_app().await;
             assert!(clipboard_is_present_for_path("/crate/fake_crate/0.0.1", &web).await);
             assert!(clipboard_is_present_for_path("/crate/fake_crate/0.0.1/source/", &web).await);
-            assert!(clipboard_is_present_for_path("/fake_crate/0.0.1/fake_crate/", &web).await);
+            // on rustdoc pages it's in the lazy-loaded crate dropdown
+            let menu = kuchikiki::parse_html()
+                .one(crate_details_menu(&env, "/fake_crate/0.0.1/fake_crate/").await?);
+            assert_eq!(menu.select("#clipboard").unwrap().count(), 1);
             Ok(())
         });
     }

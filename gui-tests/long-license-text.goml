@@ -6,6 +6,8 @@ store-value: (sub_menu_selector, |menu_selector| + ' .pure-menu-children')
 store-value: (license_selector, |sub_menu_selector| + ' .license')
 click: |menu_selector|
 wait-for-css: (|sub_menu_selector|, {"display": "block"})
+// The dropdown content is lazy-loaded when it opens.
+wait-for: |license_selector|
 store-size: (
     |license_selector|,
     {"height": original_height, "width": original_width},

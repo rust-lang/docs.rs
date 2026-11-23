@@ -313,8 +313,8 @@ pub(crate) fn build_axum_routes(metrics: &Arc<WebMetrics>) -> Result<AxumRouter<
             get_internal(metrics, crate_details::get_all_platforms_root),
         )
         .route(
-            "/crate/{name}/{version}/menus/releases/{*path}",
-            get_internal(metrics, crate_details::get_all_releases),
+            "/crate/{name}/{version}/menus/details/{*path}",
+            get_internal(metrics, crate_details::get_crate_details_menu),
         )
         .route("/-/partial/alerts/", get_internal(metrics, status::alerts))
         .route(

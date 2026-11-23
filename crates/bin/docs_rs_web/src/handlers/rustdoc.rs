@@ -9,17 +9,17 @@ use crate::{
         rustdoc::{PageKind, RustdocParams, UrlParams},
     },
     file::StreamingFile,
-    handlers::{axum_cached_redirect, crate_details::CrateDetails},
+    handlers::axum_cached_redirect,
     match_release::match_version,
     metadata::MetaData,
     metrics::WebMetrics,
     middleware::csp::Csp,
     page::{
         TemplateData,
-        templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+        templates::{RenderBrands, RenderSolid, filters},
     },
     routes::cached_static_redirect,
-    utils::{self, licenses},
+    utils,
 };
 use anyhow::{Context as _, anyhow};
 use askama::Template;
@@ -33,11 +33,8 @@ use axum_extra::{
     headers::{ContentType, ETag, Header as _, HeaderMapExt as _},
     typed_header::TypedHeader,
 };
-use chrono::{DateTime, Utc};
-use docs_rs_cargo_metadata::Dependency;
 use docs_rs_database::Pool;
 use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
-use docs_rs_registry_api::OwnerKind;
 use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_storage::{
     AsyncStorage, PathNotFoundError, StreamingBlob, rustdoc_archive_path, rustdoc_json_path,
@@ -316,7 +313,7 @@ pub(crate) async fn rustdoc_redirector_handler(
         let inner_path = params.inner_path();
         // this URL is actually from a crate-internal path, serve it there instead
         return async {
-            let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+            let metadata = MetaData::from_matched_release(&mut conn, &matched_release).await?;
 
             // NOTE: we want to give back the db connection to the pool
             // before we do the long S3 requests.
@@ -325,8 +322,8 @@ pub(crate) async fn rustdoc_redirector_handler(
             match storage
                 .stream_rustdoc_file(
                     params.name(),
-                    &krate.version,
-                    krate.latest_build_id,
+                    &metadata.version,
+                    metadata.latest_build_id,
                     inner_path,
                 )
                 .await
@@ -382,71 +379,20 @@ pub(crate) async fn rustdoc_redirector_handler(
     }
 }
 
-/// small wrapper around CrateDetails to limit serialized fields we hand
-/// to the template.
-/// Mostly to know what we have to serialize into the etag.
-#[derive(Serialize)]
-pub struct LimitedCrateDetails {
-    parsed_license: Option<Vec<licenses::LicenseSegment>>,
-    homepage_url: Option<String>,
-    documentation_url: Option<String>,
-    repository_url: Option<String>,
-    owners: Vec<(String, String, OwnerKind)>,
-    dependencies: Vec<Dependency>,
-    total_items: Option<i32>,
-    documented_items: Option<i32>,
-    latest_build_time: Option<DateTime<Utc>>,
-    latest_build_rustc_version: Option<String>,
-}
-
-impl From<CrateDetails> for LimitedCrateDetails {
-    fn from(value: CrateDetails) -> Self {
-        let CrateDetails {
-            parsed_license,
-            homepage_url,
-            documentation_url,
-            repository_url,
-            owners,
-            dependencies,
-            total_items,
-            documented_items,
-            latest_build,
-            ..
-        } = value;
-
-        let (latest_build_time, latest_build_rustc_version) = if let Some(b) = latest_build {
-            (b.build_time, b.rustc_version)
-        } else {
-            (None, None)
-        };
-
-        Self {
-            total_items,
-            documented_items,
-            parsed_license,
-            homepage_url,
-            documentation_url,
-            repository_url,
-            owners,
-            dependencies,
-            latest_build_time,
-            latest_build_rustc_version,
-        }
-    }
-}
-
 #[derive(Template, Serialize)]
 #[template(path = "rustdoc/topbar.html")]
 pub struct RustdocPage {
     pub latest_path: EscapedURI,
     pub permalink_path: EscapedURI,
+    /// The lazy-loaded crate dropdown, with the page's query for its permalink & version links.
+    /// Other crate pages set `None` and get a plain link in the topbar.
+    crate_details_menu_url: Option<EscapedURI>,
     // true if we are displaying the latest version of the crate, regardless
     // of whether the URL specifies a version number or the string "latest."
     pub is_latest_version: bool,
     // true if the URL specifies a version using the string "latest."
     pub is_latest_url: bool,
     pub is_prerelease: bool,
-    pub krate: LimitedCrateDetails,
     pub metadata: MetaData,
     pub current_target: String,
     params: RustdocParams,
@@ -611,7 +557,7 @@ pub(crate) async fn rustdoc_html_server_handler(
         .into_response());
     }
 
-    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    let metadata = MetaData::from_matched_release(&mut conn, &matched_release).await?;
 
     // NOTE: we want to give back the db connection to the pool
     // before we do the long S3 requests.
@@ -619,8 +565,8 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     trace!(
         ?params,
-        doc_targets=?krate.metadata.doc_targets,
-        default_target=?krate.metadata.default_target,
+        doc_targets=?metadata.doc_targets,
+        default_target=?metadata.default_target,
 
         "parsed params"
     );
@@ -632,7 +578,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             params
                 .rustdoc_url()
                 .append_raw_query(original_query.as_deref()),
-            CachePolicy::ForeverInCdn(krate.name.into()),
+            CachePolicy::ForeverInCdn(metadata.name.clone().into()),
         )?);
     }
 
@@ -648,8 +594,8 @@ pub(crate) async fn rustdoc_html_server_handler(
     let blob = match storage
         .stream_rustdoc_file(
             params.name(),
-            &krate.version,
-            krate.latest_build_id,
+            &metadata.version,
+            metadata.latest_build_id,
             &storage_path,
         )
         .await
@@ -675,8 +621,8 @@ pub(crate) async fn rustdoc_html_server_handler(
                 if storage
                     .rustdoc_file_exists(
                         params.name(),
-                        &krate.version,
-                        krate.latest_build_id,
+                        &metadata.version,
+                        metadata.latest_build_id,
                         &params.storage_path(),
                     )
                     .await?
@@ -685,7 +631,7 @@ pub(crate) async fn rustdoc_html_server_handler(
                         params
                             .rustdoc_url()
                             .append_raw_query(original_query.as_deref()),
-                        CachePolicy::ForeverInCdn(krate.name.into()),
+                        CachePolicy::ForeverInCdn(metadata.name.clone().into()),
                     )?);
                 }
             }
@@ -698,21 +644,21 @@ pub(crate) async fn rustdoc_html_server_handler(
                 // but only if the first element after the version is a target?
                 return Ok(axum_cached_redirect(
                     params.target_redirect_url(),
-                    CachePolicy::ForeverInCdn(krate.name.into()),
+                    CachePolicy::ForeverInCdn(metadata.name.clone().into()),
                 )?);
             }
 
             if storage_path
                 == format!(
                     "{}/index.html",
-                    krate.target_name.expect(
+                    metadata.target_name.as_deref().expect(
                         "we check rustdoc_status = true above, and with docs we have target_name"
                     )
                 )
             {
                 error!(
                     krate = %params.name(),
-                    version = %krate.version,
+                    version = %metadata.version,
                     original_path = params.original_path(),
                     storage_path,
                     "Couldn't find crate documentation root on storage.
@@ -727,7 +673,7 @@ pub(crate) async fn rustdoc_html_server_handler(
             // bare "resource not found" (issue #2568).
             return Err(AxumNope::ResourceNotFoundInVersion {
                 name: params.name().clone(),
-                version: krate.version,
+                version: metadata.version,
                 is_latest_url: params.req_version().is_latest(),
                 version_root_url: params.clone().with_inner_path("").rustdoc_url(),
                 crate_details_url: params.crate_details_url(),
@@ -747,21 +693,14 @@ pub(crate) async fn rustdoc_html_server_handler(
         );
     }
 
-    let latest_release = krate.latest_release();
+    let latest_release = matched_release.latest_release.as_ref();
 
     // Get the latest version of the crate
     let latest_version = latest_release
         .map(|release| release.version.clone())
-        .unwrap_or_else(|| krate.version.clone());
-    let is_latest_version = latest_version == krate.version;
-    let is_prerelease = !(krate.version.pre.is_empty());
-
-    // Find the path of the latest version for the `Go to latest` and `Permalink` links
-    let permalink_path = params
-        .clone()
-        .with_req_version(&latest_version)
-        .rustdoc_url()
-        .append_raw_query(original_query.as_deref());
+        .unwrap_or_else(|| metadata.version.clone());
+    let is_latest_version = latest_version == metadata.version;
+    let is_prerelease = !(metadata.version.pre.is_empty());
 
     let latest_path = if latest_release.is_some_and(|release| release.build_status.is_success()) {
         params
@@ -776,18 +715,27 @@ pub(crate) async fn rustdoc_html_server_handler(
     }
     .append_raw_query(original_query.as_deref());
 
+    let permalink_path = params
+        .clone()
+        .with_req_version(&metadata.version)
+        .rustdoc_url()
+        .append_raw_query(original_query.as_deref());
+    let crate_details_menu_url = params
+        .crate_details_partial_url()
+        .append_raw_query(original_query.as_deref());
+
     let current_target = params.doc_target_or_default().unwrap_or_default();
 
     // Build the page of documentation,
     let page = Arc::new(RustdocPage {
         latest_path,
         permalink_path,
+        crate_details_menu_url: Some(crate_details_menu_url),
         is_latest_version,
         is_latest_url: params.req_version().is_latest(),
         is_prerelease,
-        metadata: krate.metadata.clone(),
+        metadata,
         current_target: current_target.to_owned(),
-        krate: krate.into(),
         params,
     });
     Ok(page
@@ -828,7 +776,7 @@ pub(crate) async fn target_redirect_handler(
         )?);
     }
 
-    let crate_details = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    let metadata = MetaData::from_matched_release(&mut conn, &matched_release).await?;
 
     // NOTE: we want to give back the db connection to the pool
     // before we do the long S3 requests.
@@ -839,8 +787,8 @@ pub(crate) async fn target_redirect_handler(
     let redirect_uri = if storage
         .rustdoc_file_exists(
             params.name(),
-            &crate_details.version,
-            crate_details.latest_build_id,
+            &metadata.version,
+            metadata.latest_build_id,
             &storage_path,
         )
         .await?
@@ -860,9 +808,9 @@ pub(crate) async fn target_redirect_handler(
     Ok(axum_cached_redirect(
         redirect_uri,
         if params.req_version().is_latest() {
-            CachePolicy::ForeverInCdn(crate_details.name.into())
+            CachePolicy::ForeverInCdn(metadata.name.into())
         } else {
-            CachePolicy::ForeverInCdnAndStaleInBrowser(crate_details.name.into())
+            CachePolicy::ForeverInCdnAndStaleInBrowser(metadata.name.into())
         },
     )?)
 }
@@ -936,7 +884,8 @@ pub(crate) async fn json_download_handler(
         return Err(AxumNope::ResourceNotFound);
     }
 
-    let krate = CrateDetails::from_matched_release(&mut conn, matched_release).await?;
+    let name = matched_release.name;
+    let version = matched_release.release.version;
 
     // NOTE: we want to give back the db connection to the pool
     // before we do the long S3 requests.
@@ -977,14 +926,14 @@ pub(crate) async fn json_download_handler(
     });
 
     let storage_path = rustdoc_json_path(
-        &krate.name,
-        &krate.version,
+        &name,
+        &version,
         target,
         wanted_format_version,
         Some(wanted_compression),
     );
 
-    let cache_policy = CachePolicy::ForeverInCdn(krate.name.clone().into());
+    let cache_policy = CachePolicy::ForeverInCdn(name.clone().into());
 
     let (mut response, updated_storage_path) = match storage.get_raw_stream(&storage_path).await {
         Ok(file) => (
@@ -996,13 +945,8 @@ pub(crate) async fn json_download_handler(
             // with content-encoding=zstd & just a `.json` file extension.
             // As a fallback, we redirect to that, if zstd was requested (which is also the default).
             if wanted_compression == CompressionAlgorithm::Zstd {
-                let storage_path = rustdoc_json_path(
-                    &krate.name,
-                    &krate.version,
-                    target,
-                    wanted_format_version,
-                    None,
-                );
+                let storage_path =
+                    rustdoc_json_path(&name, &version, target, wanted_format_version, None);
                 // we have an old file with a `.json` extension,
                 // redirect to that as fallback
                 (
@@ -1413,14 +1357,85 @@ mod test {
                 CachePolicy::ForeverInCdn(KrateName::from_str("dummy").unwrap().into()),
                 env.config(),
             );
-            let body = resp.text().await?;
+            // the dropdown is lazy-loaded
+            let menu = crate_details_menu(&env, "/dummy/latest/dummy/").await?;
             assert!(
-                body.contains("<a href=\"/crate/dummy/latest/source/\""),
+                menu.contains("<a href=\"/crate/dummy/latest/source/\""),
+                "{}",
+                menu
+            );
+            assert!(menu.contains("<a href=\"/crate/dummy/latest\""), "{}", menu);
+            assert!(menu.contains("<a href=\"/dummy/0.1.0/dummy/\""), "{}", menu);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn rustdoc_topbar_without_js() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html")
+                .create()
+                .await?;
+
+            let body = env
+                .web_app()
+                .await
+                .get("/dummy/latest/dummy/")
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            // crawlers get the crate page link without loading the dropdown
+            assert!(
+                body.contains(
+                    "<a href=\"/crate/dummy/latest\" class=\"pure-menu-link crate-name\""
+                ),
                 "{}",
                 body
             );
-            assert!(body.contains("<a href=\"/crate/dummy/latest\""), "{}", body);
-            assert!(body.contains("<a href=\"/dummy/0.1.0/dummy/\""), "{}", body);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn permalink_keeps_query() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("dummy")
+                .version("0.1.0")
+                .rustdoc_file("dummy/index.html")
+                .create()
+                .await?;
+
+            let path = "/dummy/latest/dummy/?foo=bar";
+            let body = env
+                .web_app()
+                .await
+                .get(path)
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            // for the `y` shortcut
+            let metadata: serde_json::Value = serde_json::from_str(
+                &kuchikiki::parse_html()
+                    .one(body)
+                    .select_first("#crate-metadata")
+                    .expect("missing crate metadata")
+                    .text_contents(),
+            )?;
+            assert_eq!(metadata["permalink"], "/dummy/0.1.0/dummy/?foo=bar");
+            let menu = crate_details_menu(&env, path).await?;
+            assert!(
+                menu.contains("<a href=\"/dummy/0.1.0/dummy/?foo=bar\""),
+                "{}",
+                menu
+            );
             Ok(())
         })
     }
@@ -2766,7 +2781,7 @@ mod test {
     fn parse_release_links_from_menu(body: &str) -> Vec<String> {
         kuchikiki::parse_html()
             .one(body)
-            .select(r#"ul > li > a"#)
+            .select(r#"#releases-list li > a"#)
             .expect("invalid selector")
             .map(|elem| elem.attributes.borrow().get("href").unwrap().to_string())
             .collect()
@@ -2796,18 +2811,18 @@ mod test {
                 .await?;
 
             // test rustdoc pages stay on the documentation
-            let releases_response = env
+            let menu_response = env
                 .web_app()
                 .await
-                .get("/crate/hexponent/0.3.1/menus/releases/x86_64-unknown-linux-gnu/hexponent/index.html")
+                .get("/crate/hexponent/0.3.1/menus/details/x86_64-unknown-linux-gnu/hexponent/index.html")
                 .await?;
-            assert!(releases_response.status().is_success());
-            releases_response.assert_cache_control(
+            assert!(menu_response.status().is_success());
+            menu_response.assert_cache_control(
                 CachePolicy::ForeverInCdn(KrateName::from_str("hexponent").unwrap().into()),
                 env.config(),
             );
             assert_eq!(
-                parse_release_links_from_menu(&releases_response.text().await?),
+                parse_release_links_from_menu(&menu_response.text().await?),
                 vec![
                     "/crate/hexponent/0.3.1/target-redirect/x86_64-unknown-linux-gnu/hexponent/"
                         .to_owned(),
@@ -2817,18 +2832,18 @@ mod test {
             );
 
             // test if target-redirect includes path
-            let releases_response = env
+            let menu_response = env
                 .web_app()
                 .await
-                .get("/crate/hexponent/0.3.1/menus/releases/hexponent/something.html")
+                .get("/crate/hexponent/0.3.1/menus/details/hexponent/something.html")
                 .await?;
-            assert!(releases_response.status().is_success());
-            releases_response.assert_cache_control(
+            assert!(menu_response.status().is_success());
+            menu_response.assert_cache_control(
                 CachePolicy::ForeverInCdn(KrateName::from_str("hexponent").unwrap().into()),
                 env.config(),
             );
             assert_eq!(
-                parse_release_links_from_menu(&releases_response.text().await?),
+                parse_release_links_from_menu(&menu_response.text().await?),
                 vec![
                     "/crate/hexponent/0.3.1/target-redirect/hexponent/something.html".to_owned(),
                     "/crate/hexponent/0.3.0/target-redirect/hexponent/something.html".to_owned(),
@@ -2867,14 +2882,8 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(
-                env.web_app()
-                    .await
-                    .get("/testing/0.1.0/testing/")
-                    .await?
-                    .text()
-                    .await?,
-            );
+            let dom = kuchikiki::parse_html()
+                .one(crate_details_menu(&env, "/testing/0.1.0/testing/").await?);
 
             assert_eq!(
                 dom.select(r#"ul > li a[href="https://git.example.com"]"#)
@@ -2899,14 +2908,8 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(
-                env.web_app()
-                    .await
-                    .get("/testing/0.1.0/testing/")
-                    .await?
-                    .text()
-                    .await?,
-            );
+            let dom = kuchikiki::parse_html()
+                .one(crate_details_menu(&env, "/testing/0.1.0/testing/").await?);
 
             assert_eq!(
                 dom.select(r#"ul > li a[href="https://git.example.com"]"#)
@@ -2939,14 +2942,8 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(
-                env.web_app()
-                    .await
-                    .get("/testing/0.1.0/testing/")
-                    .await?
-                    .text()
-                    .await?,
-            );
+            let dom = kuchikiki::parse_html()
+                .one(crate_details_menu(&env, "/testing/0.1.0/testing/").await?);
 
             let owner_links: Vec<_> = dom
                 .select(r#"#topbar-owners > li > a"#)
@@ -2992,15 +2989,8 @@ mod test {
                 .create()
                 .await?;
 
-            let dom = kuchikiki::parse_html().one(
-                env.web_app()
-                    .await
-                    .get("/testing/0.1.0/testing/")
-                    .await?
-                    .error_for_status()?
-                    .text()
-                    .await?,
-            );
+            let dom = kuchikiki::parse_html()
+                .one(crate_details_menu(&env, "/testing/0.1.0/testing/").await?);
             assert!(
                 dom.select(
                     r#"a[href="/optional-dep/^1.2.3/"] > i[class="dependencies normal"] + i"#

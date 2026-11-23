@@ -3,6 +3,8 @@
 define-function: ("check-url-anchor", [anchor], block {
     click: ".pure-menu-link.crate-name"
     wait-for: ".crate-dropdown.pure-menu-active"
+    // The dropdown content is lazy-loaded when it opens.
+    wait-for: "#permalink"
     click: "#permalink"
     assert-document-property: ({"URL": "#" + |anchor|}, ENDS_WITH)
     // Since we clicked on the permalink, we should not have the `/latest/` part anymore.
@@ -13,6 +15,17 @@ go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html#test"
 assert-document-property: ({"URL": "#test"}, ENDS_WITH)
 assert-document-property: ({"URL": "/latest/"}, CONTAINS)
 call-function: ("check-url-anchor", {"anchor": "test"})
+
+// The permalink should also keep the query.
+go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html?foo=bar#test"
+call-function: ("check-url-anchor", {"anchor": "test"})
+assert-document-property: ({"URL": "?foo=bar#test"}, ENDS_WITH)
+
+// The `y` shortcut works without opening the dropdown, it reads the permalink from `#crate-metadata`.
+go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html#test"
+press-key: "y"
+assert-document-property-false: ({"URL": "/latest/"}, CONTAINS)
+assert-document-property: ({"URL": "#test"}, ENDS_WITH)
 
 // We now click on a link in the sidebar to change the anchor.
 go-to: |DOC_PATH| + "/sysinfo/latest/sysinfo/index.html"
