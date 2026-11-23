@@ -570,11 +570,9 @@ pub async fn add_build_logs(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Config, testing::TestDatabase};
+    use crate::testing::TestDatabase;
     use chrono::NaiveDate;
     use docs_rs_cargo_metadata::CargoMetadata;
-    use docs_rs_config::AppConfig as _;
-    use docs_rs_opentelemetry::testing::TestMetrics;
     use docs_rs_registry_api::OwnerKind;
     use docs_rs_types::{
         KrateName, SimpleBuildError,
@@ -631,8 +629,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_finish_release_uses_dummy_release_time() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
         let mut conn = db.async_conn().await?;
 
         let release_id = fake_release(&mut conn, &KRATE, &V0_1, &ReleaseData::dummy()).await?;
@@ -649,8 +646,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_finish_release_uses_dummy_release_time_when_missing() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
         let mut conn = db.async_conn().await?;
 
         let release_id = fake_release(
@@ -676,8 +672,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_set_build_to_error() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -718,8 +713,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_finish_build_success_valid_rustc_date() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -772,8 +766,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_finish_build_success_invalid_rustc_date() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -826,8 +819,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_finish_build_error() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -876,8 +868,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn new_owner_long_avatar() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -917,8 +908,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn new_owners() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -958,8 +948,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn update_owner_details() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -1008,8 +997,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn add_new_owners_and_delete_old() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -1126,8 +1114,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_initialize_crate() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
 
@@ -1150,8 +1137,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_initialize_release() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -1176,8 +1162,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_initialize_build() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -1202,8 +1187,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_initialize_build_marks_previous_attempt_as_failure() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         let crate_id = initialize_crate(&mut conn, &KRATE).await?;
@@ -1247,8 +1231,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_long_crate_name() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
 
@@ -1266,8 +1249,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_long_release_version() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
 
@@ -1297,8 +1279,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_long_license() -> Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
 

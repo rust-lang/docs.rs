@@ -65,9 +65,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, testing::TestDatabase};
-    use docs_rs_config::AppConfig as _;
-    use docs_rs_opentelemetry::testing::TestMetrics;
+    use crate::testing::TestDatabase;
     use serde_json::Value;
     use test_case::test_case;
 
@@ -83,8 +81,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_config_empty() -> anyhow::Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         sqlx::query!("DELETE FROM config")
@@ -101,8 +98,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_set_and_get_config_() -> anyhow::Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         sqlx::query!("DELETE FROM config")
@@ -130,8 +126,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_remove_existing_config() -> anyhow::Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         set_config(
@@ -158,8 +153,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_remove_missing_config_is_noop() -> anyhow::Result<()> {
-        let test_metrics = TestMetrics::new();
-        let db = TestDatabase::new(&Config::test_config()?, test_metrics.provider()).await?;
+        let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
         sqlx::query!("DELETE FROM config")
