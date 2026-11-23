@@ -50,9 +50,9 @@ url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/3849249
 provenance = "github-attestations"
 
 [[tools."cargo:cargo-audit"]]
-version = "0.22.2"
+version = "0.23.0"
 backend = "cargo:cargo-audit"
-specifiers = ["0.22.2"]
+specifiers = ["0.23.0"]
 
 [[tools."cargo:cargo-machete"]]
 version = "0.10.1"

@@ -9,7 +9,7 @@ cargo.binstall_quickinstall = true
 
 [tools]
 actionlint = "1.7.12"
-"cargo:cargo-audit" = "0.22.2"
+"cargo:cargo-audit" = "0.23.0"
 "cargo:cargo-machete" = "0.10.1"
 "cargo:cargo-nextest" = "0.9.152"
 "cargo:cargo-sort" = "2.1.4"
