@@ -179,7 +179,8 @@ lint-dependencies-udeps:
     cargo +nightly udeps --workspace
 
     echo "check for unused dev dependencies"
-    cargo +nightly udeps --workspace --all-targets
+    # `testing` enables the benches that declare it in `required-features`
+    cargo +nightly udeps --workspace --all-targets --features testing
 
 # Lint frontend JavaScript and templates with ESLint.
 [group('linting')]
