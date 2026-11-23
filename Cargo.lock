@@ -1316,9 +1316,9 @@ checksum = "e0921b3876b3a1df8a1c9f912e7f94342458022c2e84288015893d83c4d62a79"
 
 [[package]]
 name = "cli-table"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14da8d951cef7cc4f13ccc9b744d736963d57863c7e6fc33c070ea274546082c"
+checksum = "da3f6d58fee48985bc014a632222438d0d999765ed0da41b7b5436b31c12aa15"
 dependencies = [
  "termcolor",
  "unicode-width",
