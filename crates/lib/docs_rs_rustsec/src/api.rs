@@ -1,7 +1,7 @@
 use crate::Config;
 use anyhow::{Context as _, Result};
 use arc_swap::ArcSwapOption;
-use docs_rs_types::KrateName;
+use docs_rs_types::{KrateName, Version};
 use docs_rs_utils::spawn_blocking;
 use rustsec::advisory::Informational;
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -31,7 +31,11 @@ impl RustsecDatabase {
     ///
     /// Returns `None` when the database has not loaded or no advisory matches.
     #[instrument(skip(self), fields(krate = %name))]
-    pub fn find_unmaintained(&self, name: &KrateName) -> Option<&rustsec::Advisory> {
+    pub fn find_unmaintained(
+        &self,
+        name: &KrateName,
+        version: &Version,
+    ) -> Option<&rustsec::Advisory> {
         let query = crate_query(name).withdrawn(false).informational(true);
 
         self.0
@@ -39,7 +43,7 @@ impl RustsecDatabase {
             .into_iter()
             .filter(|advisory| {
                 advisory.metadata.informational == Some(Informational::Unmaintained)
-                    && advisory.versions.patched().is_empty()
+                    && advisory.versions.is_vulnerable(&version.0)
             })
             // `min_by_key` instead of `find` so the order is deterministic
             .min_by_key(|advisory| advisory.id())
@@ -166,7 +170,7 @@ impl Drop for RustsecClient {
 mod tests {
     use super::*;
     use crate::testing::{advisory, database};
-    use docs_rs_types::testing::DUMMY;
+    use docs_rs_types::testing::{DUMMY, V0_1, V1, V2};
     use rustsec::VersionReq;
     use test_case::test_case;
 
@@ -179,7 +183,7 @@ mod tests {
         let database = database(advisories)?;
         assert_eq!(
             database
-                .find_unmaintained(&OWNED_ALLOC)
+                .find_unmaintained(&OWNED_ALLOC, &V1)
                 .map(|advisory| advisory.id().as_str()),
             expected
         );
@@ -195,7 +199,7 @@ mod tests {
         let database = database([inserted.clone()])?;
 
         let queried = database
-            .find_unmaintained(&OWNED_ALLOC)
+            .find_unmaintained(&OWNED_ALLOC, &V1)
             .expect("unmaintained advisory");
         assert_eq!(queried.id(), inserted.id());
         assert_eq!(queried.title(), "`owned-alloc` is unmaintained");
@@ -226,6 +230,35 @@ mod tests {
         )
     }
 
+    #[test_case(V0_1, true; "version below the unaffected range is unmaintained")]
+    #[test_case(V1, false; "first unaffected version is not unmaintained")]
+    #[test_case(V2, false; "later unaffected version is not unmaintained")]
+    fn respects_unaffected_versions(version: Version, expected: bool) -> Result<()> {
+        let database = database([advisory(&OWNED_ALLOC)
+            .informational(Informational::Unmaintained)
+            .unaffected(VersionReq::parse(">= 1.0.0").unwrap())
+            .build()])?;
+        assert_eq!(
+            database.find_unmaintained(&OWNED_ALLOC, &version).is_some(),
+            expected
+        );
+        Ok(())
+    }
+
+    #[test_case(V0_1, true; "version before the patch is unmaintained")]
+    #[test_case(V1, false; "patched version is not unmaintained")]
+    fn respects_patched_versions(version: Version, expected: bool) -> Result<()> {
+        let database = database([advisory(&OWNED_ALLOC)
+            .informational(Informational::Unmaintained)
+            .patched(VersionReq::parse(">= 1.0.0").unwrap())
+            .build()])?;
+        assert_eq!(
+            database.find_unmaintained(&OWNED_ALLOC, &version).is_some(),
+            expected
+        );
+        Ok(())
+    }
+
     #[test]
     fn ignores_advisory_for_another_crate() -> Result<()> {
         let advisory_for_other_crate = advisory(&DUMMY)
@@ -253,7 +286,7 @@ mod tests {
         ])?;
 
         assert_eq!(
-            database.find_unmaintained(&OWNED_ALLOC).unwrap().id(),
+            database.find_unmaintained(&OWNED_ALLOC, &V1).unwrap().id(),
             first.id()
         );
         Ok(())

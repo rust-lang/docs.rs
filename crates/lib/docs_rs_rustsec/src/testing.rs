@@ -29,6 +29,7 @@ pub fn advisory(
     #[builder(default = next_advisory_id())] id: String,
     informational: Option<Informational>,
     patched: Option<VersionReq>,
+    unaffected: Option<VersionReq>,
     withdrawn: Option<String>,
 ) -> rustsec::Advisory {
     serde_json::from_value(serde_json::json!({
@@ -43,6 +44,7 @@ pub fn advisory(
         },
         "versions": {
             "patched": patched.into_iter().collect::<Vec<_>>(),
+            "unaffected": unaffected.into_iter().collect::<Vec<_>>(),
         },
     }))
     .expect("valid test advisory")
