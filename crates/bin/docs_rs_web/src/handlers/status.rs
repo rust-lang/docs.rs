@@ -17,7 +17,7 @@ use axum::{
 use docs_rs_build_queue::AsyncBuildQueue;
 use docs_rs_database::service_config::{Abnormality, Alert};
 use docs_rs_std_replacements::ReplacementDetails;
-use docs_rs_types::KrateName;
+use docs_rs_types::{KrateName, Version};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Template)]
@@ -87,7 +87,7 @@ impl_axum_webpage! {
 /// Render crate warnings for insertion into the documentation topbar.
 pub(crate) async fn crate_warnings(
     State(state): State<AppState>,
-    Path(name): Path<KrateName>,
+    Path((name, version)): Path<(KrateName, Version)>,
 ) -> AxumResult<impl IntoResponse> {
     // default cache policy for this endpoint.
     // Should be used:
@@ -97,7 +97,7 @@ pub(crate) async fn crate_warnings(
 
     let unmaintained = if let Some(database) = state.rustsec()?.database() {
         database
-            .find_unmaintained(&name)
+            .find_unmaintained(&name, &version)
             .map(|advisory| UnmaintainedWarning {
                 id: advisory.id().to_string(),
                 title: advisory.title().to_string(),
@@ -188,7 +188,7 @@ mod tests {
         let html = env
             .web_app()
             .await
-            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .assert_success("/-/partial/crate-warnings/owned-alloc/1.0.0/")
             .await?
             .text()
             .await?;
@@ -230,7 +230,7 @@ mod tests {
         let response = env
             .web_app()
             .await
-            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .assert_success("/-/partial/crate-warnings/owned-alloc/1.0.0/")
             .await?;
 
         response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
@@ -263,7 +263,7 @@ mod tests {
         let response = env
             .web_app()
             .await
-            .assert_success("/-/partial/crate-warnings/owned-alloc/")
+            .assert_success("/-/partial/crate-warnings/owned-alloc/1.0.0/")
             .await?;
 
         response.assert_cache_control(CachePolicy::ShortInCdnAndBrowser, env.config());
