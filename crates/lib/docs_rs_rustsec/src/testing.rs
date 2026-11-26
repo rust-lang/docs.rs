@@ -91,3 +91,12 @@ pub fn unmaintained(package: &KrateName) -> rustsec::Advisory {
         .informational(Informational::Unmaintained)
         .build()
 }
+
+/// create a dummy unmaintained advisory that does not affect the versions in
+/// the `unaffected` range, e.g. `">= 1.0.0"`.
+pub fn unmaintained_unaffected(package: &KrateName, unaffected: &str) -> rustsec::Advisory {
+    advisory(package)
+        .informational(Informational::Unmaintained)
+        .unaffected(VersionReq::parse(unaffected).unwrap())
+        .build()
+}

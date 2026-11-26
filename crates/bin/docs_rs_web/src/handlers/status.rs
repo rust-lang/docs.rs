@@ -213,6 +213,44 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn crate_warnings_unmaintained_depends_on_version() -> Result<()> {
+        let std_server = StdReplacementMockServer::new()
+            .await
+            .mock()
+            .status_code(StatusCode::NOT_FOUND)
+            .start()
+            .await;
+
+        let env = TestEnvironment::builder()
+            .std_replacements_config(std_server.config().build())
+            .rustsec(Arc::new(testing::client([
+                testing::unmaintained_unaffected(&OWNED_ALLOC, ">= 1.0.0"),
+            ])?))
+            .build()
+            .await?;
+
+        let html = env
+            .web_app()
+            .await
+            .assert_success("/-/partial/crate-warnings/owned-alloc/0.1.0/")
+            .await?
+            .text()
+            .await?;
+        assert!(html.contains("Unmaintained"));
+
+        let html = env
+            .web_app()
+            .await
+            .assert_success("/-/partial/crate-warnings/owned-alloc/1.0.0/")
+            .await?
+            .text()
+            .await?;
+        assert!(!html.contains("Unmaintained"));
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn crate_warnings_caches_replacement_404() -> Result<()> {
         let std_server = StdReplacementMockServer::new()
             .await
