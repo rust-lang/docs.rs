@@ -33,7 +33,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_util::io::SyncIoBridge;
-use tracing::{debug, error, info, info_span, instrument, trace, warn};
+use tracing::{Instrument as _, debug, error, info, info_span, instrument, trace, warn};
 use url::Url;
 
 pub(crate) const ARCHIVE_INDEX_FILE_EXTENSION: &str = "index";
@@ -721,8 +721,13 @@ impl Cache {
             .fetch_archive_index(remote_index_path)
             .await?
             .content;
-        let copied = io::copy(&mut stream, &mut temp_file).await?;
-        temp_file.flush().await?;
+        let copied = async {
+            let copied = io::copy(&mut stream, &mut temp_file).await?;
+            temp_file.flush().await?;
+            Ok::<_, std::io::Error>(copied)
+        }
+        .instrument(info_span!("write_archive_index"))
+        .await?;
 
         // Publish atomically.
         // Will replace any existing file.
