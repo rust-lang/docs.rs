@@ -160,11 +160,11 @@ impl RepositoryForge for GitHub {
 
         for error in &response.errors {
             use GraphErrorPath::*;
-            match (error.error_type.as_str(), error.path.as_slice()) {
-                ("NOT_FOUND", [Segment(nodes), Index(idx)]) if nodes == "nodes" => {
+            match (error.error_type.as_deref(), error.path.as_slice()) {
+                (Some("NOT_FOUND"), [Segment(nodes), Index(idx)]) if nodes == "nodes" => {
                     ret.missing.push(node_ids[*idx as usize].clone());
                 }
-                ("RATE_LIMITED", []) => {
+                (Some("RATE_LIMITED"), []) => {
                     return Err(RateLimitReached.into());
                 }
                 _ => bail!("error updating repositories: {}", error.message),
@@ -244,8 +244,9 @@ struct GraphResponse<T> {
 
 #[derive(Debug, Deserialize)]
 struct GraphError {
+    // GitHub omits `type` on some errors, e.g. query timeouts.
     #[serde(rename = "type")]
-    error_type: String,
+    error_type: Option<String>,
     #[serde(default)]
     path: Vec<GraphErrorPath>,
     message: String,
@@ -365,6 +366,26 @@ mod tests {
             Err(e) if e.downcast_ref::<RateLimitReached>().is_some() => {}
             x => panic!("Expected Err(RateLimitReached), found: {x:?}"),
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn error_without_type() -> Result<()> {
+        let config = github_config()?;
+        let (mut server, updater) = mock_server_and_github(&config).await;
+
+        let _m1 = server
+            .mock("POST", "/graphql")
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data": null, "errors": [{"message": "Something went wrong"}]}"#)
+            .match_header(AUTHORIZATION, format!("Bearer {TEST_TOKEN}").as_str())
+            .create();
+
+        let err = updater
+            .fetch_repositories(&[String::new()])
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Something went wrong"), "{err:?}");
         Ok(())
     }
 
