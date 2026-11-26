@@ -26,8 +26,8 @@ fn crate_query(name: &KrateName) -> rustsec::database::Query {
 pub struct RustsecDatabase(pub(crate) Arc<rustsec::Database>);
 
 impl RustsecDatabase {
-    /// Fetch the first unmaintained advisory that has not been withdrawn and
-    /// does not offer a patched version, matching crates.io.
+    /// Fetch the first non-withdrawn unmaintained advisory that affects the
+    /// given version.
     ///
     /// Returns `None` when the database has not loaded or no advisory matches.
     #[instrument(skip(self), fields(krate = %name))]
@@ -36,15 +36,15 @@ impl RustsecDatabase {
         name: &KrateName,
         version: &Version,
     ) -> Option<&rustsec::Advisory> {
-        let query = crate_query(name).withdrawn(false).informational(true);
+        let query = crate_query(name)
+            .package_version(version.0.clone())
+            .withdrawn(false)
+            .informational(true);
 
         self.0
             .query(&query)
             .into_iter()
-            .filter(|advisory| {
-                advisory.metadata.informational == Some(Informational::Unmaintained)
-                    && advisory.versions.is_vulnerable(&version.0)
-            })
+            .filter(|advisory| advisory.metadata.informational == Some(Informational::Unmaintained))
             // `min_by_key` instead of `find` so the order is deterministic
             .min_by_key(|advisory| advisory.id())
     }
@@ -210,21 +210,18 @@ mod tests {
         Ok(())
     }
 
-    #[test_case(Some(Informational::Unmaintained), Some("2026-09-24"), None; "withdrawn")]
-    #[test_case(Some(Informational::Unmaintained), None, Some(VersionReq::parse(">= 1.0.0").unwrap()); "patched")]
-    #[test_case(None, None, None; "security advisory")]
-    #[test_case(Some(Informational::Unsound), None, None; "other informational")]
-    #[test_case(Some(Informational::Other("future-notice".to_string())), None, None; "unknown informational")]
+    #[test_case(Some(Informational::Unmaintained), Some("2026-09-24"); "withdrawn")]
+    #[test_case(None, None; "security advisory")]
+    #[test_case(Some(Informational::Unsound), None; "other informational")]
+    #[test_case(Some(Informational::Other("future-notice".to_string())), None; "unknown informational")]
     fn ignores_non_matching_advisory(
         informational: Option<Informational>,
         withdrawn: Option<&str>,
-        patched: Option<VersionReq>,
     ) -> Result<()> {
         assert_unmaintained(
             [advisory(&OWNED_ALLOC)
                 .maybe_informational(informational)
                 .maybe_withdrawn(withdrawn)
-                .maybe_patched(patched)
                 .build()],
             None,
         )
