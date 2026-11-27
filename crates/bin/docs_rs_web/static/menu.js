@@ -87,7 +87,9 @@
                 newMenu,
                 "crate-details-menu",
                 "crate details",
-            );
+            ).then(() => {
+                setupDocsrsClipboardCopyButton();
+            });
         } else if (newMenu.querySelector("#platforms")) {
             loadAjaxMenu(
                 newMenu,

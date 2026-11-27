@@ -1,38 +1,36 @@
-(function() {
-    let resetClipboardTimeout = null;
-    let resetClipboardIcon = null;
-    document.addEventListener("click", ev => {
-        const clipboard = ev.target.closest?.("#clipboard");
-        if (!clipboard) {
-            return;
-        }
-        const metadata = JSON.parse(document.getElementById("crate-metadata").innerText);
+function setupDocsrsClipboardCopyButton() {
+    const clipboard = document.getElementById("clipboard");
+    if (clipboard) {
+        let resetClipboardTimeout = null;
+        const resetClipboardIcon = clipboard.innerHTML;
 
-        const temporaryInput = document.createElement("input");
-        temporaryInput.type = "text";
-        temporaryInput.value = `${metadata.name} = "${metadata.version}"`;
+        clipboard.addEventListener("click", () => {
+            const metadata = JSON.parse(document.getElementById("crate-metadata").innerText);
 
-        document.body.append(temporaryInput);
-        temporaryInput.select();
-        document.execCommand("copy");
-        temporaryInput.remove();
+            const temporaryInput = document.createElement("input");
+            temporaryInput.type = "text";
+            temporaryInput.value = `${metadata.name} = "${metadata.version}"`;
 
-        if (resetClipboardTimeout === null) {
-            resetClipboardIcon = clipboard.innerHTML;
-        } else {
-            clearTimeout(resetClipboardTimeout);
-        }
-        clipboard.textContent = "✓";
-        resetClipboardTimeout = setTimeout(() => {
-            resetClipboardTimeout = null;
-            clipboard.innerHTML = resetClipboardIcon;
-        }, 1000);
-    });
+            document.body.append(temporaryInput);
+            temporaryInput.select();
+            document.execCommand("copy");
+            temporaryInput.remove();
 
-    document.addEventListener("mouseover", ev => {
-        const link = ev.target.closest?.("a[data-fragment=\"retain\"]");
-        if (link) {
-            link.hash = document.location.hash;
-        }
-    });
-})();
+            clipboard.textContent = "✓";
+            if (resetClipboardTimeout !== null) {
+                clearTimeout(resetClipboardTimeout);
+            }
+            resetClipboardTimeout = setTimeout(() => {
+                resetClipboardTimeout = null;
+                clipboard.innerHTML = resetClipboardIcon;
+            }, 1000);
+        });
+    }
+
+    for (const e of document.querySelectorAll("a[data-fragment=\"retain\"]")) {
+        e.addEventListener("mouseover", () => {
+            e.hash = document.location.hash;
+        });
+    }
+}
+setupDocsrsClipboardCopyButton();
