@@ -5,10 +5,6 @@
     {% call macros::doc_title(name=name, version=version) %}{% endcall %}
 {%- endblock title -%}
 
-{%- block meta -%}
-    <link rel="canonical" href="{{ canonical_url|safe }}" />
-{%- endblock meta -%}
-
 {%- block topbar -%}
   {%- include "rustdoc/topbar.html" -%}
 {%- endblock topbar -%}

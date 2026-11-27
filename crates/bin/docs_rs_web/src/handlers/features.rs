@@ -9,11 +9,11 @@ use crate::{
     match_release::match_version,
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    search_indexing::SearchIndexing,
 };
 use anyhow::anyhow;
 use askama::Template;
 use axum::response::IntoResponse;
-use docs_rs_headers::CanonicalUrl;
 use docs_rs_types::{Feature as DbFeature, KrateName, ReqVersion};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -87,7 +87,6 @@ struct FeaturesPage {
     dependencies: HashMap<String, ReqVersion>,
     sorted_features: Option<Vec<Feature>>,
     default_features: HashSet<String>,
-    canonical_url: CanonicalUrl,
     is_latest_url: bool,
     params: RustdocParams,
 }
@@ -196,21 +195,20 @@ pub(crate) async fn build_features_handler(
         (None, Default::default())
     };
 
-    Ok(FeaturesPage {
-        metadata,
-        dependencies,
-        sorted_features,
-        default_features,
-        is_latest_url: params.req_version().is_latest(),
-        canonical_url: CanonicalUrl::from_uri(
-            params
-                .clone()
-                .with_req_version(ReqVersion::Latest)
-                .features_url(),
-        ),
-        params,
-    }
-    .into_response())
+    let is_latest_url = params.req_version().is_latest();
+
+    Ok((
+        SearchIndexing::latest_only(is_latest_url),
+        FeaturesPage {
+            metadata,
+            dependencies,
+            sorted_features,
+            default_features,
+            is_latest_url,
+            params,
+        },
+    )
+        .into_response())
 }
 
 /// Turns the raw JSON `dependencies` into a [`HashMap`] of dependencies and their versions.
@@ -558,5 +556,30 @@ mod tests {
 
             Ok(())
         });
+    }
+
+    #[test]
+    fn only_latest_is_indexed() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .create()
+                .await?;
+            let web = env.web_app().await;
+
+            let response = web.get("/crate/foo/0.1.0/features").await?;
+            assert!(response.status().is_success());
+            assert_eq!(response.headers().get("x-robots-tag").unwrap(), "noindex");
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
+
+            let response = web.get("/crate/foo/latest/features").await?;
+            assert!(response.status().is_success());
+            assert!(response.headers().get("x-robots-tag").is_none());
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
+
+            Ok(())
+        })
     }
 }

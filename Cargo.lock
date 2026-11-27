@@ -2240,17 +2240,13 @@ name = "docs_rs_headers"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "askama",
  "axum-core",
  "axum-extra",
  "docs_rs_types",
- "docs_rs_uri",
  "headers",
  "http 1.5.0",
  "itertools 0.15.0",
  "md5",
- "serde",
- "serde_json",
  "test-case",
  "tokio",
 ]

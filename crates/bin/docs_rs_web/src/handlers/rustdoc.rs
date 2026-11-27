@@ -19,6 +19,7 @@ use crate::{
         templates::{RenderBrands, RenderSolid, filters},
     },
     routes::cached_static_redirect,
+    search_indexing::SearchIndexing,
     utils,
 };
 use anyhow::{Context as _, anyhow};
@@ -34,7 +35,7 @@ use axum_extra::{
     typed_header::TypedHeader,
 };
 use docs_rs_database::Pool;
-use docs_rs_headers::{ETagComputer, IfNoneMatch, X_ROBOTS_TAG};
+use docs_rs_headers::{ETagComputer, IfNoneMatch};
 use docs_rs_rustdoc_json::RustdocJsonFormatVersion;
 use docs_rs_storage::{
     AsyncStorage, PathNotFoundError, StreamingBlob, rustdoc_archive_path, rustdoc_json_path,
@@ -454,7 +455,7 @@ impl RustdocPage {
         } else {
             CachePolicy::ForeverInCdnAndStaleInBrowser(crate_name.into())
         };
-        let robots_tag = (!self.is_latest_url).then_some([(&X_ROBOTS_TAG, "noindex")]);
+        let search_indexing = SearchIndexing::latest_only(self.is_latest_url);
 
         let etag = rustdoc_html
             .etag
@@ -467,7 +468,7 @@ impl RustdocPage {
         {
             (
                 StatusCode::NOT_MODIFIED,
-                robots_tag,
+                search_indexing,
                 TypedHeader(etag.clone()),
                 Extension(cache_policy),
             )
@@ -475,7 +476,7 @@ impl RustdocPage {
         } else {
             (
                 StatusCode::OK,
-                robots_tag,
+                search_indexing,
                 etag.map(TypedHeader),
                 Extension(cache_policy),
                 TypedHeader(ContentType::from(mime::TEXT_HTML_UTF_8)),

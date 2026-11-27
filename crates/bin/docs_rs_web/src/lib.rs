@@ -20,6 +20,7 @@ mod metrics;
 pub(crate) mod middleware;
 mod page;
 mod routes;
+mod search_indexing;
 mod state;
 #[cfg(test)]
 pub(crate) mod testing;

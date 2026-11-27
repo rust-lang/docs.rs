@@ -7,6 +7,7 @@ use crate::{
     match_release::match_version,
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    search_indexing::SearchIndexing,
 };
 use anyhow::{Result, anyhow};
 use askama::Template;
@@ -20,8 +21,7 @@ use constant_time_eq::constant_time_eq;
 use docs_rs_build_limits::Limits;
 use docs_rs_build_queue::{AsyncBuildQueue, PRIORITY_MANUAL_FROM_CRATES_IO};
 use docs_rs_context::Context;
-use docs_rs_headers::CanonicalUrl;
-use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildId, BuildStatus, Duration, KrateName, Version};
 use http::StatusCode;
 use std::sync::Arc;
 
@@ -44,7 +44,6 @@ struct BuildsPage {
     metadata: MetaData,
     builds: Vec<Build>,
     limits: Limits,
-    canonical_url: CanonicalUrl,
     params: RustdocParams,
 }
 
@@ -85,20 +84,17 @@ pub(crate) async fn build_list_handler(
     .await?;
     let params = params.apply_metadata(&metadata);
 
-    Ok(BuildsPage {
-        metadata,
-        builds: get_builds(&mut conn, params.name(), &version).await?,
-        limits: Limits::for_crate(context.config().build_limits()?, &mut conn, params.name())
-            .await?,
-        canonical_url: CanonicalUrl::from_uri(
-            params
-                .clone()
-                .with_req_version(&ReqVersion::Latest)
-                .builds_url(),
-        ),
-        params,
-    }
-    .into_response())
+    Ok((
+        SearchIndexing::latest_only(params.req_version().is_latest()),
+        BuildsPage {
+            metadata,
+            builds: get_builds(&mut conn, params.name(), &version).await?,
+            limits: Limits::for_crate(context.config().build_limits()?, &mut conn, params.name())
+                .await?,
+            params,
+        },
+    )
+        .into_response())
 }
 
 async fn crate_version_exists(
@@ -860,5 +856,30 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn only_latest_is_indexed() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .create()
+                .await?;
+            let web = env.web_app().await;
+
+            let response = web.get("/crate/foo/0.1.0/builds").await?;
+            assert!(response.status().is_success());
+            assert_eq!(response.headers().get("x-robots-tag").unwrap(), "noindex");
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
+
+            let response = web.get("/crate/foo/latest/builds").await?;
+            assert!(response.status().is_success());
+            assert!(response.headers().get("x-robots-tag").is_none());
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
+
+            Ok(())
+        })
     }
 }

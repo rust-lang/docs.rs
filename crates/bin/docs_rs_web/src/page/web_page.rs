@@ -19,7 +19,6 @@ macro_rules! impl_axum_webpage {
         $page:ty
         $(, status = $status:expr)?
         $(, content_type = $content_type:expr)?
-        $(, canonical_url = $canonical_url:expr)?
         $(, cache_policy  = $cache_policy:expr)?
         $(, cpu_intensive_rendering = $cpu_intensive_rendering:expr)?
         $(,)?
@@ -67,19 +66,6 @@ macro_rules! impl_axum_webpage {
                         (cache_policy)(&self)
                     });
                 )?
-
-                $(
-                    let canonical_url = {
-                        let canonical_url: fn(&Self) -> Option<docs_rs_headers::CanonicalUrl> = $canonical_url;
-                        (canonical_url)(&self)
-                    };
-                    if let Some(canonical_url) = canonical_url {
-                        use axum_extra::headers::HeaderMapExt;
-
-                        response.headers_mut().typed_insert(canonical_url);
-                    }
-                )?
-
 
                 response.extensions_mut().insert($crate::page::web_page::DelayedTemplateRender {
                     template: std::sync::Arc::new(Box::new(self)),
