@@ -1,0 +1,38 @@
+// Checks that the copy button shows a `✓` when clicked, then goes back to the icon.
+
+define-function: (
+    "check-clipboard",
+    [selector, check_clipboard],
+    block {
+        // Initial state: the icon is shown and there's no text.
+        assert-attribute: (|selector|, {"class": "svg-clipboard"})
+        assert-text: (|selector|, "")
+        set-clipboard: ""
+        click: |selector|
+        // The icon class is removed and the `✓` is added.
+        assert-text: (|selector|, "✓")
+        assert-attribute: (|selector|, {"class": ""})
+        wait-for-attribute: (|selector|, {"class": "svg-clipboard"})
+        assert-text: (|selector|, "")
+        // FIXME: bug in browser-ui-test: https://github.com/GuillaumeGomez/browser-UI-test/issues/774
+        if: (|check_clipboard|, block {
+            assert-clipboard: ("sysinfo = ", CONTAINS)
+        })
+    },
+)
+
+// On the crate page.
+go-to: |DOC_PATH| + "/crate/sysinfo/latest"
+show-text: true
+permissions: ["clipboard-read", "clipboard-write"]
+call-function: (
+    "check-clipboard", {"selector": ".description-container #clipboard", "check_clipboard": true}
+)
+
+// In the lazy-loaded topbar dropdown on rustdoc pages.
+go-to: |DOC_PATH| + "/sysinfo"
+click: "#nav-search-form .crate-dropdown"
+wait-for: ".package-details-menu #clipboard"
+call-function: (
+    "check-clipboard", {"selector": ".package-details-menu #clipboard", "check_clipboard": false}
+)
