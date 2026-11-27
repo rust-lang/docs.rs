@@ -4,8 +4,17 @@ compose-up-resources: _touch-env
     # Keep the persistent resources as the default Compose services. The
     # bucket provisioner is a one-shot command, which `--wait` would otherwise
     # treat as a failed (exited) service.
-    docker compose up --detach --wait --remove-orphans db s3
+    docker compose up --detach --wait --remove-orphans db s3 || { \
+      docker compose logs db | grep -q pg_upgrade && \
+      echo -e "\nerror: the postgres volume holds data from an older major version.\nrun \`just compose-reset-db\` to wipe it." >&2; \
+      exit 1; }
     docker compose run --rm --no-deps s3-init
+
+# Wipe the local PostgreSQL data, e.g. after a major version upgrade.
+[group('compose')]
+compose-reset-db:
+    docker compose rm --stop --force db
+    docker compose run --rm --no-deps --entrypoint sh db -c 'rm -rf /var/lib/postgresql/*'
 
 # Apply migrations, then start the requested Compose profiles.
 [group('compose')]
