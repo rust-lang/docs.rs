@@ -4,7 +4,7 @@
         const clipboard = document.getElementById("clipboard");
         if (clipboard) {
             let resetClipboardTimeout = null;
-            const resetClipboardIcon = clipboard.innerHTML;
+            const resetClipboardIcon = clipboard.className;
 
             clipboard.addEventListener("click", () => {
                 const metadata = JSON.parse(document.getElementById("crate-metadata").innerText);
@@ -19,12 +19,14 @@
                 temporaryInput.remove();
 
                 clipboard.textContent = "✓";
+                clipboard.className = "";
                 if (resetClipboardTimeout !== null) {
                     clearTimeout(resetClipboardTimeout);
                 }
                 resetClipboardTimeout = setTimeout(() => {
                     resetClipboardTimeout = null;
-                    clipboard.innerHTML = resetClipboardIcon;
+                    clipboard.className = resetClipboardIcon;
+                    clipboard.textContent = "";
                 }, 1000);
             });
         }
