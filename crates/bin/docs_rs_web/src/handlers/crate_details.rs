@@ -138,10 +138,10 @@ impl CrateDetails {
                 releases.default_target,
                 releases.source_size as "source_size?: ByteSize",
                 builds.documentation_size as "documentation_size?: ByteSize",
-                -- we're using the rustc version here to set the correct CSS file
+                -- we're using the rustc nightly date here to set the correct CSS file
                 -- in the metadata.
                 -- So we're only interested in successful builds here.
-                builds.rustc_version as "rustc_version?",
+                builds.rustc_nightly_date as "rustc_nightly_date?",
                 doc_coverage.total_items,
                 doc_coverage.documented_items,
                 doc_coverage.total_items_needing_examples,
@@ -152,7 +152,7 @@ impl CrateDetails {
             LEFT JOIN doc_coverage ON doc_coverage.release_id = releases.id
             LEFT JOIN repositories ON releases.repository_id = repositories.id
             LEFT JOIN LATERAL (
-                 SELECT rustc_version, documentation_size, id
+                 SELECT rustc_nightly_date, documentation_size, id
                  FROM builds
                  WHERE
                     builds.rid = releases.id AND
@@ -188,11 +188,7 @@ impl CrateDetails {
             default_target: krate.default_target,
             doc_targets: krate.doc_targets.as_ref().map(parse_doc_targets),
             yanked: krate.yanked,
-            rustdoc_css_file: krate
-                .rustc_version
-                .as_deref()
-                .map(get_correct_docsrs_style_file)
-                .transpose()?,
+            rustdoc_css_file: krate.rustc_nightly_date.map(get_correct_docsrs_style_file),
             latest_build_id: krate.latest_build_id,
         };
 
@@ -1213,6 +1209,25 @@ mod tests {
                 "binary-0.1.0 is not a library"
             );
 
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn pages_render_without_rustc_nightly_date() {
+        async_wrapper(|env| async move {
+            // no `rustc_nightly_date` => no rustdoc CSS file to pick.
+            env.fake_release()
+                .await
+                .name("foo")
+                .version("0.1.0")
+                .builds(vec![FakeBuild::default().without_rustc_version()])
+                .create()
+                .await?;
+
+            let web = env.web_app().await;
+            web.assert_success("/crate/foo/0.1.0").await?;
+            web.assert_success("/foo/0.1.0/foo/").await?;
             Ok(())
         });
     }

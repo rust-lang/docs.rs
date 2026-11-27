@@ -249,7 +249,7 @@ async fn import_test_release_inner(
     finish_build(
         &mut *conn,
         build_id,
-        "rustc 1.95.0-nightly (873d4682c 2026-01-25)",
+        &"rustc 1.95.0-nightly (873d4682c 2026-01-25)".parse()?,
         BUILD_VERSION,
         BuildStatus::Success,
         Some(doc_stats.original_size),

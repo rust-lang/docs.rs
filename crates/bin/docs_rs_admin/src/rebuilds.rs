@@ -78,32 +78,25 @@ mod tests {
     async fn test_rebuild_broken_rustdoc_specific_date_simple() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        // Matrix of test builds (crate name, nightly date, version)
+        // Matrix of test builds (crate name, nightly date (y, m, d), version)
         let build_matrix = [
             // Should be skipped since this is not the latest build for this release
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            (FOO, (2020, 10, 1), V1),
             // All those should match
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V2),
-            (BAR, NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            (FOO, (2020, 10, 2), V1),
+            (FOO, (2020, 10, 2), V2),
+            (BAR, (2020, 10, 2), V1),
             // Should be skipped since the nightly doesn't match
-            (BAR, NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
+            (BAR, (2020, 10, 3), V2),
         ];
-        for build in build_matrix.into_iter() {
-            let (crate_name, nightly, version) = build;
+        for (crate_name, (year, month, day), version) in build_matrix {
             env.fake_release()
                 .await
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
                     FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
+                        .rustc_version_date(year, month, day)
                         .build_status(BuildStatus::Failure),
                 ])
                 .create()
@@ -142,30 +135,23 @@ mod tests {
     async fn test_rebuild_broken_rustdoc_specific_date_skipped() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        // Matrix of test builds (crate name, nightly date, version)
+        // Matrix of test builds (crate name, nightly date (y, m, d), version)
         let build_matrix = [
             // Should be skipped since this is not the latest build for this release even if the nightly matches
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V1),
+            (FOO, (2020, 10, 3), V1),
             // Should be skipped since the nightly doesn't match
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
+            (FOO, (2020, 10, 2), V1),
             // Should be skipped since the nightly doesn't match
-            (BAR, NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+            (BAR, (2020, 10, 4), V1),
         ];
-        for build in build_matrix.into_iter() {
-            let (crate_name, nightly, version) = build;
+        for (crate_name, (year, month, day), version) in build_matrix {
             env.fake_release()
                 .await
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
                     FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
+                        .rustc_version_date(year, month, day)
                         .build_status(BuildStatus::Failure),
                 ])
                 .create()
@@ -195,32 +181,25 @@ mod tests {
     async fn test_rebuild_broken_rustdoc_date_range() -> Result<()> {
         let env = TestEnvironment::new().await?;
 
-        // Matrix of test builds (crate name, nightly date, version)
+        // Matrix of test builds (crate name, nightly date (y, m, d), version)
         let build_matrix = [
             // Should be skipped since this is not the latest build for this release
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 1).unwrap(), V1),
+            (FOO, (2020, 10, 1), V1),
             // All those should match
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 2).unwrap(), V1),
-            (FOO, NaiveDate::from_ymd_opt(2020, 10, 3).unwrap(), V2),
-            (BAR, NaiveDate::from_ymd_opt(2020, 10, 4).unwrap(), V1),
+            (FOO, (2020, 10, 2), V1),
+            (FOO, (2020, 10, 3), V2),
+            (BAR, (2020, 10, 4), V1),
             // Should be skipped since the nightly doesn't match (end date is exclusive)
-            (BAR, NaiveDate::from_ymd_opt(2020, 10, 5).unwrap(), V2),
+            (BAR, (2020, 10, 5), V2),
         ];
-        for build in build_matrix.into_iter() {
-            let (crate_name, nightly, version) = build;
+        for (crate_name, (year, month, day), version) in build_matrix {
             env.fake_release()
                 .await
                 .name(&crate_name)
                 .version(version)
                 .builds(vec![
                     FakeBuild::default()
-                        .rustc_version(
-                            format!(
-                                "rustc 1.84.0-nightly (e7c0d2750 {})",
-                                nightly.format("%Y-%m-%d")
-                            )
-                            .as_str(),
-                        )
+                        .rustc_version_date(year, month, day)
                         .build_status(BuildStatus::Failure),
                 ])
                 .create()

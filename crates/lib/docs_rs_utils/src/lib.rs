@@ -1,5 +1,4 @@
 mod runtime_ext;
-pub mod rustc_version;
 mod shutdown;
 #[cfg(feature = "testing")]
 pub mod testing;

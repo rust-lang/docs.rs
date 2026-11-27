@@ -1,6 +1,6 @@
 use super::*;
 use docs_rs_config::AppConfig as _;
-use docs_rs_types::ByteSize;
+use docs_rs_types::{ByteSize, RustcVersion};
 use pretty_assertions::assert_eq;
 
 fn environment() -> Result<TestEnvironment> {
@@ -416,11 +416,13 @@ fn essential_files_are_published_only_when_needed() -> Result<()> {
     let pool = env.pool()?;
     let storage = env.storage()?;
     let mut builder = env.build_builder()?;
-    let published = || -> Result<Vec<String>> {
+    let published = || -> Result<Vec<RustcVersion>> {
         runtime.block_on(async {
             let mut conn = pool.get_async().await?;
             Ok(
-                sqlx::query_scalar!("SELECT rustc_version FROM essential_files ORDER BY 1")
+                sqlx::query_scalar!(
+                    r#"SELECT rustc_version as "rustc_version: RustcVersion" FROM essential_files ORDER BY 1"#
+                )
                     .fetch_all(&mut *conn)
                     .await?,
             )

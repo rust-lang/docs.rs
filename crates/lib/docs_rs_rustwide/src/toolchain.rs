@@ -1,4 +1,6 @@
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
+use chrono::NaiveDate;
+use docs_rs_types::{RustcVersion, Version};
 use docs_rs_utils::retry;
 use docsrs_metadata::{DEFAULT_TARGETS, HOST_TARGET};
 use rustwide::{Toolchain, Workspace, cmd::Command, toolchain::ToolchainError};
@@ -54,7 +56,7 @@ impl ManagedToolchain {
     pub(crate) fn resource_suffix(&self, workspace: &Workspace) -> Result<String> {
         Ok(format!(
             "-{}",
-            parse_rustc_version(&self.rustc_version(workspace)?)?
+            self.rustc_version(workspace)?.resource_suffix()
         ))
     }
 
@@ -139,20 +141,20 @@ impl ManagedToolchain {
             }
         }
 
-        debug!(old_version, "installing or updating toolchain");
+        debug!(?old_version, "installing or updating toolchain");
         retry(|| self.toolchain.install(workspace), 3)?;
         self.ensure_ready(workspace)?;
 
         let new_version = self.rustc_version(workspace)?;
         let changed = old_version.as_ref() != Some(&new_version);
-        debug!(changed, new_version, "toolchain update complete");
+        debug!(changed, %new_version, "toolchain update complete");
         Ok(changed)
     }
 
-    pub(crate) fn rustc_version(&self, workspace: &Workspace) -> Result<String> {
+    pub(crate) fn rustc_version(&self, workspace: &Workspace) -> Result<RustcVersion> {
         if let Some(ci) = self.toolchain.as_ci() {
             let version = ci_rustc_version(ci.sha());
-            debug!(version, "using synthetic CI rustc version");
+            debug!(%version, "using synthetic CI rustc version");
             return Ok(version);
         }
 
@@ -165,7 +167,9 @@ impl ManagedToolchain {
             bail!("invalid output returned by `rustc --version`");
         };
         debug!(version, "detected rustc version");
-        Ok(version.clone())
+        version
+            .parse()
+            .context("unexpected output returned by `rustc --version`")
     }
 
     #[instrument(skip_all)]
@@ -220,29 +224,14 @@ impl ManagedToolchain {
     }
 }
 
-fn ci_rustc_version(sha: &str) -> String {
-    format!("rustc 1.9999.0-nightly ({sha} 2999-12-29)")
-}
-
-fn parse_rustc_version(version: &str) -> Result<String> {
-    let mut outer = version.splitn(3, ' ');
-    let _binary = outer.next();
-    let release = outer
-        .next()
-        .ok_or_else(|| anyhow!("missing release in rustc version `{version}`"))?;
-    let details = outer
-        .next()
-        .and_then(|value| value.strip_prefix('('))
-        .and_then(|value| value.strip_suffix(')'))
-        .ok_or_else(|| anyhow!("missing details in rustc version `{version}`"))?;
-    let mut details = details.split_whitespace();
-    let commit = details
-        .next()
-        .ok_or_else(|| anyhow!("missing commit in rustc version `{version}`"))?;
-    let date = details
-        .next()
-        .ok_or_else(|| anyhow!("missing date in rustc version `{version}`"))?;
-    Ok(format!("{}-{release}-{commit}", date.replace('-', "")))
+/// CI toolchains can't be invoked through rustup's `+toolchain` syntax, so we
+/// use a stable synthetic version for them.
+fn ci_rustc_version(sha: &str) -> RustcVersion {
+    RustcVersion::new(
+        Version::parse("1.9999.0-nightly").expect("valid semver"),
+        sha,
+        NaiveDate::from_ymd_opt(2999, 12, 29).expect("valid date"),
+    )
 }
 
 #[cfg(test)]
@@ -285,17 +274,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_rustc_resource_version() {
-        assert_eq!(
-            parse_rustc_version("rustc 1.10.0-nightly (57ef01513 2016-05-23)").unwrap(),
-            "20160523-1.10.0-nightly-57ef01513"
-        );
-    }
-
-    #[test]
     fn creates_ci_rustc_resource_version() {
         assert_eq!(
-            parse_rustc_version(&ci_rustc_version("0123456789abcdef")).unwrap(),
+            ci_rustc_version("0123456789abcdef").resource_suffix(),
             "29991229-1.9999.0-nightly-0123456789abcdef"
         );
     }
@@ -377,11 +358,14 @@ mod tests {
             .arg("--version")
             .arg("--verbose")
             .run_capture()?;
-        assert_eq!(verbose.stdout_lines().first(), Some(&version));
-        assert!(version.starts_with("rustc "));
+        assert_eq!(
+            verbose.stdout_lines().first().map(String::as_str),
+            Some(version.as_str())
+        );
+        assert!(version.as_str().starts_with("rustc "));
         assert_eq!(
             toolchain.resource_suffix(workspace)?,
-            format!("-{}", parse_rustc_version(&version)?)
+            format!("-{}", version.resource_suffix())
         );
         Ok(())
     }

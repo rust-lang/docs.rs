@@ -10,15 +10,12 @@ testing = []
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
-regex = { workspace = true }
 tokio = { workspace = true, features = ["signal", "time"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
 time = "0.3"
 tokio = { workspace = true }
 

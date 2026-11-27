@@ -4,7 +4,7 @@ use docs_rs_builder::{Config, RustwideBuilder, queue_builder};
 use docs_rs_config::AppConfig as _;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
-use docs_rs_types::{KrateName, Version};
+use docs_rs_types::{KrateName, RustcVersion, Version};
 use docs_rs_utils::install_shutdown_signal_handlers;
 use std::sync::Arc;
 use tokio::runtime;
@@ -131,7 +131,7 @@ impl BuildSubcommand {
                             .await
                             .context("failed to get a database connection")?;
 
-                        get_config::<String>(&mut conn, ConfigName::RustcVersion).await
+                        get_config::<RustcVersion>(&mut conn, ConfigName::RustcVersion).await
                     }
                 })?;
                 if only_first_time && rustc_version.is_some() {

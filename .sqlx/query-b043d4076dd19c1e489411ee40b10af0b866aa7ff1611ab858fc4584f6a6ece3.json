@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n             builds.rustc_version,\n             builds.docsrs_version,\n             builds.build_status as \"build_status: BuildStatus\",\n             COALESCE(builds.build_finished, builds.build_started) as build_time,\n             builds.output,\n             builds.errors,\n             builds.error_kind,\n             releases.default_target,\n             (\n                 SELECT array_agg(row(bl.log_filename, bl.success))\n                 FROM (\n                     SELECT log_filename, success\n                     FROM builds_logs\n                     WHERE builds_logs.build_id = builds.id\n                     ORDER BY log_filename\n                 ) bl\n             ) AS \"logs: Vec<(String, bool)>\"\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
+  "query": "SELECT\n             builds.rustc_version as \"rustc_version: RustcVersion\",\n             builds.docsrs_version,\n             builds.build_status as \"build_status: BuildStatus\",\n             COALESCE(builds.build_finished, builds.build_started) as build_time,\n             builds.output,\n             builds.errors,\n             builds.error_kind,\n             releases.default_target,\n             (\n                 SELECT array_agg(row(bl.log_filename, bl.success))\n                 FROM (\n                     SELECT log_filename, success\n                     FROM builds_logs\n                     WHERE builds_logs.build_id = builds.id\n                     ORDER BY log_filename\n                 ) bl\n             ) AS \"logs: Vec<(String, bool)>\"\n         FROM builds\n         INNER JOIN releases ON releases.id = builds.rid\n         INNER JOIN crates ON releases.crate_id = crates.id\n         WHERE builds.id = $1 AND crates.name = $2 AND releases.version = $3",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "rustc_version",
+        "name": "rustc_version: RustcVersion",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -124,5 +124,5 @@
       null
     ]
   },
-  "hash": "28a93198f116f697ad7a32a55882bd94e0b9278ce0837a52cb063c8570688aa9"
+  "hash": "b043d4076dd19c1e489411ee40b10af0b866aa7ff1611ab858fc4584f6a6ece3"
 }

@@ -47,9 +47,11 @@
                                         <div class="pure-u-1 pure-u-sm-1-24 build">
                                             {{- icon -}}
                                         </div> {#- -#}
-                                        <div class="pure-u-1 pure-u-sm-7-24">
+                                        <div class="pure-u-1 pure-u-sm-7-24"
+                                            {%- if let Some(rustc_version) = build.rustc_version %} title="{{ rustc_version }}"{% endif -%}
+                                        >
                                             {%- if let Some(rustc_version) = build.rustc_version -%}
-                                                {{ rustc_version }}
+                                                {{ rustc_version.release() }} ({{ rustc_version.date() }})
                                             {%- else -%}
                                                 &mdash;
                                             {%- endif -%}

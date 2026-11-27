@@ -10,6 +10,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use docs_rs_build_limits::Limits;
 use docs_rs_context::Context;
 use docs_rs_database::service_config::{ConfigName, get_config};
+use docs_rs_types::RustcVersion;
 use std::sync::Arc;
 
 #[derive(Template)]
@@ -17,7 +18,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AboutBuilds {
     /// The current version of rustc that docs.rs is using to build crates
-    rustc_version: Option<String>,
+    rustc_version: Option<RustcVersion>,
     /// The default crate build limits
     limits: Limits,
     /// Just for the template, since this isn't shared with AboutPage
@@ -36,7 +37,7 @@ pub(crate) async fn about_builds_handler(
     State(context): State<Arc<Context>>,
 ) -> AxumResult<impl IntoResponse> {
     Ok(AboutBuilds {
-        rustc_version: get_config::<String>(&mut conn, ConfigName::RustcVersion).await?,
+        rustc_version: get_config(&mut conn, ConfigName::RustcVersion).await?,
         limits: Limits::from_config(context.config().build_limits()?),
         active_tab: "builds",
     })

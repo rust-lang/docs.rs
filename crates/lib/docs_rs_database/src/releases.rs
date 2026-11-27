@@ -4,15 +4,14 @@ use docs_rs_cargo_metadata::{MetadataPackage, ReleaseDependencyList};
 use docs_rs_registry_api::{CrateData, CrateOwner, ReleaseData};
 use docs_rs_types::{
     BuildError, BuildId, BuildStatus, ByteSize, CompressionAlgorithm, CrateId, DocCoverage,
-    Feature, KrateName, ReleaseId, Version,
+    Feature, KrateName, ReleaseId, RustcVersion, Version,
 };
-use docs_rs_utils::rustc_version::parse_rustc_date;
 use std::{
     fmt, fs,
     io::{BufRead, BufReader},
     path::Path,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 /// Adds a package into database.
 ///
@@ -213,7 +212,7 @@ pub async fn add_doc_coverage(
 pub async fn finish_build<E>(
     conn: &mut sqlx::PgConnection,
     build_id: BuildId,
-    rustc_version: &str,
+    rustc_version: &RustcVersion,
     docsrs_version: &str,
     build_status: BuildStatus,
     documentation_size: Option<ByteSize>,
@@ -230,20 +229,6 @@ where
         .map(i64::try_from)
         .transpose()
         .context("documentation file count exceeds PostgreSQL BIGINT range")?;
-
-    let rustc_date = match parse_rustc_date(rustc_version) {
-        Ok(date) => Some(date),
-        Err(err) => {
-            // in the database we see cases where the rustc version is missing
-            // in the builds-table. In this case & if we can't parse the version
-            // we just want to log an error, but still finish the build.
-            error!(
-                "Failed to parse date from rustc version \"{}\": {:?}",
-                rustc_version, err
-            );
-            None
-        }
-    };
 
     let release_id = sqlx::query_scalar!(
         r#"UPDATE builds
@@ -262,13 +247,13 @@ where
          WHERE
             id = $10
          RETURNING rid as "rid: ReleaseId" "#,
-        rustc_version,
+        rustc_version as _,
         docsrs_version,
         build_status as BuildStatus,
         hostname.to_str().unwrap_or(""),
         build_error.map(|err| err.to_string()),
         documentation_size as _,
-        rustc_date,
+        rustc_version.date(),
         build_error.map(|err| err.kind()),
         memory_peak as _,
         build_id as _,
@@ -582,6 +567,8 @@ mod test {
     use std::{collections::BTreeMap, iter, slice};
     use test_case::test_case;
 
+    const RUSTC_VERSION: &str = "rustc 1.84.0-nightly (e7c0d2750 2024-10-15)";
+
     /// miminmal fake release for the tests in this module
     async fn fake_release(
         conn: &mut sqlx::PgConnection,
@@ -723,7 +710,7 @@ mod test {
         finish_build(
             &mut conn,
             build_id,
-            "rustc 1.84.0-nightly (e7c0d2750 2024-10-15)",
+            &RUSTC_VERSION.parse()?,
             "docsrs_version",
             BuildStatus::Success,
             None,
@@ -748,10 +735,7 @@ mod test {
         .fetch_one(&mut *conn)
         .await?;
 
-        assert_eq!(
-            row.rustc_version,
-            Some("rustc 1.84.0-nightly (e7c0d2750 2024-10-15)".into())
-        );
+        assert_eq!(row.rustc_version, Some(RUSTC_VERSION.into()));
         assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
         assert_eq!(row.build_status, BuildStatus::Success);
         assert_eq!(
@@ -765,7 +749,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_finish_build_success_invalid_rustc_date() -> Result<()> {
+    async fn test_finish_build_success_with_statistics() -> Result<()> {
         let db = TestDatabase::with_test_config().await?;
 
         let mut conn = db.async_conn().await?;
@@ -776,7 +760,7 @@ mod test {
         finish_build(
             &mut conn,
             build_id,
-            "rustc_version",
+            &RUSTC_VERSION.parse()?,
             "docsrs_version",
             BuildStatus::Success,
             Some(42u64.into()),
@@ -804,13 +788,16 @@ mod test {
         .fetch_one(&mut *conn)
         .await?;
 
-        assert_eq!(row.rustc_version, Some("rustc_version".into()));
+        assert_eq!(row.rustc_version, Some(RUSTC_VERSION.into()));
         assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
         assert_eq!(row.build_status, BuildStatus::Success);
         assert_eq!(row.documentation_size, Some(42));
         assert_eq!(row.documentation_file_count, Some(7));
         assert_eq!(row.memory_peak, Some(23));
-        assert!(row.rustc_nightly_date.is_none());
+        assert_eq!(
+            row.rustc_nightly_date,
+            Some(NaiveDate::from_ymd_opt(2024, 10, 15).unwrap())
+        );
         assert!(row.errors.is_none());
         assert!(row.error_kind.is_none());
 
@@ -829,7 +816,7 @@ mod test {
         finish_build(
             &mut conn,
             build_id,
-            "rustc_version",
+            &RUSTC_VERSION.parse()?,
             "docsrs_version",
             BuildStatus::Failure,
             None,
@@ -855,7 +842,7 @@ mod test {
         .fetch_one(&mut *conn)
         .await?;
 
-        assert_eq!(row.rustc_version, Some("rustc_version".into()));
+        assert_eq!(row.rustc_version, Some(RUSTC_VERSION.into()));
         assert_eq!(row.docsrs_version, Some("docsrs_version".into()));
         assert_eq!(row.build_status, BuildStatus::Failure);
         assert_eq!(row.errors, Some("build error: error message".into()));
