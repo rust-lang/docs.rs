@@ -1,5 +1,4 @@
 (function() {
-    // Delegated, because the rustdoc crate dropdown is loaded later.
     let resetClipboardTimeout = null;
     let resetClipboardIcon = null;
     document.addEventListener("click", ev => {
