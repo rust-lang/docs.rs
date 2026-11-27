@@ -16,7 +16,7 @@
         }
     </script>
     {#- rustdoc pages get the dropdown, other crate pages a plain link -#}
-    {%- if let Some(crate_details_menu_url) = crate_details_menu_url -%}
+    {%- if crate_details_menu_url is defined -%}
         <li class="pure-menu-item pure-menu-has-children crate-dropdown">
             {#- `menu.js` opens the dropdown on click; the real link is for crawlers and
                 no-JS users, since the dropdown is lazy-loaded -#}

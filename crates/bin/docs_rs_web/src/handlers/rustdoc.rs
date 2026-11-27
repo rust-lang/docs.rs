@@ -386,7 +386,7 @@ pub struct RustdocPage {
     pub permalink_path: EscapedURI,
     /// The lazy-loaded crate dropdown, with the page's query for its permalink & version links.
     /// Other crate pages set `None` and get a plain link in the topbar.
-    crate_details_menu_url: Option<EscapedURI>,
+    crate_details_menu_url: EscapedURI,
     // true if we are displaying the latest version of the crate, regardless
     // of whether the URL specifies a version number or the string "latest."
     pub is_latest_version: bool,
@@ -730,7 +730,7 @@ pub(crate) async fn rustdoc_html_server_handler(
     let page = Arc::new(RustdocPage {
         latest_path,
         permalink_path,
-        crate_details_menu_url: Some(crate_details_menu_url),
+        crate_details_menu_url,
         is_latest_version,
         is_latest_url: params.req_version().is_latest(),
         is_prerelease,
