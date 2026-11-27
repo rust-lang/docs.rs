@@ -121,7 +121,6 @@ mod tests {
                 "/crate/rcc/0.0.0/status.json",
                 "/crate/{name}/{version}/status.json",
             ),
-            ("/-/static/index.js", "static resource"),
             ("/-/static/menu.js", "static resource"),
             ("/-/static/keyboard.js", "static resource"),
             ("/-/static/source.js", "static resource"),
@@ -218,7 +217,7 @@ mod tests {
                         ("/releases/recent/{page}", 2),
                         ("/sitemap.xml", 2),
                         ("rustdoc page", 4),
-                        ("static resource", 16),
+                        ("static resource", 14),
                     ]
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))
@@ -261,7 +260,7 @@ mod tests {
                         ("/releases/recent/{page}", 2),
                         ("/sitemap.xml", 2),
                         ("rustdoc page", 4),
-                        ("static resource", 16),
+                        ("static resource", 14),
                     ]
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))

@@ -352,13 +352,13 @@ mod tests {
         async_wrapper(|env| async move {
             let web = env.web_app().await;
 
-            // just to be sure that `index.js` exists
-            assert!(web.get("/-/static/index.js").await?.status().is_success());
+            // just to be sure that `menu.js` exists
+            assert!(web.get("/-/static/menu.js").await?.status().is_success());
 
-            // `index.js` exists, but is not a directory,
+            // `menu.js` exists, but is not a directory,
             // so trying to fetch it via `ServeDir` will lead
             // to an IO-error.
-            let resp = web.get("/-/static/index.js/something").await?;
+            let resp = web.get("/-/static/menu.js/something").await?;
             assert_eq!(resp.status().as_u16(), StatusCode::NOT_FOUND);
             assert!(resp.headers().get(ETAG).is_none());
 
@@ -366,7 +366,6 @@ mod tests {
         });
     }
 
-    #[test_case("/-/static/index.js", "resetClipboardTimeout")]
     #[test_case("/-/static/menu.js", "closeMenu")]
     #[test_case("/-/static/keyboard.js", "handleKey")]
     #[test_case("/-/static/source.js", "toggleSource")]
