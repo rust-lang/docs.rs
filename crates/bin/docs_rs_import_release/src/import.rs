@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow, bail};
 use docs_rs_cargo_metadata::CargoMetadata;
 use docs_rs_database::releases::{
     finish_build, finish_release, initialize_build, initialize_crate, initialize_release,
-    update_build_with_error,
+    update_build_with_error, update_crate_data_in_database,
 };
 use docs_rs_registry_api::RegistryApi;
 use docs_rs_repository_stats::RepositoryStatsUpdater;
@@ -241,6 +241,10 @@ async fn import_test_release_inner(
         source_stats.file_count,
     )
     .await?;
+
+    info!("updating crate owners...");
+    let crate_data = registry_api.get_crate_data(name).await?;
+    update_crate_data_in_database(&mut *conn, name, &crate_data).await?;
 
     finish_build(
         &mut *conn,
