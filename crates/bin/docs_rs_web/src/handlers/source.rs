@@ -70,16 +70,16 @@ struct SourcePage {
 impl_axum_webpage! {
     SourcePage,
     canonical_url = |page| Some(page.canonical_url.clone()),
-    cache_policy = |page| if page.is_latest_url {
-        CachePolicy::ForeverInCdn(
-            page.metadata.name.clone().into()
-        )
-    } else {
-        CachePolicy::ForeverInCdnAndStaleInBrowser(
-            page.metadata.name.clone().into()
-        )
-    },
+    cache_policy = |page| cache_policy(page.is_latest_url, page.metadata.name.clone()),
     cpu_intensive_rendering = true,
+}
+
+fn cache_policy(is_latest_url: bool, name: KrateName) -> CachePolicy {
+    if is_latest_url {
+        CachePolicy::ForeverInCdn(name.into())
+    } else {
+        CachePolicy::ForeverInCdnAndStaleInBrowser(name.into())
+    }
 }
 
 // Used in templates.
@@ -177,6 +177,8 @@ pub(crate) async fn source_browser_handler(
             .source_url(),
     );
 
+    let is_latest_url = params.req_version().is_latest();
+
     let mut is_file_too_large = false;
 
     let (file, file_content) = if let Some(stream) = stream {
@@ -188,9 +190,7 @@ pub(crate) async fn source_browser_handler(
             response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
-                .insert(CachePolicy::ForeverInCdnAndStaleInBrowser(
-                    matched_release.name.into(),
-                ));
+                .insert(cache_policy(is_latest_url, matched_release.name));
             return Ok(response);
         } else {
             let max_file_size = storage.config().max_file_size_for(&stream.path);
@@ -234,7 +234,7 @@ pub(crate) async fn source_browser_handler(
         file_content,
         canonical_url,
         is_file_too_large,
-        is_latest_url: params.req_version().is_latest(),
+        is_latest_url,
         params,
     }
     .into_response())
@@ -384,6 +384,13 @@ mod tests {
                 })
                 .await?;
             assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+
+            web.get("/crate/fake/latest/source/some_file.pdf")
+                .await?
+                .assert_cache_control(
+                    CachePolicy::ForeverInCdn(KrateName::from_str("fake").unwrap().into()),
+                    env.config(),
+                );
 
             Ok(())
         });
