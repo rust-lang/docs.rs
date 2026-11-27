@@ -89,9 +89,31 @@ $ just web-watch
 The watch command runs from the repository root and ignores changes confined to
 other application binaries, such as the builder and registry watcher.
 
-### Build documentation for a crate
+### Get documentation for a crate
 
-Set up or update the docs.rs nightly toolchain, then build a release:
+If you only need an existing release in your local environment, import it
+instead of running the builder:
+
+```console
+$ just import-release regex latest
+$ just import-release regex 1.3.1
+```
+
+This downloads the already-built documentation, rustdoc JSON, source and rustdoc
+static files from docs.rs, and adds the release to your local database and
+storage. It needs no nightly toolchain and is much faster than a local build, so
+it's the easiest way to get realistic data for working on the web server. The
+version defaults to `latest` when omitted.
+
+Caveats:
+
+- It's mainly tested with newer releases.
+- Build logs are placeholders, not the real logs.
+- It runs `cargo metadata` on the downloaded source, so only import crates you
+  trust.
+
+To build a release yourself instead, set up or update the docs.rs nightly
+toolchain, then run the builder:
 
 ```console
 $ just builder build update-toolchain
@@ -118,29 +140,6 @@ For installation, options, and output locations, see the
 [build CLI README](crates/bin/docs_rs_build/README.md). For workspace selection,
 see
 [Building workspace packages](https://rust-lang.github.io/docs.rs/development/build-workspaces.html).
-
-### Import a release from docs.rs
-
-If you only need an existing release in your local environment, import it
-instead of running the builder:
-
-```console
-$ just import-release regex latest
-$ just import-release regex 1.3.1
-```
-
-This downloads the already-built documentation, rustdoc JSON, source and rustdoc
-static files from docs.rs, and adds the release to your local database and
-storage. It needs no nightly toolchain and is much faster than a local build, so
-it's the easiest way to get realistic data for working on the web server. The
-version defaults to `latest` when omitted.
-
-Caveats:
-
-- It's mainly tested with newer releases.
-- Build logs are placeholders, not the real logs.
-- It runs `cargo metadata` on the downloaded source, so only import crates you
-  trust.
 
 ### Run with Docker Compose only
 

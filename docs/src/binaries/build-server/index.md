@@ -20,7 +20,7 @@ you can add it there.
 Also see the [docs.rs build info page](https://docs.rs/about/builds).
 
 The root
-[README](https://github.com/rust-lang/docs.rs#build-documentation-for-a-crate)
+[README](https://github.com/rust-lang/docs.rs#get-documentation-for-a-crate)
 documents building a published release or a local package during development.
 
 Docs.rs invokes rustdoc with its nightly toolchain. See the
