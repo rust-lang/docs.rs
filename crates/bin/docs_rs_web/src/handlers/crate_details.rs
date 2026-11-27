@@ -10,6 +10,7 @@ use crate::{
     match_release::{LazyReleases, MatchedRelease, match_version},
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    search_indexing::SearchIndexing,
     utils::{get_correct_docsrs_style_file, licenses},
 };
 use anyhow::{Context, Result};
@@ -21,7 +22,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use docs_rs_cargo_metadata::{Dependency, ReleaseDependencyList};
 use docs_rs_database::crate_details::{Release, parse_doc_targets};
-use docs_rs_headers::CanonicalUrl;
 use docs_rs_registry_api::OwnerKind;
 use docs_rs_storage::{AsyncStorage, PathNotFoundError};
 use docs_rs_types::{
@@ -421,7 +421,6 @@ struct CrateDetailsPage {
     rustdoc: Option<String>, // this is description_long in database
     source_size: Option<ByteSize>,
     documentation_size: Option<ByteSize>,
-    canonical_url: CanonicalUrl,
     params: RustdocParams,
 }
 
@@ -507,39 +506,36 @@ pub(crate) async fn crate_details_handler(
 
     let is_latest_version = params.req_version().is_latest();
 
-    let mut res = CrateDetailsPage {
-        version,
-        name: name.clone(),
-        owners,
-        metadata,
-        documented_items,
-        total_items,
-        total_items_needing_examples,
-        build_statistics,
-        items_with_examples,
-        homepage_url,
-        documentation_url,
-        repository_url,
-        repository_metadata,
-        dependencies,
-        releases,
-        readme,
-        build_status,
-        rustdoc_status,
-        is_library,
-        last_successful_build,
-        rustdoc,
-        source_size,
-        documentation_size,
-        canonical_url: CanonicalUrl::from_uri(
-            params
-                .clone()
-                .with_req_version(ReqVersion::Latest)
-                .crate_details_url(),
-        ),
-        params,
-    }
-    .into_response();
+    let mut res = (
+        SearchIndexing::latest_only(is_latest_version),
+        CrateDetailsPage {
+            version,
+            name: name.clone(),
+            owners,
+            metadata,
+            documented_items,
+            total_items,
+            total_items_needing_examples,
+            build_statistics,
+            items_with_examples,
+            homepage_url,
+            documentation_url,
+            repository_url,
+            repository_metadata,
+            dependencies,
+            releases,
+            readme,
+            build_status,
+            rustdoc_status,
+            is_library,
+            last_successful_build,
+            rustdoc,
+            source_size,
+            documentation_size,
+            params,
+        },
+    )
+        .into_response();
     res.extensions_mut()
         .insert::<CachePolicy>(if is_latest_version {
             CachePolicy::ForeverInCdn(name.into())
@@ -1142,7 +1138,7 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_url() {
+    fn only_latest_is_indexed() {
         async_wrapper(|env| async move {
             env.fake_release()
                 .await
@@ -1164,16 +1160,20 @@ mod tests {
                 .get(&format!("/crate/{krate}/0.0.1"))
                 .await?;
             response.assert_cache_control(
-                CachePolicy::ForeverInCdnAndStaleInBrowser(krate.into()),
+                CachePolicy::ForeverInCdnAndStaleInBrowser(krate.clone().into()),
                 env.config(),
             );
+            assert_eq!(response.headers().get("x-robots-tag").unwrap(), "noindex");
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
 
-            assert!(
-                response
-                    .text()
-                    .await?
-                    .contains("rel=\"canonical\" href=\"https://docs.rs/crate/foo/latest")
-            );
+            let response = env
+                .web_app()
+                .await
+                .get(&format!("/crate/{krate}/latest"))
+                .await?;
+            assert!(response.status().is_success());
+            assert!(response.headers().get("x-robots-tag").is_none());
+            assert!(!response.text().await?.contains("rel=\"canonical\""));
 
             Ok(())
         })

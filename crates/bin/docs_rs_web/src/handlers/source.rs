@@ -11,15 +11,16 @@ use crate::{
     match_release::match_version,
     metadata::MetaData,
     page::templates::{RenderBrands, RenderRegular, RenderSolid, filters},
+    search_indexing::SearchIndexing,
 };
 
 use anyhow::{Context as _, Result};
 use askama::Template;
 use axum::{extract::State, response::IntoResponse};
-use axum_extra::{TypedHeader, headers::HeaderMapExt};
-use docs_rs_headers::{CanonicalUrl, IfNoneMatch};
+use axum_extra::TypedHeader;
+use docs_rs_headers::IfNoneMatch;
 use docs_rs_storage::{AsyncStorage, FolderEntry, PathNotFoundError, source_archive_path};
-use docs_rs_types::{BuildId, KrateName, ReqVersion, Version};
+use docs_rs_types::{BuildId, KrateName, Version};
 use futures_util::TryStreamExt as _;
 use std::sync::Arc;
 use tracing::instrument;
@@ -61,7 +62,6 @@ struct SourcePage {
     show_parent_link: bool,
     file: Option<FolderEntry>,
     file_content: Option<String>,
-    canonical_url: CanonicalUrl,
     is_file_too_large: bool,
     is_latest_url: bool,
     params: RustdocParams,
@@ -69,7 +69,6 @@ struct SourcePage {
 
 impl_axum_webpage! {
     SourcePage,
-    canonical_url = |page| Some(page.canonical_url.clone()),
     cache_policy = |page| cache_policy(page.is_latest_url, page.metadata.name.clone()),
     cpu_intensive_rendering = true,
 }
@@ -170,14 +169,8 @@ pub(crate) async fn source_browser_handler(
         None
     };
 
-    let canonical_url = CanonicalUrl::from_uri(
-        params
-            .clone()
-            .with_req_version(ReqVersion::Latest)
-            .source_url(),
-    );
-
     let is_latest_url = params.req_version().is_latest();
+    let search_indexing = SearchIndexing::latest_only(is_latest_url);
 
     let mut is_file_too_large = false;
 
@@ -187,11 +180,10 @@ pub(crate) async fn source_browser_handler(
             // if the file isn't text, serve it directly to the client
             let mut response = StreamingFile(stream)
                 .into_response(if_none_match.as_deref(), STATIC_ASSET_CACHE_POLICY);
-            response.headers_mut().typed_insert(canonical_url);
             response
                 .extensions_mut()
                 .insert(cache_policy(is_latest_url, matched_release.name));
-            return Ok(response);
+            return Ok((search_indexing, response).into_response());
         } else {
             let max_file_size = storage.config().max_file_size_for(&stream.path);
 
@@ -226,18 +218,20 @@ pub(crate) async fn source_browser_handler(
         (None, None)
     };
 
-    Ok(SourcePage {
-        file_list,
-        metadata,
-        show_parent_link,
-        file,
-        file_content,
-        canonical_url,
-        is_file_too_large,
-        is_latest_url,
-        params,
-    }
-    .into_response())
+    Ok((
+        search_indexing,
+        SourcePage {
+            file_list,
+            metadata,
+            show_parent_link,
+            file,
+            file_content,
+            is_file_too_large,
+            is_latest_url,
+            params,
+        },
+    )
+        .into_response())
 }
 
 #[cfg(test)]
@@ -293,13 +287,6 @@ mod tests {
                 .get(&format!("/crate/fake/0.1.0/source/{encoded_filename}"))
                 .await?;
             assert!(response.status().is_success());
-            let canonical_url = format!(
-                "<https://docs.rs/crate/fake/latest/source/{encoded_filename}>; rel=\"canonical\"",
-            );
-            assert_eq!(
-                response.headers().get("link").unwrap(),
-                canonical_url.as_str(),
-            );
             assert!(response.text().await?.contains("some_random_content"));
             Ok(())
         });
@@ -326,10 +313,6 @@ mod tests {
             .await?;
             let response = web.get("/crate/fake/0.1.0/source/some_filename.rs").await?;
             assert!(response.status().is_success());
-            assert_eq!(
-                response.headers().get("link").unwrap(),
-                "<https://docs.rs/crate/fake/latest/source/some_filename.rs>; rel=\"canonical\""
-            );
             response.assert_cache_control(
                 CachePolicy::ForeverInCdnAndStaleInBrowser(
                     KrateName::from_str("fake").unwrap().into(),
@@ -359,10 +342,6 @@ mod tests {
             let response = web.get(URL).await?;
             assert!(response.status().is_success());
             let headers = response.headers();
-            assert_eq!(
-                headers.get("link").unwrap(),
-                "<https://docs.rs/crate/fake/latest/source/some_file.pdf>; rel=\"canonical\""
-            );
             assert_eq!(
                 headers.typed_get::<ContentType>().unwrap(),
                 APPLICATION_PDF.into(),
@@ -692,6 +671,36 @@ mod tests {
             );
             Ok(())
         });
+    }
+
+    #[test]
+    fn only_latest_is_indexed() {
+        async_wrapper(|env| async move {
+            env.fake_release()
+                .await
+                .name("fake")
+                .version("0.1.0")
+                .source_file("README.md", b"hello")
+                .source_file("some_file.pdf", b"some_random_content")
+                .create()
+                .await?;
+            let web = env.web_app().await;
+
+            for path in ["", "README.md", "some_file.pdf"] {
+                let response = web.get(&format!("/crate/fake/0.1.0/source/{path}")).await?;
+                assert!(response.status().is_success());
+                assert_eq!(response.headers().get("x-robots-tag").unwrap(), "noindex");
+                assert!(response.headers().get("link").is_none());
+
+                let response = web
+                    .get(&format!("/crate/fake/latest/source/{path}"))
+                    .await?;
+                assert!(response.status().is_success());
+                assert!(response.headers().get("x-robots-tag").is_none());
+                assert!(response.headers().get("link").is_none());
+            }
+            Ok(())
+        })
     }
 
     #[tokio::test(flavor = "multi_thread")]
