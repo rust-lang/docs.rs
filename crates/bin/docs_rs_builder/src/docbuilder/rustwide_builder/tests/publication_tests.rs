@@ -416,39 +416,54 @@ fn essential_files_are_published_only_when_needed() -> Result<()> {
     let pool = env.pool()?;
     let storage = env.storage()?;
     let mut builder = env.build_builder()?;
-    let published = || -> Result<Option<String>> {
+    let published = || -> Result<Vec<String>> {
         runtime.block_on(async {
             let mut conn = pool.get_async().await?;
-            get_config(&mut conn, ConfigName::RustcVersion).await
+            Ok(
+                sqlx::query_scalar!("SELECT rustc_version FROM essential_files ORDER BY 1")
+                    .fetch_all(&mut *conn)
+                    .await?,
+            )
         })
     };
-    assert_eq!(published()?, None);
+
+    assert!(published()?.is_empty());
     storage.reject_uploads_for_testing(Some(|p| p.starts_with(RUSTDOC_STATIC_STORAGE_PREFIX)));
     assert!(builder.publish_essential_files_if_needed(false).is_err());
-    assert_eq!(published()?, None);
+    assert!(published()?.is_empty());
     storage.reject_uploads_for_testing(None);
     builder.publish_essential_files_if_needed(false)?;
     let version = builder.environment.rustc_version()?;
-    assert_eq!(published()?, Some(version.clone()));
+    assert_eq!(published()?, vec![version.clone()]);
     assert!(
         env.blocking_storage()?
             .list_prefix(RUSTDOC_STATIC_STORAGE_PREFIX)
             .next()
             .is_some()
     );
+
     storage.reject_uploads_for_testing(Some(|p| p.starts_with(RUSTDOC_STATIC_STORAGE_PREFIX)));
-    // A matching version must skip uploading; an update must still publish.
+    // A published version must skip uploading; an update must still publish.
     builder.publish_essential_files_if_needed(false)?;
     assert!(builder.publish_essential_files_if_needed(true).is_err());
+    // Another builder publishing a different version must not trigger a republish here.
     runtime.block_on(async {
         let mut conn = pool.get_async().await?;
-        set_config(&mut conn, ConfigName::RustcVersion, &"outdated").await
+        set_config(&mut conn, ConfigName::RustcVersion, &"other builder").await
+    })?;
+    builder.publish_essential_files_if_needed(false)?;
+    // An unpublished version must be published.
+    runtime.block_on(async {
+        let mut conn = pool.get_async().await?;
+        sqlx::query!("DELETE FROM essential_files")
+            .execute(&mut *conn)
+            .await?;
+        anyhow::Ok(())
     })?;
     assert!(builder.publish_essential_files_if_needed(false).is_err());
-    assert_eq!(published()?, Some("outdated".into()));
     storage.reject_uploads_for_testing(None);
     builder.publish_essential_files_if_needed(false)?;
-    assert_eq!(published()?, Some(version));
+    assert_eq!(published()?, vec![version]);
     Ok(())
 }
 

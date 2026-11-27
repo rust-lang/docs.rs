@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM essential_files",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "46344ce1162b222027c9727a7bcb4673813bf2ae3b250a0336be3be3a3b165cb"
+}

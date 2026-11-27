@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO essential_files (rustc_version) VALUES ($1)\n                 ON CONFLICT (rustc_version) DO UPDATE SET published_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "926017f21047a26971b383344ad33f06e037b1f06e0dd43b693e1fe8580bc1b3"
+}

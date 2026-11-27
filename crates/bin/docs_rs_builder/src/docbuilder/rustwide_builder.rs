@@ -158,21 +158,25 @@ impl RustwideBuilder {
 
     fn publish_essential_files_if_needed(&mut self, toolchain_updated: bool) -> Result<()> {
         let rustc_version = self.environment.rustc_version()?;
-        let published_version = self.runtime.block_on(async {
+        let published = self.runtime.block_on(async {
             let mut conn = self.db.get_async().await?;
-            get_config::<String>(&mut conn, ConfigName::RustcVersion).await
+            sqlx::query_scalar!(
+                r#"SELECT EXISTS(SELECT 1 FROM essential_files WHERE rustc_version = $1) AS "exists!""#,
+                rustc_version,
+            )
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(Error::from)
         })?;
 
         // A toolchain update can succeed while publishing its essential files fails.
-        // The next check then reports no update, so also compare against the version
-        // recorded only after successful publication. This retries failed uploads
-        // across maintenance passes and restarts, and handles first publication.
-        if toolchain_updated || published_version.as_ref() != Some(&rustc_version) {
+        // The next check then reports no update, so also check whether this version was
+        // recorded, which only happens after successful publication. Keyed by version
+        // (not builder), so builders on different toolchains don't trigger each other.
+        if toolchain_updated || !published {
             debug!(
                 toolchain_updated,
-                ?published_version,
-                rustc_version,
-                "publishing essential files"
+                published, rustc_version, "publishing essential files"
             );
             self.add_essential_files()
                 .context("adding essential files after toolchain maintenance")?;
@@ -203,6 +207,14 @@ impl RustwideBuilder {
                 .await?;
 
             let mut conn = self.db.get_async().await?;
+            sqlx::query!(
+                "INSERT INTO essential_files (rustc_version) VALUES ($1)
+                 ON CONFLICT (rustc_version) DO UPDATE SET published_at = NOW()",
+                rustc_version,
+            )
+            .execute(&mut *conn)
+            .await?;
+            // only shown on the about page; last writer wins with several builders
             set_config(&mut conn, ConfigName::RustcVersion, &rustc_version).await
         })?;
         Ok(())
