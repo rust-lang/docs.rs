@@ -22,6 +22,8 @@ store-value: (active_crate_dropdown_selector, "#nav-search-form .crate-dropdown.
 
 // The dropdown should not be "open" for now.
 assert-false: |active_crate_dropdown_selector|
+// Its content isn't loaded yet.
+assert-false: ".package-details-menu #topbar-owners"
 // We open it.
 click: "#nav-search-form .crate-dropdown"
 // This time it should be open.
